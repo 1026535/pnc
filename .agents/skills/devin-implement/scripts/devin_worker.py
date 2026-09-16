@@ -261,8 +261,8 @@ def notify_completion(state, thread_id):
                    "and its handoff, then continue this task through review, corrections, or recovery. "
                    "Do not read the full conversation/export or repeat an already handled turn.")
         if state.get("head_drift"):
-            message += (" The repository HEAD moved during this turn; verify the handoff's declared "
-                        "commit/ref explains it before trusting the result.")
+            message += (" The repository HEAD moved during this turn; reconcile the baseline against "
+                        "the handoff's declared commit/ref before resuming or accepting results.")
         asyncio.run(send_notification(thread_id, message, turn_dir / "notification.stderr.log"))
         record["status"] = "delivered"
     except Exception as error:
@@ -482,9 +482,11 @@ def run(args):
                 raise RuntimeError("Successful CLI exit has no export; model/session evidence is unavailable.")
             after = snapshot(repo, turn_dir, "after")
             state["final_head"] = after["head"]
-            # Drift is reported, not failed: worker commits legitimately move HEAD;
-            # the lead reconciles this flag against the handoff's declared commit/ref.
             state["head_drift"] = after["head"] != args.expected_head
+            if state["head_drift"] and state["status"] in ("exited", "incomplete"):
+                state["status"] = "failed"
+                state["error"] = (f"Repository HEAD moved from {args.expected_head} to {after['head']} "
+                                  "during the run; reconcile the baseline before resuming or accepting results.")
             state["initially_dirty"] = bool(before["status"])
         except BaseException as error:
             state["status"] = "failed"
@@ -534,7 +536,7 @@ def main(argv=None):
                         help="Hide the live Devin output console (shown by default).")
     action.add_argument("--notify-thread", default=os.environ.get("CODEX_THREAD_ID"),
                         help="Codex task to wake on completion/failure; defaults to the calling Codex task.")
-    action.add_argument("--permission-mode", choices=("normal", "accept-edits", "dangerous"), default="dangerous")
+    action.add_argument("--permission-mode", choices=("normal", "accept-edits", "dangerous"), default="accept-edits")
     action.add_argument("--allow-rule", action="append", default=[])
     args = parser.parse_args(argv)
     if args.action in ("ask", "steer"):

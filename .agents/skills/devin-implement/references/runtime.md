@@ -6,7 +6,7 @@ The launcher supports **native Windows, Python 3.11+, Git, and authenticated Dev
 
 The launcher resolves `devin` from PATH or `%LOCALAPPDATA%/devin/cli/bin/devin.exe`, records its version, and checks the account catalog for `swe-2-max`. It verifies exported models, resume identity, and absence of nested subagent tools. If authentication fails, use `devin auth status` and the documented login flow.
 
-The authorized defaults are `--permission-mode dangerous` and `--respect-workspace-trust false`, applied after exact Git-root and HEAD validation. Routine commands need no approval grants. Explicit `normal`/`accept-edits` overrides retain workspace trust and support repeated `--allow-rule` arguments. Native Windows has no Devin filesystem sandbox; host and organization restrictions still apply.
+The default is `--permission-mode accept-edits` with `--respect-workspace-trust true`, applied after exact Git-root and HEAD validation; workers keep edit approval but unattended tool permission requests are denied, so a turn that needs exec-style tools ends in `incomplete`/denial rather than a silent grant. `dangerous` requires an explicit `--permission-mode dangerous` choice — it auto-approves routine tool requests for that turn and drops workspace trust; pair it with `--allow-rule` scoping. Native Windows has no Devin filesystem sandbox; host and organization restrictions still apply.
 
 A per-turn config replaces the CLI user config, disables imported tool settings and nested subagents, and sets `attribution: false` so worker commits and PRs omit Devin footers. Shared settings are not modified. Project/system rules, hooks, and dedicated MCP configuration can still apply; investigate the specific setting if a conflict occurs.
 
@@ -51,7 +51,7 @@ On completion, `turn-NNN/result.json` and `handoff.md` hold the result; logs, ex
 
 `exited` means the CLI supplied a final response with valid model evidence. A zero exit without a new final response, including observed headless permission rejections, is `incomplete`. The lead evaluates readiness separately. The launcher does not retry automatically.
 
-`head_drift` in `result.json`/`state.json` reports that the checkout `HEAD` no longer equals the launch's expected baseline. Worker commits legitimately move it; the lead verifies the handoff's declared commit/ref explains the move before trusting the result. Drift is reported, not auto-failed.
+`head_drift` in `result.json`/`state.json` reports that the checkout `HEAD` no longer equals the launch's expected baseline; a drifted baseline fails the turn. Worker commits legitimately move `HEAD` — the lead reconciles the handoff's declared commit/ref against the recorded `final_head` before resuming or accepting results.
 
 ## Side questions through the owned connection
 
