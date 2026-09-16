@@ -51,6 +51,8 @@ On completion, `turn-NNN/result.json` and `handoff.md` hold the result; logs, ex
 
 `exited` means the CLI supplied a final response with valid model evidence. A zero exit without a new final response, including observed headless permission rejections, is `incomplete`. The lead evaluates readiness separately. The launcher does not retry automatically.
 
+`head_drift` in `result.json`/`state.json` reports that the checkout `HEAD` no longer equals the launch's expected baseline. Worker commits legitimately move it; the lead verifies the handoff's declared commit/ref explains the move before trusting the result. Drift is reported, not auto-failed.
+
 ## Side questions through the owned connection
 
 Use this short progress question on demand for a running worker with healthy transport, after plain `status`. Scheduled keepalives never invoke it. The native side chain reads the current conversation without adding the question/answer to the main chain or redirecting implementation. No worker-maintained progress file is required.

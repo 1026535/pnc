@@ -204,6 +204,11 @@ if behavior in ('sleep', 'graceful-cancel'):
 if behavior == 'failure':
     pathlib.Path('partial.txt').write_text('preserve partial result')
     sys.exit(7)
+if behavior == 'commit':
+    pathlib.Path('worker.txt').write_text('worker change\\n')
+    subprocess.run(['git', 'add', 'worker.txt'], check=True)
+    subprocess.run(['git', '-c', 'user.name=Worker', '-c', 'user.email=worker@localhost',
+                    'commit', '-qm', 'worker change'], check=True)
 model = 'wrong-model' if behavior == 'model-mismatch' else 'swe-2-max'
 step = {'source':'agent','model_name':model,'message':'READY_FOR_REVIEW: fixture complete.'}
 if behavior == 'denied':
@@ -291,6 +296,19 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertTrue((self.run_dir / "turn-001/handoff.md").is_file())
         self.assertEqual((self.repo / "existing.txt").read_text(), "user's uncommitted work\n")
         self.assertTrue(state["writers_stopped"])
+        self.assertFalse(state["head_drift"])
+
+    def test_head_drift_is_reported(self):
+        """A baseline moved mid-run is flagged for lead reconciliation, not hidden."""
+        try:
+            self.assertEqual(self.invoke("commit"), 0)
+            state = worker.read_json(self.run_dir / "state.json")
+            self.assertTrue(state["head_drift"])
+            self.assertNotEqual(state["final_head"], self.head)
+            self.assertTrue((self.repo / "worker.txt").is_file())
+        finally:
+            subprocess.run(["git", "-C", str(self.repo), "reset", "--hard", "-q", self.head], check=True)
+            (self.repo / "worker.txt").unlink(missing_ok=True)
 
     def test_zero_exit_without_handoff_is_incomplete(self):
         """A rejected final tool call cannot masquerade as completed transport."""

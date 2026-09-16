@@ -150,7 +150,7 @@ def status(run_dir, recent=False):
     state = read_json(Path(run_dir) / "state.json")
     turn_dir = Path(state["turn_dir"])
     result = {key: state.get(key) for key in ("status", "transport", "session_id", "turn", "writers_stopped",
-              "supervisor_pid", "bootstrap_pid", "turn_dir", "error", "cancellation")}
+              "supervisor_pid", "bootstrap_pid", "turn_dir", "error", "cancellation", "head_drift")}
     now = time.time()
     result["elapsed_seconds"] = state.get("elapsed_seconds", round(now - state["started_at"]))
     if state["status"] == "running":
@@ -260,6 +260,9 @@ def notify_completion(state, thread_id):
                    f"Run: {state['run_dir']}. Read the compact result at {turn_dir / 'result.json'} "
                    "and its handoff, then continue this task through review, corrections, or recovery. "
                    "Do not read the full conversation/export or repeat an already handled turn.")
+        if state.get("head_drift"):
+            message += (" The repository HEAD moved during this turn; verify the handoff's declared "
+                        "commit/ref explains it before trusting the result.")
         asyncio.run(send_notification(thread_id, message, turn_dir / "notification.stderr.log"))
         record["status"] = "delivered"
     except Exception as error:
@@ -479,6 +482,9 @@ def run(args):
                 raise RuntimeError("Successful CLI exit has no export; model/session evidence is unavailable.")
             after = snapshot(repo, turn_dir, "after")
             state["final_head"] = after["head"]
+            # Drift is reported, not failed: worker commits legitimately move HEAD;
+            # the lead reconciles this flag against the handoff's declared commit/ref.
+            state["head_drift"] = after["head"] != args.expected_head
             state["initially_dirty"] = bool(before["status"])
         except BaseException as error:
             state["status"] = "failed"
@@ -497,7 +503,7 @@ def run(args):
             write_json(run_dir / "state.json", state)
             write_json(turn_dir / "result.json", state)
             notify_completion(state, args.notify_thread)
-        print(json.dumps({key: state.get(key) for key in ("status", "session_id", "turn", "elapsed_seconds", "served_models", "writers_stopped", "run_dir")}))
+        print(json.dumps({key: state.get(key) for key in ("status", "session_id", "turn", "elapsed_seconds", "served_models", "writers_stopped", "head_drift", "run_dir")}))
         return 0 if state["status"] == "exited" else 1
 
 
