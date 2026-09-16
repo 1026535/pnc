@@ -42,7 +42,7 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 
 ### Execution record — 2026-09-16
 
-**Current status: Under review.** Devin returned complete shared-state/publication work at `f650050ae04d408d1be67d5b3099a9c5671371a1`. The lead integrated it with `origin/main` `7af5e89470489dac644e3a6c3e5aa0c53aa18656` in the coordinating feature branch, corrected findings, and is validating the combined candidate. No default-branch landing or packet acceptance yet; PW02/PW03/PW06 remain gated.
+**Current status: Merged/pushed.** Lead accepted `14b7d68ef37d7cee204c4dd194b7d243f5b1d823` after independent review, corrections, focused checks, complete dependency-correct portable validation and installed-package proof. The exact commit was pushed to `origin/main` and the coordinating feature branch, and the shared main checkout was fast-forwarded without changing its unrelated untracked `nul`. PW02/PW03/PW06 are released from the accepted foundation.
 
 - Worker checkout/branch: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-pw01`, `codex/pet-workshop-pw01`.
 - Base: `b8c96b8e36b943a47006fde320629e1ae313ad29`, incorporating accepted `origin/main` `a73843cebfcee2105d8efd07706dd7fcb94fda10`. First dispatch used `f346d91` before that synchronization.
@@ -101,3 +101,14 @@ The reported service error is `-32013`, internal `Protocol error (invalid_argume
 - Worker/test processes are stopped and the worktree remained clean at `0b229cc`. The partial dependency-correct full run has no completed result and is **not accepted**; preserve its selection/log under worker `.test-impact/pw01-revalidated-full-selection.json` and `.local-data/reports/pet-workshop/pw01-revalidated-full.log`.
 - Lead fixed the observed launcher fault in the canonical atomic JSON writer: retry only Windows replacement errors 5/32 within 350 ms; preserve the old record until successful replacement and still fail on persistent denial. No model/game-action retry or parallel writer was added. Regressions prove transient recovery and bounded persistent failure with evidence retained.
 - Launcher checks: `py -m unittest test_devin_worker test_devin_acp test_devin_monitor` from the skill scripts directory — **52 passed** in 13.280 seconds. `git diff --check` passed. The next native worker turn will rerun the interrupted full portable suite with the already-correct isolated interpreter and repaired launcher, using new evidence filenames.
+
+
+#### Final acceptance and landing — 2026-09-16
+
+- Accepted/tested/pushed implementation: `14b7d68ef37d7cee204c4dd194b7d243f5b1d823`. `origin/main` was still at `447e552` before the authorized fast-forward push; remote main and coordinating branch were independently confirmed at the accepted SHA afterward. Both task worktrees were clean; unrelated shared-main `nul` remains untouched.
+- Lead reviewed actual catalog/models/publication diffs and corrected C1–C4 above. Final runtime/test content equals reviewed `50a860d`; later commits contain integration of accepted skills/docs and the tested launcher recovery only. No unresolved acceptance findings remain.
+- Final command: explicit isolated Python interpreter, `tools/run_tests.py full --json .test-impact/pw01-final-full-selection.json --results .test-impact/pw01-final-full-results.json` in the PW01 worker checkout — **2,581 discovered, 2,574 passed, 0 failures/errors, 7 skipped**, 327 modules, 2,588.563 seconds test time. Lead independently inspected the JSON and log; this supersedes the incomplete/failed runs without deleting them.
+- Run ID `1b89d466bd8c4925968b126625f068df`; source fingerprint `4a22600fab26b7b3de7e2208639a6dec3f6a340ee94b2e63d1a87ad8fc3f9ffb`; result timestamp `2026-09-16T21:19:42.464457+00:00`. All 78 Workshop tests passed. Seven skips are five optional local screenshots, one unavailable saved Alliance capture and one Windows symlink privilege restriction; none masks a Workshop case.
+- Supporting proof: 15 OCR environment regressions passed, 52 launcher/ACP/monitor tests passed, `git diff --check` passed, and the built/installed package loaded its catalog with raw APK/Lua/extraction reads forbidden. Game/runtime code has no APK dependency.
+- Final artifacts: worker `.test-impact/pw01-final-full-{selection,results}.json` and `.local-data/reports/pet-workshop/pw01-final-full.log`; installed-package proof remains in the coordinating checkout at `.local-data/reports/pet-workshop/pw01-installed-package-proof.json`.
+- `pw01-platform-check/turn-006` handled once: valid SWE-2 Max final handoff and `writers_stopped: true`. Live check **not applicable** to this unused shared-model/publication foundation. Recognition and gameplay retain their actual-candidate live gates; main is not yet released by the user.

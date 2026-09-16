@@ -1,6 +1,6 @@
 # Pet Workshop roadmap — separate delivery packets
 
-Updated: 2026-09-16. **0/10 packets accepted; PW01 under independent review and combined validation. Next eligible wave after PW01 acceptance: PW02, PW03 and PW06.**
+Updated: 2026-09-16. **1/10 packets accepted; PW01 merged/pushed at 14b7d68. Next eligible wave after PW01 acceptance: PW02, PW03 and PW06.**
 
 [Shared contract and recognition](PNC_PET_WORKSHOP_01_RECOGNITION_STATE_PLAN.md) · [Solver and policy](PNC_PET_WORKSHOP_02_SOLVER_POLICY_PLAN.md) · [Execution and integration](PNC_PET_WORKSHOP_03_EXECUTION_INTEGRATION_PLAN.md)
 
@@ -42,7 +42,7 @@ Status is maintained here. Keep detailed review findings, commands, supported co
 
 | Packet | Former ID | Offline implementation dependency | Status | Accepted base / result and remaining condition |
 | --- | --- | --- | --- | --- |
-| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Under review | Worker `f650050` reviewed; lead corrections at `50a860d`, latest main skills integrated at `fea8ec2`. 78 focused tests passed. OCR environment corrected; 15 formerly blocked replay/composition cases passed. Full rerun interrupted by a Windows metrics-file lock; launcher repair passed 52 tests, full rerun pending. |
+| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Merged/pushed | Accepted implementation `14b7d68`; 2,574 passed / 7 environmental skips, all 78 Workshop tests passed, portable installed-package proof passed. No live effect. |
 | [PW02 — Recognition and controls](pet_workshop_packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Planned | Saved captures available; missing action-state coverage remains explicit. |
 | [PW03 — Effort, reservations and policy](pet_workshop_packets/PW03_EFFORT_RESERVATIONS_POLICY.md) | S1 | PW01 | Planned | Offline solver lane; independent of PW02. |
 | [PW04 — One-step solver](pet_workshop_packets/PW04_ONE_STEP_SOLVER.md) | S2 | PW03 policy implementation | Planned | Same worker may continue from tested PW03 code and hand both back together; a separate worker receives an accepted dependency commit. |
