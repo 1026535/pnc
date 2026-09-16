@@ -260,6 +260,8 @@ def notify_completion(state, thread_id):
                    f"Run: {state['run_dir']}. Read the compact result at {turn_dir / 'result.json'} "
                    "and its handoff, then continue this task through review, corrections, or recovery. "
                    "Do not read the full conversation/export or repeat an already handled turn.")
+        if state["status"] == "failed" and state.get("error"):
+            message += " Diagnosis: " + str(state["error"])[:300]
         asyncio.run(send_notification(thread_id, message, turn_dir / "notification.stderr.log"))
         record["status"] = "delivered"
     except Exception as error:
@@ -480,6 +482,15 @@ def run(args):
             after = snapshot(repo, turn_dir, "after")
             state["final_head"] = after["head"]
             state["initially_dirty"] = bool(before["status"])
+            if state["status"] == "failed" and not state.get("error"):
+                record = turn_dir / "acp-error.json"
+                if record.is_file():
+                    state["error"] = "Devin ACP failure: " + str(read_json(record).get("error", ""))[:600]
+                else:
+                    state["error"] = f"Worker exited {state.get('exit_code')} without a recorded diagnosis."
+                stderr_tail = tail(turn_dir / "stderr.log", 2048)
+                if stderr_tail:
+                    state["stderr_tail"] = stderr_tail
         except BaseException as error:
             state["status"] = "failed"
             state["error"] = str(error) or type(error).__name__

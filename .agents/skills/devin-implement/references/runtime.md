@@ -51,6 +51,8 @@ On completion, `turn-NNN/result.json` and `handoff.md` hold the result; logs, ex
 
 `exited` means the CLI supplied a final response with valid model evidence. A zero exit without a new final response, including observed headless permission rejections, is `incomplete`. The lead evaluates readiness separately. The launcher does not retry automatically.
 
+On a failure without another recorded error, `result.json` carries `error` sourced from the adapter's `acp-error.json` — which preserves the peer's JSON-RPC detail such as `cognition.ai/errorKind` and `cognition.ai/retryable` — plus a bounded `stderr_tail`; the completion message includes a short diagnosis. A `retryable` ACP failure supports a normal resume with the same run directory.
+
 ## Side questions through the owned connection
 
 Use this short progress question on demand for a running worker with healthy transport, after plain `status`. Scheduled keepalives never invoke it. The native side chain reads the current conversation without adding the question/answer to the main chain or redirecting implementation. No worker-maintained progress file is required.

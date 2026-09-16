@@ -82,6 +82,28 @@ def submit_request(run_dir, kind, field, text, request_id, wait_seconds):
             "note": "Retrieve this ID; do not resubmit. Waiting does not cancel either chain."}
 
 
+class ProtocolError(RuntimeError):
+    """Carry the peer's JSON-RPC error object so the turn records a structured diagnosis."""
+
+    def __init__(self, error):
+        super().__init__(str(error)[:600])
+        self.detail = error
+
+
+def record_failure(turn_dir, failure):
+    """Persist a bounded machine-readable diagnosis for the supervisor's result."""
+    if turn_dir is None:
+        return
+    record = {"at": time.time(), "error": str(failure)[:800]}
+    detail = getattr(failure, "detail", None)
+    if isinstance(detail, dict):
+        record["acp_error"] = detail
+    try:
+        write_json(Path(turn_dir) / "acp-error.json", record)
+    except OSError:
+        pass  # Diagnosis must never mask the original failure.
+
+
 class Connection:
     """Multiplex standard JSON-RPC and Devin's main/side chain extension."""
 
@@ -203,7 +225,7 @@ class Connection:
         """Consume exactly one correlated response, preserving native errors."""
         response = self.responses.pop(identifier)
         if "error" in response:
-            raise RuntimeError(str(response["error"])[:600])
+            raise ProtocolError(response["error"])
         return response["result"]
 
     def request(self, method, params, timeout=60):
@@ -412,4 +434,5 @@ if __name__ == "__main__":
         sys.exit(run(sys.argv[1:]))
     except Exception as failure:
         print("ACP ERROR: " + str(failure)[:800], file=sys.stderr)
+        record_failure(os.environ.get("DEVIN_IMPLEMENT_TURN_DIR"), failure)
         sys.exit(1)
