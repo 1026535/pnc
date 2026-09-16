@@ -28,6 +28,7 @@ from pnc_automation.core.infra.capture.screenshot_service import CapturedScreens
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
@@ -66,6 +67,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_list_entry,
     bind_spatial_surface,
+    bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
     bind_trial_stats_detail,
@@ -167,6 +169,7 @@ class ObservationAdditions:
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
+    bag_preview: BagChestPreviewFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -875,6 +878,16 @@ class ObservationBuilder:
                 if additions.trial_stats_detail is not None
                 else None
             ),
+            bag_preview=(
+                bind_bag_preview(
+                    additions.bag_preview,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.bag_preview is not None
+                else None
+            ),
             frame_ref=getattr(screenshot, "frame_ref", None),
         )
         if self.debug_artifact_collector is not None and ocr_context is not None:
@@ -1315,6 +1328,7 @@ def _merge_observation_additions(
         research_queue_rows=primary.research_queue_rows or fallback.research_queue_rows,
         trial_summary=primary.trial_summary or fallback.trial_summary,
         trial_stats_detail=primary.trial_stats_detail or fallback.trial_stats_detail,
+        bag_preview=primary.bag_preview or fallback.bag_preview,
     )
 
 

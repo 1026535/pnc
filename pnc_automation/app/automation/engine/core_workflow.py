@@ -38,6 +38,7 @@ from pnc_automation.app.pnc.domain.building_operations import (
     observable_construction_slot_key,
 )
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.bag_items import TreasureIdentity
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
@@ -829,6 +830,19 @@ class WorkflowContext:
         try:
             return self._runtime.navigation.select_bag_tab(
                 tab,
+                observe_content=self._observe_bag_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def open_bag_chest_preview(self, identity: TreasureIdentity) -> Observation:
+        """Open one qualified Treasure magnifier and return its fresh preview observation."""
+
+        if not isinstance(identity, TreasureIdentity):
+            raise ValueError("Bag chest preview requires a TreasureIdentity.")
+        try:
+            return self._runtime.navigation.open_bag_chest_preview(
+                identity,
                 observe_content=self._observe_bag_content,
             )
         finally:

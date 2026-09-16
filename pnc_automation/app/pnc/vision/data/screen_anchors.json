@@ -1089,6 +1089,71 @@
       ]
     },
     {
+      "id": "bag_common_victory_preview",
+      "layout_id": "bag_common_victory_preview",
+      "screen": "PNC_BAG_CHEST_PREVIEW",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/bag_common_victory_preview_20260916.png",
+        "decoded_sha256": "fe09bed643c671ecc1403d4e61d9aa555f321b1ecbc27809545f7e6d679a5129",
+        "capture_group": "2026-09-16/mega_old_acc/v11_common_preview_1483bb20"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Live Common 1st Victory Chest read-only magnifier preview on mega_old_acc. Independent title and season-conversion description own the panel; measured upper-right gold X closes to Bag. Capture20260916T110456Z; installed build not queried.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/bag_common_victory_preview_title.png",
+          "search_region": [
+            90,
+            135,
+            365,
+            55
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/bag_common_victory_preview_description.png",
+          "search_region": [
+            15,
+            180,
+            510,
+            60
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BAG_CHEST_PREVIEW_CLOSE",
+          "anchor": {
+            "image": "screen_anchors/bag_arena_chest_preview_close.png",
+            "search_region": [
+              445,
+              110,
+              95,
+              100
+            ],
+            "threshold": 0.94
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        17,
+        141,
+        505,
+        538
+      ],
+      "occludes": [
+        "PNC_BAG"
+      ]
+    },
+    {
       "id": "institute",
       "screen": "PNC_INSTITUTE",
       "anchors": [

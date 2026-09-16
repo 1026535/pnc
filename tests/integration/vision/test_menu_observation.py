@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions,
     ObservationBuilder,
 )
+from pnc_automation.app.pnc.vision.bag_items import BagItemContentProducer
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_alliance_join_additions,
@@ -55,6 +56,7 @@ def _build_bag_semantics(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> O
         image=image,
         ocr_context=ocr_context,
         selector_registry=build_default_selector_registry(),
+        bag_item_producer=BagItemContentProducer(),
     )
     return additions or ObservationAdditions()
 

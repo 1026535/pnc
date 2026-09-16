@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDeb
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_list_entry,
     bind_spatial_surface,
+    bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
     bind_trial_stats_detail,
@@ -314,6 +315,16 @@ class NavigationPerception:
                     source_layout_id=decision.layout_id,
                 )
                 if content.trial_stats_detail is not None
+                else None
+            ),
+            bag_preview=(
+                bind_bag_preview(
+                    content.bag_preview,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.bag_preview is not None
                 else None
             ),
         )

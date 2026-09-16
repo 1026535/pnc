@@ -39,6 +39,12 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.bag import BagTab, bag_tab_selector_id
+from pnc_automation.app.pnc.domain.bag_items import (
+    TreasureIdentity,
+    bag_chest_preview_layout,
+    bag_item_identity_key,
+    bag_item_inspection_supported,
+)
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.research import (
@@ -491,6 +497,59 @@ class NavigationCore:
             completion_predicate=lambda observation: (
                 observation.decision.guard == GuardVerdict.CLEAR
                 and observation.active_bag_tab == tab
+            ),
+        )
+
+    def open_bag_chest_preview(
+        self, identity: TreasureIdentity, *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open one qualified Treasure magnifier and require the matching read-only preview.
+
+        Only Treasure identities whose preview destination family is qualified
+        (Arena Surprise Chest, Common 1st Victory Chest) are supported; other
+        recognized magnifiers stay observation-only and are rejected before any
+        tap. Completion requires fresh preview frames whose independently parsed
+        title identity agrees with the requested source.
+        """
+
+        if not isinstance(identity, TreasureIdentity):
+            raise ValueError("Bag chest preview requires a TreasureIdentity.")
+        if not bag_item_inspection_supported(identity):
+            raise ValueError("Treasure identity is not a qualified inspection target.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_bag_chest_preview"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_BAG or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or source.decision.layout_id != "bag"
+            or source.active_bag_tab != BagTab.TREASURE
+        ):
+            raise RuntimeError("Chest preview requires a freshly observed, unblocked Bag Treasure tab.")
+        key = bag_item_identity_key(identity)
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.BAG_ITEM)
+            if entry.bag_item_facts is not None
+            and entry.bag_item_facts.identity is not None
+            and bag_item_identity_key(entry.bag_item_facts.identity) == key
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError("Qualified chest item is missing, changed or ambiguous; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.BAG_ITEM,
+                metadata_key="identity", metadata_value=key,
+                use_action_point=True, reason="open_bag_chest_preview",
+            ),
+            source, frozenset({ScreenType.PNC_BAG_CHEST_PREVIEW}), label, observe_content,
+            completion_predicate=lambda frame: _bag_chest_preview_matches(
+                frame, identity=identity, layout_id=bag_chest_preview_layout(identity),
             ),
         )
 
@@ -1398,6 +1457,25 @@ def _trial_stats_detail_matches(frame: Observation, *, category: TrialCategory) 
         )
         and detail is not None
         and detail.category == category
+    )
+
+
+def _bag_chest_preview_matches(
+    frame: Observation, *, identity: TreasureIdentity, layout_id: str | None,
+) -> bool:
+    """Prove the fresh chest preview belongs to the requested Treasure identity.
+
+    The qualified layout and the independently parsed title identity must both
+    agree; an unreadable title never confirms the wrong popup was not opened.
+    """
+
+    preview = frame.bag_preview
+    return (
+        frame.decision.guard == GuardVerdict.CLEAR
+        and layout_id is not None
+        and frame.decision.layout_id == layout_id
+        and preview is not None
+        and preview.source_identity == identity
     )
 
 

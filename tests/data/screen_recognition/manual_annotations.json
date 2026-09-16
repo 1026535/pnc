@@ -586,6 +586,42 @@
       "rows": []
     },
     {
+      "image": "bag_variants/bag_speedup_bonus_tab.png",
+      "screen": "PNC_BAG",
+      "state": "speedup_selected",
+      "group": "2026-09-16/mega_old_acc/vision-v09-live_a7e1320c",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/worktrees/vision-v09-bag/.local-data/devin-v09/live_ready/artifacts/2026-09-16/mega_old_acc/20260916T055750Z_core_20260916T055657Z_a7e1320c_0029_core_8_bag_tab_after_1.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "024a10e290691ceaea82cf9551679eefbe1f3a09d553717ec67209c9a621cfe4",
+      "reviewed_at": "2026-09-16T12:00:00Z",
+      "build": null,
+      "locale": null,
+      "selected_subtab": "speedup",
+      "annotation_note": "Independent mega_old_acc Speedup-tab capture (core_8_bag_tab_after_1). Six percentage-bonus cards: 10%/30% Build, Research, and Training Speedups owned 1/7/1/3/1/5. Each shows a Use control and no magnifier; these are temporary percentage bonuses, not flat-minute time reductions.",
+      "rows": []
+    },
+    {
+      "image": "bag_variants/bag_treasure_victory_tab.png",
+      "screen": "PNC_BAG",
+      "state": "treasure_selected",
+      "group": "2026-09-16/mega_old_acc/vision-v09-live_a7e1320c",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/worktrees/vision-v09-bag/.local-data/devin-v09/live_ready/artifacts/2026-09-16/mega_old_acc/20260916T055753Z_core_20260916T055657Z_a7e1320c_0032_core_9_bag_tab_after_1.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "7e29c58ce70f8442b6fb8861f67b0c3e9cabc2aa84cba63214e402bcd59dcae7",
+      "reviewed_at": "2026-09-16T12:00:00Z",
+      "build": null,
+      "locale": null,
+      "selected_subtab": "treasure",
+      "annotation_note": "Independent mega_old_acc Treasure-tab capture (core_9_bag_tab_after_1). Common 1st Victory Chest x57, Rare 1st Victory Chest x4, Pinball x5, Starna's Dice x5, Lv.23 Oath Rune Chest x1, Diamond Chest x6,900. Common/Rare/Oath carry magnifiers; season-conversion descriptions are not immediate owned rewards.",
+      "rows": []
+    },
+    {
       "image": "quest_daily.png",
       "screen": "PNC_QUEST_DAILY",
       "state": "clear",
@@ -3402,6 +3438,23 @@
         "Cancel": "PNC_POPUP_CLOSE_BUTTON"
       },
       "notes": "Existing tracked September 10 capture reviewed for the same portrait/footer layout. Message and portrait own identity; the old Cancel patch is now a control, not an identity anchor. Original fixture pixels and original unknown-build provenance are retained. The current 3xx reference is a separate source, not an independent success claim."
+    },
+    {
+      "image": "bag_arena_chest_preview_holdout_20260915.png",
+      "screen": "PNC_BAG_CHEST_PREVIEW",
+      "state": "preview_open",
+      "layout_id": "bag_arena_chest_preview",
+      "group": "2026-09-15/testing/vision_navigation_fix_bc0f132a",
+      "source_artifact": "C:\\Users\\lebel\\pnc\\.local-data\\artifacts\\vision_navigation_fix_20260915\\2026-09-15\\testing\\20260915T170020Z_core_20260915T165816Z_bc0f132a_0034_03_preview_inspect_arena_chest_contents.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "44212be5af0a8ffb6a0d6db9d2127cd979808fd9cc1ef10c156d19c311f76fb5",
+      "reviewed_at": "2026-09-16",
+      "build": null,
+      "locale": null,
+      "annotation_note": "Independent native capture, roughly40minutes after the tour reference. Same four displayed offers:30-min Speedup x1~5 Owned4;30-min Research Speedup x1~5 Owned0;30-min Heal Speedup x1~5 Owned10;Elros Frag. x1~2 with clipped Owned field. Possible amounts and current Owned remain separate."
     }
   ],
   "semantic_annotation_note": "Canonical identifiers attached to the already manually reviewed labels; existing boxes remain unchanged and captured Alliance row/castle provenance is recorded in reviewed_regions and reviewed_rows."

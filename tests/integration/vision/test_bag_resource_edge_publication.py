@@ -227,7 +227,20 @@ class BagResourceEdgePublicationTests(unittest.TestCase):
                             hashlib.sha256(resource_capture.image.tobytes()).hexdigest(),
                             observation.frame_fingerprint,
                         )
-                        self.assertEqual((), observation.list_entries)
+                        # The tab gate still keeps Resource rows and actions off
+                        # neighbouring tabs; V10/V11 BAG_ITEM rows on those tabs
+                        # are their own typed content, not stale Resource facts.
+                        self.assertEqual(
+                            (),
+                            tuple(
+                                entry for entry in observation.list_entries
+                                if entry.kind in {
+                                    ListEntryKind.RESOURCE_ITEM,
+                                    ListEntryKind.RESOURCE_INVENTORY_EXCLUSION,
+                                    ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED,
+                                }
+                            ),
+                        )
                         # Measured Bag navigation controls, including the
                         # unselected Resource button, stay available on the
                         # neighbouring tabs; Resource rows/actions/body reads

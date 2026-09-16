@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import TypeVar
 
+from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
@@ -288,12 +289,31 @@ def bind_trial_stats_detail(
     )
 
 
+def bind_bag_preview(
+    preview: BagChestPreviewFacts,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> BagChestPreviewFacts:
+    """Adds missing chest-preview provenance while rejecting contradictory proof."""
+
+    return _bind_typed_fact(
+        preview,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Bag chest preview",
+    )
+
+
 _TypedFactT = TypeVar(
     "_TypedFactT",
     ResearchDetail,
     ResearchQueueRow,
     TrialChallengeSummary,
     TrialApplicableStatsDetail,
+    BagChestPreviewFacts,
 )
 
 

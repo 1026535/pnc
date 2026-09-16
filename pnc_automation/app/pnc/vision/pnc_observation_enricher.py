@@ -58,6 +58,7 @@ from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditio
 from pnc_automation.app.pnc.vision.observation_provenance import select_content_labels
 from pnc_automation.app.pnc.vision.research import ResearchContentProducer
 from pnc_automation.app.pnc.vision.trial_challenge import TrialContentProducer
+from pnc_automation.app.pnc.vision.bag_items import BagItemContentProducer
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionFailurePolicy,
     OcrRegionRead,
@@ -1816,6 +1817,7 @@ class PncObservationEnricher:
     home_city_camera: HomeCityCameraLocalizer | None = None
     research_producer: ResearchContentProducer = field(default_factory=ResearchContentProducer)
     trial_producer: TrialContentProducer = field(default_factory=TrialContentProducer)
+    bag_item_producer: BagItemContentProducer = field(default_factory=BagItemContentProducer)
 
     def content_labels(
         self,
@@ -2166,7 +2168,16 @@ class PncObservationEnricher:
                 image=image,
                 ocr_context=ocr_context,
                 selector_registry=self.selector_registry,
+                bag_item_producer=self.bag_item_producer,
             )
+        bag_item_additions = self.bag_item_producer.additions_for_screen(
+            image=image,
+            screen_type=screen_type,
+            ocr_context=ocr_context,
+            layout_id=layout_id,
+        )
+        if bag_item_additions is not None:
+            return bag_item_additions
         trial_additions = self.trial_producer.additions_for_screen(
             image=image,
             screen_type=screen_type,
@@ -7781,8 +7792,9 @@ def _build_bag_additions(
     image: Image.Image,
     ocr_context: ObservationOcrContext,
     selector_registry: SelectorRegistry | None,
+    bag_item_producer: BagItemContentProducer,
 ) -> ObservationAdditions:
-    """Return Bag identity, the measured subtab and Resource rows only when selected."""
+    """Return Bag identity, the measured subtab and selected-tab semantic rows."""
 
     visible_elements = {
         UiElementId.PNC_BAG_MAIN_TAB_BAG: _make_visible(
@@ -7794,6 +7806,20 @@ def _build_bag_additions(
         ),
     }
     active_tab = detect_selected_bag_tab(image)
+    if active_tab in {BagTab.SPEEDUP, BagTab.TREASURE}:
+        # The dedicated item producer owns Speedup/Treasure card semantics under
+        # the same shared card geometry; Resource keeps its inventory scanner.
+        item_additions = bag_item_producer.tab_additions(
+            image=image,
+            tab=active_tab,
+            ocr_context=ocr_context,
+        )
+        return ObservationAdditions(
+            visible_elements=visible_elements,
+            active_bag_tab=active_tab,
+            list_entries=item_additions.list_entries,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "bag_shell"),),
+        )
     if active_tab != BagTab.RESOURCE or selector_registry is None:
         # Identity, the typed selection and template-measured controls publish
         # for every Bag frame; Resource rows require a positively selected
