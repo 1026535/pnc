@@ -1,0 +1,4 @@
+interface:
+  display_name: "PNC Live Testing"
+  short_description: "Execute the assigned PNC live test and package curated evidence"
+  default_prompt: "Use $pnc-live-testing to execute the received PNC BlueStacks live-testing assignment and return one curated evidence package."

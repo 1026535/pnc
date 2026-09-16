@@ -259,6 +259,8 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
                 return worker.run(self.args)
             arguments = ["run", "--repo", self.args.repo, "--expected-head", self.args.expected_head,
                          "--run-dir", self.args.run_dir, "--brief", self.args.brief]
+            if getattr(self.args, "preamble_file", None):
+                arguments.extend(["--preamble-file", self.args.preamble_file])
             if self.args.resume:
                 arguments.append("--resume")
             if not self.args.console:
@@ -291,6 +293,55 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertTrue((self.run_dir / "turn-001/handoff.md").is_file())
         self.assertEqual((self.repo / "existing.txt").read_text(), "user's uncommitted work\n")
         self.assertTrue(state["writers_stopped"])
+
+    def test_custom_preamble_replaces_implementation_role(self):
+        """A specialized worker can replace the default implementation reporting contract."""
+        preamble = self.root / "live-test-preamble.md"
+        preamble.write_text("Return BLOCKED only for required user intervention.", encoding="utf-8")
+        self.args.preamble_file = str(preamble)
+        self.assertEqual(self.invoke(through_cli=True), 0)
+        prompt = (self.run_dir / "turn-001" / "prompt.md").read_text(encoding="utf-8")
+        self.assertTrue(prompt.startswith("Return BLOCKED only for required user intervention.\n\n"))
+        self.assertNotIn("NEEDS_LEAD", prompt)
+        self.args.resume = True
+        self.args.preamble_file = None
+        self.assertEqual(self.invoke(through_cli=True), 0)
+        resumed = (self.run_dir / "turn-002" / "prompt.md").read_text(encoding="utf-8")
+        self.assertTrue(resumed.startswith("Return BLOCKED only for required user intervention.\n\n"))
+        self.assertNotIn("NEEDS_LEAD", resumed)
+
+    def test_missing_fresh_preamble_leaves_no_run(self):
+        """An absent preamble path fails before run evidence; a corrected retry takes turn-001."""
+        self.args.preamble_file = str(self.root / "absent-preamble.md")
+        with self.assertRaises(FileNotFoundError):
+            worker.run(self.args)
+        self.assertFalse(self.run_dir.exists())
+        preamble = self.root / "live-test-preamble.md"
+        preamble.write_text("Return BLOCKED only for required user intervention.", encoding="utf-8")
+        self.args.preamble_file = str(preamble)
+        self.assertEqual(self.invoke(), 0)
+        prompt = (self.run_dir / "turn-001" / "prompt.md").read_text(encoding="utf-8")
+        self.assertTrue(prompt.startswith("Return BLOCKED only for required user intervention.\n\n"))
+
+    def test_mismatched_resume_preamble_preserves_next_turn(self):
+        """A conflicting resume preamble fails before claiming the next turn directory."""
+        preamble = self.root / "live-test-preamble.md"
+        preamble.write_text("Return BLOCKED only for required user intervention.", encoding="utf-8")
+        self.args.preamble_file = str(preamble)
+        self.assertEqual(self.invoke(), 0)
+        other = self.root / "other-preamble.md"
+        other.write_text("A different worker role.", encoding="utf-8")
+        self.args.resume = True
+        self.args.preamble_file = str(other)
+        with self.assertRaisesRegex(RuntimeError, "preamble differs"):
+            worker.run(self.args)
+        self.assertFalse((self.run_dir / "turn-002").exists())
+        self.assertEqual((self.run_dir / "worker-preamble.md").read_text(encoding="utf-8"),
+                         "Return BLOCKED only for required user intervention.\n")
+        self.args.preamble_file = None
+        self.assertEqual(self.invoke(), 0)
+        prompt = (self.run_dir / "turn-002" / "prompt.md").read_text(encoding="utf-8")
+        self.assertTrue(prompt.startswith("Return BLOCKED only for required user intervention.\n\n"))
 
     def test_zero_exit_without_handoff_is_incomplete(self):
         """A rejected final tool call cannot masquerade as completed transport."""
