@@ -4,6 +4,8 @@ Date: 2026-09-15. Status: prepared for implementation; no implementation is auth
 
 **Execution order:** use the [43-packet roadmap](PNC_VISION_ROADMAP.md) for delivery waves, dependency gates, next assignments and progress tracking. This index owns scope and shared architecture.
 
+**Shared OCR modernization:** use the [OCR text recognition and localization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) for backend, model, packaging, and measured text-position qualification. It is cross-cutting infrastructure outside the 43-packet count; numbered packets retain feature semantics and action policy.
+
 ## Outcome and design
 
 Recognize and navigate the supported Home, research, Bag, Campaign, Trial and building interfaces through one production observation and navigation path. Each numbered packet is a coherent assignment for one Luna xhigh agent. A packet owns its feature from screenshot to typed facts, measured controls, navigation, callers and focused proof.
@@ -13,7 +15,7 @@ Recognize and navigate the supported Home, research, Bag, Campaign, Trial and bu
 - **World:** retain the separate detector/model work and existing map navigation. Integrate only a qualified output through the same observation contract.
 - **Actions:** the existing navigator and observed-action executor remain the only action owners. Recognition of an enabled button does not authorize research, donation, item use, recruitment or battle.
 
-OpenCV is already integrated. V01 adapts and qualifies existing interfaces; it is not a new engine project. Do not begin a broad OCR replacement, VLM service, screen-plugin framework or rewrite of working profiles.
+OpenCV is already integrated. V01 adapts and qualifies existing interfaces; it is not a new engine project. Any OCR backend change must follow the bounded shared modernization plan rather than become a feature-packet rewrite. Do not begin a VLM service, screen-plugin framework or rewrite of working profiles.
 
 ## Baseline and precedence
 

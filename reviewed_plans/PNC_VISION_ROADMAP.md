@@ -2,7 +2,7 @@
 
 Updated: 2026-09-16. Status: **14/43 accepted for stated coverage: V01, V02, V04–V07, V09–V13, V15, V16 and V18. V13/V18 passed combined full acceptance, architecture/caller review and their required live routes. V22 safe entry is prepared while its inventory/detail evidence remains pending.**
 
-[Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [Building coverage](vision_modules/BUILDING_MENU_COVERAGE.md) · [Evidence](vision_modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](vision_modules/PLAN_RETIREMENT.md)
+[Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [OCR text modernization](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) · [Building coverage](vision_modules/BUILDING_MENU_COVERAGE.md) · [Evidence](vision_modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](vision_modules/PLAN_RETIREMENT.md)
 
 ## Start here
 
@@ -15,6 +15,8 @@ V11, V13 and V15 preserve the corrected recognition/returns and implement their
 remaining content and routes; these packets are not completed by the small fix.
 
 Continue with V09, V13 and V16 to establish Bag, Campaign and shared building-menu contracts. Their dependent features then reuse those contracts. This is the execution-order document; the individual packets remain authoritative for detailed scope, owners, evidence and validation.
+
+The [OCR text recognition and localization modernization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) is planned cross-cutting infrastructure outside the 43-packet count. It owns the shared backend/model/localization comparison and qualification. V10, V13, V15 and other feature packets retain their domain semantics and consume the qualified service.
 
 The roadmap has **five delivery waves containing 39 packets**, plus **four packets on an availability-dependent track**. Every packet appears once in the tables below. Wave numbers express priority, not a barrier requiring every earlier packet to finish. Start a later packet when its own prerequisites are integrated and its work is the next useful available assignment.
 
