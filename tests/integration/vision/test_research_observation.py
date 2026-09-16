@@ -25,8 +25,8 @@ from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_matching_text_screen_additions,
-    _build_research_tree_additions,
 )
+from pnc_automation.app.pnc.vision.research import ResearchContentProducer
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
@@ -54,12 +54,14 @@ RESEARCH_ICON_BOXES = {
     "Storage I": Bounds(351, 456, 88, 84),
     "Infirmary Cap I": Bounds(228, 647, 87, 85),
 }
+# Real measured blue label tiles (~107x33 at 540x960); the older expected
+# boxes encoded the retired scan's inflated ~49px merged-frame rectangles.
 RESEARCH_LABEL_BOXES = {
-    "Construction I": Bounds(218, 159, 107, 49),
-    "Research Speed I": Bounds(218, 350, 108, 48),
-    "Troop Load I": Bounds(93, 541, 108, 48),
-    "Storage I": Bounds(343, 541, 107, 48),
-    "Infirmary Cap I": Bounds(218, 731, 108, 48),
+    "Construction I": Bounds(219, 176, 107, 33),
+    "Research Speed I": Bounds(219, 366, 107, 33),
+    "Troop Load I": Bounds(94, 557, 107, 33),
+    "Storage I": Bounds(344, 557, 107, 33),
+    "Infirmary Cap I": Bounds(219, 747, 107, 33),
 }
 
 
@@ -105,11 +107,11 @@ def _development_ocr_lines(*, scale: float = 1.0) -> tuple[OcrLine, ...]:
     return (
         _ocr_line("Development", x=scaled(112), y=scaled(14), width=scaled(183), height=scaled(27)),
         _ocr_line("Construction", x=scaled(222), y=scaled(183), width=scaled(102), height=scaled(17)),
-        _ocr_line("Research", x=scaled(239), y=scaled(367), width=scaled(68), height=scaled(15)),
-        _ocr_line("Speed I", x=scaled(245), y=scaled(382), width=scaled(57), height=scaled(18)),
+        _ocr_line("Research", x=scaled(239), y=scaled(371), width=scaled(68), height=scaled(14)),
+        _ocr_line("Speed I", x=scaled(245), y=scaled(386), width=scaled(57), height=scaled(14)),
         _ocr_line("TroopLoadi", x=scaled(103), y=scaled(563), width=scaled(93), height=scaled(18)),
         _ocr_line("Storagel", x=scaled(363), y=scaled(562), width=scaled(69), height=scaled(21)),
-        _ocr_line("Infirmary Cap", x=scaled(219), y=scaled(746), width=scaled(105), height=scaled(19)),
+        _ocr_line("Infirmary Cap", x=scaled(219), y=scaled(752), width=scaled(105), height=scaled(19)),
         _ocr_line("Miraculous", x=scaled(231), y=scaled(936), width=scaled(84), height=scaled(19)),
     )
 
@@ -149,8 +151,8 @@ class ResearchObservationTests(unittest.TestCase):
             (
                 "Construction I",
                 "Research Speed I",
-                "Storage I",
                 "Troop Load I",
+                "Storage I",
                 "Infirmary Cap I",
             ),
             tuple(row.title_text for row in complete),
@@ -167,7 +169,7 @@ class ResearchObservationTests(unittest.TestCase):
             self.assertEqual(screenshot.frame_ref, row.frame_ref)
             self.assertEqual(ScreenType.PNC_RESEARCH_TREE, row.source_screen)
 
-        clipped = next(row for row in rows if row.title_text == "Miraculous Survival")
+        clipped = next(row for row in rows if row.title_text == "Miraculous")
         self.assertEqual(RowRecognitionStatus.CLIPPED, clipped.row_status)
         self.assertIsNone(clipped.action_bounds)
         self.assertIsNone(clipped.action_point)
@@ -230,9 +232,12 @@ class ResearchObservationTests(unittest.TestCase):
     def test_duplicate_development_labels_are_ambiguous(self) -> None:
         """Does not expose a tap point when one reviewed label appears twice."""
 
-        lines = (*_development_ocr_lines(), _ocr_line("Construction I", x=80, y=235, width=105, height=18))
+        image = _load_research_fixture()
+        tile = image.crop((219, 74, 326, 209))
+        image.paste(tile, (94, 74))
+        lines = (*_development_ocr_lines(), _ocr_line("Construction", x=97, y=183, width=102, height=17))
         observation = _research_perception(lines).build(
-            _captured_research_fixture(),
+            _captured_research_image(image, session_id="research-observation-duplicate"),
             include_content=True,
         )
 
@@ -291,10 +296,16 @@ class ResearchObservationTests(unittest.TestCase):
             ),
             accepted_screen=ScreenType.PNC_RESEARCH_TREE,
             image_size=(540, 960),
-            semantic_parser=lambda image, lines: _build_research_tree_additions(
+            semantic_parser=lambda image, lines: ResearchContentProducer().additions_for_tree(
                 image=image,
                 lines=lines,
-                proved_screen=ScreenType.PNC_RESEARCH_TREE,
+                ocr_context=ObservationOcrContext(
+                    image,
+                    _FakeOcrService(lines=lines),
+                    None,
+                    "research-observation-semantic-test",
+                ),
+                layout_id="research_tree_development",
             ),
         )
 

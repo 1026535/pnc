@@ -17,6 +17,7 @@ from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId, DailyTaskCheckpoint, MutationAcknowledgement, MutationIntentState
 from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, RowRecognitionStatus, VisibleElement
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchNodeFacts, ResearchNodeId
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -61,9 +62,19 @@ class CoreResearchMutationTests(unittest.TestCase):
             ListEntryKind.RESEARCH, Bounds(200, 200, 100, 90), title_text="Construction I",
             action_point=(250, 240), action_bounds=Bounds(200, 200, 100, 80),
             row_status=RowRecognitionStatus.COMPLETE, metadata={"category": "development"},
+            research_facts=ResearchNodeFacts(
+                category=ResearchCategory.DEVELOPMENT,
+                node_id=ResearchNodeId.CONSTRUCTION_I,
+            ),
         )
         self.grid = research("research_tree_development", rows=(self.node,))
-        self.idle = research("research_tree_node_detail", start=True)
+        self.idle = replace(
+            research("research_tree_node_detail", start=True),
+            research_detail=ResearchDetail(
+                title_text="Construction I",
+                node_id=ResearchNodeId.CONSTRUCTION_I,
+            ),
+        )
         self.active = research("research_tree_node_detail_active")
 
     def context(self, observations):

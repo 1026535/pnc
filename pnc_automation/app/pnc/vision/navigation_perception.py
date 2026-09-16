@@ -268,6 +268,8 @@ class NavigationPerception:
             active_bag_tab=content.active_bag_tab,
             chat_draft_empty=content.chat_draft_empty,
             chat_draft_text=content.chat_draft_text,
+            research_detail=content.research_detail,
+            research_queue_rows=content.research_queue_rows,
         )
         return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
 

@@ -155,12 +155,12 @@ def _select_development_node(
     observation: Observation,
     policy: ResearchPolicy,
 ) -> DetectedListEntry | None:
-    """Select exactly one complete Development row without inferring eligibility."""
+    """Select exactly one complete typed Development row without inferring eligibility."""
 
     candidates: list[DetectedListEntry] = []
     for entry in observation.entries(ListEntryKind.RESEARCH):
-        category = _entry_category(entry)
-        if category == ResearchCategory.DEVELOPMENT:
+        facts = entry.research_facts
+        if facts is not None and facts.category == ResearchCategory.DEVELOPMENT:
             candidates.append(entry)
     if not candidates:
         return None
@@ -168,7 +168,9 @@ def _select_development_node(
     target = choose_priority_entry(
         candidates,
         policy.priority,
-        key_selector=lambda entry: _entry_category(entry),
+        key_selector=lambda entry: (
+            entry.research_facts.category if entry.research_facts is not None else None
+        ),
     )
     if target is None:
         return None
@@ -192,20 +194,6 @@ def _select_development_node(
             "Development research node has no valid observed action geometry; no mutation was attempted."
         )
     return target
-
-
-def _entry_category(entry: DetectedListEntry) -> ResearchCategory | None:
-    """Parse one row's existing category metadata without treating unknown text as eligible."""
-
-    raw_category = entry.metadata.get("category")
-    if isinstance(raw_category, ResearchCategory):
-        return raw_category
-    if not isinstance(raw_category, str):
-        return None
-    try:
-        return ResearchCategory(raw_category)
-    except ValueError:
-        return None
 
 
 def _no_visible_supported_node(checkpoint: DailyTaskCheckpoint) -> ResearchResult:

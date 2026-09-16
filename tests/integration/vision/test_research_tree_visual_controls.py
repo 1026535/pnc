@@ -11,9 +11,15 @@ from PIL import Image
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
-from pnc_automation.app.pnc.domain.action_requests import TapAction
+from pnc_automation.app.pnc.domain.action_requests import TapAction, TapListEntryAction
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import (
+    ListEntryKind,
+    RowRecognitionStatus,
+    VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.research import ResearchNodeFacts, ResearchNodeId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -338,7 +344,7 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_RESEARCH_TREE)
-        self.assertEqual(observation.decision.layout_id, "research_tree_development")
+        self.assertEqual(observation.decision.layout_id, "research_tree_node_detail")
         self.assertEqual(observation.decision.guard, GuardVerdict.CLEAR)
         self.assertFalse(observation.blocking_popup)
         self.assertFalse(observation.has(UiElementId.PNC_RESEARCH_START_BUTTON))
@@ -368,7 +374,7 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         start = observation.require(UiElementId.PNC_RESEARCH_START_BUTTON)
         self.assertEqual(start.source_kind, VisibleElementSourceKind.TEMPLATE)
         self.assertEqual(start.source_screen, ScreenType.PNC_RESEARCH_TREE)
-        self.assertEqual(start.source_layout_id, "research_tree_development")
+        self.assertEqual(start.source_layout_id, "research_tree_node_detail")
         self.assertEqual(start.frame_ref, observation.frame_ref)
 
     def test_production_builder_publishes_start_to_research_consumer(self) -> None:
@@ -382,24 +388,35 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         start = detail.require(UiElementId.PNC_RESEARCH_START_BUTTON)
         self.assertEqual(start.source_kind, VisibleElementSourceKind.TEMPLATE)
         self.assertEqual(start.source_screen, ScreenType.PNC_RESEARCH_TREE)
-        self.assertEqual(start.source_layout_id, "research_tree_development")
+        self.assertEqual(start.source_layout_id, "research_tree_node_detail")
         self.assertEqual(start.frame_ref, detail.frame_ref)
 
         task = ResearchTask()
         context = Mock(params=task.parse_params({"priority": ["development"]}))
-        before = make_observation(
+        tree = make_observation(
             ScreenType.PNC_RESEARCH_TREE,
             list_entries=(
                 make_entry(
                     ListEntryKind.RESEARCH,
                     title="Construction I",
-                    metadata={"category": "development"},
+                    row_status=RowRecognitionStatus.COMPLETE,
+                    action_bounds=Bounds(40, 40, 20, 20),
+                    research_facts=ResearchNodeFacts(
+                        category=ResearchCategory.DEVELOPMENT,
+                        node_id=ResearchNodeId.CONSTRUCTION_I,
+                    ),
                 ),
             ),
         )
+        node_action = next(
+            action
+            for action in task.plan(context, tree)
+            if isinstance(action, TapListEntryAction)
+        )
+        self.assertEqual(node_action.title_text, "Construction I")
         start_action = next(
             action
-            for action in task.plan(context, before)
+            for action in task.plan(context, detail)
             if isinstance(action, TapAction)
             and action.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON
         )
@@ -414,7 +431,7 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         )
 
         self.assertEqual(session.taps, [start.action_point])
-        self.assertTrue(task.verify(context, before, result.observation).succeeded)
+        self.assertTrue(task.verify(context, tree, result.observation).succeeded)
 
     def test_production_builder_blocks_start_behind_required_update(self) -> None:
         """Keeps the measured background Start unavailable when an update owns the frame."""

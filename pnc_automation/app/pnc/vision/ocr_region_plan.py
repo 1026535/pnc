@@ -271,9 +271,24 @@ def compile_screen_content_ocr_region_plans(
             ("unmet_building_prerequisite", 0.04, 0.44, 0.92, 0.085),
         )
     if resolved_screen == ScreenType.PNC_RESEARCH_TREE:
-        if layout_id in {"research_tree_node_detail", "research_tree_node_detail_active"}:
-            regions = (("research_detail", 0.04, 0.245, 0.92, 0.48),)
-        elif layout_id != "research_tree_development":
+        if layout_id == "research_tree_node_detail":
+            # The detail panel spans the measured popup from its title band
+            # through the resource cost rows; nothing below the panel is owned.
+            regions = (("research_detail", 0.04, 0.24, 0.92, 0.58),)
+        elif layout_id == "research_tree_development":
+            # Node discovery is geometry-owned; OCR reads only the fixed
+            # category header plus each measured label/level region owned by
+            # the producer.
+            return (
+                OcrRegionPlan(
+                    family=resolved_screen,
+                    purpose=OcrRegionPurpose.HEADER,
+                    bounds=Bounds(0, 0, width, round(height * 0.065)),
+                    required_fact="screen_header",
+                    failure_policy=OcrRegionFailurePolicy.OMIT,
+                ),
+            )
+        else:
             return ()
     if resolved_screen == ScreenType.PNC_CAMPAIGN_MAP:
         campaign_region = CAMPAIGN_MAP_CHAPTER_ROW
@@ -334,7 +349,8 @@ def compile_screen_content_ocr_region_plans(
     include_header = not (
         resolved_screen in {ScreenType.PNC_ALLIANCE_HOME, ScreenType.PNC_WORLD_MAP}
         or (resolved_screen == ScreenType.PNC_RESEARCH_TREE
-            and layout_id in {"research_tree_node_detail", "research_tree_node_detail_active"})
+            and layout_id == "research_tree_node_detail")
+        or resolved_screen == ScreenType.PNC_RESEARCH_QUEUE
     )
     return (*((header,) if include_header else ()), *(
         OcrRegionPlan(

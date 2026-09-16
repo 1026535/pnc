@@ -298,6 +298,28 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
+    def scroll_research_tree(self) -> Observation:
+        """Swipe the proved Development grid once and invalidate node priming."""
+
+        self._research_node = None
+        try:
+            return self._runtime.navigation.scroll_research_tree(
+                observe_content=self._observe_research_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def close_research_detail(self) -> Observation:
+        """Back out of the proved detail and invalidate node priming."""
+
+        self._research_node = None
+        try:
+            return self._runtime.navigation.close_research_detail(
+                observe_content=self._observe_research_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def start_research(self, checkpoint: DailyTaskCheckpoint) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Use the canonical one-research boundary only after this context selected its node."""
 

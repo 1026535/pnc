@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig, castle_names_match
 from pnc_automation.core.errors import SelectorResolutionError
@@ -26,6 +26,14 @@ from pnc_automation.app.pnc.domain.screen_decision import (
     ScreenEvidence,
 )
 from pnc_automation.core.vision.image.models import Bounds
+
+
+if TYPE_CHECKING:
+    from pnc_automation.app.pnc.domain.research import (
+        ResearchDetail,
+        ResearchNodeFacts,
+        ResearchQueueRow,
+    )
 
 
 class VisibleElementSourceKind(StrEnum):
@@ -146,6 +154,7 @@ class DetectedListEntry:
     metadata: Mapping[str, Any] = field(default_factory=dict)
     row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED
     action_bounds: Bounds | None = None
+    research_facts: ResearchNodeFacts | None = None
     frame_ref: FrameRef | None = None
     source_screen: ScreenType | None = None
     source_layout_id: str | None = None
@@ -494,6 +503,8 @@ class Observation:
     text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
+    research_detail: ResearchDetail | None = None
+    research_queue_rows: tuple[ResearchQueueRow, ...] = ()
     frame_ref: FrameRef | None = None
 
     def __init__(
@@ -522,6 +533,8 @@ class Observation:
         text_field_states: Mapping[UiElementId, ObservedTextFieldState] | None = None,
         chat_draft_empty: bool | None = None,
         chat_draft_text: str | None = None,
+        research_detail: ResearchDetail | None = None,
+        research_queue_rows: tuple[ResearchQueueRow, ...] = (),
         frame_ref: FrameRef | None = None,
         *,
         screen_type: ScreenType | None = None,
@@ -573,6 +586,8 @@ class Observation:
             "text_field_states": {} if text_field_states is None else text_field_states,
             "chat_draft_empty": chat_draft_empty,
             "chat_draft_text": chat_draft_text,
+            "research_detail": research_detail,
+            "research_queue_rows": research_queue_rows,
             "frame_ref": frame_ref,
         }
         for field_name, value in values.items():

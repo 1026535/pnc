@@ -11,6 +11,7 @@ from typing import Literal, Protocol
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
     InputTextAction,
+    KeyEventAction,
     SelectChatChannelAction,
     SwipeAction,
     TapAction,
@@ -40,6 +41,10 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.domain.bag import BagTab, bag_tab_selector_id
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.research import (
+    ResearchNodeId,
+    research_node_for_title,
+)
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.chat import (
     ChatChannel,
@@ -76,6 +81,13 @@ _CAMERA_MEASURED_BUILDING_TARGETS = frozenset(
 # Consensus fitting is accurate to a few reference pixels; anything at or below
 # this delta after a pan means the camera did not measurably move.
 _CAMERA_STALL_TOLERANCE_REFERENCE_PX = 12
+
+_RESEARCH_DETAIL_ANCHOR_REASONS = frozenset(
+    {
+        "visual_anchor:research_tree_node_detail",
+        "visual_anchor:research_tree_node_detail_active",
+    }
+)
 
 
 class NavigationActuator(Protocol):
@@ -596,10 +608,19 @@ class NavigationCore:
         self, title: str, category: ResearchCategory, *,
         observe_content: Callable[[str], Observation],
     ) -> Observation:
-        """Select one fresh Development node and prove its normal detail control."""
+        """Select one fresh Development node and prove its matching detail identity.
+
+        Completion requires a fresh detail frame whose typed facts identify the
+        requested node; a generic Start template alone never proves the wrong
+        node was not opened. Active or locked matching details stay readable,
+        while mutation readiness remains owned by the Start boundary.
+        """
 
         if category != ResearchCategory.DEVELOPMENT or not isinstance(title, str) or not title.strip():
             raise ValueError("Research selection requires one named Development node.")
+        requested_node = research_node_for_title(title)
+        if requested_node is None:
+            raise ValueError("Research selection requires a supported Development node title.")
         self._sequence += 1
         label = f"core_{self._sequence}_research_node"
         source = observe_content(f"{label}_source")
@@ -611,7 +632,9 @@ class NavigationCore:
             raise RuntimeError("Research node selection requires the proved Development grid.")
         matches = tuple(
             entry for entry in source.entries(ListEntryKind.RESEARCH)
-            if entry.title_text == title and entry.metadata.get("category") == category.value
+            if entry.research_facts is not None
+            and entry.research_facts.node_id == requested_node
+            and entry.research_facts.category == category
         )
         if (
             len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
@@ -627,10 +650,77 @@ class NavigationCore:
                 use_action_point=True, reason="open_research_candidate",
             ),
             source, frozenset({ScreenType.PNC_RESEARCH_TREE}), label, observe_content,
+            completion_predicate=lambda frame: _research_detail_matches(
+                frame, node_id=requested_node, category=category
+            ),
+        )
+
+    def scroll_research_tree(
+        self, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Swipe the proved Development grid once and require a fresh tree frame.
+
+        The gesture is the single reviewed command captured in
+        ``12_research_scroll_result.json``; a failed confirmation never sends
+        another swipe.
+        """
+
+        self._sequence += 1
+        label = f"core_{self._sequence}_research_scroll"
+        before = observe_content(f"{label}_source")
+        _require_proved_development_grid(before)
+        return self._execute_content_and_confirm(
+            SwipeAction(
+                reason="replacement_scroll_research_tree",
+                start_x_ratio=0.86,
+                start_y_ratio=0.75,
+                end_x_ratio=0.86,
+                end_y_ratio=0.43,
+                duration_ms=700,
+            ),
+            before,
+            frozenset({ScreenType.PNC_RESEARCH_TREE}),
+            label,
+            observe_content,
             completion_predicate=lambda frame: (
                 frame.decision.guard == GuardVerdict.CLEAR
-                and any(evidence.reason == "visual_anchor:research_tree_node_detail" for evidence in frame.decision.evidence)
-                and _template_control(frame, UiElementId.PNC_RESEARCH_START_BUTTON)
+                and any(
+                    evidence.reason == "visual_anchor:research_tree_development"
+                    for evidence in frame.decision.evidence
+                )
+            ),
+        )
+
+    def close_research_detail(
+        self, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Send one Android Back from the proved detail and require the tree grid."""
+
+        self._sequence += 1
+        label = f"core_{self._sequence}_research_detail_close"
+        before = observe_content(f"{label}_source")
+        if (
+            before.screen_type != ScreenType.PNC_RESEARCH_TREE or before.blocking_popup
+            or before.decision.guard != GuardVerdict.CLEAR
+            or not any(
+                evidence.reason
+                in {"visual_anchor:research_tree_node_detail", "visual_anchor:research_tree_node_detail_active"}
+                for evidence in before.decision.evidence
+            )
+        ):
+            raise RuntimeError("Research detail close requires a proved detail frame.")
+        return self._execute_content_and_confirm(
+            KeyEventAction(key_code="KEYCODE_BACK", reason="replacement_close_research_detail"),
+            before,
+            frozenset({ScreenType.PNC_RESEARCH_TREE}),
+            label,
+            observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and any(
+                    evidence.reason == "visual_anchor:research_tree_development"
+                    for evidence in frame.decision.evidence
+                )
             ),
         )
 
@@ -1191,6 +1281,47 @@ def _template_control(observation: Observation, selector_id: UiElementId) -> boo
 
     element = observation.get(selector_id)
     return element is not None and element.source_kind == VisibleElementSourceKind.TEMPLATE
+
+
+def _require_proved_development_grid(observation: Observation) -> None:
+    """Require a fresh, unblocked, visually proved Development research grid."""
+
+    if (
+        observation.screen_type != ScreenType.PNC_RESEARCH_TREE or observation.blocking_popup
+        or observation.decision.guard != GuardVerdict.CLEAR
+        or not any(
+            evidence.reason == "visual_anchor:research_tree_development"
+            for evidence in observation.decision.evidence
+        )
+    ):
+        raise RuntimeError("Research tree actions require the proved Development grid.")
+
+
+def _research_detail_matches(
+    frame: Observation,
+    *,
+    node_id: ResearchNodeId,
+    category: ResearchCategory,
+) -> bool:
+    """Prove the fresh detail belongs to the requested node and category.
+
+    The detail's typed identity must resolve to the requested node. When the
+    panel displays its own category it must agree; when the panel hides it,
+    the freshly proved source category plus the direct single-tap transition
+    supply the navigation context instead.
+    """
+
+    detail = frame.research_detail
+    return (
+        frame.decision.guard == GuardVerdict.CLEAR
+        and any(
+            evidence.reason in _RESEARCH_DETAIL_ANCHOR_REASONS
+            for evidence in frame.decision.evidence
+        )
+        and detail is not None
+        and detail.node_id == node_id
+        and (detail.category is None or detail.category == category)
+    )
 
 
 def _require_chat_send_source(

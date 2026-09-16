@@ -28,6 +28,11 @@ from pnc_automation.app.pnc.domain.observation import (
     RowRecognitionStatus,
 )
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResearchPolicy
+from pnc_automation.app.pnc.domain.research import (
+    ResearchNodeFacts,
+    ResearchNodeId,
+    research_node_for_title,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import TaskVerificationError
 from tests.support.pnc.observations import make_observation
@@ -213,6 +218,10 @@ def _complete_entry(title: str, *, category: ResearchCategory = ResearchCategory
         action_bounds=action_bounds,
         metadata={"category": category.value},
         row_status=RowRecognitionStatus.COMPLETE,
+        research_facts=ResearchNodeFacts(
+            category=category,
+            node_id=research_node_for_title(title) or ResearchNodeId.CONSTRUCTION_I,
+        ),
     )
 
 
@@ -225,6 +234,7 @@ def _clipped_entry(title: str) -> DetectedListEntry:
         title_text=title,
         metadata={"category": ResearchCategory.DEVELOPMENT.value},
         row_status=RowRecognitionStatus.CLIPPED,
+        research_facts=ResearchNodeFacts(category=ResearchCategory.DEVELOPMENT),
     )
 
 

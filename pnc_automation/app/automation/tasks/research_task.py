@@ -16,8 +16,14 @@ from pnc_automation.app.automation.engine.task import (
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.observation import (
+    ListEntryKind,
+    Observation,
+    RowRecognitionStatus,
+    VisibleElementSourceKind,
+)
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResearchPolicy
+from pnc_automation.app.pnc.domain.research import ResearchNodeId
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -30,6 +36,12 @@ class ResearchTask(BaseAutomationTask):
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     preflight = TaskPreflight.HOME_CITY
     required_recognition_selectors = (UiElementId.PNC_RESEARCH_START_BUTTON,)
+
+    def __init__(self) -> None:
+        """Track the one node this task selected so Start needs a matching detail."""
+
+        self._pending_node_id: ResearchNodeId | None = None
+        self._pending_node_title: str | None = None
 
     def parse_params(self, params: Mapping[str, Any]) -> ResearchPolicy:
         """Builds the typed research policy."""
@@ -48,11 +60,13 @@ class ResearchTask(BaseAutomationTask):
         }
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
-        """Plans one research-start increment from the current screen."""
+        """Plans one research increment; Start requires the proved selected detail."""
 
         if observation.screen_type not in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
+            self._clear_pending_node()
             return context.flows.open_institute(observation)
         if observation.screen_type == ScreenType.PNC_INSTITUTE:
+            self._clear_pending_node()
             selector_id = _choose_institute_category_selector(observation, context.params.priority)
             if selector_id is not None:
                 return [
@@ -72,26 +86,67 @@ class ResearchTask(BaseAutomationTask):
                 ]
             return []
 
-        candidates = observation.entries(ListEntryKind.RESEARCH)
+        detail = observation.research_detail
+        if detail is not None:
+            # Only the detail this task opened can authorize its Start tap; a
+            # pre-opened or mismatched panel stays read-only.
+            if (
+                self._pending_node_id is None
+                or detail.node_id != self._pending_node_id
+                or not _has_template_start(observation)
+            ):
+                return []
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
+                    reason="start_research",
+                    observe_after=True,
+                )
+            ]
+
+        self._clear_pending_node()
+        candidates = tuple(
+            entry
+            for entry in observation.entries(ListEntryKind.RESEARCH)
+            if entry.research_facts is not None
+            and entry.research_facts.category is not None
+            and entry.row_status == RowRecognitionStatus.COMPLETE
+        )
         target = choose_priority_entry(
             candidates,
             context.params.priority,
-            key_selector=lambda entry: ResearchCategory(str(entry.require_metadata("category"))),
+            key_selector=lambda entry: entry.research_facts.category,
         )
         if target is None:
             return []
+        selected = tuple(
+            entry
+            for entry in candidates
+            if entry.research_facts is not None
+            and entry.research_facts.node_id == target.research_facts.node_id
+        )
+        if (
+            len(selected) != 1
+            or target.research_facts is None
+            or target.research_facts.node_id is None
+        ):
+            raise TaskVerificationError(
+                "Research candidate is ambiguous or unidentified; no node was opened or started.",
+                candidate_count=len(selected),
+            )
+        self._pending_node_id = target.research_facts.node_id
+        self._pending_node_title = target.title_text
         return [
             _tap_entry(target, kind=ListEntryKind.RESEARCH, reason="open_research_candidate"),
-            TapAction(
-                selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
-                reason="start_research",
-                observe_after=True,
-            ),
         ]
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies either navigation to the research tree or a started research item."""
 
+        if _is_active_research_detail(after):
+            if not after.has(UiElementId.PNC_RESEARCH_START_BUTTON):
+                self._clear_pending_node()
+                return TaskResult.success("Research started and the active detail has no start button.")
         if before.screen_type not in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
             if after.screen_type in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
                 return TaskResult.replan("Reached institute flow for research planning.")
@@ -103,12 +158,25 @@ class ResearchTask(BaseAutomationTask):
                 return TaskResult.skipped("No research category button was visible in the institute.")
             if after.screen_type == ScreenType.PNC_RESEARCH_TREE:
                 return TaskResult.replan("Opened the research tree.")
-        if before.screen_type == ScreenType.PNC_RESEARCH_TREE and not before.entries(ListEntryKind.RESEARCH):
-            return TaskResult.skipped("No eligible research items were visible.")
-        if _is_active_research_detail(after):
-            if not after.has(UiElementId.PNC_RESEARCH_START_BUTTON):
-                return TaskResult.success("Research started and the active detail has no start button.")
+        if before.screen_type == ScreenType.PNC_RESEARCH_TREE:
+            if before.entries(ListEntryKind.RESEARCH) and after.research_detail is not None:
+                return TaskResult.replan("Opened the selected research detail.")
+            if not before.entries(ListEntryKind.RESEARCH) and before.research_detail is None:
+                return TaskResult.skipped("No eligible research items were visible.")
         return TaskResult.failure("Research did not produce a verified state change.", retryable=True)
+
+    def _clear_pending_node(self) -> None:
+        """Drop the remembered selection whenever the task loses its detail proof."""
+
+        self._pending_node_id = None
+        self._pending_node_title = None
+
+
+def _has_template_start(observation: Observation) -> bool:
+    """Return whether the ordinary Start control was template-matched on this frame."""
+
+    element = observation.get(UiElementId.PNC_RESEARCH_START_BUTTON)
+    return element is not None and element.source_kind == VisibleElementSourceKind.TEMPLATE
 
 
 def _tap_entry(entry: object, *, kind: ListEntryKind, reason: str) -> TapListEntryAction:

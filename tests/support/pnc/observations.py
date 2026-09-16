@@ -19,9 +19,15 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     ObservedTextFieldState,
+    RowRecognitionStatus,
     SpatialSurfaceObservation,
     VisibleElement,
     VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.research import (
+    ResearchDetail,
+    ResearchNodeFacts,
+    ResearchQueueRow,
 )
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.domain.popup import (
@@ -71,6 +77,9 @@ def make_entry(
     metadata: dict[str, Any] | None = None,
     selected: bool = False,
     action_point: tuple[int, int] = (50, 50),
+    action_bounds: Bounds | None = None,
+    row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED,
+    research_facts: ResearchNodeFacts | None = None,
 ) -> DetectedListEntry:
     """Builds a dynamic list entry for tests."""
 
@@ -82,7 +91,10 @@ def make_entry(
         timer_text=timer_text,
         selected=selected,
         action_point=action_point,
+        action_bounds=action_bounds,
+        row_status=row_status,
         metadata=metadata or {},
+        research_facts=research_facts,
     )
 
 
@@ -116,6 +128,8 @@ def make_observation(
     popup_overlay: PopupOverlayObservation | None = None,
     frame_ref: FrameRef | None = None,
     decision: ScreenDecision | None = None,
+    research_detail: ResearchDetail | None = None,
+    research_queue_rows: tuple[ResearchQueueRow, ...] = (),
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -205,6 +219,8 @@ def make_observation(
         image_size=image_size,
         frame_fingerprint=frame_fingerprint or f"synthetic:{screen_type.value}:{','.join(item.value for item in visible_ids)}",
         popup_overlay=popup_overlay,
+        research_detail=research_detail,
+        research_queue_rows=research_queue_rows,
         frame_ref=resolved_frame_ref,
     )
 

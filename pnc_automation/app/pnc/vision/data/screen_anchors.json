@@ -1954,7 +1954,7 @@
         "locale": null,
         "qualification": "guarded_reference_only"
       },
-      "layout_id": "research_tree_development"
+      "layout_id": "research_tree_node_detail"
     },
     {
       "id": "research_tree_node_detail_active",
@@ -1994,7 +1994,7 @@
         "locale": null,
         "qualification": "guarded_reference_only"
       },
-      "layout_id": "research_tree_development"
+      "layout_id": "research_tree_node_detail"
     },
     {
       "id": "settings_preferences",

@@ -30,6 +30,7 @@ from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
+from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     DetectedListEntry,
@@ -154,6 +155,8 @@ class ObservationAdditions:
     text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
+    research_detail: ResearchDetail | None = None
+    research_queue_rows: tuple[ResearchQueueRow, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -823,6 +826,8 @@ class ObservationBuilder:
             text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
+            research_detail=additions.research_detail,
+            research_queue_rows=additions.research_queue_rows,
             frame_ref=getattr(screenshot, "frame_ref", None),
         )
         if self.debug_artifact_collector is not None and ocr_context is not None:
