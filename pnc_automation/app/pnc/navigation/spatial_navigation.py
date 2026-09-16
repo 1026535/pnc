@@ -61,6 +61,15 @@ HOME_CITY_HUD_SAFE_MAX_Y_RATIO = 0.58
 _HOME_CITY_CAMERA_PAN_CONTENT_GAIN = 2.33
 _HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO = 0.10
 _HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO = 0.56
+# Measured southern corridor for the eastern Campaign acquisition: at the
+# northern/default Home camera a dominant horizontal pan leaves every supported
+# landmark behind before the eastern landmarks enter below the viewport, so a
+# Campaign target that still needs horizontal acquisition first descends into
+# the independently measured atlas band (-709 corridor qualified on pan_07/c45;
+# -843 on the mega-castle bridge pair).
+_HOME_CITY_CAMPAIGN_CORRIDOR_MIN_Y = -850
+_HOME_CITY_CAMPAIGN_CORRIDOR_MAX_Y = -620
+_HOME_CITY_CAMPAIGN_CORRIDOR_AIM_Y = -709
 
 
 @dataclass(frozen=True, slots=True)
@@ -2359,6 +2368,20 @@ def plan_home_city_camera_pan(
     )
     dx_needed = 0.0 if band_x[0] <= point_reference[0] <= band_x[1] else (band_x[0] + band_x[1]) / 2 - point_reference[0]
     dy_needed = 0.0 if band_y[0] <= point_reference[1] <= band_y[1] else (band_y[0] + band_y[1]) / 2 - point_reference[1]
+    entering_campaign_corridor = (
+        target == HomeCityObjectId.CAMPAIGN
+        and dx_needed != 0.0
+        and not (
+            _HOME_CITY_CAMPAIGN_CORRIDOR_MIN_Y
+            <= proof.translation[1]
+            <= _HOME_CITY_CAMPAIGN_CORRIDOR_MAX_Y
+        )
+    )
+    if entering_campaign_corridor:
+        # Horizontal acquisition at a non-corridor camera row would outrun the
+        # landmark catalog; descend to the measured southern corridor instead.
+        dx_needed = 0.0
+        dy_needed = _HOME_CITY_CAMPAIGN_CORRIDOR_AIM_Y - proof.translation[1]
     if dx_needed == 0.0 and dy_needed == 0.0:
         raise SelectorResolutionError(
             (
@@ -2376,10 +2399,15 @@ def plan_home_city_camera_pan(
     needed = dx_needed if axis == "x" else dy_needed
     axis_reference_size = reference_width if axis == "x" else reference_height
     direction = _home_city_atlas_swipe_direction(axis=axis, remaining_delta=int(round(-needed)))
+    # The ordinary minimum moves about 373 reference pixels vertically, more
+    # than this 230-pixel corridor is wide. Near either edge it would overshoot
+    # and reverse indefinitely; use the measured error for that correction.
+    # The interior aim keeps even the shortest such gesture above touch slop.
+    minimum_distance_ratio = 0.0 if entering_campaign_corridor else _HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO
     distance_ratio = min(
         _HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO,
         max(
-            _HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO,
+            minimum_distance_ratio,
             abs(needed) / (axis_reference_size * _HOME_CITY_CAMERA_PAN_CONTENT_GAIN),
         ),
     )

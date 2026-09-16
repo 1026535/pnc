@@ -25,35 +25,42 @@ Start groups `unit.app.pnc.vision` and `unit.app.pnc.navigation`, then affected 
 
 ## Execution status
 
-**In progress, 2026-09-16 UTC; not merged.** The implementation checkout is
-`codex/vision-v02-home-camera`, integrated with accepted V01/V09 base
-`32a03492a2b83684582cb1868928d531c2064180`. The shared producer, both publishers,
-current-frame body targets and bounded measured-pan route are implemented.
+**Accepted for stated coverage, 2026-09-16 UTC.** Integrated with accepted
+V01/V09 base `32a03492a2b83684582cb1868928d531c2064180`. One canonical camera
+producer publishes independent current-frame proof through both observation
+paths; sixteen landmarks in ten scene groups support Institute, Tower and
+Campaign bodies. Campaign's canonical atlas action point is (2083,1121).
 
-Lead architectural/caller review corrected the worker's one-pan-only route to
-replan from fresh proof within the canonical scan budget. Live testing exposed
-HUD occlusion and loss of northern camera landmarks; the catalog now includes
-the qualified south-plaza and Tower-body evidence (eight crops, five groups).
-The Trial Challenge identity profile now uses its fixed toolbar instead of a
-mutable Hero card. Body geometry has one canonical reference per asset.
+Lead architecture/caller review corrected single-pan handling to measured
+replanning within the existing budget and fixed short Campaign corridor
+corrections that otherwise overshot the acquisition band. Live findings added
+qualified HUD-resistant plaza, Tower, ridge-wall and Alliance Hall evidence.
+The Trial profile now uses its stable toolbar; Campaign's persisted southern
+map view has a bounded two-anchor profile with the existing Home portal.
 
-**Live passed:** Home -> measured pan -> Institute -> Home, and measured Home
-Tower body -> Trial Challenge -> Home. Tests used the explicitly authorized
-mega_old_acc active castle, configured DAILY_CANARY role, canonical scoped
-lease and keep-warm cleanup. No account/castle switch, research, Trial challenge
-or spending occurred. See the [workflow evidence](../../docs/game-reference/workflows/home-camera-navigation.md).
-The legacy Home-city-map smoke does not prove these new core paths.
+**Live passed on the authorized mega_old_acc active castle:**
 
-Focused lead checks passed: 75 navigation tests; 41 camera/pan/both-publisher
-checks before the Tower correction; then 33 camera/profile/publication checks
-covering the final Tower correction. The original worker full run was2231passed
-+7skipped before V09 integration and lead corrections. Final combined affected
-integration checks remain due after the remaining Campaign changes.
+- Home -> measured pan -> Institute -> Home.
+- Measured Tower body -> Trial Challenge -> Home.
+- Default Home -> two measured pans -> fresh Campaign body -> recognized
+  Campaign map -> Home. Final camera returned to (-532,+222).
 
-**Remaining gate:** Campaign Home-portal calibration and target/route proof.
-Worker turn004's bidirectional saved-scene comparison found no reliable bridge.
-The lead is capturing one bounded horizontal Home pan from an already measured
-camera to supply overlap. Its translation must be measured from scene pixels;
-gesture displacement, Campaign/Arena OCR coordinates and the worker's suggested
-intermediate coordinates are not proof. Keep V02 unmerged while independent
-Research and Campaign-map work continues.
+All phases used the configured DAILY_CANARY role, canonical scoped reservation
+and keep-warm cleanup. No account/castle switch, research, Trial challenge,
+battle, item use or resource spending occurred. The lead inspected the actual
+menus and returns. Earlier stopped attempts and corrections are retained in
+[workflow evidence](../../docs/game-reference/workflows/home-camera-navigation.md).
+
+Offline verification: worker vision171 / navigation272 / both-publisher7 passed;
+required affected selection fell back to full integration with **2,275 passed
+and 7 skipped (2,282 total)**. After lead corrections, 93 navigation checks,
+57 camera/pan/publication checks,one new both-publisher HUD regression,
+20 Campaign profile checks and 3 profile-metadata checks passed; diff check
+passed. The metadata count assertion initially failed after adding the profile
+and was corrected before the three metadata checks passed. The full result is
+reused for unchanged contracts; the later bounded fixes have targeted proof.
+
+This accepts the captured/current ordinary appearance and three requested
+routes. Seasonal/event variants belong to V03; other atlas residuals, Trial
+card content and Campaign chapter/stage content remain with their named
+packets. This is not a claim of universal Home-map coverage.

@@ -190,6 +190,97 @@ class HomeCityCameraPanTests(unittest.TestCase):
         self.assertAlmostEqual(0.69, action.start_x_ratio)
         self.assertAlmostEqual(0.69, action.end_x_ratio)
 
+    def test_campaign_at_northern_camera_descends_to_corridor_first(self) -> None:
+        """Horizontal acquisition off-corridor would outrun the landmark catalog."""
+        action = plan_home_city_camera_pan(
+            observation=_observation(translation=(-532, 222)),
+            target=HomeCityObjectId.CAMPAIGN,
+        )
+
+        # Corridor aim -709 from camera row 222 requires image motion -931.
+        self.assertEqual("up", action.direction)
+        self.assertEqual("pan_home_city_camera_campaign_y", action.reason)
+        self.assertAlmostEqual(931 / (1600 * 2.33), action.distance_ratio, places=2)
+        self.assertTrue(action.observe_after)
+
+    def test_campaign_below_corridor_moves_up_into_the_band(self) -> None:
+        """A camera just below the corridor steps back up toward -709."""
+        action = plan_home_city_camera_pan(
+            observation=_observation(translation=(-700, -880)),
+            target=HomeCityObjectId.CAMPAIGN,
+        )
+
+        # A 0.10 minimum would overshoot the entire corridor and reverse again.
+        self.assertEqual("down", action.direction)
+        self.assertEqual("pan_home_city_camera_campaign_y", action.reason)
+        self.assertAlmostEqual(171 / (1600 * 2.33), action.distance_ratio)
+
+    def test_campaign_near_corridor_edge_does_not_force_an_overshooting_step(self) -> None:
+        """A short correction remains proportional on either side of the corridor."""
+        for source_y in (-600, -880):
+            with self.subTest(source_y=source_y):
+                action = plan_home_city_camera_pan(
+                    observation=_observation(translation=(-700, source_y)),
+                    target=HomeCityObjectId.CAMPAIGN,
+                )
+                self.assertLess(action.distance_ratio, 0.10)
+                signed_motion = action.distance_ratio * 1600 * 2.33
+                if action.direction == "up":
+                    signed_motion = -signed_motion
+                planned_y = source_y + signed_motion
+                self.assertGreaterEqual(planned_y, -850)
+                self.assertLessEqual(planned_y, -620)
+                # A fresh measurement in the corridor resumes horizontal work;
+                # the runtime never promotes this estimate to camera evidence.
+                next_action = plan_home_city_camera_pan(
+                    observation=_observation(translation=(-700, round(planned_y))),
+                    target=HomeCityObjectId.CAMPAIGN,
+                )
+                self.assertEqual("left", next_action.direction)
+
+    def test_campaign_in_corridor_pans_horizontally_toward_the_body(self) -> None:
+        """Inside the measured corridor the ordinary horizontal plan applies."""
+        action = plan_home_city_camera_pan(
+            observation=_observation(translation=(-1000, -709)),
+            target=HomeCityObjectId.CAMPAIGN,
+        )
+
+        # Atlas action anchor (2083,1121) projects to reference (1083,412): only
+        # horizontal acquisition is needed.
+        self.assertEqual("left", action.direction)
+        self.assertEqual("pan_home_city_camera_campaign_x", action.reason)
+        self.assertAlmostEqual(633 / (900 * 2.33), action.distance_ratio, places=2)
+
+    def test_campaign_body_above_band_pans_down_without_corridor_override(self) -> None:
+        """A matched body needing only vertical motion keeps the ordinary plan."""
+        target = _measured_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(353, 145, 90, 42),
+            action_point=(395, 167),
+            action_bounds=Bounds(389, 161, 13, 13),
+        )
+        action = plan_home_city_camera_pan(
+            observation=_observation(objects=(target,), translation=(-1423, -843)),
+            target=HomeCityObjectId.CAMPAIGN,
+        )
+
+        # Reference point (658,278) sits above the band; content must move down.
+        self.assertEqual("down", action.direction)
+        self.assertEqual("pan_home_city_camera_campaign_y", action.reason)
+
+    def test_campaign_in_band_body_needs_no_pan_step(self) -> None:
+        target = _measured_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(78, 225, 90, 42),
+            action_point=(121, 247),
+            action_bounds=Bounds(114, 241, 13, 13),
+        )
+        with self.assertRaisesRegex(SelectorResolutionError, "no pan is needed"):
+            plan_home_city_camera_pan(
+                observation=_observation(objects=(target,), translation=(-1882, -709)),
+                target=HomeCityObjectId.CAMPAIGN,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -78,6 +78,70 @@
       ],
       "source_sha256": "3623775820bdbe9c1ac43417957fec20bcc27d854bdff8d34fd2835d229832cd",
       "annotation": "2026-09-16 mega_old_acc active castle. Post-pan p3, t6 and the previously qualified Tower body agree exactly on image translation(0,-1065), atlas translation(-532,-843). Camera must remain localized after the other northern landmarks leave view."
+    },
+    {
+      "image": "home_city_bridge_t1_20260916.png",
+      "role": "bridge_camera_t1_southern_corridor",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "a17a0bb36f5123bd4cc754617ce15949bc821080ff47468cbf1fc356b4248430",
+      "source_artifact": "20260916T065649Z_core_20260916T065559Z_43b62d8a_0023_v02_bridge_pan_after_1.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "4ce48bbc6ba010f4e71f169c2bf7be80b722827f5e1d7ea5653a2a7787f6fc82",
+      "annotation": "2026-09-16 mega_old_acc active castle, live_campaign_bridge after frame (independent date/account from the 2026-09-15 tour). One .25-ratio left gesture moved image content (-477,0): atlas translation(-1009,-843). Localizes through blacksmith_structure + southern_courtyard + p6_path_right."
+    },
+    {
+      "image": "home_city_bridge_t2_20260916.png",
+      "role": "bridge_camera_t2_eastern_view",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "e8045e1faf5d5e0d2e8f391c387e458cf10d7f637d230f31d9a3e3b7db2f5b35",
+      "source_artifact": "20260916T070820Z_core_20260916T070733Z_450b5f36_0023_v02_bridge_pan_after_1.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "2362a6768729cea10379c16d78c23e33e1c8b2a08b8c3a08f3eb39dde74bc3ad",
+      "annotation": "2026-09-16 mega_old_acc active castle, live_campaign_bridge_2 after frame under a second canonical lease. One .20-ratio left gesture moved image content (-414,0): atlas translation(-1423,-843). Localizes through east_fortification + east_cliff groups and matches the Campaign portal body above the HUD-safe band."
+    },
+    {
+      "image": "home_city_campaign_portal_20260915.png",
+      "role": "campaign_portal_eastern_view",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "302a27b1d391e8e1236ecd5ca5655d3abb19ff974eee6ee7d82b4d2cf32c5b57",
+      "source_artifact": "20260915T161009Z_core_20260915T160413Z_018f500d_0045_core_9_building_source.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "09a1df5e8ce04a538906ab8705eb0ddd85a8a112ba40fd94f18d582671447a77",
+      "annotation": "2026-09-15 testing castle c45 view carrying the verified Campaign tap (201,412). Globally calibrated through the 2026-09-16 mega_old_acc bridge captures: image translation(-1350,-931), atlas translation(-1882,-709)."
+    },
+    {
+      "image": "home_city_campaign_hud_occluded_20260916.png",
+      "role": "live_regression_campaign_post_pan_hud_occlusion",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "9ac958b589e5b2e974ebc991deed4758bdafe15d2b4808e030bee7ff778f19e1",
+      "source_artifact": "20260916T080126Z_core_20260916T080024Z_425a9c7e_0024_core_6_building_pan_1_after_1.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "6a681e7e20c63bbfc47171d559703ae2ff213ab91a89386f37b7850f1ffb4764",
+      "annotation": "2026-09-16 mega_old_acc active castle. A measured vertical pan moved content(0,+359) from T(-1423,-843) to T(-1423,-484). Eastern cliff/parapet crops were occluded by fixed HUD. Aqueduct, previously calibrated ridge-wall and Alliance Hall structure agree on the new camera. Campaign pedestal .92164 agrees at(589,600), verified action(660,637). No building tap was sent before camera qualification."
     }
   ]
 }

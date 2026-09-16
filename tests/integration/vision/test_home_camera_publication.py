@@ -55,7 +55,7 @@ from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_
 FIXTURES = TEST_DATA_ROOT / "home_city_camera"
 HOME_LAYOUT_ID = "home_city"
 _CAMERA_TARGET_IDS = frozenset(
-    {HomeCityObjectId.INSTITUTE, HomeCityObjectId.TOWER_OF_TRIAL}
+    {HomeCityObjectId.INSTITUTE, HomeCityObjectId.TOWER_OF_TRIAL, HomeCityObjectId.CAMPAIGN}
 )
 
 # Reviewed measured results for each tracked fixture: expected atlas-to-
@@ -76,6 +76,14 @@ _EXPECTED = {
     "home_city_mega_castle.png": {
         "translation": (-822, -260),
         "targets": {HomeCityObjectId.INSTITUTE: (260, 463)},
+    },
+    "home_city_campaign_portal_20260915.png": {
+        "translation": (-1881, -710),
+        "targets": {HomeCityObjectId.CAMPAIGN: (121, 247)},
+    },
+    "home_city_bridge_t2_20260916.png": {
+        "translation": (-1423, -843),
+        "targets": {HomeCityObjectId.CAMPAIGN: (395, 167)},
     },
 }
 
@@ -297,6 +305,75 @@ class HomeCameraPublicationTests(unittest.TestCase):
                     expected["translation"],
                     expected["targets"],
                 )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_campaign_capture_publishes_portal_body_without_a_spelled_label(self) -> None:
+        """The bridge-calibrated c45 view localizes and exposes the verified portal tap."""
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_campaign_portal_20260915.png",
+            session_id="v02-home-camera",
+            capture_sequence=6,
+        )
+
+        observations = self._build_both(builder, navigation, backend, capture)
+        expected = _EXPECTED["home_city_campaign_portal_20260915.png"]
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_camera_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_bridge_t2_capture_publishes_the_same_portal_body(self) -> None:
+        """The independent mega-castle bridge frame agrees on the same measured body."""
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_bridge_t2_20260916.png",
+            session_id="v02-home-camera",
+            capture_sequence=7,
+        )
+
+        observations = self._build_both(builder, navigation, backend, capture)
+        expected = _EXPECTED["home_city_bridge_t2_20260916.png"]
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_camera_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_campaign_post_pan_hud_occlusion_keeps_fresh_actionable_body(self) -> None:
+        """Actual HUD occlusion does not erase the independent camera proof."""
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_campaign_hud_occluded_20260916.png",
+            session_id="v02-campaign-occlusion",
+            capture_sequence=8,
+        )
+        observations = self._build_both(builder, navigation, backend, capture)
+        for observation in observations:
+            self._assert_camera_publication(
+                observation, capture, (-1423, -484),
+                {HomeCityObjectId.CAMPAIGN: (395, 382)},
+            )
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_world_map_is_a_camera_negative_on_both_paths(self) -> None:

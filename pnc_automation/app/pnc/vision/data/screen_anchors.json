@@ -986,12 +986,12 @@
           "threshold": 0.96
         },
         {
-        "image": "screen_anchors/popup/valiant_conquest_panel.png",
-        "search_region": [
-          15,
-          570,
-          510,
-          300
+          "image": "screen_anchors/popup/valiant_conquest_panel.png",
+          "search_region": [
+            15,
+            570,
+            510,
+            300
           ],
           "threshold": 0.96
         }
@@ -4100,12 +4100,22 @@
       "anchors": [
         {
           "image": "screen_anchors/building_arena_title.png",
-          "search_region": [20, 0, 300, 52],
+          "search_region": [
+            20,
+            0,
+            300,
+            52
+          ],
           "threshold": 0.95
         },
         {
           "image": "screen_anchors/building_arena_arena_tab.png",
-          "search_region": [0, 52, 270, 54],
+          "search_region": [
+            0,
+            52,
+            270,
+            54
+          ],
           "threshold": 0.94
         }
       ],
@@ -4114,7 +4124,12 @@
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
           "anchor": {
             "image": "screen_anchors/building_arena_back.png",
-            "search_region": [0, 0, 100, 55],
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
             "threshold": 0.94
           }
         },
@@ -4122,7 +4137,12 @@
           "selector": "PNC_VERSUS_CENTER_TAB_ARENA",
           "anchor": {
             "image": "screen_anchors/building_arena_arena_tab.png",
-            "search_region": [0, 52, 270, 54],
+            "search_region": [
+              0,
+              52,
+              270,
+              54
+            ],
             "threshold": 0.94
           }
         },
@@ -4130,12 +4150,19 @@
           "selector": "PNC_VERSUS_CENTER_TAB_EXCHANGE_SHOP",
           "anchor": {
             "image": "screen_anchors/building_arena_exchange_tab.png",
-            "search_region": [270, 52, 270, 54],
+            "search_region": [
+              270,
+              52,
+              270,
+              54
+            ],
             "threshold": 0.94
           }
         }
       ],
-      "occludes": ["PNC_HOME_CITY"]
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "building_blacksmith",
@@ -4157,12 +4184,22 @@
       "anchors": [
         {
           "image": "screen_anchors/building_blacksmith_title.png",
-          "search_region": [80, 0, 190, 55],
+          "search_region": [
+            80,
+            0,
+            190,
+            55
+          ],
           "threshold": 0.95
         },
         {
           "image": "screen_anchors/building_blacksmith_description.png",
-          "search_region": [270, 120, 270, 100],
+          "search_region": [
+            270,
+            120,
+            270,
+            100
+          ],
           "threshold": 0.94
         }
       ],
@@ -4171,7 +4208,12 @@
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
           "anchor": {
             "image": "screen_anchors/building_blacksmith_back.png",
-            "search_region": [0, 0, 100, 55],
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
             "threshold": 0.94
           }
         },
@@ -4179,12 +4221,19 @@
           "selector": "PNC_BLACKSMITH_UPGRADE_BUTTON",
           "anchor": {
             "image": "screen_anchors/building_blacksmith_upgrade.png",
-            "search_region": [360, 245, 180, 60],
+            "search_region": [
+              360,
+              245,
+              180,
+              60
+            ],
             "threshold": 0.94
           }
         }
       ],
-      "occludes": ["PNC_HOME_CITY"]
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "building_hall_of_war",
@@ -4277,12 +4326,22 @@
       "anchors": [
         {
           "image": "screen_anchors/building_sacred_tree_title.png",
-          "search_region": [90, 0, 230, 60],
+          "search_region": [
+            90,
+            0,
+            230,
+            60
+          ],
           "threshold": 0.95
         },
         {
           "image": "screen_anchors/building_sacred_tree_description.png",
-          "search_region": [85, 730, 390, 100],
+          "search_region": [
+            85,
+            730,
+            390,
+            100
+          ],
           "threshold": 0.93
         }
       ],
@@ -4291,7 +4350,12 @@
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
           "anchor": {
             "image": "screen_anchors/building_sacred_tree_back.png",
-            "search_region": [0, 0, 100, 65],
+            "search_region": [
+              0,
+              0,
+              100,
+              65
+            ],
             "threshold": 0.94
           }
         },
@@ -4299,7 +4363,12 @@
           "selector": "PNC_SACRED_TREE_BLESSING_RECORD_BUTTON",
           "anchor": {
             "image": "screen_anchors/building_sacred_tree_blessing_record.png",
-            "search_region": [425, 50, 115, 145],
+            "search_region": [
+              425,
+              50,
+              115,
+              145
+            ],
             "threshold": 0.94
           }
         },
@@ -4307,7 +4376,12 @@
           "selector": "PNC_SACRED_TREE_HARVEST_BUTTON",
           "anchor": {
             "image": "screen_anchors/building_sacred_tree_harvest.png",
-            "search_region": [155, 860, 230, 100],
+            "search_region": [
+              155,
+              860,
+              230,
+              100
+            ],
             "threshold": 0.94
           }
         }
@@ -4718,6 +4792,61 @@
       "controls": [],
       "occludes": [
         "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "campaign_map_southern_view",
+      "layout_id": "campaign_map",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_map_southern_view_20260916.png",
+        "decoded_sha256": "3ecd28ef81e61596428f3d1f61c4c5bc580d42076b6e72c483adf0bbe08e86fc",
+        "capture_group": "2026-09-16/mega_old_acc/v02_campaign_live"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Current persisted southern Campaign map position, independently identified by the Costa Dorad and Misty Bay chapter rows. Reuses the existing measured Home portal; the observed rows do not imply an active chapter or mode.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_map_costa_dorad.png",
+          "search_region": [
+            88,
+            355,
+            166,
+            54
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_map_misty_bay.png",
+          "search_region": [
+            160,
+            672,
+            166,
+            52
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_HOME_PORTAL",
+          "anchor": {
+            "image": "screen_anchors/campaign_home_portal.png",
+            "search_region": [
+              466,
+              775,
+              55,
+              45
+            ],
+            "threshold": 0.95
+          }
+        }
       ]
     }
   ]

@@ -123,11 +123,22 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             (HomeCityObjectId.CASTLE, HomeCityObjectId.INFANTRY_BARRACKS),
             catalog.anchor_object_ids,
         )
-        self.assertEqual(8, len(catalog.landmarks))
-        self.assertEqual(2, len(catalog.targets))
+        self.assertEqual(16, len(catalog.landmarks))
+        self.assertEqual(3, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
-            {"institute_structure", "garden_terrace", "plaza_low", "barracks_roofs", "tower_structure"},
+            {
+                "institute_structure",
+                "garden_terrace",
+                "plaza_low",
+                "barracks_roofs",
+                "tower_structure",
+                "blacksmith_structure",
+                "southern_courtyard",
+                "east_fortification",
+                "east_cliff",
+                "alliance_hall_structure",
+            },
             groups,
         )
         # Institute-correlated crops share one group so they cannot outvote
@@ -141,12 +152,21 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             {"p2_institute_facade", "p3_institute_base_left", "p6_path_right"},
             set(institute_votes),
         )
+        # Correlated eastern wall/cliff crops are grouped honestly for the same reason.
+        by_group = {}
+        for landmark in catalog.landmarks:
+            by_group.setdefault(landmark.group_id, set()).add(landmark.id)
+        self.assertEqual({"east_aqueduct", "east_parapet", "ridge_wall"}, by_group["east_fortification"])
+        self.assertEqual({"east_cliff_rock", "east_rock_trees"}, by_group["east_cliff"])
         for item in (*catalog.landmarks, *catalog.targets):
             self.assertTrue(catalog.template_path(item.file_name).is_file())
         self.assertIs(
             catalog.target_for(HomeCityObjectId.INSTITUTE),
             catalog.targets[0],
         )
+        campaign = catalog.target_for(HomeCityObjectId.CAMPAIGN)
+        self.assertIsNotNone(campaign)
+        self.assertEqual((2083, 1121), campaign.atlas_action_point())
         self.assertIsNone(catalog.target_for(HomeCityObjectId.CASTLE))
 
 
@@ -218,6 +238,53 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
 
         self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
         self.assertEqual((-822, -260), proof.translation)
+
+    def test_bridge_t1_localizes_through_southern_corridor_landmarks(self) -> None:
+        """The first live bridge pan lands on the measured corridor camera."""
+        proof = _localizer().localize(_fixture(_CAMERA_FIXTURES / "home_city_bridge_t1_20260916.png"))
+
+        self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
+        self.assertEqual((-1009, -843), proof.translation)
+        self.assertIn("blacksmith_structure", proof.matched_group_ids)
+        self.assertIn("southern_courtyard", proof.matched_group_ids)
+
+    def test_bridge_t2_localizes_through_eastern_landmarks(self) -> None:
+        """The second live bridge pan lands on the eastern landmark groups."""
+        proof = _localizer().localize(_fixture(_CAMERA_FIXTURES / "home_city_bridge_t2_20260916.png"))
+
+        self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
+        self.assertEqual((-1423, -843), proof.translation)
+        self.assertTrue({"east_fortification", "east_cliff"} <= proof.matched_group_ids)
+
+    def test_campaign_post_pan_hud_occlusion_retains_independent_camera_and_body(self) -> None:
+        """The HUD-covered eastern view retains fortification and Alliance Hall proof."""
+        localizer = _localizer()
+        frame = localizer.prepare_frame(
+            _fixture(_CAMERA_FIXTURES / "home_city_campaign_hud_occluded_20260916.png")
+        )
+        proof = localizer.localize(frame)
+        self.assertTrue(proof.localized)
+        for actual, expected in zip(proof.translation, (-1423, -484), strict=True):
+            self.assertLessEqual(abs(actual - expected), 1)
+        self.assertTrue({"east_fortification", "alliance_hall_structure"} <= proof.matched_group_ids)
+        match = localizer.match_target(
+            frame, localizer.catalog.target_for(HomeCityObjectId.CAMPAIGN),
+            translation=proof.translation,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual((395, 382), match.action_point)
+
+    def test_campaign_view_localizes_at_the_globally_calibrated_translation(self) -> None:
+        """The c45 portal view resolves through the bridge-calibrated eastern crops."""
+        proof = _localizer().localize(_fixture(_CAMERA_FIXTURES / "home_city_campaign_portal_20260915.png"))
+
+        self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
+        # Accepted measurement is (-1882,-709); the 540x960 fixture rounds to (-1881,-710).
+        self.assertEqual((-1881, -710), proof.translation)
+        self.assertEqual(
+            frozenset({"east_fortification", "east_cliff"}),
+            proof.matched_group_ids,
+        )
 
     def test_world_map_is_the_true_camera_negative(self) -> None:
         proof = _localizer().localize(_fixture(_SCREEN_RECOGNITION / "world_map_core.png"))
@@ -438,6 +505,62 @@ class HomeCityCameraTargetTests(unittest.TestCase):
             _SCREEN_RECOGNITION / "home_city_core.png",
             _CAMERA_FIXTURES / "home_city_pan_07.png",
             _CAMERA_FIXTURES / "home_city_mega_castle.png",
+        ):
+            with self.subTest(fixture=name.name):
+                other = localizer.prepare_frame(_fixture(name))
+                other_proof = localizer.localize(other)
+                self.assertIsNone(
+                    localizer.match_target(other, target, translation=other_proof.translation)
+                )
+
+    def test_campaign_body_matches_portal_view_with_verified_action_geometry(self) -> None:
+        """The portal body carries the verified c45 tap, not a label anchor."""
+        localizer = _localizer()
+        catalog = load_home_city_camera_catalog()
+        target = catalog.target_for(HomeCityObjectId.CAMPAIGN)
+
+        image = _fixture(_CAMERA_FIXTURES / "home_city_campaign_portal_20260915.png")
+        frame = localizer.prepare_frame(image)
+        proof = localizer.localize(frame)
+        match = localizer.match_target(frame, target, translation=proof.translation)
+
+        self.assertIsNotNone(match)
+        self.assertLessEqual(match.projection_error, 8.0)
+        self.assertGreaterEqual(match.score, 0.93)
+        # Verified Campaign tap (201,412) at 900x1600 scales to (121,247) at 540x960.
+        self.assertEqual((121, 247), match.action_point)
+        self.assertTrue(match.action_bounds.contains_point(match.action_point))
+        self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+
+    def test_campaign_body_matches_bridge_view_above_the_safe_band(self) -> None:
+        """The T2 bridge view matches the same body slightly above the tap band."""
+        localizer = _localizer()
+        catalog = load_home_city_camera_catalog()
+        target = catalog.target_for(HomeCityObjectId.CAMPAIGN)
+
+        image = _fixture(_CAMERA_FIXTURES / "home_city_bridge_t2_20260916.png")
+        frame = localizer.prepare_frame(image)
+        proof = localizer.localize(frame)
+        match = localizer.match_target(frame, target, translation=proof.translation)
+
+        self.assertIsNotNone(match)
+        self.assertGreaterEqual(match.score, 0.93)
+        # Live-qualified point (660,278) at 900x1600 scales to (395,167) at 540x960;
+        # 167 is above the HUD-safe minimum, so the route must pan before tapping.
+        self.assertEqual((395, 167), match.action_point)
+
+    def test_campaign_body_is_nonactionable_when_absent_or_unlocalized(self) -> None:
+        """No body may be invented on views that cannot see the portal."""
+        localizer = _localizer()
+        catalog = load_home_city_camera_catalog()
+        target = catalog.target_for(HomeCityObjectId.CAMPAIGN)
+
+        for name in (
+            _SCREEN_RECOGNITION / "home_city_core.png",
+            _CAMERA_FIXTURES / "home_city_pan_07.png",
+            _CAMERA_FIXTURES / "home_city_tower_pan_28.png",
+            _CAMERA_FIXTURES / "home_city_mega_castle.png",
+            _CAMERA_FIXTURES / "home_city_bridge_t1_20260916.png",
         ):
             with self.subTest(fixture=name.name):
                 other = localizer.prepare_frame(_fixture(name))

@@ -544,7 +544,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         display_name="Campaign",
         home_city_labels=("Campaign",),
         supported_actions=(BuildingAction.OPEN_CAMPAIGN,),
-        map_coordinate=HomeCityMapCoordinate(x=1854, y=1140),
+        map_coordinate=HomeCityMapCoordinate(x=2083, y=1121),
     ),
     HomeCityObjectDefinition(
         id=HomeCityObjectId.ARENA,

@@ -1120,6 +1120,19 @@
       "source_artifact": "20260916T063840Z_core_20260916T063720Z_bd76a1da_0031_core_7_building_after_7.png",
       "source_sha256": "9652e12763a6d601d0fc43d40cedfd8fb2d2102b1bc975594318b56b6d90564a",
       "annotation": "Real live completion variant: Hero Trial card is darkened and completed, Gear Trial is active. Title and fixed Progress/Total Rank toolbar are unchanged; the mutable Hero card cannot own screen identity."
+    },
+    {
+      "image": "campaign_map_southern_view_20260916.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "reference",
+      "group": "2026-09-16/mega_old_acc/v02_campaign_live",
+      "sha256": "3ecd28ef81e61596428f3d1f61c4c5bc580d42076b6e72c483adf0bbe08e86fc",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
+      ],
+      "source_artifact": "20260916T081216Z_core_20260916T081059Z_024dd4ac_0031_core_7_building_after_7.png",
+      "source_sha256": "ffebf00dfb24b2df963f180d087543f23dfb52e18e627d808abf2912586fce21",
+      "annotation": "V02 Home portal tap reached a persisted southern Campaign map view. Both distinct numbered chapter rows own this profile; no event overlay or header chapter text supplies identity."
     }
   ]
 }

@@ -35,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(69, len(catalog["profiles"]))
+        self.assertEqual(70, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -99,7 +99,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
-        self.assertEqual(69, len(recognizer.profiles))
+        self.assertEqual(len(catalog["profiles"]), len(recognizer.profiles))
         self.assertTrue(all(profile.review.qualification == "guarded_reference_only" for profile in recognizer.profiles))
 
         class _MatchAll:

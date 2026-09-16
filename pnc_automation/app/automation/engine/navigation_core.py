@@ -70,6 +70,7 @@ _CAMERA_MEASURED_BUILDING_TARGETS = frozenset(
     {
         HomeCityObjectId.INSTITUTE,
         HomeCityObjectId.TOWER_OF_TRIAL,
+        HomeCityObjectId.CAMPAIGN,
     }
 )
 # Consensus fitting is accurate to a few reference pixels; anything at or below

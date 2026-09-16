@@ -164,6 +164,30 @@ def _navigation_perception_with_backend(ocr_service: _CampaignCropOcrService) ->
 class CampaignVisualProfileTests(unittest.TestCase):
     """Require campaign identity and controls to remain evidence-backed and scoped."""
 
+    def test_persisted_southern_map_view_has_owned_home_return_on_both_paths(self) -> None:
+        """The live reopened map needs both scene rows and its measured portal."""
+        image = _image("campaign_map_southern_view_20260916.png")
+        for size in ((540, 960), (900, 1600)):
+            capture = _capture(image.resize(size, Image.Resampling.LANCZOS))
+            for path in ("builder", "navigation"):
+                with self.subTest(size=size, path=path):
+                    observation = (
+                        _builder().build(capture)
+                        if path == "builder"
+                        else _navigation_perception().build(capture, include_content=True)
+                    )
+                    self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, observation.screen_type)
+                    control = observation.get(UiElementId.PNC_CAMPAIGN_HOME_PORTAL)
+                    self.assertIsNotNone(control)
+                    self.assertEqual(VisibleElementSourceKind.TEMPLATE, control.source_kind)
+                    self.assertEqual(capture.frame_ref, control.frame_ref)
+                    self.assertFalse(observation.list_entries)
+        # One isolated chapter label cannot qualify this appearance.
+        erased = image.copy()
+        ImageDraw.Draw(erased).rectangle((85, 350, 260, 413), fill=(0, 0, 0))
+        recognition = load_visual_screen_recognizer().recognize(erased)
+        self.assertNotIn("campaign_map_southern_view", recognition.profile_ids)
+
     def test_stage_content_request_preserves_controls_without_unused_body_ocr(self) -> None:
         """A recognized stage skips popup guard OCR while retaining measured controls."""
         capture = _capture(_image("campaign_stage_10_3.png"))

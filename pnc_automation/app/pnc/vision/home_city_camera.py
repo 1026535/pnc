@@ -148,6 +148,7 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
 
     institute_body_bounds = Bounds(700, 1240, 80, 75)
     tower_body_bounds = Bounds(240, 1620, 130, 140)
+    campaign_body_bounds = Bounds(1480, 1306, 150, 70)
     catalog = HomeCityCameraCatalog(
         landmarks=(
             HomeCityCameraLandmark(
@@ -206,6 +207,62 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_bounds=tower_body_bounds,
                 min_score=0.90,
             ),
+            HomeCityCameraLandmark(
+                id="blacksmith_structure",
+                group_id="blacksmith_structure",
+                file_name="blacksmith_structure.png",
+                reference_bounds=Bounds(640, 1845, 120, 130),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="southern_courtyard",
+                group_id="southern_courtyard",
+                file_name="southern_courtyard.png",
+                reference_bounds=Bounds(640, 1530, 100, 100),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="east_aqueduct",
+                group_id="east_fortification",
+                file_name="east_aqueduct.png",
+                reference_bounds=Bounds(1451, 1505, 120, 140),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="east_parapet",
+                group_id="east_fortification",
+                file_name="east_parapet.png",
+                reference_bounds=Bounds(1651, 1715, 80, 60),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="east_cliff_rock",
+                group_id="east_cliff",
+                file_name="east_cliff_rock.png",
+                reference_bounds=Bounds(1681, 1825, 80, 140),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="east_rock_trees",
+                group_id="east_cliff",
+                file_name="east_rock_trees.png",
+                reference_bounds=Bounds(1521, 1965, 120, 100),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="ridge_wall",
+                group_id="east_fortification",
+                file_name="ridge_wall.png",
+                reference_bounds=Bounds(1117, 1365, 100, 130),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
+                id="alliance_hall_structure",
+                group_id="alliance_hall_structure",
+                file_name="alliance_hall_structure.png",
+                reference_bounds=Bounds(1197, 1675, 140, 80),
+                min_score=0.90,
+            ),
         ),
         targets=(
             HomeCityCameraTarget(
@@ -225,6 +282,19 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_bounds=tower_body_bounds,
                 reference_action_bounds=Bounds(272, 1680, 56, 50),
                 reference_action_point=(299, 1714),
+                min_score=0.90,
+                max_projection_error=8,
+            ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.CAMPAIGN,
+                landmark_id="campaign_portal_body",
+                file_name="campaign_portal_body.png",
+                reference_bounds=campaign_body_bounds,
+                reference_action_bounds=Bounds(1540, 1332, 22, 22),
+                reference_action_point=(1551, 1343),
+                # The independent post-pan live body scores .922; retained
+                # non-Home negatives stay below .40. Projection agreement and
+                # independent camera consensus remain mandatory.
                 min_score=0.90,
                 max_projection_error=8,
             ),

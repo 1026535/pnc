@@ -341,11 +341,16 @@ class NavigationCoreTests(unittest.TestCase):
                         self.assertEqual([], actuator.actions)
 
     def test_campaign_endpoint_opens_after_fresh_target_reacquisition(self):
-        target = home_building_object(HomeCityObjectId.CAMPAIGN)
+        target = measured_building_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(78, 225, 90, 42),
+            action_point=(121, 247),
+            action_bounds=Bounds(114, 241, 13, 13),
+        )
         now = datetime(2026, 9, 12, tzinfo=UTC)
         content_frames = iter((
-            home_building_frame((target,), captured_at=now),
-            home_building_frame((target,), captured_at=now + timedelta(seconds=1)),
+            camera_home_frame((target,), translation=(-1882, -709), captured_at=now),
+            camera_home_frame((target,), translation=(-1882, -709), captured_at=now + timedelta(seconds=1)),
         ))
         destination_frames = iter(
             replace(observation(screen), captured_at=now + timedelta(seconds=index))
@@ -1326,6 +1331,177 @@ class NavigationCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
             core.open_building(
                 HomeCityObjectId.INSTITUTE,
+                observe_content=lambda _: next(content_frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+
+    def test_campaign_measured_open_descends_to_corridor_before_horizontal_pan(self):
+        """Northern Home first descends to the measured corridor, then pans east."""
+        target = measured_building_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(78, 225, 90, 42),
+            action_point=(121, 247),
+            action_bounds=Bounds(114, 241, 13, 13),
+        )
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        corridor = (
+            camera_home_frame(translation=(-532, -709), captured_at=now + timedelta(seconds=1)),
+            camera_home_frame(translation=(-532, -709), captured_at=now + timedelta(seconds=2)),
+        )
+        eastern = (
+            camera_home_frame((target,), translation=(-1882, -709), captured_at=now + timedelta(seconds=3)),
+            camera_home_frame((target,), translation=(-1882, -709), captured_at=now + timedelta(seconds=4)),
+        )
+        content_frames = iter(
+            (
+                camera_home_frame(translation=(-532, 222), captured_at=now),
+                *corridor,
+                *eastern,
+                camera_home_frame((target,), translation=(-1882, -709), captured_at=now + timedelta(seconds=5)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_CAMPAIGN_MAP),
+                observation(ScreenType.PNC_CAMPAIGN_MAP),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=5),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.CAMPAIGN,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, result.screen_type)
+        self.assertEqual(3, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("up", actuator.actions[0].direction)
+        self.assertEqual("pan_home_city_camera_campaign_y", actuator.actions[0].reason)
+        self.assertIsInstance(actuator.actions[1], SwipeAction)
+        self.assertEqual("left", actuator.actions[1].direction)
+        self.assertEqual("pan_home_city_camera_campaign_x", actuator.actions[1].reason)
+        self.assertIsInstance(actuator.actions[2], TapSpatialObjectAction)
+        self.assertEqual((121, 247), actuator.actions[2].target_point)
+
+    def test_campaign_measured_open_pans_above_band_body_before_tap(self):
+        """A body matched above the HUD-safe band gets one vertical pan, never a blind tap."""
+        above_band = measured_building_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(353, 145, 90, 42),
+            action_point=(395, 167),
+            action_bounds=Bounds(389, 161, 13, 13),
+        )
+        in_band = measured_building_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(280, 225, 90, 42),
+            action_point=(323, 247),
+            action_bounds=Bounds(316, 241, 13, 13),
+        )
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame((above_band,), translation=(-1423, -843), captured_at=now),
+                camera_home_frame((in_band,), translation=(-1423, -730), captured_at=now + timedelta(seconds=1)),
+                camera_home_frame((in_band,), translation=(-1423, -730), captured_at=now + timedelta(seconds=2)),
+                camera_home_frame((in_band,), translation=(-1423, -730), captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_CAMPAIGN_MAP),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.CAMPAIGN,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("down", actuator.actions[0].direction)
+        self.assertEqual("pan_home_city_camera_campaign_y", actuator.actions[0].reason)
+        self.assertIsInstance(actuator.actions[1], TapSpatialObjectAction)
+        self.assertEqual((323, 247), actuator.actions[1].target_point)
+
+    def test_campaign_measured_stalled_corridor_pan_fails_closed_before_tap(self):
+        """A corridor descent that produced no camera motion cannot reach a tap."""
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        stalled = camera_home_frame(
+            translation=(-532, 222), captured_at=now + timedelta(seconds=1),
+        )
+        content_frames = iter(
+            (
+                camera_home_frame(translation=(-532, 222), captured_at=now),
+                stalled,
+                replace(stalled, captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_CAMPAIGN_MAP),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "no camera movement"):
+            core.open_building(
+                HomeCityObjectId.CAMPAIGN,
+                observe_content=lambda _: next(content_frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_campaign_measured_wrong_destination_does_not_repeat_tap(self):
+        """A portal tap that does not reach the Campaign map is not repeated."""
+        target = measured_building_object(
+            HomeCityObjectId.CAMPAIGN,
+            bounds=Bounds(78, 225, 90, 42),
+            action_point=(121, 247),
+            action_bounds=Bounds(114, 241, 13, 13),
+        )
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame((target,), translation=(-1882, -709), captured_at=now),
+                camera_home_frame((target,), translation=(-1882, -709), captured_at=now + timedelta(seconds=1)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_CASTLE),
+                observation(ScreenType.PNC_CASTLE),
+                observation(ScreenType.PNC_CASTLE),
+                observation(ScreenType.PNC_CASTLE),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            core.open_building(
+                HomeCityObjectId.CAMPAIGN,
                 observe_content=lambda _: next(content_frames),
             )
         self.assertEqual(1, len(actuator.actions))
