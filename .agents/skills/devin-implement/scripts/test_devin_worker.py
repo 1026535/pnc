@@ -43,6 +43,52 @@ def process_running(pid):
         api.CloseHandle(handle)
 
 
+class AtomicRecordTests(unittest.TestCase):
+    """Exercise the observed Windows replacement failure without model calls."""
+
+    def test_reader_lock_retries_and_publishes_complete_record(self):
+        """A transient destination lock must not kill an otherwise healthy worker."""
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "context.json"
+            worker.write_json(target, {"used_tokens": 1})
+            original_replace = Path.replace
+            attempts = []
+
+            def replace_after_reader_closes(temporary, destination):
+                """Simulate one Windows read handle, then perform the actual atomic rename."""
+                attempts.append(destination)
+                if len(attempts) == 1:
+                    self.assertEqual(worker.read_json(target), {"used_tokens": 1})
+                    error = PermissionError("destination is briefly open")
+                    error.winerror = 5
+                    raise error
+                return original_replace(temporary, destination)
+
+            with patch.object(Path, "replace", replace_after_reader_closes), \
+                 patch.object(worker.time, "sleep") as sleep:
+                worker.write_json(target, {"used_tokens": 2})
+            self.assertEqual(len(attempts), 2)
+            sleep.assert_called_once_with(0.05)
+            self.assertEqual(worker.read_json(target), {"used_tokens": 2})
+            self.assertFalse(target.with_suffix(".json.tmp").exists())
+
+    def test_persistent_denial_is_bounded_and_preserves_previous_record(self):
+        """Permanent denial must still fail and retain both the old and pending evidence."""
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "context.json"
+            worker.write_json(target, {"used_tokens": 1})
+            error = PermissionError("destination remains locked")
+            error.winerror = 5
+            with patch.object(Path, "replace", side_effect=error) as replace, \
+                 patch.object(worker.time, "sleep") as sleep:
+                with self.assertRaises(PermissionError):
+                    worker.write_json(target, {"used_tokens": 2})
+            self.assertEqual(replace.call_count, 4)
+            self.assertEqual(sleep.call_count, 3)
+            self.assertEqual(worker.read_json(target), {"used_tokens": 1})
+            self.assertEqual(worker.read_json(target.with_suffix(".json.tmp")), {"used_tokens": 2})
+
+
 class ExportTests(unittest.TestCase):
     """Check exported evidence with small files, without Git or worker processes."""
 

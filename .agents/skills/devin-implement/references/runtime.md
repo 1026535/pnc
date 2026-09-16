@@ -95,6 +95,8 @@ The worker receives one initial implementation brief per launched turn; `steer` 
 
 ## Cancellation and recovery
 
+Atomic JSON evidence replacement allows a bounded 350 ms retry window for Windows access/sharing errors (5/32) caused by a destination reader. The previous record stays intact until replacement succeeds; persistent denial still fails and preserves the pending temporary record. This retries local file publication only, never a model request or game action.
+
 For an internal ACP failure, first read `result.json` or plain `status`: it includes the configured compaction threshold and compact live-main context metrics (latest/peak occupancy, advertised window, completed compactions). `context.json` is updated from native events and survives prompt failure; missing metrics mean unavailable, not zero. Counts are per launched turn and exclude session-load replay and side questions. They are context snapshots, not billed token totals or evidence of an upstream limit.
 
 If necessary, inspect one bounded stderr excerpt and the recorded CLI/model identity. An opaque `-32013` does not by itself establish an authentication failure or service outage. Compare against the observed context-boundary failure above, confirm the 100,000-token overlay was applied, and distinguish evidence from hypotheses. Preserve partial work, verify writers and external resources are released, then resume the same session only after a relevant setting, context, code, or state change. Do not repeat an unchanged failed prompt or start parallel diagnostic sessions. If early compaction is already active and the same failure recurs, retain the compact evidence and investigate the specific error; do not keep lowering thresholds or add a generic retry loop.

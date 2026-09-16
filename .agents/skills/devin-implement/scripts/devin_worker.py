@@ -39,11 +39,23 @@ def read_json(path):
 
 
 def write_json(path, value):
-    """Replace a supervisor-owned record atomically for cancellation/recovery readers."""
+    """Replace a record atomically, allowing a short Windows reader-lock interval.
+
+    Windows can deny replacement while a status reader has the destination
+    open. Retry only that replace operation for at most 350 ms; persistent
+    denial and other filesystem errors still fail without discarding evidence.
+    """
     path = Path(path)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    for attempt in range(4):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError as error:
+            if getattr(error, "winerror", None) not in (5, 32) or attempt == 3:
+                raise
+            time.sleep(0.05 * (2 ** attempt))
 
 
 def git(repo, *arguments):
