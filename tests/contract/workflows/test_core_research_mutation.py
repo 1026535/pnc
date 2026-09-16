@@ -113,6 +113,22 @@ class CoreResearchMutationTests(unittest.TestCase):
             context.start_research(checkpoint)
         self.assertEqual(2, runtime.actuator.execute_action.call_count)
 
+    def test_economy_inspection_does_not_prime_development_mutation_authority(self):
+        """A measured Start on another category stays read-only in this boundary."""
+        node = replace(
+            self.node, title_text="Food Output I", metadata={"category": "economy"},
+            research_facts=ResearchNodeFacts(
+                category=ResearchCategory.ECONOMY, node_id=ResearchNodeId.FOOD_OUTPUT_I,
+            ),
+        )
+        grid = research("research_tree_economy", rows=(node,))
+        detail = replace(self.idle, research_detail=ResearchDetail(node_id=ResearchNodeId.FOOD_OUTPUT_I))
+        runtime, context = self.context((grid, detail, detail))
+        context.open_research_node("Food Output I", ResearchCategory.ECONOMY)
+        with self.assertRaises(PermissionError):
+            context.start_research(self.checkpoint)
+        self.assertEqual(1, runtime.actuator.execute_action.call_count)
+
     def test_start_disappearance_without_active_detail_is_not_success_or_replayed(self):
         empty = research("research_tree_node_detail")
         runtime, context = self.context((self.grid, self.idle, self.idle, self.idle, empty, empty))

@@ -324,6 +324,7 @@ def research_tree_frame(
     proved: bool = True,
     captured_at: datetime | None = None,
     blocked: bool = False,
+    category: ResearchCategory = ResearchCategory.DEVELOPMENT,
 ) -> Observation:
     """Build one Development tree frame with reviewed visual-anchor proof."""
 
@@ -333,7 +334,7 @@ def research_tree_frame(
             effective_screen=ScreenType.PNC_RESEARCH_TREE,
             guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
             evidence=(
-                (ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, "visual_anchor:research_tree_development"),)
+                (ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, f"visual_anchor:research_tree_{category.value}"),)
                 if proved
                 else ()
             ),
@@ -2471,6 +2472,86 @@ class ResearchNavigationCoreTests(unittest.TestCase):
         self.assertEqual("Construction I", action.title_text)
         self.assertEqual("category", action.metadata_key)
         self.assertEqual(ResearchCategory.DEVELOPMENT.value, action.metadata_value)
+
+    def test_registered_categories_open_matching_detail_and_return_to_same_grid(self):
+        """Each registered category keeps identity across one tap and one Back."""
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        for category, node in (
+            (ResearchCategory.ECONOMY, ResearchNodeId.FOOD_OUTPUT_I),
+            (ResearchCategory.MILITARY, ResearchNodeId.SIEGE_ATK_I),
+            (ResearchCategory.FORTIFICATION, ResearchNodeId.WALL_DEF_I),
+        ):
+            with self.subTest(category=category):
+                def grid(seconds):
+                    return research_tree_frame(
+                        (research_entry(node, category=category),), category=category,
+                        captured_at=now + timedelta(seconds=seconds),
+                    )
+                def detail(seconds):
+                    return research_detail_frame(node, captured_at=now + timedelta(seconds=seconds))
+                frames = iter((grid(0), detail(1), detail(2), detail(3), grid(4), grid(5)))
+                actuator = Actuator()
+                core = self.make_core(actuator)
+                opened = core.open_research_node(
+                    research_node_title(node), category, observe_content=lambda _: next(frames),
+                )
+                self.assertEqual(node, opened.research_detail.node_id)
+                core.close_research_detail(category=category, observe_content=lambda _: next(frames))
+                self.assertEqual(2, len(actuator.actions))
+                self.assertEqual(category.value, actuator.actions[0].metadata_value)
+                self.assertIsInstance(actuator.actions[1], KeyEventAction)
+
+    def test_cross_category_node_or_grid_sends_no_tap(self):
+        """A valid label in a foreign catalog or a foreign grid grants no action."""
+        for title, expected in (("Construction I", ValueError), ("Food Output I", RuntimeError)):
+            with self.subTest(title=title):
+                actuator = Actuator()
+                with self.assertRaises(expected):
+                    self.make_core(actuator).open_research_node(
+                        title, ResearchCategory.ECONOMY,
+                        observe_content=lambda _: research_tree_frame((research_entry(ResearchNodeId.FOOD_OUTPUT_I),)),
+                    )
+                self.assertEqual([], actuator.actions)
+
+    def test_detail_close_rejects_a_different_category_without_repeating_back(self):
+        """A fresh foreign grid cannot satisfy the requested category return."""
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            research_detail_frame(ResearchNodeId.FOOD_OUTPUT_I, captured_at=now),
+            *(research_tree_frame(category=ResearchCategory.MILITARY,
+                                  captured_at=now + timedelta(seconds=i)) for i in range(1, 5)),
+        ))
+        actuator = Actuator()
+        with self.assertRaises(RuntimeError):
+            self.make_core(actuator).close_research_detail(
+                category=ResearchCategory.ECONOMY, observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], KeyEventAction)
+
+    def test_category_entry_uses_measured_control_and_matching_fresh_layout(self):
+        """An Institute entry alone cannot confirm arrival in another category."""
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        selector = UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON
+        source = replace(
+            observation(ScreenType.PNC_INSTITUTE), captured_at=now,
+            visible_elements={selector: VisibleElement(selector, Bounds(40, 300, 130, 60), 1.0)},
+        )
+        frames = iter((source, *(
+            research_tree_frame(category=ResearchCategory.ECONOMY, captured_at=now + timedelta(seconds=i))
+            for i in (1, 2)
+        )))
+        actuator = Actuator()
+        self.make_core(actuator).open_research_category(
+            ResearchCategory.ECONOMY, observe_content=lambda _: next(frames),
+        )
+        self.assertEqual([selector], [action.selector_id for action in actuator.actions])
+        actuator = Actuator()
+        with self.assertRaises(RuntimeError):
+            self.make_core(actuator).open_research_category(
+                ResearchCategory.MILITARY, observe_content=lambda _: source,
+            )
+        self.assertEqual([], actuator.actions)
 
     def test_open_research_node_rejects_unqualified_sources_without_any_tap(self):
         """Missing, duplicated, unproved, or unreadable rows send no action."""

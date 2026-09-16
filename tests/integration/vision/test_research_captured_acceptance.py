@@ -115,6 +115,116 @@ def _observe(
 class ResearchCapturedAcceptanceTests(unittest.TestCase):
     """Pin the reviewed V04 publication contracts on qualified captures."""
 
+    def test_qualified_category_grids_publish_observed_nodes_and_states(self) -> None:
+        """Real category captures preserve labels, repeated art, MAX and padlocks."""
+        builder, perception = _production_components()
+        cases = (
+            (ResearchCategory.ECONOMY, (
+                (ResearchNodeId.FOOD_OUTPUT_I, 3, 4, False),
+                (ResearchNodeId.WOOD_OUTPUT_I, 1, 5, False),
+                (ResearchNodeId.FOOD_HARVEST_I, 2, 5, False),
+                (ResearchNodeId.WOOD_HARVEST_I, 1, 5, False),
+                (ResearchNodeId.IRON_OUTPUT_I, 1, 5, False),
+            )),
+            (ResearchCategory.MILITARY, (
+                (ResearchNodeId.MARCH_SPEED_I, None, None, False),
+                (ResearchNodeId.INFANTRY_HP_I, None, None, False),
+                (ResearchNodeId.INFANTRY_ATK_I, None, None, False),
+                (ResearchNodeId.INFANTRY_DEF_I, None, None, False),
+                (ResearchNodeId.HUNT_MARCH_I, None, None, False),
+                (ResearchNodeId.SIEGE_ATK_I, 2, 3, False),
+                (ResearchNodeId.CAVALRY_ATK_I, None, None, False),
+                (ResearchNodeId.RANGED_ATK_I, 1, 3, False),
+                (ResearchNodeId.MARCH_QUEUE_I, None, None, False),
+            )),
+            (ResearchCategory.FORTIFICATION, (
+                (ResearchNodeId.WALL_DEF_I, 2, 10, False),
+                (ResearchNodeId.TRAP_ATK_I, 0, 3, False),
+                (ResearchNodeId.TRAP_DEF_I, 0, 3, True),
+                (ResearchNodeId.TRAP_HP_I, 0, 3, True),
+                (ResearchNodeId.DEFENDER_ATK_I, 0, 3, True),
+                (ResearchNodeId.DEFENDER_DEF_I, 0, 3, True),
+                (ResearchNodeId.DEFENDER_HP_I, 0, 3, True),
+            )),
+        )
+        for category, expected in cases:
+            image = _image(f"research_tree_{category.value}_20260916.png")
+            for path, observation in enumerate(_observe(builder, perception, image, session_id=category.value)):
+                with self.subTest(category=category, publisher=path):
+                    self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
+                    self.assertEqual(f"research_tree_{category.value}", observation.decision.layout_id)
+                    rows = observation.entries(ListEntryKind.RESEARCH)
+                    complete = {row.research_facts.node_id: row for row in rows
+                                if row.row_status == RowRecognitionStatus.COMPLETE}
+                    self.assertEqual({item[0] for item in expected}, set(complete))
+                    self.assertEqual(len(expected) + (category == ResearchCategory.ECONOMY), len(rows))
+                    for node, current, maximum, locked in expected:
+                        row = complete[node]
+                        facts = row.research_facts
+                        self.assertEqual(category, facts.category)
+                        self.assertEqual((current, maximum, locked),
+                                         (facts.current_level, facts.max_level, facts.locked))
+                        self.assertEqual(current is None or current == maximum, facts.maximum_reached)
+                        self.assertTrue(row.bounds.contains_bounds(row.action_bounds))
+                        self.assertTrue(row.action_bounds.contains_point(row.action_point))
+                        self.assertEqual(observation.frame_ref, row.frame_ref)
+                        self.assertEqual(observation.decision.layout_id, row.source_layout_id)
+                    if category == ResearchCategory.ECONOMY:
+                        self.assertEqual(RowRecognitionStatus.CLIPPED, rows[-1].row_status)
+                        self.assertIsNone(rows[-1].action_point)
+                        self.assertIsNone(rows[-1].action_bounds)
+
+    def test_category_detail_captures_resolve_the_matching_supported_node(self) -> None:
+        """Shared detail parsing resolves each catalog without inferring category."""
+        builder, perception = _production_components()
+        for category, node in (
+            ("economy", ResearchNodeId.FOOD_OUTPUT_I),
+            ("military", ResearchNodeId.SIEGE_ATK_I),
+            ("fortification", ResearchNodeId.WALL_DEF_I),
+        ):
+            image = _image(f"{category}_detail_idle.png", subdir="research_variants")
+            for path, observation in enumerate(_observe(builder, perception, image, session_id=f"{category}-detail")):
+                with self.subTest(category=category, publisher=path):
+                    self.assertEqual("research_tree_node_detail", observation.decision.layout_id)
+                    self.assertEqual(node, observation.research_detail.node_id)
+                    self.assertIsNone(observation.research_detail.category)
+                    self.assertEqual(observation.frame_ref, observation.research_detail.frame_ref)
+                    self.assertEqual(VisibleElementSourceKind.TEMPLATE, observation.get(START).source_kind)
+                    self.assertTrue(observation.research_detail.costs)
+
+    def test_independent_economy_tree_reacquires_its_current_complete_rows(self) -> None:
+        """A later viewport has a complete Iron Harvest tile with fresh geometry."""
+        builder, perception = _production_components()
+        image = _image("research_tree_economy_holdout_20260916.png")
+        expected = {
+            ResearchNodeId.FOOD_OUTPUT_I: (3, 4),
+            ResearchNodeId.WOOD_OUTPUT_I: (1, 5),
+            ResearchNodeId.FOOD_HARVEST_I: (2, 5),
+            ResearchNodeId.WOOD_HARVEST_I: (1, 5),
+            ResearchNodeId.IRON_OUTPUT_I: (1, 5),
+            ResearchNodeId.IRON_HARVEST_I: (0, 5),
+        }
+        for path, observation in enumerate(_observe(builder, perception, image, session_id="economy-holdout")):
+            with self.subTest(publisher=path):
+                self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
+                self.assertEqual("research_tree_economy", observation.decision.layout_id)
+                rows = observation.entries(ListEntryKind.RESEARCH)
+                self.assertEqual(6, len(rows))
+                by_node = {row.research_facts.node_id: row for row in rows}
+                for node, levels in expected.items():
+                    row = by_node[node]
+                    self.assertEqual(RowRecognitionStatus.COMPLETE, row.row_status)
+                    self.assertEqual(ResearchCategory.ECONOMY, row.research_facts.category)
+                    self.assertEqual(levels, (row.research_facts.current_level, row.research_facts.max_level))
+                    self.assertTrue(row.bounds.contains_bounds(row.action_bounds))
+                    self.assertTrue(row.action_bounds.contains_point(row.action_point))
+                    self.assertEqual(observation.frame_ref, row.frame_ref)
+                for row in rows:
+                    if row.research_facts.node_id is None:
+                        self.assertEqual(RowRecognitionStatus.UNREADABLE, row.row_status)
+                        self.assertIsNone(row.action_bounds)
+                        self.assertIsNone(row.action_point)
+
     def test_upper_tree_publishes_complete_typed_rows_on_both_paths(self) -> None:
         """The 540x960 upper tree yields five complete rows and one clipped bottom tile."""
 
@@ -273,8 +383,8 @@ class ResearchCapturedAcceptanceTests(unittest.TestCase):
                 self.assertEqual(observation.frame_ref, detail.frame_ref)
                 self.assertEqual("research_tree_node_detail", detail.source_layout_id)
 
-    def test_economy_holdout_detail_publishes_facts_with_unresolved_identity(self) -> None:
-        """The independent holdout keeps typed costs but never invents a node id."""
+    def test_economy_holdout_detail_resolves_identity_from_its_own_title_band(self) -> None:
+        """The independent holdout resolves its measured title without icon noise."""
 
         builder, perception = _production_components()
         image = _image("economy_detail_idle_holdout.png", subdir="research_variants")
@@ -284,8 +394,7 @@ class ResearchCapturedAcceptanceTests(unittest.TestCase):
                 self.assertEqual(observation.decision.layout_id, "research_tree_node_detail")
                 detail = observation.research_detail
                 self.assertIsNotNone(detail)
-                # The artifact-prefixed title must not resolve to a canonical id.
-                self.assertIsNone(detail.node_id)
+                self.assertEqual(ResearchNodeId.FOOD_OUTPUT_I, detail.node_id)
                 self.assertIsNone(detail.category)
                 self.assertEqual(3, detail.current_level)
                 self.assertEqual(4, detail.max_level)

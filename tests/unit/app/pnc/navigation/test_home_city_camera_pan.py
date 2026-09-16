@@ -190,6 +190,40 @@ class HomeCityCameraPanTests(unittest.TestCase):
         self.assertAlmostEqual(0.69, action.start_x_ratio)
         self.assertAlmostEqual(0.69, action.end_x_ratio)
 
+    def test_lower_tower_pan_uses_translated_ground_instead_of_blacksmith(self) -> None:
+        """The observed lower-city lane must avoid the Blacksmith body."""
+        target = _measured_object(
+            HomeCityObjectId.INSTITUTE,
+            bounds=Bounds(420, 107, 48, 45),
+            action_point=(434, 115),
+            action_bounds=Bounds(425, 110, 20, 20),
+        )
+        for translation_x in (-532, -600):
+            with self.subTest(translation_x=translation_x):
+                action = plan_home_city_camera_pan(
+                    observation=_observation(
+                        translation=(translation_x, -840), objects=(target,),
+                    ),
+                    target=HomeCityObjectId.INSTITUTE,
+                )
+                self.assertEqual("down", action.direction)
+                self.assertAlmostEqual((1072 + translation_x) / 900, action.start_x_ratio)
+                self.assertEqual(action.start_x_ratio, action.end_x_ratio)
+
+    def test_ground_lane_does_not_extend_beyond_its_observed_vertical_extent(self) -> None:
+        target = _measured_object(
+            HomeCityObjectId.INSTITUTE,
+            bounds=Bounds(165, 890, 30, 24),
+            action_point=(180, 900),
+            action_bounds=Bounds(170, 892, 20, 20),
+        )
+        action = plan_home_city_camera_pan(
+            observation=_observation(translation=(-532, -840), objects=(target,)),
+            target=HomeCityObjectId.INSTITUTE,
+        )
+        self.assertAlmostEqual(0.69, action.start_x_ratio)
+        self.assertAlmostEqual(0.69, action.end_x_ratio)
+
     def test_campaign_at_northern_camera_descends_to_corridor_first(self) -> None:
         """Horizontal acquisition off-corridor would outrun the landmark catalog."""
         action = plan_home_city_camera_pan(

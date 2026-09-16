@@ -19,3 +19,18 @@ Military detail variants are represented in `test_research_captured_variants.py`
 Use real Military tree/detail frames through both production publishers, with at least one representative reused-icon or neighboring-node case from available captures. Assert correct category/node identity, viewport clipping, measured action bounds and unknown handling. Do not create an exhaustive troop-tier test matrix without evidence of layout variation.
 
 Start `py tools/run_tests.py group unit.app.pnc.vision`, then affected checks. One testing core-runtime route: Institute → Military → one available complete node → matching detail → tree → Home. Save the frame/observation pairs and action trace. Stop if the category is inaccessible or identity is ambiguous; do not unlock it, train troops or start research to produce a fixture. Record the supported subset and unavailable variants.
+
+
+## Lead acceptance — 2026-09-16
+
+Accepted for the capture-derived subset through the shared category catalog,
+ResearchContentProducer, both publishers and existing navigation/workflow owners.
+Siege ATK I2/3 in a02dbcf6; nine evidenced nodes, including seven literal MAX badges without invented numeric maxima.
+
+The active mega_old_acc castle was K157/NPC2/22. The matching detail, return
+category and final Home were freshly observed with zero resource actions; leases
+released and the existing instance was preserved. Full baseline, focused final
+regressions, exact source frames and remaining limits are recorded in the
+[shared category acceptance note](../../docs/game-reference/workflows/research-category-inventory.md#accepted-shared-category-implementation--2026-09-16).
+Category support does not authorize Start or Research Now. Unseen variants and
+unreadable fields remain unqualified.

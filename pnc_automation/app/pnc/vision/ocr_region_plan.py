@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from PIL import Image
+from pnc_automation.app.pnc.domain.research import research_category_for_layout
 from pnc_automation.core.errors import ScreenClassificationError
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -280,7 +281,7 @@ def compile_screen_content_ocr_region_plans(
         elif layout_id == "research_tree_node_detail_max":
             # The completed-node panel is lower and contains no action/cost area.
             regions = (("research_detail", 0.10, 0.37, 0.84, 0.32),)
-        elif layout_id == "research_tree_development":
+        elif research_category_for_layout(layout_id) is not None:
             # Node discovery is geometry-owned; OCR reads only the fixed
             # category header plus each measured label/level region owned by
             # the producer.

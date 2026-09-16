@@ -123,7 +123,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             (HomeCityObjectId.CASTLE, HomeCityObjectId.INFANTRY_BARRACKS),
             catalog.anchor_object_ids,
         )
-        self.assertEqual(16, len(catalog.landmarks))
+        self.assertEqual(18, len(catalog.landmarks))
         self.assertEqual(3, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
@@ -138,6 +138,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
                 "east_fortification",
                 "east_cliff",
                 "alliance_hall_structure",
+                "sanctum_structure",
             },
             groups,
         )
@@ -158,6 +159,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             by_group.setdefault(landmark.group_id, set()).add(landmark.id)
         self.assertEqual({"east_aqueduct", "east_parapet", "ridge_wall"}, by_group["east_fortification"])
         self.assertEqual({"east_cliff_rock", "east_rock_trees"}, by_group["east_cliff"])
+        self.assertEqual({"tower_of_trial_body", "west_trial_wall"}, by_group["tower_structure"])
         for item in (*catalog.landmarks, *catalog.targets):
             self.assertTrue(catalog.template_path(item.file_name).is_file())
         self.assertIs(
@@ -219,6 +221,29 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
         self.assertEqual((-1000, -710), proof.translation)
         self.assertIn("institute_structure", proof.matched_group_ids)
         self.assertIn("plaza_low", proof.matched_group_ids)
+
+    def test_west_live_holdout_localizes_at_both_supported_sizes(self) -> None:
+        """Independent west capture retains three votes from two actual structures."""
+        native = _fixture(_CAMERA_FIXTURES / "home_city_west_holdout_20260916.png")
+        for size in ((900, 1600), (540, 960)):
+            with self.subTest(size=size):
+                proof = _localizer().localize(native.resize(size, Image.Resampling.LANCZOS))
+                self.assertTrue(proof.localized)
+                # Projecting integer 540px matches back to the 900px atlas
+                # quantizes the vertical offset by one reference pixel.
+                for actual, expected in zip(proof.translation, (-74, -812), strict=True):
+                    self.assertLessEqual(abs(actual - expected), 1)
+                self.assertEqual(frozenset({"tower_structure", "sanctum_structure"}), proof.matched_group_ids)
+                self.assertEqual(3, len(proof.evidence))
+                self.assertTrue(all(item.residual <= 1 for item in proof.evidence))
+
+    def test_west_tower_crops_alone_do_not_supply_independent_scene_proof(self) -> None:
+        """Two correlated Tower crops cannot replace the missing Sanctum evidence."""
+        image = _fixture(_CAMERA_FIXTURES / "home_city_west_holdout_20260916.png")
+        image.paste((0, 0, 0), (500, 960, 595, 1085))
+        proof = _localizer().localize(image)
+        self.assertEqual(HomeCityCameraStatus.INSUFFICIENT, proof.status)
+        self.assertIsNone(proof.translation)
 
     def test_tower_view_localizes_at_the_measured_image_translation(self) -> None:
         proof = _localizer().localize(_fixture(_CAMERA_FIXTURES / "home_city_tower_pan_28.png"))

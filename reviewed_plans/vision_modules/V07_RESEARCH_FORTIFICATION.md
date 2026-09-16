@@ -19,3 +19,18 @@ Fortification detail variants already have captured tests; node selection and sc
 Extend `test_research_captured_variants.py` and the shared tree tests with actual Fortification tree/detail captures. Both publishers must preserve category/node identity and current state. Use a locked node capture if already available to verify “inspectable” does not become “research eligible”; do not create that state through spending.
 
 Start `py tools/run_tests.py group unit.app.pnc.vision`, then affected checks. One core-runtime route on testing: Institute → Fortification → one complete visible node → matching detail → tree → Home. Save source/detail/return frames, typed results and trace. Stop on unavailable category, unknown node or an action boundary. No research, unlock or prerequisite upgrade is part of this proof.
+
+
+## Lead acceptance — 2026-09-16
+
+Accepted for the capture-derived subset through the shared category catalog,
+ResearchContentProducer, both publishers and existing navigation/workflow owners.
+Wall DEF I2/10 in a02dbcf6; seven evidenced nodes, including five observed padlocks. A lock is distinct from inspection permission and research eligibility.
+
+The active mega_old_acc castle was K157/NPC2/22. The matching detail, return
+category and final Home were freshly observed with zero resource actions; leases
+released and the existing instance was preserved. Full baseline, focused final
+regressions, exact source frames and remaining limits are recorded in the
+[shared category acceptance note](../../docs/game-reference/workflows/research-category-inventory.md#accepted-shared-category-implementation--2026-09-16).
+Category support does not authorize Start or Research Now. Unseen variants and
+unreadable fields remain unqualified.

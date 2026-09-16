@@ -50,7 +50,9 @@ from pnc_automation.app.pnc.domain.bag_items import (
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.research import (
+    RESEARCH_CATEGORY_DEFINITIONS,
     ResearchNodeId,
+    research_category_definition,
     research_node_for_title,
 )
 from pnc_automation.app.pnc.domain.trial_challenge import (
@@ -745,11 +747,33 @@ class NavigationCore:
             observe_content,
         )
 
+    def open_research_category(
+        self, category: ResearchCategory, *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open a measured Institute category and prove its matching tree layout."""
+
+        definition = research_category_definition(category)
+        self._sequence += 1
+        label = f"core_{self._sequence}_research_category"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_INSTITUTE or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or not _template_control(source, definition.entry_selector)
+        ):
+            raise RuntimeError("Research category entry requires a proved Institute control.")
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=definition.entry_selector, reason="open_research_category"),
+            source, frozenset({ScreenType.PNC_RESEARCH_TREE}), label, observe_content,
+            completion_predicate=lambda frame: _proved_research_category(frame) == category,
+        )
+
     def open_research_node(
         self, title: str, category: ResearchCategory, *,
         observe_content: Callable[[str], Observation],
     ) -> Observation:
-        """Select one fresh Development node and prove its matching detail identity.
+        """Select one fresh category node and prove its matching detail identity.
 
         Completion requires a fresh detail frame whose typed facts identify the
         requested node; a generic Start template alone never proves the wrong
@@ -757,20 +781,16 @@ class NavigationCore:
         while mutation readiness remains owned by the Start boundary.
         """
 
-        if category != ResearchCategory.DEVELOPMENT or not isinstance(title, str) or not title.strip():
-            raise ValueError("Research selection requires one named Development node.")
-        requested_node = research_node_for_title(title)
+        if not isinstance(category, ResearchCategory) or not isinstance(title, str) or not title.strip():
+            raise ValueError("Research selection requires a typed category and named node.")
+        requested_node = research_node_for_title(title, category=category)
         if requested_node is None:
-            raise ValueError("Research selection requires a supported Development node title.")
+            raise ValueError("Research node title is unsupported in the requested category.")
         self._sequence += 1
         label = f"core_{self._sequence}_research_node"
         source = observe_content(f"{label}_source")
-        if (
-            source.screen_type != ScreenType.PNC_RESEARCH_TREE or source.blocking_popup
-            or source.decision.guard != GuardVerdict.CLEAR
-            or not any(evidence.reason == "visual_anchor:research_tree_development" for evidence in source.decision.evidence)
-        ):
-            raise RuntimeError("Research node selection requires the proved Development grid.")
+        if _proved_research_category(source) != category:
+            raise RuntimeError("Research node selection requires the proved requested category grid.")
         matches = tuple(
             entry for entry in source.entries(ListEntryKind.RESEARCH)
             if entry.research_facts is not None
@@ -799,7 +819,7 @@ class NavigationCore:
     def scroll_research_tree(
         self, *, observe_content: Callable[[str], Observation],
     ) -> Observation:
-        """Swipe the proved Development grid once and require a fresh tree frame.
+        """Swipe one proved category grid once and require the same fresh category.
 
         The gesture is the single reviewed command captured in
         ``12_research_scroll_result.json``; a failed confirmation never sends
@@ -809,7 +829,9 @@ class NavigationCore:
         self._sequence += 1
         label = f"core_{self._sequence}_research_scroll"
         before = observe_content(f"{label}_source")
-        _require_proved_development_grid(before)
+        category = _proved_research_category(before)
+        if category is None:
+            raise RuntimeError("Research tree actions require a proved category grid.")
         return self._execute_content_and_confirm(
             SwipeAction(
                 reason="replacement_scroll_research_tree",
@@ -823,20 +845,17 @@ class NavigationCore:
             frozenset({ScreenType.PNC_RESEARCH_TREE}),
             label,
             observe_content,
-            completion_predicate=lambda frame: (
-                frame.decision.guard == GuardVerdict.CLEAR
-                and any(
-                    evidence.reason == "visual_anchor:research_tree_development"
-                    for evidence in frame.decision.evidence
-                )
-            ),
+            completion_predicate=lambda frame: _proved_research_category(frame) == category,
         )
 
     def close_research_detail(
         self, *, observe_content: Callable[[str], Observation],
+        category: ResearchCategory | None = None,
     ) -> Observation:
         """Send one Android Back from the proved detail and require the tree grid."""
 
+        if category is not None:
+            research_category_definition(category)
         self._sequence += 1
         label = f"core_{self._sequence}_research_detail_close"
         before = observe_content(f"{label}_source")
@@ -857,11 +876,8 @@ class NavigationCore:
             label,
             observe_content,
             completion_predicate=lambda frame: (
-                frame.decision.guard == GuardVerdict.CLEAR
-                and any(
-                    evidence.reason == "visual_anchor:research_tree_development"
-                    for evidence in frame.decision.evidence
-                )
+                (returned := _proved_research_category(frame)) is not None
+                and (category is None or returned == category)
             ),
         )
 
@@ -1517,18 +1533,22 @@ def _template_control(observation: Observation, selector_id: UiElementId) -> boo
     return element is not None and element.source_kind == VisibleElementSourceKind.TEMPLATE
 
 
-def _require_proved_development_grid(observation: Observation) -> None:
-    """Require a fresh, unblocked, visually proved Development research grid."""
+def _proved_research_category(observation: Observation) -> ResearchCategory | None:
+    """Resolve a clear grid from its qualified visual evidence and layout."""
 
     if (
         observation.screen_type != ScreenType.PNC_RESEARCH_TREE or observation.blocking_popup
         or observation.decision.guard != GuardVerdict.CLEAR
-        or not any(
-            evidence.reason == "visual_anchor:research_tree_development"
-            for evidence in observation.decision.evidence
-        )
     ):
-        raise RuntimeError("Research tree actions require the proved Development grid.")
+        return None
+    matches = tuple(
+        item.category for item in RESEARCH_CATEGORY_DEFINITIONS
+        if (observation.decision.layout_id is None
+            or observation.decision.layout_id == item.layout_id)
+        and any(evidence.reason == f"visual_anchor:{item.layout_id}"
+                for evidence in observation.decision.evidence)
+    )
+    return matches[0] if len(matches) == 1 else None
 
 
 def _research_detail_matches(
