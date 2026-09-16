@@ -1,0 +1,4 @@
+interface:
+  display_name: "PNC Game Knowledge"
+  short_description: "Answer PNC game questions from reverse-engineered APK evidence"
+  default_prompt: "Use $pnc-game-knowledge to answer a Puzzles & Conquest game-behavior question from the repository's recovered APK evidence."

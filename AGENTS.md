@@ -98,6 +98,7 @@ Read the applicable `SKILL.md` completely before its workflow.
 - Use the plan, review, implementation, live-test, browser, and source-control skills only when their descriptions match the request.
 - `create-plan-with-chatgpt-pro` may route to `consult-chatgpt-pro`; direct Pro consultation otherwise requires an explicit request.
 - `implement-with-luna-global` is explicit-only.
+- Use `devin-implement` for requested Devin implementation delegation and `devin-game-knowledge` for bounded consultation. When the user delegates live testing to Devin, use `devin-live-test` for all applicable live execution, including follow-up validation; the lead reviews its curated evidence and owns acceptance. `test-bluestacks-live` remains the canonical live policy.
 - Before porting a workflow to the replacement navigation core, read `instructions/CORE_WORKFLOW_PORTING.md`.
 
 ## Review And Source Control

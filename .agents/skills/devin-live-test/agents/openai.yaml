@@ -1,0 +1,4 @@
+interface:
+  display_name: "Devin Live Test"
+  short_description: "Delegate live checks and collect curated evidence"
+  default_prompt: "Use $devin-live-test to hand Devin a bounded live-testing assignment and collect one curated evidence package when it finishes."

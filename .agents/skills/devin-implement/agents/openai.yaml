@@ -1,0 +1,4 @@
+interface:
+  display_name: "Devin Implement"
+  short_description: "Delegate concrete implementation and evidence gathering"
+  default_prompt: "Use $devin-implement for concrete implementation and evidence gathering with SWE-2 Max; retain complex reasoning, design decisions, steering, and acceptance with the lead."
