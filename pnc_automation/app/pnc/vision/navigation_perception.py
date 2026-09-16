@@ -33,6 +33,7 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_trial_stats_detail,
     bind_trial_summary,
     bind_visible_elements,
+    bind_workshop_observation,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -364,6 +365,16 @@ class NavigationPerception:
                     source_layout_id=decision.layout_id,
                 )
                 if content.building_detail is not None
+                else None
+            ),
+            workshop=(
+                bind_workshop_observation(
+                    content.workshop,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.workshop is not None
                 else None
             ),
         )

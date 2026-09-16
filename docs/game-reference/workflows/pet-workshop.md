@@ -1,0 +1,128 @@
+# Pet Workshop catalog tables and progression
+
+## Evidence and limits
+
+The table facts below come from the decoded client tables of packaged PNC
+**5.0.203 / version code 233** (the `H-合成活动` sheet family), recovered
+offline 2026-09-16. Each table's packed/decoded SHA-256 and decode method
+(bytewise XOR `0x2c`, strict UTF-8, no code executed) is recorded in the
+packaged catalog's `provenance` section and in
+`reports/pet-workshop/client-tables-5.0.203/manifest.json` under the ignored
+evidence root. Progression findings cite Lua paths under the recovered
+gameplay root (`apk-exploration/gameplay-lua/`); see
+[provenance](../PROVENANCE.md).
+
+The prior live exploration ran build `5.2.80_5.0.204.235`, so packaged tables
+are static evidence, not a guarantee of current server-delivered data. Active
+orders and hidden/random order selection are server-driven and are observed
+at runtime, not from these tables.
+
+## Table structure and inheritance
+
+**Client source verified:** every `ComposeAct*` table is a Lua literal whose
+rows are sparse: missing fields resolve through `__default_values` via
+`setmetatable` `__index`, and repeated subtables are shared `__rt_N` locals
+referenced by name. `basedata` records `len`, `key`, and `excelName`. Catalog
+authoring resolves both mechanisms into plain data; nothing executes Lua.
+
+## Items, merges, and recycling — `ComposeActItemLevel` (+ `.en` names)
+
+**Client source verified:** 114 item rows keyed by `id`; the English
+localization supplies `itemName`/`itemTips` for all 114. Facts preserved per
+item: `composeItemId` merge successor (0 = max level), `level` tier, `type`/
+`subType`/`sort`/`getType`/`exp` raw fields, `itemIcon` sprite, `recovery`
+flag, `recoveryReward`, and `unlockCost` (present on many mergeable pieces;
+its consumer is unverified).
+
+- `recoveryReward` shared tables `__rt_2`–`__rt_9` are counts 2–256 of
+  energy-related item `44009010`, `type=9`. Fruit 5 (20105) and Statue 5
+  (10205) map to `__rt_4` = count 8, matching the reviewed recycling finding;
+  treat the live energy delta as unproven until a receipt is observed.
+- Every producer item has `type=1`; ordinary mergeable pieces are `type=2`;
+  the Omni Card (100001) is `type=0`. Producer-ness is defined by the worker
+  table, not inferred from `type` — keep the raw field.
+- Merge chains are acyclic in the seed and include generator families
+  (Map/Tree/Clay/Bag), product families (Treasure/Statue/Fruit/Wood/Bowl/
+  Food/Lighting/Fishing Tool/Sea Creature/Ocean Drifter/Animal), and usable
+  pieces (Item Chest, AP, Diamond).
+
+## Producers and drops — `ComposeActWorker`, `ComposeActWorkerItemGroup`
+
+**Client source verified:** 20 worker records keyed by generator item id with
+`itemGroupId`, `num`, `maxNum`, `cdTime` (ms), `changeItemId`,
+`unlockItemId`, `type`, `assist`. 123 group rows form 20 drop groups keyed by
+`groupId` with `itemId` + `rate` weights.
+
+- Finite producers carry `maxNum`/`changeItemId`: Fishing Tool 9 (40209)
+  transforms to 40206; Bowl 5 (30105) and Item Chest (60001) have `maxNum`
+  with no transform (per tips, they disappear). Trap (50004) has
+  `unlockItemId=31103`, consistent with `IsProductionNeedUnLock` reading that
+  field as the feed/activation ingredient.
+- Group weights are authored rates, not guaranteed percentages: most groups
+  sum to 1000, but group 66 (Item Chest) sums to 500, and many groups contain
+  `rate=0` entries. Consumers must normalize by the actual positive sum.
+- No minimum Workshop-level field exists on worker records; do not invent a
+  per-generator level gate.
+
+## Board, levels, and energy — `ComposeActAreaGrid`, `ComposeActLevel`, `ComposeAct`
+
+**Client source verified:** 63 area-grid rows (`pos`, `level`, `unlockType`,
+`randomItems`) covering the observed 7 x 9 board (cell id `(row-1)*7+col`);
+`unlockType` values 0/1/2 are raw codes and `level=0` marks no level gate.
+21 level rows carry `exp`, `productivity`, and `composeActItemReward`
+(`itemId_count|...`): level 2 grants Map 1, level 3 grants Tree 1 + Map 2,
+level 10 grants Bag 1 + Clay 3 + Item Chest x3. The single `ComposeAct` row
+carries energy facts: `itemId=44009010`, `maxProductivity=200`,
+`productivityCost=1` per production, `productivityTime=300000` ms regen,
+shared `cdTime=20000`/`cdCost=50`.
+
+`randomItems` is retained as authored seed candidates, including three cells
+with more than one candidate. It is not evidence that those pieces currently
+occupy a cell. `MergeAdventureData:InitChessboard` copies the current server
+`gridMap` entry into each cell; automation must obtain current occupancy from
+its screenshot observation, not from the seed catalog.
+
+**Inferred:** `productivity` on level rows is the level's energy value and
+`unlockType` gates cells by level/progression; the exact unlock predicates
+were not traced.
+
+## Order progression
+
+**Client source verified** (reviewed 2026-09-16; paths under the recovered
+Lua root):
+
+- Normal order display checks completed prerequisites, minimum Workshop
+  level, and configured item-family presence:
+  `uis/composeact/item/mergeadventureorderoperation.lua` `VerifyDisplayOrder`;
+  `datas/mergeadventuredata.lua` `VerifyHasSubType`.
+- Hidden orders appear when their targets are satisfied; random orders arrive
+  as a server-selected id list: `VerifyNewOrder`, `GetRandomOrders`,
+  `SetRandomOrders`; `commands/composeact/composeactcommand.lua` passes
+  `serverData.randomOrderForm`. The server's random-order selector is
+  unknown — survey visible orders, never synthesize them from the packaged
+  `ComposeActOrderForm` (1,263 forms, intentionally not imported).
+
+## Automation implications
+
+- `pnc_automation/app/pnc/pet_workshop_catalog.py` is the canonical owner;
+  the packaged JSON under `data/pet_workshop/` is the only runtime source.
+- `pnc_automation/app/pnc/domain/pet_workshop.py` owns the canonical logical
+  models (`WorkshopState`, `WorkshopView`, `WorkshopObservation`, orders,
+  intents); `Observation.workshop` is the optional published field bound by
+  the shared provenance owner. See the
+  [canonical design](../../PET_WORKSHOP_DESIGN.md).
+- Catalog facts are game data, not policy: excluded mechanics (Omni Card,
+  consumable AP/Diamond, storage) stay representable for recognition.
+- Workshop level awards do not guarantee a usable producer on the current
+  board; keep item tier, Workshop level, board access, and generator state
+  distinct.
+- A recoverable generator state (feedable, mergeable, transformable) is not
+  an immediate stop; a visibly present order is not malformed because
+  inferred level eligibility disagrees.
+
+## Remaining uncertainty
+
+- `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings
+  are preserved raw; their consumers were not all traced.
+- Recycling's live energy receipt, generator depletion behavior, and order
+  submission results are unobserved; see the PW10 live-qualification ledger.

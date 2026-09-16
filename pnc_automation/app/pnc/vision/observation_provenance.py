@@ -19,6 +19,7 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.domain.building_details import BuildingDetail, BuildingRequirementRow
+from pnc_automation.app.pnc.domain.pet_workshop import WorkshopObservation, WorkshopView
 from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
 from pnc_automation.app.pnc.domain.trial_challenge import (
     TrialApplicableStatsDetail,
@@ -376,6 +377,31 @@ def bind_building_requirement_row(
     )
 
 
+def bind_workshop_observation(
+    observation: WorkshopObservation,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> WorkshopObservation:
+    """Adds missing Workshop provenance on the measured view while rejecting contradictory proof.
+
+    The logical state is coordinate-free and carries no provenance; binding
+    therefore stamps only ``observation.view``.
+    """
+
+    return replace(
+        observation,
+        view=_bind_typed_fact(
+            observation.view,
+            frame_ref=frame_ref,
+            source_screen=source_screen,
+            source_layout_id=source_layout_id,
+            label="Workshop view",
+        ),
+    )
+
+
 _TypedFactT = TypeVar(
     "_TypedFactT",
     ResearchDetail,
@@ -386,6 +412,7 @@ _TypedFactT = TypeVar(
     HeroRecruitResult,
     BuildingDetail,
     BuildingRequirementRow,
+    WorkshopView,
 )
 
 

@@ -13,6 +13,7 @@ from pnc_automation.app.pnc.domain.building_details import BuildingDetail
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
+from pnc_automation.app.pnc.domain.pet_workshop import WorkshopObservation
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
@@ -132,6 +133,7 @@ def make_observation(
     research_detail: ResearchDetail | None = None,
     research_queue_rows: tuple[ResearchQueueRow, ...] = (),
     building_detail: BuildingDetail | None = None,
+    workshop: WorkshopObservation | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -224,6 +226,7 @@ def make_observation(
         research_detail=research_detail,
         research_queue_rows=research_queue_rows,
         building_detail=building_detail,
+        workshop=workshop,
         frame_ref=resolved_frame_ref,
     )
 

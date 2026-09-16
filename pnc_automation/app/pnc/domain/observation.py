@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         BagPreviewRewardFacts,
     )
     from pnc_automation.app.pnc.domain.building_details import BuildingDetail
+    from pnc_automation.app.pnc.domain.pet_workshop import WorkshopObservation
     from pnc_automation.app.pnc.domain.research import (
         ResearchDetail,
         ResearchNodeFacts,
@@ -533,6 +534,7 @@ class Observation:
     hero_recruit_result: HeroRecruitResult | None = None
     bag_preview: BagChestPreviewFacts | None = None
     building_detail: BuildingDetail | None = None
+    workshop: WorkshopObservation | None = None
     frame_ref: FrameRef | None = None
 
     def __init__(
@@ -569,6 +571,7 @@ class Observation:
         hero_recruit_result: HeroRecruitResult | None = None,
         bag_preview: BagChestPreviewFacts | None = None,
         building_detail: BuildingDetail | None = None,
+        workshop: WorkshopObservation | None = None,
         frame_ref: FrameRef | None = None,
         *,
         screen_type: ScreenType | None = None,
@@ -628,6 +631,7 @@ class Observation:
             "hero_recruit_result": hero_recruit_result,
             "bag_preview": bag_preview,
             "building_detail": building_detail,
+            "workshop": workshop,
             "frame_ref": frame_ref,
         }
         for field_name, value in values.items():

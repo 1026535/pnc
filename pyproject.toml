@@ -30,5 +30,6 @@ include = ["pnc_automation*"]
 
 [tool.setuptools.package-data]
 "pnc_automation" = ["py.typed", "templates/pnc/*.png"]
+"pnc_automation.app.pnc" = ["data/pet_workshop/*.json"]
 "pnc_automation.app.pnc.vision" = ["data/*.yaml", "data/*.json", "data/screen_anchors/*.png", "data/control_anchors/*.png", "data/home_city_camera/*.png"]
 "pnc_automation.core.vision.ocr" = ["data/*.onnx", "data/*.txt"]
