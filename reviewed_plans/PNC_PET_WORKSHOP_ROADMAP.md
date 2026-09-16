@@ -42,7 +42,7 @@ Status is maintained here. Keep detailed review findings, commands, supported co
 
 | Packet | Former ID | Offline implementation dependency | Status | Accepted base / result and remaining condition |
 | --- | --- | --- | --- | --- |
-| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Under review | Worker `f650050` reconciled with `origin/main` `7af5e89`; lead corrected unread-cell defaults and recycling fixture. 78 focused tests passed; combined portable validation pending. |
+| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Under review | Worker `f650050` reviewed; lead corrections at `50a860d`, latest main skills integrated at `fea8ec2`. 78 focused tests passed. Full validation exposed missing rapidocr 3.4.5 in the test interpreter; isolated dependency-correct rerun pending. |
 | [PW02 — Recognition and controls](pet_workshop_packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Planned | Saved captures available; missing action-state coverage remains explicit. |
 | [PW03 — Effort, reservations and policy](pet_workshop_packets/PW03_EFFORT_RESERVATIONS_POLICY.md) | S1 | PW01 | Planned | Offline solver lane; independent of PW02. |
 | [PW04 — One-step solver](pet_workshop_packets/PW04_ONE_STEP_SOLVER.md) | S2 | PW03 policy implementation | Planned | Same worker may continue from tested PW03 code and hand both back together; a separate worker receives an accepted dependency commit. |
