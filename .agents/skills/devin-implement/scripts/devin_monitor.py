@@ -153,7 +153,14 @@ def activity_snapshot(run_dir, alive=process_alive):
     if worker["status"] != "running":
         return {"state": "terminal", "turn_dir": worker["turn_dir"], "turn": worker["turn"]}
     turn_dir = Path(worker["turn_dir"])
-    events = [json.loads(line) for line in tail(turn_dir / "identity.jsonl", 16384).splitlines()]
+    events = []
+    unreadable_event_lines = 0
+    for line in tail(turn_dir / "identity.jsonl", 16384).splitlines():
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            # A damaged hook record must not stop monitoring independent workers.
+            unreadable_event_lines += 1
     tools = [e for e in events if e.get("hook_event_name") in ("PreToolUse", "PostToolUse")]
     last = tools[-1] if tools else {}
     files = [turn_dir / "identity.jsonl", turn_dir / "stdout.log"]
@@ -163,6 +170,7 @@ def activity_snapshot(run_dir, alive=process_alive):
         "fingerprint": [worker["turn"], *[p.stat().st_size if p.exists() else 0 for p in files], last.get("at")],
         "in_flight": last.get("hook_event_name") == "PreToolUse", "tool": last.get("tool_name"),
         "last_tool_at": last.get("at"),
+        "unreadable_event_lines": unreadable_event_lines,
     }
 
 

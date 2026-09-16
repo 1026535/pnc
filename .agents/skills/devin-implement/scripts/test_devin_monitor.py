@@ -160,6 +160,26 @@ class MonitorTests(unittest.TestCase):
         self.assertTrue(snapshot["in_flight"])
         self.assertEqual(snapshot["last_tool_at"], 1)
 
+    def test_snapshot_preserves_tool_state_across_damaged_hook_line(self):
+        turn = self.root / "turn"
+        turn.mkdir()
+        monitor.write_json(self.root / "state.json", {
+            "status": "running", "turn": 1, "turn_dir": str(turn), "supervisor_pid": 1,
+        })
+        identity = turn / "identity.jsonl"
+        identity.write_text(
+            '{"hook_event_name":"PostToolUse","tool_name":"shell","at":1}\n'
+            'e_up"}\n'
+            '{"hook_event_name":"PreToolUse","tool_name":"tests","at":2}\n',
+            encoding="utf-8",
+        )
+        snapshot = monitor.activity_snapshot(self.root, alive=lambda pid: True)
+        self.assertTrue(snapshot["in_flight"])
+        self.assertEqual(snapshot["tool"], "tests")
+        self.assertEqual(snapshot["last_tool_at"], 2)
+        self.assertEqual(snapshot["unreadable_event_lines"], 1)
+        self.assertEqual(snapshot["fingerprint"][1], identity.stat().st_size)
+
     def test_rearm_failure_backoff_and_single_alert(self):
         clock = [1000]
         attempts = []
