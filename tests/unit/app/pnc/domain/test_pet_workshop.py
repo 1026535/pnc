@@ -66,7 +66,16 @@ from tests.support.pnc import pet_workshop as workshop_fixtures
 class WorkshopCellTests(unittest.TestCase):
     """Cell facts keep access, occupancy, and item status independent."""
 
+    def test_unread_cell_defaults_preserve_unknown_facts(self) -> None:
+        """An addressed but unread square must not imply access or a present piece."""
+        cell = WorkshopCell(cell_id=1, row=1, column=1)
+        self.assertEqual(cell.access, WorkshopCellAccess.UNKNOWN)
+        self.assertEqual(cell.occupancy, WorkshopOccupancy.UNKNOWN)
+        self.assertIsNone(cell.item_id)
+        self.assertIsNone(cell.item_status)
+
     def test_occupied_cell_with_status_and_cooldown(self) -> None:
+        """Verifies that occupied cell with status and cooldown."""
         cell = workshop_fixtures.make_cell(
             4, 3,
             item_id=workshop_fixtures.TREE_4,
@@ -78,6 +87,7 @@ class WorkshopCellTests(unittest.TestCase):
         self.assertEqual(cell.cooldown, WorkshopCooldown.ACTIVE)
 
     def test_item_status_variants_stay_representable(self) -> None:
+        """Verifies that item status variants stay representable."""
         for status in (
             WorkshopItemStatus.NORMAL,
             WorkshopItemStatus.INACTIVE,
@@ -90,6 +100,7 @@ class WorkshopCellTests(unittest.TestCase):
                 self.assertEqual(cell.item_status, status)
 
     def test_known_empty_cell_carries_no_item_facts(self) -> None:
+        """Verifies that known empty cell carries no item facts."""
         cell = workshop_fixtures.make_cell(
             1, 1, occupancy=WorkshopOccupancy.EMPTY, item_status=None,
         )
@@ -97,6 +108,7 @@ class WorkshopCellTests(unittest.TestCase):
         self.assertIsNone(cell.item_status)
 
     def test_occupied_cell_may_have_unread_item_identity(self) -> None:
+        """Verifies that occupied cell may have unread item identity."""
         cell = workshop_fixtures.make_cell(
             1, 1, item_id=None, item_status=WorkshopItemStatus.UNKNOWN,
         )
@@ -104,6 +116,7 @@ class WorkshopCellTests(unittest.TestCase):
         self.assertIsNone(cell.item_id)
 
     def test_invalid_coordinates_and_cell_ids_fail(self) -> None:
+        """Verifies that invalid coordinates and cell ids fail."""
         for bad in (
             {"cell_id": 0, "row": 1, "column": 1},
             {"cell_id": 1, "row": 0, "column": 1},
@@ -116,6 +129,7 @@ class WorkshopCellTests(unittest.TestCase):
                     WorkshopCell(**bad)
 
     def test_empty_cell_with_item_facts_fails(self) -> None:
+        """Verifies that empty cell with item facts fails."""
         with self.assertRaises(ValueError):
             workshop_fixtures.make_cell(
                 1, 1,
@@ -125,10 +139,12 @@ class WorkshopCellTests(unittest.TestCase):
             )
 
     def test_non_empty_cell_requires_a_status(self) -> None:
+        """Verifies that non empty cell requires a status."""
         with self.assertRaises(ValueError):
             workshop_fixtures.make_cell(1, 1, item_id=workshop_fixtures.FRUIT_1, item_status=None)
 
     def test_cells_are_immutable(self) -> None:
+        """Verifies that cells are immutable."""
         cell = workshop_fixtures.make_cell(1, 1, item_id=workshop_fixtures.FRUIT_1)
         with self.assertRaises(FrozenInstanceError):
             cell.item_id = workshop_fixtures.FRUIT_5  # type: ignore[misc]
@@ -138,6 +154,7 @@ class WorkshopSelectionTests(unittest.TestCase):
     """Selection distinguishes a known cell, known-none, and unknown."""
 
     def test_known_selected_none_and_unknown_are_distinct(self) -> None:
+        """Verifies that known selected none and unknown are distinct."""
         selected = WorkshopSelection(WorkshopSelectionKind.SELECTED, cell_id=5)
         none = WorkshopSelection(WorkshopSelectionKind.NONE)
         unknown = WorkshopSelection(WorkshopSelectionKind.UNKNOWN)
@@ -147,10 +164,12 @@ class WorkshopSelectionTests(unittest.TestCase):
         self.assertNotEqual(none.kind, unknown.kind)
 
     def test_selected_without_cell_fails(self) -> None:
+        """Verifies that selected without cell fails."""
         with self.assertRaises(ValueError):
             WorkshopSelection(WorkshopSelectionKind.SELECTED)
 
     def test_non_selected_with_cell_fails(self) -> None:
+        """Verifies that non selected with cell fails."""
         for kind in (WorkshopSelectionKind.NONE, WorkshopSelectionKind.UNKNOWN):
             with self.subTest(kind=kind):
                 with self.assertRaises(ValueError):
@@ -161,20 +180,24 @@ class WorkshopEnergyTests(unittest.TestCase):
     """Energy keeps zero, unknown, and over-cap readings distinct."""
 
     def test_zero_energy_is_reliably_zero(self) -> None:
+        """Verifies that zero energy is reliably zero."""
         energy = WorkshopEnergy(current=0, capacity=200)
         self.assertTrue(energy.known)
         self.assertTrue(energy.is_zero)
 
     def test_unknown_energy_is_never_zero(self) -> None:
+        """Verifies that unknown energy is never zero."""
         energy = WorkshopEnergy(current=None, capacity=None)
         self.assertFalse(energy.known)
         self.assertFalse(energy.is_zero)
 
     def test_over_cap_reading_is_valid(self) -> None:
+        """Verifies that over cap reading is valid."""
         energy = WorkshopEnergy(current=250, capacity=200)
         self.assertEqual(energy.current, 250)
 
     def test_negative_or_typed_bad_readings_fail(self) -> None:
+        """Verifies that negative or typed bad readings fail."""
         for bad in (
             {"current": -1},
             {"current": 1.5},
@@ -190,11 +213,13 @@ class WorkshopOrderTests(unittest.TestCase):
     """Orders preserve quantities, coverage, rewards, and readiness."""
 
     def test_duplicate_ingredient_quantity_is_preserved(self) -> None:
+        """Verifies that duplicate ingredient quantity is preserved."""
         order = workshop_fixtures.make_order(1, {workshop_fixtures.FRUIT_1: 2})
         self.assertEqual(order.total_pieces, 2)
         self.assertEqual(order.requirements[workshop_fixtures.FRUIT_1], 2)
 
     def test_three_piece_orders_stay_representable(self) -> None:
+        """Verifies that three piece orders stay representable."""
         order = workshop_fixtures.make_order(
             1,
             {workshop_fixtures.WOOD_10: 1, workshop_fixtures.FRUIT_1: 2},
@@ -203,6 +228,7 @@ class WorkshopOrderTests(unittest.TestCase):
         self.assertEqual(order.total_pieces, 3)
 
     def test_clipped_order_keeps_partial_requirements(self) -> None:
+        """Verifies that clipped order keeps partial requirements."""
         order = workshop_fixtures.make_order(
             1,
             {workshop_fixtures.WOOD_10: 1},
@@ -213,6 +239,7 @@ class WorkshopOrderTests(unittest.TestCase):
         self.assertIsNone(order.ready)
 
     def test_unknown_and_other_reward_categories_are_representable(self) -> None:
+        """Verifies that unknown and other reward categories are representable."""
         order = workshop_fixtures.make_order(
             1,
             {workshop_fixtures.FRUIT_1: 1},
@@ -225,6 +252,7 @@ class WorkshopOrderTests(unittest.TestCase):
         self.assertEqual(order.rewards[1].category, WorkshopOrderRewardCategory.UNKNOWN)
 
     def test_requirement_map_is_frozen_and_positive(self) -> None:
+        """Verifies that requirement map is frozen and positive."""
         order = workshop_fixtures.make_order(1, {workshop_fixtures.FRUIT_1: 2})
         self.assertIsInstance(order.requirements, MappingProxyType)
         for bad in ({0: 1}, {workshop_fixtures.FRUIT_1: 0}, {workshop_fixtures.FRUIT_1: -2}):
@@ -233,17 +261,20 @@ class WorkshopOrderTests(unittest.TestCase):
                     workshop_fixtures.make_order(1, bad)
 
     def test_invalid_refs_and_ready_flags_fail(self) -> None:
+        """Verifies that invalid refs and ready flags fail."""
         with self.assertRaises(ValueError):
             workshop_fixtures.make_order(0, {workshop_fixtures.FRUIT_1: 1})
         with self.assertRaises(TypeError):
             workshop_fixtures.make_order(1, {workshop_fixtures.FRUIT_1: 1}, ready="yes")  # type: ignore[arg-type]
 
     def test_survey_rejects_duplicate_order_refs(self) -> None:
+        """Verifies that survey rejects duplicate order refs."""
         order = workshop_fixtures.make_order(1, {workshop_fixtures.FRUIT_1: 1})
         with self.assertRaises(ValueError):
             WorkshopOrderSurvey(orders=(order, order))
 
     def test_survey_coverage_and_freshness_are_typed(self) -> None:
+        """Verifies that survey coverage and freshness are typed."""
         survey = WorkshopOrderSurvey(
             orders=(),
             coverage=WorkshopSurveyCoverage.PARTIAL,
@@ -259,6 +290,7 @@ class WorkshopStateTests(unittest.TestCase):
     """The logical state validates board consistency and keeps partial reads."""
 
     def test_partial_recognition_keeps_unobserved_positions(self) -> None:
+        """Verifies that partial recognition keeps unobserved positions."""
         state = workshop_fixtures.make_state(
             cells=(
                 workshop_fixtures.make_cell(1, 1, item_id=workshop_fixtures.TREE_4),
@@ -272,6 +304,7 @@ class WorkshopStateTests(unittest.TestCase):
         self.assertIs(state.cell_at(9, 7), state.cell(63))
 
     def test_cell_address_must_match_board_coordinates(self) -> None:
+        """Verifies that cell address must match board coordinates."""
         board = workshop_fixtures.board_layout()
         bad_cell = WorkshopCell(
             cell_id=board.cell_id(2, 1) + 1,
@@ -283,21 +316,25 @@ class WorkshopStateTests(unittest.TestCase):
             WorkshopState(board=board, cells=(bad_cell,))
 
     def test_out_of_board_coordinates_fail_via_layout_owner(self) -> None:
+        """Verifies that out of board coordinates fail via layout owner."""
         with self.assertRaises(PetWorkshopCatalogError):
             workshop_fixtures.make_cell(10, 1)
 
     def test_duplicate_observed_cells_fail(self) -> None:
+        """Verifies that duplicate observed cells fail."""
         cell = workshop_fixtures.make_cell(1, 1)
         with self.assertRaises(ValueError):
             workshop_fixtures.make_state(cells=(cell, cell))
 
     def test_selection_must_stay_on_the_board(self) -> None:
+        """Verifies that selection must stay on the board."""
         with self.assertRaises(ValueError):
             workshop_fixtures.make_state(
                 selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, cell_id=64),
             )
 
     def test_excluded_surface_and_production_mode_stay_representable(self) -> None:
+        """Verifies that excluded surface and production mode stay representable."""
         state = workshop_fixtures.make_state(
             surface=WorkshopSurfaceKind.EXCLUDED_MODAL,
             production_mode=WorkshopProductionMode.AUTO_FUSION,
@@ -306,6 +343,7 @@ class WorkshopStateTests(unittest.TestCase):
         self.assertEqual(state.production_mode, WorkshopProductionMode.AUTO_FUSION)
 
     def test_board_layout_must_be_the_catalog_owner_type(self) -> None:
+        """Verifies that board layout must be the catalog owner type."""
         with self.assertRaises(TypeError):
             WorkshopState(board={"columns": 7, "rows": 9})  # type: ignore[arg-type]
 
@@ -314,6 +352,7 @@ class WorkshopViewTests(unittest.TestCase):
     """The measured view validates geometry against the paired state."""
 
     def test_view_pairs_measured_bounds_with_state(self) -> None:
+        """Verifies that view pairs measured bounds with state."""
         state = workshop_fixtures.make_state(
             cells=(workshop_fixtures.make_cell(5, 4, item_id=workshop_fixtures.FRUIT_1),),
             order_survey=WorkshopOrderSurvey(
@@ -328,12 +367,14 @@ class WorkshopViewTests(unittest.TestCase):
         self.assertIsNotNone(order_view.submit_bounds)
 
     def test_cell_bounds_outside_the_board_fail(self) -> None:
+        """Verifies that cell bounds outside the board fail."""
         state = workshop_fixtures.make_state()
         view = WorkshopView(cell_bounds={99: Bounds(x=0, y=0, width=10, height=10)})
         with self.assertRaises(ValueError):
             WorkshopObservation(state=state, view=view)
 
     def test_order_view_without_surveyed_order_fails(self) -> None:
+        """Verifies that order view without surveyed order fails."""
         state = workshop_fixtures.make_state()
         view = WorkshopView(
             order_views=(WorkshopOrderView(order_ref=7, portrait_bounds=Bounds(x=0, y=0, width=5, height=5)),),
@@ -342,6 +383,7 @@ class WorkshopViewTests(unittest.TestCase):
             WorkshopObservation(state=state, view=view)
 
     def test_view_rejects_non_bounds_geometry(self) -> None:
+        """Verifies that view rejects non bounds geometry."""
         with self.assertRaises(TypeError):
             WorkshopView(cell_bounds={1: (0, 0, 10, 10)})  # type: ignore[dict-item]
         with self.assertRaises(TypeError):
@@ -352,6 +394,7 @@ class WorkshopIntentTests(unittest.TestCase):
     """Intents carry typed logical targets and reject malformed ones."""
 
     def test_every_variant_exposes_its_kind_tag(self) -> None:
+        """Verifies that every variant exposes its kind tag."""
         intents = (
             (WorkshopSelectIntent(cell_id=1), WorkshopIntentKind.SELECT),
             (WorkshopProduceIntent(cell_id=1, producer_item_id=workshop_fixtures.TREE_4), WorkshopIntentKind.PRODUCE),
@@ -369,6 +412,7 @@ class WorkshopIntentTests(unittest.TestCase):
                 self.assertEqual(intent.kind, kind)
 
     def test_pair_intents_reject_a_single_cell(self) -> None:
+        """Verifies that pair intents reject a single cell."""
         for build in (
             lambda: WorkshopMergeIntent(source_cell_id=1, target_cell_id=1, item_id=workshop_fixtures.FRUIT_1),
             lambda: WorkshopActivateIntent(source_cell_id=1, target_cell_id=1, item_id=workshop_fixtures.FRUIT_1),
@@ -379,6 +423,7 @@ class WorkshopIntentTests(unittest.TestCase):
                     build()
 
     def test_inspect_subjects_match_their_need(self) -> None:
+        """Verifies that inspect subjects match their need."""
         WorkshopInspectIntent(need=WorkshopInspectKind.ORDER_CONTENTS, order_ref=3)
         WorkshopInspectIntent(need=WorkshopInspectKind.CELL_STATE, cell_id=3)
         for need, kwargs in (
@@ -394,10 +439,12 @@ class WorkshopIntentTests(unittest.TestCase):
                     WorkshopInspectIntent(need=need, **kwargs)
 
     def test_wait_requires_a_bound(self) -> None:
+        """Verifies that wait requires a bound."""
         with self.assertRaises(ValueError):
             WorkshopWaitIntent(max_wait_ms=0)
 
     def test_intents_reject_non_positive_targets(self) -> None:
+        """Verifies that intents reject non positive targets."""
         for build in (
             lambda: WorkshopSelectIntent(cell_id=0),
             lambda: WorkshopProduceIntent(cell_id=1, producer_item_id=0),
@@ -413,6 +460,7 @@ class WorkshopDecisionPolicyTests(unittest.TestCase):
     """Decisions carry revalidation context; policies keep typed knobs."""
 
     def test_decision_freezes_quantity_maps(self) -> None:
+        """Verifies that decision freezes quantity maps."""
         decision = WorkshopDecision(
             intent=WorkshopSubmitOrderIntent(order_ref=1),
             reason="ready two-piece order",
@@ -423,6 +471,7 @@ class WorkshopDecisionPolicyTests(unittest.TestCase):
         self.assertEqual(decision.goal_order_ref, 1)
 
     def test_decision_rejects_untyped_intent_and_bad_quantities(self) -> None:
+        """Verifies that decision rejects untyped intent and bad quantities."""
         with self.assertRaises(TypeError):
             WorkshopDecision(intent="merge")  # type: ignore[arg-type]
         with self.assertRaises(ValueError):
@@ -432,6 +481,7 @@ class WorkshopDecisionPolicyTests(unittest.TestCase):
             )
 
     def test_policy_contract_validates_its_knobs(self) -> None:
+        """Verifies that policy contract validates its knobs."""
         policy = workshop_fixtures.make_policy()
         self.assertEqual(policy.order_piece_total, 2)
         self.assertEqual(policy.reward_priority[0], WorkshopOrderRewardCategory.BEAST_LASSO)
@@ -454,6 +504,7 @@ class WorkshopDecisionPolicyTests(unittest.TestCase):
                     WorkshopPolicy(**kwargs)
 
     def test_validation_result_contract(self) -> None:
+        """Verifies that validation result contract."""
         for verdict in WorkshopValidationVerdict:
             with self.subTest(verdict=verdict):
                 result = WorkshopIntentValidation(verdict=verdict, reason="check")
@@ -466,6 +517,7 @@ class WorkshopInterfaceTests(unittest.TestCase):
     """The pure plan_next/validate_intent signatures are fixed for PW03/PW04."""
 
     def test_plan_next_signature(self) -> None:
+        """Verifies that plan next signature."""
         hints = typing.get_type_hints(WorkshopPlanNext.__call__)
         self.assertIs(hints["state"], WorkshopState)
         self.assertIs(hints["catalog"], PetWorkshopCatalog)
@@ -473,6 +525,7 @@ class WorkshopInterfaceTests(unittest.TestCase):
         self.assertIs(hints["return"], WorkshopDecision)
 
     def test_validate_intent_signature(self) -> None:
+        """Verifies that validate intent signature."""
         hints = typing.get_type_hints(WorkshopValidateIntent.__call__)
         self.assertIs(hints["state"], WorkshopState)
         self.assertIs(hints["intent"], WorkshopIntent)
@@ -485,6 +538,7 @@ class WorkshopScenarioFixtureTests(unittest.TestCase):
     """Synthetic fixtures cover the agreed mechanic states; none are live proof."""
 
     def test_feed_locked_fixture_supports_a_feed_intent(self) -> None:
+        """Verifies that feed locked fixture supports a feed intent."""
         state = workshop_fixtures.feed_locked_state()
         locked = state.cell_at(1, 1)
         food = state.cell_at(1, 2)
@@ -497,6 +551,7 @@ class WorkshopScenarioFixtureTests(unittest.TestCase):
         self.assertEqual(intent.kind, WorkshopIntentKind.FEED)
 
     def test_activation_fixture_supports_an_activate_intent(self) -> None:
+        """Verifies that activation fixture supports an activate intent."""
         state = workshop_fixtures.activation_state()
         inactive = state.cell_at(2, 1)
         normal = state.cell_at(2, 2)
@@ -509,6 +564,7 @@ class WorkshopScenarioFixtureTests(unittest.TestCase):
         self.assertEqual(intent.kind, WorkshopIntentKind.ACTIVATE)
 
     def test_finite_producer_fixture_is_representable_without_use_counts(self) -> None:
+        """Verifies that finite producer fixture is representable without use counts."""
         state = workshop_fixtures.finite_producer_state()
         producer = workshop_fixtures.catalog().producer_for(workshop_fixtures.FISHING_TOOL_9)
         self.assertIsNotNone(producer)
@@ -517,13 +573,17 @@ class WorkshopScenarioFixtureTests(unittest.TestCase):
         self.assertEqual(state.cell_at(3, 1).item_id, workshop_fixtures.FISHING_TOOL_9)
 
     def test_recycling_fixture_supports_a_recycle_intent(self) -> None:
+        """Verifies that recycling fixture supports a recycle intent."""
         state = workshop_fixtures.recycling_state()
+        self.assertFalse(state.unobserved_cell_ids)
+        self.assertTrue(all(cell.occupancy == WorkshopOccupancy.OCCUPIED for cell in state.cells))
         candidate = state.cell_at(9, 1)
         self.assertEqual(candidate.item_id, workshop_fixtures.FRUIT_5)
         intent = WorkshopRecycleIntent(cell_id=candidate.cell_id, item_id=workshop_fixtures.FRUIT_5)
         self.assertEqual(intent.kind, WorkshopIntentKind.RECYCLE)
 
     def test_zero_energy_fixture_stays_distinct(self) -> None:
+        """Verifies that zero energy fixture stays distinct."""
         state = workshop_fixtures.zero_energy_state()
         self.assertTrue(state.energy.is_zero)
         stop = WorkshopDecision(
@@ -537,12 +597,14 @@ class ObservationFieldTests(unittest.TestCase):
     """The workshop field composes with the canonical Observation model."""
 
     def test_observation_carries_the_workshop_fact(self) -> None:
+        """Verifies that observation carries the workshop fact."""
         workshop = workshop_fixtures.make_observation()
         observation = Observation(screen_type=ScreenType.PNC_SETTINGS, workshop=workshop)
         self.assertIs(observation.workshop, workshop)
         self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
 
     def test_observation_default_is_no_workshop(self) -> None:
+        """Verifies that observation default is no workshop."""
         observation = Observation(screen_type=ScreenType.PNC_SETTINGS)
         self.assertIsNone(observation.workshop)
 

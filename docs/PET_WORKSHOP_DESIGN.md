@@ -116,6 +116,8 @@ authored data while keeping unread facts representable.
   on an occupied cell (piece seen, identity unread); `item_status` covers
   `NORMAL`, `INACTIVE` (grey activation target), `BUBBLE`, `FEED_LOCKED`
   (producer awaiting its catalog feed ingredient), and `UNKNOWN`.
+  An unread addressed cell defaults to unknown access and occupancy with no
+  item facts; only confirmed occupied cells require an explicit item status.
   `cooldown` is the tri-state visible marker only — no deadline is inferred.
 - `WorkshopSelection` distinguishes `SELECTED` + cell id, `NONE`, and
   `UNKNOWN`; a repeated tap on a selected producer produces, so the planner

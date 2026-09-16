@@ -1,6 +1,6 @@
 # Pet Workshop roadmap — separate delivery packets
 
-Updated: 2026-09-16. **0/10 packets accepted; PW01 delegated to Devin. Next eligible wave after PW01 acceptance: PW02, PW03 and PW06.**
+Updated: 2026-09-16. **0/10 packets accepted; PW01 under independent review and combined validation. Next eligible wave after PW01 acceptance: PW02, PW03 and PW06.**
 
 [Shared contract and recognition](PNC_PET_WORKSHOP_01_RECOGNITION_STATE_PLAN.md) · [Solver and policy](PNC_PET_WORKSHOP_02_SOLVER_POLICY_PLAN.md) · [Execution and integration](PNC_PET_WORKSHOP_03_EXECUTION_INTEGRATION_PLAN.md)
 
@@ -20,7 +20,7 @@ The implementation checkout was synchronized with `origin/main` at `0aab4d7f5a22
 
 The user's current instruction supersedes any earlier wording that would allow merging a live-observable packet with only offline acceptance. Validate distinct feature-owned use cases and relevant regressions using the actual final candidate before merging. A packet with no meaningful observable live effect needs no live check. Keep work requiring unavailable live proof awaiting validation, record the exact blocker and evidence under the packet's handoff, notify the user, and continue independent eligible work. PW10 still owns combined qualification; its ledger can collect relevant proof earlier rather than postpone a packet's required pre-merge check.
 
-The authorized live instance is **3xx spies**, resolved through configured identity, roles and the canonical lease. Use the active castle unless switching is explicitly authorized. Preserve existing resource restrictions and bind any consumptive canary to the exact target/action/budget authorized by the request or approved plan; the lease alone does not invent a spending amount. No live work is needed for PW01. The existing native Devin completion callback and monitor own automatic handoff delivery; keep worker run/turn, reviewed/tested revisions and evidence in packet records. Do not treat worker completion as acceptance.
+Live work is on hold: the configured castles on **3xx spies** are C1–C9, below Workshop’s C24 prerequisite, and the user is arranging a replacement account. Do not substitute another instance. Resolve the replacement through configured identity, roles and the canonical lease once supplied. Use the active castle unless switching is explicitly authorized. Preserve existing resource restrictions and bind any consumptive canary to the exact target/action/budget authorized by the request or approved plan; the lease alone does not invent a spending amount. No live work is needed for PW01. The existing native Devin completion callback and monitor own automatic handoff delivery; keep worker run/turn, reviewed/tested revisions and evidence in packet records. Do not treat worker completion as acceptance.
 
 Use the status table below as the single queue record. During implementation record **Delegated**, **Under review**, **Fixing findings**, **Awaiting validation**, **Accepted**, **Merged/pushed**, or **Blocked: exact reason**. Untouched packets remain Planned. Record failures with reproduction/command, candidate revision, observed result, artifact references and next action in the affected packet; generated logs stay under `.local-data/`.
 
@@ -42,7 +42,7 @@ Status is maintained here. Keep detailed review findings, commands, supported co
 
 | Packet | Former ID | Offline implementation dependency | Status | Accepted base / result and remaining condition |
 | --- | --- | --- | --- | --- |
-| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Delegated | Catalog reviewed at `0fb4af0` (17 focused tests passed); `cedar-stealer` turn 003 implements shared state/publication and combined checks. PW01 acceptance pending. |
+| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Under review | Worker `f650050` reconciled with `origin/main` `7af5e89`; lead corrected unread-cell defaults and recycling fixture. 78 focused tests passed; combined portable validation pending. |
 | [PW02 — Recognition and controls](pet_workshop_packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Planned | Saved captures available; missing action-state coverage remains explicit. |
 | [PW03 — Effort, reservations and policy](pet_workshop_packets/PW03_EFFORT_RESERVATIONS_POLICY.md) | S1 | PW01 | Planned | Offline solver lane; independent of PW02. |
 | [PW04 — One-step solver](pet_workshop_packets/PW04_ONE_STEP_SOLVER.md) | S2 | PW03 policy implementation | Planned | Same worker may continue from tested PW03 code and hand both back together; a separate worker receives an accepted dependency commit. |

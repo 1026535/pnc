@@ -42,11 +42,11 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 
 ### Execution record — 2026-09-16
 
-**Current status: Delegated.** The catalog slice is independently reviewed and saved at `0fb4af03acff0c5e9f32abe2b42722b55e016849`; shared-state/observation work is running. PW01 is not yet accepted, merged or pushed. PW02/PW03/PW06 remain gated on complete PW01 acceptance.
+**Current status: Under review.** Devin returned complete shared-state/publication work at `f650050ae04d408d1be67d5b3099a9c5671371a1`. The lead integrated it with `origin/main` `7af5e89470489dac644e3a6c3e5aa0c53aa18656` in the coordinating feature branch, corrected findings, and is validating the combined candidate. No default-branch landing or packet acceptance yet; PW02/PW03/PW06 remain gated.
 
 - Worker checkout/branch: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-pw01`, `codex/pet-workshop-pw01`.
 - Base: `b8c96b8e36b943a47006fde320629e1ae313ad29`, incorporating accepted `origin/main` `a73843cebfcee2105d8efd07706dd7fcb94fda10`. First dispatch used `f346d91` before that synchronization.
-- Active worker: session `cedar-stealer`, `.local-data/devin-implement/pw01-platform-check`, turn `003`; brief `.local-data/devin-briefs/pw01-shared-state.md`. Startup confirmed. The existing native completion callback and lead monitor cover this run; monitor evidence is in the coordinating checkout's `.local-data/devin-monitor`.
+- Completed worker: session `cedar-stealer`, `.local-data/devin-implement/pw01-platform-check`, turn `003`; brief `.local-data/devin-briefs/pw01-shared-state.md`. Completed with `writers_stopped: true` and a final handoff. The existing native completion callback and lead monitor cover this run; monitor evidence is in the coordinating checkout's `.local-data/devin-monitor`.
 - The catalog and shared-state portions are internal handoffs of PW01, not new packets/dependencies. Lead reviews actual implementation and combined checks before releasing consumers. No live effect/access is needed for this foundation; live validation for later packets remains on hold for the user's replacement account.
 
 #### Independent catalog review
@@ -70,3 +70,15 @@ Paths below are relative to the worker's `.local-data/devin-implement/`. Each tu
 | `pw01-platform-check/turn-002` | Same service error after 1235.56 seconds; trace `d96576f355ffb2f172187a0a18bb5c56`; catalog/docs/tests preserved, 573-test group passed. | Reviewed saved implementation, applied the two findings above, independently checked and committed the catalog slice, resumed shared-state work. |
 
 The reported service error is `-32013`, internal `Protocol error (invalid_argument)`, marked retryable by Devin. Root cause remains unknown; diagnostic success does not prove it fixed. Installed CLI recorded `3000.10.27 (bcbe88c7)` and `swe-2-max`. No permission or model substitution occurred. The user confirmed these should be treated as recoverable: preserve useful work, continue automatically, and notify again only when recovery stops making progress or requires input.
+
+
+#### Shared-state review and combined validation
+
+- Reviewed worker candidate: `f650050`; all ten intent variants, catalog-backed layout, coordinate-free state, measured view and both canonical publication paths inspected. Production recognizers do not yet emit Workshop content.
+- `PW01-C3` fixed by lead: `WorkshopCell(1, 1, 1)` incorrectly raised because unknown occupancy required an item status. Unknown occupancy now permits absent item facts, and unread access defaults to `UNKNOWN`. Confirmed occupied cells still require an explicit status. Added a regression.
+- `PW01-C4` fixed by lead: the recycling fixture described a full board but contained 56 empty cells. It now contains a complete board of terminal pieces; policy legality remains the solver's responsibility. The fixture test checks occupancy/coverage.
+- Corrected the view documentation: the recognizer supplies image dimensions, while the canonical provenance binder stamps frame/screen/layout. Documented new protocol methods and test helpers.
+- Lead focused command: `py -m unittest tests.unit.app.pnc.test_pet_workshop_catalog tests.unit.app.pnc.domain.test_pet_workshop tests.unit.app.pnc.vision.test_pet_workshop_publication` — **78 passed** after functional fixes. `git diff --check` passed.
+- Worker evidence before lead integration: `unit.app.pnc` 634 passed; full suite 2,523 passed / 7 skipped / 2,530 discovered. The seven skips are optional missing fixture or Windows symlink-privilege cases, not live-gated tests. Full metadata records `0fb4af0` plus the then-uncommitted source fingerprint; final type-guard edits received 60 focused passes. Lead combined validation supersedes this earlier candidate evidence.
+- Lead full-suite and installed-package proof: pending; artifacts will be under the coordinating checkout's `.test-impact/pw01-integrated-*` and `.local-data/reports/pet-workshop/`.
+- Live validation: **not applicable to PW01**. Later Workshop packets retain the replacement-account and final-candidate live gates.

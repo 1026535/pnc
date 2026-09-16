@@ -61,6 +61,7 @@ class EmptySelectorEngine:
     """Returns no raw selector matches so content comes only from additions."""
 
     def detect(self, image, registry, *, selector_ids=None, ocr_context=None):
+        """Suppresses selector matches so only the scripted typed additions drive publication."""
         del image, registry, selector_ids, ocr_context
         return ()
 
@@ -72,10 +73,12 @@ class ScriptedEnricher:
     enrichments: list[ObservationAdditions]
 
     def recognize_guards(self, image, request, *, ocr_context):
+        """Supplies a clear guard without invoking pixel recognition."""
         del image, request, ocr_context
         return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
     def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
+        """Supplies the scripted content through the production enrichment interface."""
         del image, screen_type, visible_elements, request, ocr_context, ocr_regions, layout_id
         if not self.enrichments:
             raise AssertionError("Scripted enricher received more calls than expected")
@@ -89,15 +92,18 @@ class ScriptedNavigationGuard:
     content: ObservationAdditions
 
     def detect_interruption(self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None):
+        """Supplies a clear navigation guard without running a live detector."""
         del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
         return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
     def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
+        """Supplies the scripted content through the production enrichment interface."""
         del image, screen_type, visible_elements, request, ocr_context, ocr_regions, layout_id
         return self.content
 
 
 def _builder(enricher: ScriptedEnricher) -> ObservationBuilder:
+    """Builds the production publisher with deterministic screen and content evidence."""
     return ObservationBuilder(
         selector_registry=build_default_selector_registry(),
         selector_engine=EmptySelectorEngine(),
@@ -115,6 +121,7 @@ def _builder(enricher: ScriptedEnricher) -> ObservationBuilder:
 
 
 def _navigation(builder: ObservationBuilder, guard: ScriptedNavigationGuard) -> NavigationPerception:
+    """Builds the navigation publisher sharing the same observation context owner."""
     return NavigationPerception(
         builder.visual_recognizer,
         guard,
@@ -124,6 +131,7 @@ def _navigation(builder: ObservationBuilder, guard: ScriptedNavigationGuard) -> 
 
 
 def _screenshot(frame_ref: FrameRef = FRAME) -> CapturedScreenshot:
+    """Creates an in-memory capture with explicit provenance and no emulator access."""
     return CapturedScreenshot(
         artifact=None,
         image=Image.new("RGB", IMAGE_SIZE, (8, 9, 10)),
@@ -135,10 +143,12 @@ def _screenshot(frame_ref: FrameRef = FRAME) -> CapturedScreenshot:
 
 
 def _content(workshop=None, **extra) -> ObservationAdditions:
+    """Supplies typed additions so publication tests exercise no recognition implementation."""
     return ObservationAdditions(workshop=workshop, **extra)
 
 
 def _entry() -> DetectedListEntry:
+    """Creates unrelated list content to detect accidental loss during Workshop publication."""
     return DetectedListEntry(
         kind=ListEntryKind.DAILY_QUEST,
         bounds=Bounds(x=20, y=20, width=40, height=20),
@@ -151,6 +161,7 @@ class WorkshopPublicationTests(unittest.TestCase):
     """The optional workshop field survives both canonical publication paths."""
 
     def test_builder_publishes_workshop_with_bound_provenance(self) -> None:
+        """Verifies that builder publishes workshop with bound provenance."""
         workshop = workshop_fixtures.make_observation()
         additions = _content(workshop=workshop, list_entries=(_entry(),))
         observation = _builder(ScriptedEnricher([additions])).build(
@@ -167,6 +178,7 @@ class WorkshopPublicationTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, SCREEN)
 
     def test_navigation_publishes_workshop_with_bound_provenance(self) -> None:
+        """Verifies that navigation publishes workshop with bound provenance."""
         workshop = workshop_fixtures.make_observation()
         builder = _builder(ScriptedEnricher([]))
         navigation = _navigation(builder, ScriptedNavigationGuard(_content(workshop=workshop)))
@@ -177,6 +189,7 @@ class WorkshopPublicationTests(unittest.TestCase):
         self.assertEqual(observation.workshop.view.source_layout_id, "test-layout")
 
     def test_navigation_without_content_leaves_workshop_unset(self) -> None:
+        """Verifies that navigation without content leaves workshop unset."""
         workshop = workshop_fixtures.make_observation()
         builder = _builder(ScriptedEnricher([]))
         navigation = _navigation(builder, ScriptedNavigationGuard(_content(workshop=workshop)))
@@ -185,6 +198,7 @@ class WorkshopPublicationTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, SCREEN)
 
     def test_both_paths_publish_equivalent_workshop_facts(self) -> None:
+        """Verifies that both paths publish equivalent workshop facts."""
         workshop = workshop_fixtures.make_observation()
         builder = _builder(ScriptedEnricher([_content(workshop=workshop)]))
         via_builder = builder.build(
@@ -195,6 +209,7 @@ class WorkshopPublicationTests(unittest.TestCase):
         self.assertEqual(via_builder.workshop, via_navigation.workshop)
 
     def test_additions_merge_preserves_workshop_from_either_side(self) -> None:
+        """Verifies that additions merge preserves workshop from either side."""
         workshop = workshop_fixtures.make_observation()
         merged = _merge_observation_additions(
             ObservationAdditions(guard_verdict=GuardVerdict.BLOCKED),
@@ -208,6 +223,7 @@ class WorkshopPublicationTests(unittest.TestCase):
         self.assertIs(merged.workshop, workshop)
 
     def test_unresolved_decision_drops_workshop_with_other_content(self) -> None:
+        """Verifies that unresolved decision drops workshop with other content."""
         workshop = workshop_fixtures.make_observation()
         additions = _content(workshop=workshop, list_entries=(_entry(),))
         builder = ObservationBuilder(
@@ -225,6 +241,7 @@ class WorkshopPublicationTests(unittest.TestCase):
         self.assertEqual(observation.list_entries, ())
 
     def test_contradictory_frame_provenance_is_rejected(self) -> None:
+        """Verifies that contradictory frame provenance is rejected."""
         workshop = workshop_fixtures.make_observation(frame_ref=OTHER_FRAME)
         additions = _content(workshop=workshop)
         with self.assertRaises(SelectorResolutionError):
@@ -233,6 +250,7 @@ class WorkshopPublicationTests(unittest.TestCase):
             )
 
     def test_prebound_workshop_keeps_its_provenance(self) -> None:
+        """Verifies that prebound workshop keeps its provenance."""
         workshop = workshop_fixtures.make_observation(frame_ref=FRAME)
         additions = _content(workshop=workshop)
         observation = _builder(ScriptedEnricher([additions])).build(

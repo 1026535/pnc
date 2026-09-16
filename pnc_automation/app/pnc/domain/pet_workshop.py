@@ -228,7 +228,8 @@ class WorkshopCell:
     usability (for example a level-locked square) and is independent of
     ``occupancy``. ``item_id`` and ``item_status`` describe the occupying
     piece; an ``OCCUPIED`` cell may still carry ``item_id=None`` when a piece
-    is visible but its identity was not read. ``cooldown`` is the visible
+    is visible but its identity was not read. An unread square defaults to
+    unknown access/occupancy and carries no item facts. ``cooldown`` is the visible
     cooldown marker only — an absent icon is ``CLEAR``, an unread one is
     ``UNKNOWN``, and no deadline is inferred.
     """
@@ -236,7 +237,7 @@ class WorkshopCell:
     cell_id: int
     row: int
     column: int
-    access: WorkshopCellAccess = WorkshopCellAccess.USABLE
+    access: WorkshopCellAccess = WorkshopCellAccess.UNKNOWN
     occupancy: WorkshopOccupancy = WorkshopOccupancy.UNKNOWN
     item_id: int | None = None
     item_status: WorkshopItemStatus | None = None
@@ -262,9 +263,9 @@ class WorkshopCell:
         if self.occupancy == WorkshopOccupancy.EMPTY:
             if self.item_id is not None or self.item_status is not None:
                 raise ValueError("An empty WorkshopCell cannot carry item facts.")
-        elif self.item_status is None:
+        elif self.occupancy == WorkshopOccupancy.OCCUPIED and self.item_status is None:
             raise ValueError(
-                "A non-empty WorkshopCell requires an item_status "
+                "An occupied WorkshopCell requires an item_status "
                 "(WorkshopItemStatus.UNKNOWN when the state was not read)."
             )
 
@@ -560,9 +561,10 @@ class WorkshopView:
     ``cell_bounds`` maps observed board cell ids to their measured bounds;
     ``order_views`` carries per-card portrait/submit geometry. The named
     control bounds are the safe detail/close/recycle/confirmation controls
-    measured on this frame. ``image_size``, ``frame_ref``, ``source_screen``
-    and ``source_layout_id`` are stamped by the observation-provenance owner
-    at publication; nothing here is inferred offscreen.
+    measured on this frame. The recognizer supplies ``image_size`` from the
+    capture. ``frame_ref``, ``source_screen`` and ``source_layout_id`` are
+    stamped by the observation-provenance owner at publication; nothing here
+    is inferred offscreen.
     """
 
     cell_bounds: Mapping[int, Bounds] = field(default_factory=dict)
@@ -999,7 +1001,9 @@ class WorkshopPlanNext(Protocol):
         state: WorkshopState,
         catalog: PetWorkshopCatalog,
         policy: WorkshopPolicy,
-    ) -> WorkshopDecision: ...
+    ) -> WorkshopDecision:
+        """Proposes one logical action without performing I/O or mutating state."""
+        ...
 
 
 class WorkshopValidateIntent(Protocol):
@@ -1019,7 +1023,9 @@ class WorkshopValidateIntent(Protocol):
         intent: WorkshopIntent,
         catalog: PetWorkshopCatalog,
         policy: WorkshopPolicy,
-    ) -> WorkshopIntentValidation: ...
+    ) -> WorkshopIntentValidation:
+        """Checks an action against current facts and the canonical policy predicates."""
+        ...
 
 
 __all__ = [

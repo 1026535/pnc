@@ -309,12 +309,19 @@ def finite_producer_state() -> WorkshopState:
 
 
 def recycling_state() -> WorkshopState:
-    """Synthetic full-ish board state with a recoverable Fruit 5 candidate."""
+    """Synthetic full board of terminal pieces with a Fruit 5 recycle candidate.
 
-    cells = list(make_empty_cells(rows=range(1, 9)))
-    cells.append(make_cell(9, 1, item_id=FRUIT_5))
-    cells.extend(make_cell(9, column, item_id=FRUIT_1) for column in range(2, 8))
-    return make_state(cells=tuple(cells), energy=WorkshopEnergy(current=4, capacity=200))
+    This represents the required space constraint, not a policy verdict;
+    the solver must still establish reservations and useful alternatives.
+    """
+
+    board = board_layout()
+    cells = tuple(
+        make_cell(row, column, item_id=FRUIT_5 if (row, column) == (9, 1) else STATUE_5)
+        for row in range(1, board.rows + 1)
+        for column in range(1, board.columns + 1)
+    )
+    return make_state(cells=cells, energy=WorkshopEnergy(current=4, capacity=200))
 
 
 def zero_energy_state() -> WorkshopState:

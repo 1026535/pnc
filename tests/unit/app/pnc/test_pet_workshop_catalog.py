@@ -84,6 +84,7 @@ class PackagedSeedTests(unittest.TestCase):
         cls.catalog = load_pet_workshop_catalog()
 
     def test_packaged_seed_loads_with_expected_coverage(self) -> None:
+        """Verifies that packaged seed loads with expected coverage."""
         catalog = self.catalog
         self.assertEqual(len(catalog.items), 114)
         self.assertEqual(len(catalog.producers), 20)
@@ -99,6 +100,7 @@ class PackagedSeedTests(unittest.TestCase):
         self.assertEqual((catalog.board.columns, catalog.board.rows), (7, 9))
 
     def test_catalog_file_is_reachable_as_package_resource(self) -> None:
+        """Verifies that catalog file is reachable as package resource."""
         resource = (
             importlib.resources.files("pnc_automation.app.pnc")
             .joinpath("data")
@@ -113,6 +115,7 @@ class PackagedSeedTests(unittest.TestCase):
         self.assertEqual(len(catalog.items), 114)
 
     def test_real_seed_relationships_and_inherited_defaults(self) -> None:
+        """Verifies that real seed relationships and inherited defaults."""
         catalog = self.catalog
         fruit5 = catalog.require_item(20105)
         self.assertEqual(fruit5.name, "Fruit 5")
@@ -141,6 +144,7 @@ class PackagedSeedTests(unittest.TestCase):
         self.assertEqual(catalog.activity.energy_item_id, 44009010)
 
     def test_drop_weights_normalize_by_actual_sums(self) -> None:
+        """Verifies that drop weights normalize by actual sums."""
         group66 = self.catalog.drop_group(66)
         self.assertEqual(group66.total_weight, 500)
         self.assertAlmostEqual(group66.probability_of(60101), 0.37)
@@ -152,6 +156,7 @@ class PackagedSeedTests(unittest.TestCase):
         self.assertEqual(group1.probability_of(10102), 0.0)
 
     def test_items_excluded_by_policy_remain_representable(self) -> None:
+        """Verifies that items excluded by policy remain representable."""
         omni = self.catalog.require_item(100001)
         self.assertEqual(omni.name, "Omni Card")
         self.assertEqual(omni.item_type, 0)
@@ -175,11 +180,13 @@ class CatalogSchemaTests(unittest.TestCase):
                 load_pet_workshop_catalog(path)
 
     def test_minimal_document_loads(self) -> None:
+        """Verifies that minimal document loads."""
         catalog = PetWorkshopCatalog(_minimal_document())
         self.assertEqual(len(catalog.items), 2)
         self.assertAlmostEqual(catalog.drop_group(7).probability_of(2), 0.6)
 
     def test_non_1000_group_sum_normalizes(self) -> None:
+        """Verifies that non 1000 group sum normalizes."""
         document = _minimal_document()
         document["drop_groups"] = {"7": [{"item_id": 2, "weight": 3}, {"item_id": 1, "weight": 1}]}
         catalog = PetWorkshopCatalog(document)
@@ -187,18 +194,21 @@ class CatalogSchemaTests(unittest.TestCase):
         self.assertAlmostEqual(catalog.drop_group(7).probability_of(2), 0.75)
 
     def test_duplicate_item_id_fails(self) -> None:
+        """Verifies that duplicate item id fails."""
         document = _minimal_document()
         document["items"].append(copy.deepcopy(document["items"][0]))
         with self.assertRaises(PetWorkshopCatalogError):
             PetWorkshopCatalog(document)
 
     def test_dangling_merge_successor_fails(self) -> None:
+        """Verifies that dangling merge successor fails."""
         document = _minimal_document()
         document["items"][1]["merge_successor_id"] = 999
         with self.assertRaises(PetWorkshopCatalogError):
             PetWorkshopCatalog(document)
 
     def test_dangling_producer_references_fail(self) -> None:
+        """Verifies that dangling producer references fail."""
         for field, value in (("item_id", 999), ("group_id", 999), ("feed_item_id", 999), ("change_item_id", 999)):
             document = _minimal_document()
             document["producers"][0][field] = value
@@ -206,6 +216,7 @@ class CatalogSchemaTests(unittest.TestCase):
                 PetWorkshopCatalog(document)
 
     def test_dangling_drop_and_seed_and_reward_references_fail(self) -> None:
+        """Verifies that dangling drop and seed and reward references fail."""
         document = _minimal_document()
         document["drop_groups"] = {"7": [{"item_id": 999, "weight": 1}]}
         with self.assertRaises(PetWorkshopCatalogError):
@@ -220,6 +231,7 @@ class CatalogSchemaTests(unittest.TestCase):
             PetWorkshopCatalog(document)
 
     def test_nonpositive_required_quantities_fail(self) -> None:
+        """Verifies that nonpositive required quantities fail."""
         document = _minimal_document()
         document["items"][1]["tier"] = 0
         with self.assertRaises(PetWorkshopCatalogError):
@@ -238,6 +250,7 @@ class CatalogSchemaTests(unittest.TestCase):
             PetWorkshopCatalog(document)
 
     def test_nonpositive_group_weight_fails_but_zero_entries_are_kept(self) -> None:
+        """Verifies that nonpositive group weight fails but zero entries are kept."""
         document = _minimal_document()
         document["drop_groups"] = {"7": [{"item_id": 2, "weight": 0}]}
         with self.assertRaises(PetWorkshopCatalogError):
@@ -253,6 +266,7 @@ class CatalogSchemaTests(unittest.TestCase):
             PetWorkshopCatalog(document)
 
     def test_merge_cycle_fails(self) -> None:
+        """Verifies that merge cycle fails."""
         document = _minimal_document()
         document["items"][0]["merge_successor_id"] = 2
         document["items"][1]["merge_successor_id"] = 1
@@ -260,6 +274,7 @@ class CatalogSchemaTests(unittest.TestCase):
             PetWorkshopCatalog(document)
 
     def test_invalid_grid_coordinates_fail(self) -> None:
+        """Verifies that invalid grid coordinates fail."""
         document = _minimal_document()
         document["grid_cells"][0]["position"] = 5
         with self.assertRaises(PetWorkshopCatalogError):
@@ -272,6 +287,7 @@ class CatalogSchemaTests(unittest.TestCase):
             PetWorkshopCatalog(document)
 
     def test_missing_section_fails(self) -> None:
+        """Verifies that missing section fails."""
         document = _minimal_document()
         del document["items"]
         with self.assertRaises(PetWorkshopCatalogError):
