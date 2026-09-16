@@ -147,7 +147,6 @@ def main() -> int:
         "false",
         "--prompt-file",
         str(prompt_path),
-        str(repo),
     ]
     completed = subprocess.run(
         command,
@@ -180,6 +179,8 @@ def main() -> int:
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"status": status, "result_path": str(result_path)}))
     if completed.stdout:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         print("\n--- Devin consultation ---\n")
         print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
     if completed.returncode != 0:
