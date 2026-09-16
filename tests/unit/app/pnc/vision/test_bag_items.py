@@ -12,6 +12,10 @@ from pnc_automation.app.pnc.domain.bag_items import (
     BagItemApplicability,
     BagItemFacts,
     BagPreviewRewardFacts,
+    MilitaryItemIdentity,
+    MilitaryKind,
+    MiscItemIdentity,
+    MiscKind,
     SpeedBonusIdentity,
     TimeReductionIdentity,
     TreasureIdentity,
@@ -33,6 +37,8 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.bag_items import (
     BagItemContentProducer,
     _mark_duplicate_identities,
+    _military_identity,
+    _misc_identity,
     _owned_count,
     _speedup_identity,
     _CardLine,
@@ -244,6 +250,162 @@ class SpeedupIdentityTests(unittest.TestCase):
             SpeedBonusIdentity(BagItemApplicability.BUILD, 0, 60)
         with self.assertRaises(ValueError):
             SpeedBonusIdentity(BagItemApplicability.BUILD, 10, 0)
+
+
+class MilitaryIdentityTests(unittest.TestCase):
+    """Military identities resolve timed protection and percentage boosts."""
+
+    def test_zero_ocr_values_stay_unknown(self) -> None:
+        for name, description in (
+            ("0-hr Anti-Scout", None),
+            ("-hr Shield of Grace", "for 0 hrs."),
+            ("0% Troop ATK Boost", "Boosts Troop ATK by 0% for 12 hrs."),
+            ("20% Troop DEF Boost", "Boosts Troop DEF by 20% for 0 hrs."),
+        ):
+            with self.subTest(name=name, description=description):
+                self.assertIsNone(_military_identity(name, description))
+
+    def test_timed_protection_variants(self) -> None:
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 360),
+            _military_identity("6-hr Anti-Scout", "Prevents your territory from recon for 6 hrs."),
+        )
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 720),
+            _military_identity("12-hr Anti-Scout", "Prevents your territory from recon for 12 hrs."),
+        )
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.SHIELD_OF_GRACE, 120),
+            _military_identity("2-hr Shield of Grace", "Prevents your territory from attack and recon for 2 hrs."),
+        )
+        # Same artwork family: only the displayed duration distinguishes them.
+        self.assertNotEqual(
+            _military_identity("6-hr Anti-Scout", "for 6 hrs."),
+            _military_identity("12-hr Anti-Scout", "for 12 hrs."),
+        )
+
+    def test_boost_variants_keep_percent_and_duration(self) -> None:
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.TROOP_ATK_BOOST, 720, 20),
+            _military_identity("20% Troop ATK Boost", "Boosts Troop ATK by 20% for 12 hrs."),
+        )
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.TROOP_DEF_BOOST, 720, 20),
+            _military_identity("20% Troop DEF Boost", "Boosts Troop DEF by 20% for 12 hrs."),
+        )
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.TROOP_SIZE_BOOST, 120, 25),
+            _military_identity("25% Troop Size Boost", "Boosts troop size by 25% for 2 hrs."),
+        )
+
+    def test_letter_confused_boost_names_resolve(self) -> None:
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.TROOP_ATK_BOOST, 720, 20),
+            _military_identity("20% Tro0p ATK B00st", "Boosts Troop ATK by 20% for 12 hrs."),
+        )
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.TROOP_SIZE_BOOST, 120, 25),
+            _military_identity("25% Troop Size Bo0st", "Boosts troop size by 25% for 2 hrs."),
+        )
+
+    def test_desc_supplies_duration_when_name_digit_drops(self) -> None:
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 360),
+            _military_identity("-hr Anti-Scout", "Prevents your territory from recon for 6 hrs."),
+        )
+        self.assertEqual(
+            MilitaryItemIdentity(MilitaryKind.TROOP_ATK_BOOST, 720, 20),
+            _military_identity("Tro0p ATK B00st", "Boosts Troop ATK by 20% for 12 hrs."),
+        )
+
+    def test_conflicts_and_partials_stay_unknown(self) -> None:
+        for name, desc in (
+            ("6-hr Anti-Scout", "Prevents your territory from recon for 12 hrs."),
+            ("20% Troop ATK Boost", "Boosts Troop DEF by 20% for 12 hrs."),
+            ("20% Troop ATK Boost", "Boosts Troop ATK by 25% for 12 hrs."),
+            ("20% Troop ATK Boost", None),
+            ("20% Troop ATK Boost", "Some unrelated description."),
+            ("Mystery Relic", "for 6 hrs."),
+            (None, None),
+        ):
+            with self.subTest(name=name, desc=desc):
+                self.assertIsNone(_military_identity(name, desc))
+
+    def test_model_invariants(self) -> None:
+        with self.assertRaises(ValueError):
+            MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 0)
+        with self.assertRaises(ValueError):
+            MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 360, 20)
+        with self.assertRaises(ValueError):
+            MilitaryItemIdentity(MilitaryKind.TROOP_ATK_BOOST, 720)
+        with self.assertRaises(ValueError):
+            MilitaryItemIdentity(MilitaryKind.TROOP_ATK_BOOST, 720, 0)
+
+    def test_identity_keys_carry_all_variant_fields(self) -> None:
+        self.assertEqual(
+            "military:anti_scout:360",
+            bag_item_identity_key(MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 360)),
+        )
+        self.assertEqual(
+            "military:troop_size_boost:25:120",
+            bag_item_identity_key(MilitaryItemIdentity(MilitaryKind.TROOP_SIZE_BOOST, 120, 25)),
+        )
+        self.assertFalse(
+            bag_item_inspection_supported(MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, 360))
+        )
+
+
+class MiscIdentityTests(unittest.TestCase):
+    """Misc identities resolve material kinds and Lord EXP denominations."""
+
+    def test_zero_ocr_amount_stays_unknown(self) -> None:
+        self.assertIsNone(_misc_identity("0 Lord EXP", "Adds 0 Lord EXP"))
+
+    def test_material_kinds(self) -> None:
+        for name, kind in (
+            ("Sandsea Mining Shovel", MiscKind.SANDSEA_MINING_SHOVEL),
+            ("Pickaxe", MiscKind.PICKAXE),
+            ("Challenge Key", MiscKind.CHALLENGE_KEY),
+            ("Wish Crystal", MiscKind.WISH_CRYSTAL),
+            ("Bow and Arrow", MiscKind.BOW_AND_ARROW),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(MiscItemIdentity(kind), _misc_identity(name, None))
+
+    def test_lord_exp_amount_is_denomination_not_owned(self) -> None:
+        self.assertEqual(
+            MiscItemIdentity(MiscKind.LORD_EXP, 500),
+            _misc_identity("500 Lord EXP", "Adds 500 Lord EXP"),
+        )
+        self.assertEqual(
+            "misc:lord_exp:500",
+            bag_item_identity_key(MiscItemIdentity(MiscKind.LORD_EXP, 500)),
+        )
+        self.assertEqual(
+            "misc:wish_crystal",
+            bag_item_identity_key(MiscItemIdentity(MiscKind.WISH_CRYSTAL)),
+        )
+
+    def test_desc_amount_conflict_and_unknown_labels(self) -> None:
+        self.assertIsNone(_misc_identity("500 Lord EXP", "Adds 100 Lord EXP"))
+        self.assertEqual(
+            MiscItemIdentity(MiscKind.LORD_EXP, 1000),
+            _misc_identity("1,000 Lord EXP", None),
+        )
+        for name in (None, "", "Golden Hammer", "Lord EXP", "Lord EXP 500"):
+            with self.subTest(name=name):
+                self.assertIsNone(_misc_identity(name, None))
+
+    def test_model_invariants(self) -> None:
+        with self.assertRaises(ValueError):
+            MiscItemIdentity(MiscKind.PICKAXE, 500)
+        with self.assertRaises(ValueError):
+            MiscItemIdentity(MiscKind.LORD_EXP)
+        with self.assertRaises(ValueError):
+            MiscItemIdentity(MiscKind.LORD_EXP, 0)
+        self.assertFalse(
+            bag_item_inspection_supported(MiscItemIdentity(MiscKind.LORD_EXP, 500))
+        )
 
 
 class OwnedCountTests(unittest.TestCase):

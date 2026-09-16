@@ -96,7 +96,80 @@ class TreasureIdentity:
             raise ValueError(f"{self.kind} does not carry a displayed level")
 
 
-BagItemIdentity: TypeAlias = TimeReductionIdentity | SpeedBonusIdentity | TreasureIdentity
+class MilitaryKind(StrEnum):
+    """Military-tab item families evidenced by the current mega_old_acc capture."""
+
+    ANTI_SCOUT = "anti_scout"
+    TROOP_ATK_BOOST = "troop_atk_boost"
+    TROOP_DEF_BOOST = "troop_def_boost"
+    TROOP_SIZE_BOOST = "troop_size_boost"
+    SHIELD_OF_GRACE = "shield_of_grace"
+
+
+# Military kinds whose displayed percent is part of the item variant.
+_BOOST_MILITARY_KINDS = frozenset({
+    MilitaryKind.TROOP_ATK_BOOST,
+    MilitaryKind.TROOP_DEF_BOOST,
+    MilitaryKind.TROOP_SIZE_BOOST,
+})
+
+
+@dataclass(frozen=True, slots=True)
+class MilitaryItemIdentity:
+    """A resolved Military-tab item: timed protection or percentage troop boost.
+
+    `duration_minutes` is the displayed protection/boost duration. `percent` is
+    required exactly for the troop-boost kinds; protection items carry none.
+    """
+
+    kind: MilitaryKind
+    duration_minutes: int
+    percent: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.duration_minutes <= 0:
+            raise ValueError(f"duration_minutes must be positive, got {self.duration_minutes}")
+        if self.kind in _BOOST_MILITARY_KINDS:
+            if self.percent is None or self.percent <= 0:
+                raise ValueError(f"{self.kind} requires a positive percent, got {self.percent}")
+        elif self.percent is not None:
+            raise ValueError(f"{self.kind} does not carry a displayed percent")
+
+
+class MiscKind(StrEnum):
+    """Misc-tab item families evidenced by the current mega_old_acc capture."""
+
+    SANDSEA_MINING_SHOVEL = "sandsea_mining_shovel"
+    PICKAXE = "pickaxe"
+    LORD_EXP = "lord_exp"
+    CHALLENGE_KEY = "challenge_key"
+    WISH_CRYSTAL = "wish_crystal"
+    BOW_AND_ARROW = "bow_and_arrow"
+
+
+@dataclass(frozen=True, slots=True)
+class MiscItemIdentity:
+    """A resolved Misc-tab material or Lord EXP item.
+
+    `amount` is the displayed EXP denomination, required exactly for LORD_EXP;
+    material items carry none.
+    """
+
+    kind: MiscKind
+    amount: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind == MiscKind.LORD_EXP:
+            if self.amount is None or self.amount <= 0:
+                raise ValueError(f"{self.kind} requires a positive amount, got {self.amount}")
+        elif self.amount is not None:
+            raise ValueError(f"{self.kind} does not carry a displayed amount")
+
+
+BagItemIdentity: TypeAlias = (
+    TimeReductionIdentity | SpeedBonusIdentity | TreasureIdentity
+    | MilitaryItemIdentity | MiscItemIdentity
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +283,14 @@ def bag_item_identity_key(identity: BagItemIdentity) -> str:
             if level is not None:
                 return f"treasure:{kind}:{level}"
             return f"treasure:{kind}"
+        case MilitaryItemIdentity(kind=kind, duration_minutes=minutes, percent=percent):
+            if percent is not None:
+                return f"military:{kind}:{percent}:{minutes}"
+            return f"military:{kind}:{minutes}"
+        case MiscItemIdentity(kind=kind, amount=amount):
+            if amount is not None:
+                return f"misc:{kind}:{amount}"
+            return f"misc:{kind}"
 
 
 def bag_item_facts_metadata(facts: BagItemFacts) -> dict[str, str]:

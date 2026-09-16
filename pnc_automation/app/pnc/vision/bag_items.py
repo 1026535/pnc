@@ -35,6 +35,10 @@ from pnc_automation.app.pnc.domain.bag_items import (
     BagItemFacts,
     BagItemIdentity,
     BagPreviewRewardFacts,
+    MilitaryItemIdentity,
+    MilitaryKind,
+    MiscItemIdentity,
+    MiscKind,
     SpeedBonusIdentity,
     TimeReductionIdentity,
     TreasureIdentity,
@@ -85,6 +89,39 @@ _SPEED_BONUS_NAME_PATTERN = re.compile(r"^(\d+)(BUILD|RESEARCH|TRAINING|HEAL)SPE
 _SPEED_BONUS_DESC_PATTERN = re.compile(r"(BUILD|RESEARCH|TRAINING|HEAL)SPEEDBY(\d+)FOR(\d+)HRS?")
 _TIME_NAME_PATTERN = re.compile(r"^(\d+)(MIN|HRS?)(BUILD|RESEARCH|TRAINING|HEAL)?SPEEDUP$")
 _TIME_DESC_PATTERN = re.compile(r"(BUILD|RESEARCH|TRAINING|HEAL)?(?:REMAINING)?TIMEBY(\d+)(MIN|HRS?)")
+
+# Military names carry the timed duration (N-hr) or the boost percent; the
+# bounded description confirms or supplies the remaining field.
+# The accepted OCR backend systematically confuses O/0 in this font
+# (``Tro0p``, ``B00st``); tolerate it only inside the evidenced words.
+# The leading magnitude may drop entirely, in which case the bounded
+# description must supply it.
+_MILITARY_TIMED_NAME_PATTERN = re.compile(r"^(\d*)HR(ANTISC[O0]UT|SHIELDOFGRACE)$")
+_MILITARY_BOOST_NAME_PATTERN = re.compile(r"^(\d*)TR[O0]{2}P(ATK|DEF|SIZE)B[O0]{2}ST$")
+_MILITARY_BOOST_DESC_PATTERN = re.compile(r"TR[O0]{2}P(ATK|DEF|SIZE)BY(\d+)F[O0]R(\d+)HRS?")
+_MILITARY_DURATION_PATTERN = re.compile(r"F[O0]R(\d+)HRS?")
+_MILITARY_TIMED_KINDS = {
+    "ANTISCOUT": MilitaryKind.ANTI_SCOUT,
+    "SHIELDOFGRACE": MilitaryKind.SHIELD_OF_GRACE,
+}
+_MILITARY_BOOST_KINDS = {
+    "ATK": MilitaryKind.TROOP_ATK_BOOST,
+    "DEF": MilitaryKind.TROOP_DEF_BOOST,
+    "SIZE": MilitaryKind.TROOP_SIZE_BOOST,
+}
+
+# Misc names resolve directly; only Lord EXP carries a displayed amount, which
+# the description may independently confirm.
+_MISC_EXP_NAME_PATTERN = re.compile(r"^(\d+)LORDEXP$")
+_MISC_EXP_DESC_PATTERN = re.compile(r"ADDS?(\d+)LORDEXP")
+_MISC_KIND_LABELS = {
+    "SANDSEAMININGSHOVEL": MiscKind.SANDSEA_MINING_SHOVEL,
+    "PICKAXE": MiscKind.PICKAXE,
+    "CHALLENGEKEY": MiscKind.CHALLENGE_KEY,
+    "WISHCRYSTAL": MiscKind.WISH_CRYSTAL,
+    "BOWANDARROW": MiscKind.BOW_AND_ARROW,
+}
+
 _APPLICABILITY_LABELS = {
     "BUILD": BagItemApplicability.BUILD,
     "RESEARCH": BagItemApplicability.RESEARCH,
@@ -274,6 +311,10 @@ class BagItemContentProducer:
         owned_count = _owned_count(card_lines)
         if tab == BagTab.TREASURE:
             identity: BagItemIdentity | None = treasure_identity_for_label(name_text)
+        elif tab == BagTab.MILITARY:
+            identity = _military_identity(name_text, description_text)
+        elif tab == BagTab.MISC:
+            identity = _misc_identity(name_text, description_text)
         else:
             identity = _speedup_identity(name_text, description_text)
         magnifier = self._glyph_match(
@@ -287,6 +328,13 @@ class BagItemContentProducer:
         )
         if name_text is None and description_text is None:
             row_status = RowRecognitionStatus.UNREADABLE
+        elif tab in {BagTab.MILITARY, BagTab.MISC}:
+            # These tabs have no evidenced inspection control: a resolved
+            # identity is observation-only and an unresolved one is unreadable.
+            row_status = (
+                RowRecognitionStatus.NO_ACTION if identity is not None
+                else RowRecognitionStatus.UNREADABLE
+            )
         elif (
             isinstance(identity, TreasureIdentity)
             and bag_item_inspection_supported(identity)
@@ -557,6 +605,80 @@ def _time_minutes(value: str, unit: str) -> int:
 
     minutes = int(value)
     return minutes if unit == "MIN" else minutes * 60
+
+
+def _military_identity(
+    name_text: str | None, description_text: str | None
+) -> MilitaryItemIdentity | None:
+    """Resolve a Military-tab identity from name and description tokens.
+
+    Timed protection items carry `N-hr` in the name; boosts carry `N%`. The
+    description supplies or confirms duration (`for N hrs`) and boost fields.
+    When both fields parse the same fact they must agree, otherwise the
+    identity stays unknown rather than guessing a variant.
+    """
+
+    name_normalized = normalize_ocr_text(name_text or "")
+    desc_normalized = normalize_ocr_text(description_text or "")
+    timed = _MILITARY_TIMED_NAME_PATTERN.fullmatch(name_normalized)
+    boost = _MILITARY_BOOST_NAME_PATTERN.fullmatch(name_normalized)
+    if timed is None and boost is None:
+        return None
+    desc_boost = _MILITARY_BOOST_DESC_PATTERN.search(desc_normalized)
+    desc_duration = _MILITARY_DURATION_PATTERN.search(desc_normalized)
+    if timed is not None:
+        kind = _MILITARY_TIMED_KINDS[timed.group(2).replace("0", "O")]
+        name_minutes = int(timed.group(1)) * 60 if timed.group(1) else None
+        desc_minutes = int(desc_duration.group(1)) * 60 if desc_duration else None
+        if name_minutes is not None and desc_minutes is not None and name_minutes != desc_minutes:
+            return None
+        minutes = name_minutes if name_minutes is not None else desc_minutes
+        if minutes is None or minutes <= 0:
+            return None
+        return MilitaryItemIdentity(kind=kind, duration_minutes=minutes)
+    assert boost is not None
+    kind = _MILITARY_BOOST_KINDS[boost.group(2)]
+    name_percent = int(boost.group(1)) if boost.group(1) else None
+    if desc_boost is None or _MILITARY_BOOST_KINDS[desc_boost.group(1)] != kind:
+        return None
+    desc_percent = int(desc_boost.group(2))
+    if name_percent is not None and name_percent != desc_percent:
+        return None
+    duration_minutes = int(desc_boost.group(3)) * 60
+    if desc_percent <= 0 or duration_minutes <= 0:
+        return None
+    return MilitaryItemIdentity(
+        kind=kind,
+        duration_minutes=duration_minutes,
+        percent=desc_percent,
+    )
+
+
+def _misc_identity(
+    name_text: str | None, description_text: str | None
+) -> MiscItemIdentity | None:
+    """Resolve a Misc-tab identity from the displayed name.
+
+    Only `N Lord EXP` carries an amount, which the description
+    (`Adds N Lord EXP`) may independently confirm; material kinds carry none.
+    """
+
+    name_normalized = normalize_ocr_text(name_text or "")
+    if not name_normalized:
+        return None
+    exp = _MISC_EXP_NAME_PATTERN.fullmatch(name_normalized)
+    if exp is not None:
+        amount = int(exp.group(1))
+        if amount <= 0:
+            return None
+        desc_exp = _MISC_EXP_DESC_PATTERN.search(normalize_ocr_text(description_text or ""))
+        if desc_exp is not None and int(desc_exp.group(1)) != amount:
+            return None
+        return MiscItemIdentity(kind=MiscKind.LORD_EXP, amount=amount)
+    kind = _MISC_KIND_LABELS.get(name_normalized)
+    if kind is None:
+        return None
+    return MiscItemIdentity(kind=kind)
 
 
 def _mark_duplicate_identities(

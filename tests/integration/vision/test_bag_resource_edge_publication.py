@@ -51,7 +51,10 @@ _EDGE_CONTROLS = {
     UiElementId.PNC_BACK_BUTTON_TOP_LEFT: Bounds(42, 18, 86, 54),
     UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(2, 207, 146, 60),
     UiElementId.PNC_BAG_SUBTAB_SPEEDUP: Bounds(182, 207, 146, 60),
+    # V12 unselected text-label anchors: measured crops, not slot material.
+    UiElementId.PNC_BAG_SUBTAB_MILITARY: Bounds(383, 215, 134, 42),
     UiElementId.PNC_BAG_SUBTAB_TREASURE: Bounds(542, 207, 146, 60),
+    UiElementId.PNC_BAG_SUBTAB_MISC: Bounds(753, 215, 114, 42),
 }
 _BAG_LAYOUT_ID = "bag"
 

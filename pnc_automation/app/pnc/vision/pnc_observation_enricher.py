@@ -7777,9 +7777,10 @@ def _build_bag_additions(
         ),
     }
     active_tab = detect_selected_bag_tab(image)
-    if active_tab in {BagTab.SPEEDUP, BagTab.TREASURE}:
-        # The dedicated item producer owns Speedup/Treasure card semantics under
-        # the same shared card geometry; Resource keeps its inventory scanner.
+    if active_tab in {BagTab.SPEEDUP, BagTab.MILITARY, BagTab.TREASURE, BagTab.MISC}:
+        # The dedicated item producer owns Speedup/Military/Treasure/Misc card
+        # semantics under the same shared card geometry; Resource keeps its
+        # inventory scanner.
         item_additions = bag_item_producer.tab_additions(
             image=image,
             tab=active_tab,

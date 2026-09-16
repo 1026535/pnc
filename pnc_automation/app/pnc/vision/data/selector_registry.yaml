@@ -1016,10 +1016,8 @@ selectors:
   screens:
   - PNC_BAG
   status: screenshot_seeded
-  detection_kind: unsupported
+  detection_kind: semantic
   materialize_relative_bounds: false
-  notes:
-  - 'Proposed unsupported strategy: No Bag-subtab producer.'
 - id: PNC_BAG_SUBTAB_TREASURE
   screens:
   - PNC_BAG
@@ -1030,10 +1028,8 @@ selectors:
   screens:
   - PNC_BAG
   status: screenshot_seeded
-  detection_kind: unsupported
+  detection_kind: semantic
   materialize_relative_bounds: false
-  notes:
-  - 'Proposed unsupported strategy: No Bag-subtab producer.'
 - id: PNC_BAG_ITEM_ROW
   screens:
   - PNC_BAG

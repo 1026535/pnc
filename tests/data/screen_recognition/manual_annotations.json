@@ -622,6 +622,42 @@
       "rows": []
     },
     {
+      "image": "bag_variants/bag_military_tab.png",
+      "screen": "PNC_BAG",
+      "state": "military_selected",
+      "group": "2026-09-16/mega_old_acc/v12_inventory_4b194a06",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/worktrees/vision-v01-foundation/.local-data/devin-v12/live_inventory_registered/artifacts/2026-09-16/mega_old_acc/20260916T130809Z_core_20260916T130610Z_4b194a06_0032_v12_military_inventory.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "6c56501c721edbd899889b5012b41981896b73df466c673d27837039210706e2",
+      "reviewed_at": "2026-09-16T13:30:00Z",
+      "build": null,
+      "locale": null,
+      "selected_subtab": "military",
+      "annotation_note": "Military-tab capture from the lead's non-spending leased run (v12_military_inventory, frame 0032). Six cards: 6-hr Anti-Scout owned 7, 12-hr Anti-Scout owned 4, 20% Troop ATK Boost owned 6, 20% Troop DEF Boost owned 4, 25% Troop Size Boost owned 5, 2-hr Shield of Grace owned 154. The 6h/12h Anti-Scout cards share artwork; duration distinguishes them. All cards show Use only - no magnifier and no qualified read-only detail. Same-run captures are reference provenance, not independent holdouts.",
+      "rows": []
+    },
+    {
+      "image": "bag_variants/bag_misc_tab.png",
+      "screen": "PNC_BAG",
+      "state": "misc_selected",
+      "group": "2026-09-16/mega_old_acc/v12_inventory_4b194a06",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/worktrees/vision-v01-foundation/.local-data/devin-v12/live_inventory_registered/artifacts/2026-09-16/mega_old_acc/20260916T130819Z_core_20260916T130610Z_4b194a06_0037_v12_misc_inventory.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "74e94821103f4c5c687fdb3bf41f81a1ba3e644ceec8b5d93e7b070527fd680a",
+      "reviewed_at": "2026-09-16T13:30:00Z",
+      "build": null,
+      "locale": null,
+      "selected_subtab": "misc",
+      "annotation_note": "Misc-tab capture from the lead's non-spending leased run (v12_misc_inventory, frame 0037). Six cards: Sandsea Mining Shovel owned 60, Pickaxe owned 15, 500 Lord EXP owned 2,915 (displayed amount 500 is the denomination, not ownership), Challenge Key owned 1, Wish Crystal owned 20, Bow and Arrow owned 7. Use/Use-in-bulk/Convert are visible but never inspection controls; no magnifier exists. Same-run captures are reference provenance, not independent holdouts.",
+      "rows": []
+    },
+    {
       "image": "quest_daily.png",
       "screen": "PNC_QUEST_DAILY",
       "state": "clear",

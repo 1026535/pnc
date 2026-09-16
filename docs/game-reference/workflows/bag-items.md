@@ -1,4 +1,4 @@
-# Bag Speedup/Treasure cards and chest previews
+# Bag Speedup/Treasure/Military/Misc cards and chest previews
 
 ## Evidence and limits
 
@@ -13,16 +13,20 @@ is a scaled reference of tour24 — same capture group, not independent), the
 independent September 16 `mega_old_acc` V09 captures (run
 `20260916T055657Z_a7e1320c`, tracked `bag_speedup_bonus_tab.png` and
 `bag_treasure_victory_tab.png`), the independent September 15 `bc0f132a`
-preview holdout, and the lead's non-spending September 16 Common qualification
+preview holdout, the lead's non-spending September 16 Common qualification
 (runs `20260916T110400Z_1483bb20` and `20260916T111017Z_b5e56ff0`, tracked
-native fixture `bag_common_victory_preview_20260916.png`). No direct
+native fixture `bag_common_victory_preview_20260916.png`), and the lead's
+non-spending September 16 V12 inventory route (run
+`20260916T130610Z_4b194a06`, Home → Bag Military → Misc → Home with zero
+item/spending actions; tracked `bag_military_tab.png`/`bag_misc_tab.png`,
+frames 0032/0037 — same capture group, reference provenance). No direct
 game-service request was made, and nothing here authorizes a mutation.
 
 ## Measured layout, September 16
 
-**Offline checked (V10/V11, both production observation paths, real RapidOCR):**
+**Offline checked (V10/V11/V12, both production observation paths, real RapidOCR):**
 
-- `PNC_BAG` / `bag` publishes six card bands on either tab (tops
+- `PNC_BAG` / `bag` publishes six card bands on each non-Resource tab (tops
   286/505/725/944/1163/1382, height ~202 at 900x1600; no band is clipped on the
   captured frames). The selected tab resolves from the existing tab-strip
   measurement; `Observation.active_bag_tab` carries it.
@@ -75,12 +79,45 @@ game-service request was made, and nothing here authorizes a mutation.
   (`Mithril Ore x1,000`) is bottom-clipped with its Owned line cut; the count
   stays unknown, not zero. Arena's fourth row (`Elros Frag.`) shows no Owned
   line below the panel viewport — also unknown.
+- **Military tab** rows are timed protection and percentage troop-boost items:
+  `MilitaryItemIdentity` carries the kind (`anti_scout`, `troop_atk_boost`,
+  `troop_def_boost`, `troop_size_boost`, `shield_of_grace`), the displayed
+  `duration_minutes`, and a `percent` that exists exactly for the three
+  troop-boost kinds. The `N-hr` name or the bounded description supplies the
+  duration (`...for N hrs`); boosts take the percent from the name and the
+  kind/percent/duration from `Boosts Troop X by N% for N hrs`. The 6-hr and
+  12-hr Anti-Scout cards share artwork — only the displayed duration
+  distinguishes them, and a name/description contradiction keeps the identity
+  unknown. The accepted OCR backend systematically confuses O/0 in this font
+  (`Tro0p`, `B00st`, `F0R`, `ANTISC0UT`); the parser tolerates it only inside
+  those evidenced words.
+- **Misc tab** rows are material and EXP items: `MiscItemIdentity` carries the
+  kind (`sandsea_mining_shovel`, `pickaxe`, `lord_exp`, `challenge_key`,
+  `wish_crystal`, `bow_and_arrow`) and an `amount` that exists exactly for
+  `N Lord EXP` — the `500` on `500 Lord EXP` is the displayed denomination,
+  not the 2,915 owned count. The description's `Adds N Lord EXP` may confirm
+  the denomination; a conflict stays unknown.
+- **Military and Misc rows are always observation-only.** Neither captured tab
+  shows a magnifier or any other inspection control: resolved rows publish
+  `no_action`, unresolved identity is `unreadable`, clipped cards are
+  `clipped`, and no detail route exists. The visible `Use`, `Use in bulk`
+  and `Convert` controls are never promoted to actions. The captured
+  inventories are the supported subset; unseen cards remain unresolved.
 - All facts carry `frame_ref`, `source_screen` and `source_layout_id` bound by
   the shared provenance owner on both publication paths; Bag content never
   leaks onto the preview screen or vice versa, and unrelated/closed frames
-  publish nothing.
+  publish nothing. Every row fact records its `selected_tab`, so switching
+  tabs publishes only the current family.
 
 ## Navigation boundary
+
+`NavigationCore.select_bag_tab(BagTab)` selects any of the five subtabs: a
+same-tab request returns the fresh frame without tapping, and a cross-tab
+request requires a TEMPLATE-sourced measured subtab control on the fresh
+frame before one `TapAction`. The Military/Misc unselected-label templates
+(qualified in the V12 tab-qualification evidence, floor .95) publish the
+measured controls; completion requires fresh CLEAR frames reporting the
+requested tab.
 
 `NavigationCore.open_bag_chest_preview(TreasureIdentity)` accepts only
 identities whose destination family is qualified (Arena, Common 1st Victory)
@@ -126,5 +163,21 @@ Artifacts and trace are under the task checkout's ignored
 Rare 1st Victory, Pinball, Starna's Dice, Oath Rune, Diamond and Demon
 magnifiers publish facts but are unsupported for inspection — their
 destinations need their own qualification. Speedup inspection has no
-evidenced control at all. Common is the live-qualified opening family on this
-account; Arena content and controls retain their independent captured proof.
+evidenced control at all. Military and Misc carry no inspection control at
+all — no detail layout was observed, so no detail route exists there either;
+the recorded limit covers Use/Use-in-bulk/Convert remaining strictly
+non-actionable. The V12 Military/Misc captures share one capture group
+(reference provenance, not independent holdouts), and at the 540x960
+reference size the clipped Lord EXP Owned label stays unknown. Common is the
+live-qualified opening family on this account; Arena content and controls
+retain their independent captured proof.
+
+### Independent V12 acceptance — 2026-09-16
+
+The lead's later leased Military/Misc inspection (runtime3b9a2d96 and
+`.local-data/devin-v12/live_return_completed/`) confirmed all twelve typed
+identities, displayed quantities and observation-only rows, then returned Home.
+The current Misc screenshot displays56 Shovels instead of the reference60;
+recognition preserved the observed count. No item action was performed. Zero
+OCR duration, boost or EXP denomination now stays unresolved instead of raising.
+The supported subset and absence of a qualified inspection control are unchanged.
