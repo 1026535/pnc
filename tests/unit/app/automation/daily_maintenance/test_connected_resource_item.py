@@ -11,6 +11,7 @@ from pnc_automation.app.automation.daily_maintenance.connected_resource_item imp
     ConnectedResourceItemSession,
 )
 from pnc_automation.app.pnc.domain.action_requests import TapListEntryAction
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     ListEntryKind,
@@ -233,7 +234,8 @@ def _observation(fingerprint: str, *, provenance: str = "visual_geometry") -> Ob
             effective_screen=ScreenType.PNC_BAG,
             guard=GuardVerdict.CLEAR,
             evidence=(ScreenEvidence(ScreenType.PNC_BAG, "test"),),
-        ), visible_elements={}, artifact_path=Path("fake-resource.png"), image_size=(540, 960),
+        ), visible_elements={}, active_bag_tab=BagTab.RESOURCE,
+        artifact_path=Path("fake-resource.png"), image_size=(540, 960),
         list_entries=(DetectedListEntry(
             ListEntryKind.RESOURCE_ITEM, Bounds(6, 300, 528, 120),
             title_text="50 Gold", action_point=(453, 338), action_bounds=Bounds(430, 320, 50, 36),

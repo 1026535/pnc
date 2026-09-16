@@ -230,6 +230,362 @@
       ]
     },
     {
+      "image": "bag_variants/bag_resource_scroll_first.png",
+      "screen": "PNC_BAG",
+      "state": "resource_scrolled_first",
+      "group": "core_resume/manual_update_20260913T214455Z/mega_old_acc_manual_update",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration/.local-data/artifacts/core_resume/manual_update_20260913T214455Z/2026-09-13/mega_old_acc_manual_update/20260913T214737Z_core_20260913T214457Z_b39f74f1_0041_resource_scroll_first.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "81ced4907d7f68f3a7b47fe4885923da2218fcac219e91ed0dbc61de2c5ae626",
+      "reviewed_at": "2026-09-16T00:15:00Z",
+      "build": "5.2.77_5.0.204.235",
+      "locale": null,
+      "annotation_note": "First Resource scroll frame from the September 13 K157 session. The first and last visible cards are viewport-clipped fragments: a 146-pixel top band and a 60-pixel bottom band. Both must publish unresolved clipped rows with no item, count or action.",
+      "rows": [
+        {
+          "edge": "top",
+          "card": [
+            9,
+            278,
+            882,
+            146
+          ],
+          "expected_kind": "resource_inventory_unresolved",
+          "expected_status": "clipped"
+        },
+        {
+          "title": "500 Gold (Safe)",
+          "owned": 2234,
+          "card": [
+            9,
+            443,
+            882,
+            200
+          ],
+          "Use": [
+            648,
+            469,
+            217,
+            67
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:500:safe",
+            "resource": "gold",
+            "amount": 500,
+            "owned": 2234
+          }
+        },
+        {
+          "title": "2.5K Gold",
+          "owned": 62,
+          "card": [
+            9,
+            662,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            688,
+            217,
+            67
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:2500:normal",
+            "resource": "gold",
+            "amount": 2500,
+            "owned": 62
+          }
+        },
+        {
+          "title": "2.5K Gold (Safe)",
+          "owned": 121,
+          "card": [
+            9,
+            881,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            907,
+            217,
+            68
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:2500:safe",
+            "resource": "gold",
+            "amount": 2500,
+            "owned": 121
+          }
+        },
+        {
+          "title": "3K Gold",
+          "owned": 370,
+          "card": [
+            9,
+            1100,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            1126,
+            217,
+            68
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:3000:normal",
+            "resource": "gold",
+            "amount": 3000,
+            "owned": 370
+          }
+        },
+        {
+          "title": "7.5K Gold",
+          "owned": 526,
+          "card": [
+            9,
+            1319,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            1345,
+            217,
+            68
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:7500:normal",
+            "resource": "gold",
+            "amount": 7500,
+            "owned": 526
+          }
+        },
+        {
+          "edge": "bottom",
+          "card": [
+            9,
+            1538,
+            882,
+            60
+          ],
+          "expected_kind": "resource_inventory_unresolved",
+          "expected_status": "clipped"
+        }
+      ]
+    },
+    {
+      "image": "bag_variants/bag_resource_scroll_settled.png",
+      "screen": "PNC_BAG",
+      "state": "resource_scrolled_settled",
+      "group": "core_resume/manual_update_20260913T214455Z/mega_old_acc_manual_update",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration/.local-data/artifacts/core_resume/manual_update_20260913T214455Z/2026-09-13/mega_old_acc_manual_update/20260913T214747Z_core_20260913T214457Z_b39f74f1_0043_resource_scroll_settled.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "c22e5a9cd535c89560bef07f3504109d45064343538b865e3daf41e9756989f3",
+      "reviewed_at": "2026-09-16T00:15:00Z",
+      "build": "5.2.77_5.0.204.235",
+      "locale": null,
+      "annotation_note": "Settled Resource scroll frame from the September 13 K157 session. Lead-confirmed clipped cards: a 66-pixel top fragment omitted by the old 120-pixel minimum and a 141-pixel bottom card previously labelled unreadable. Both must publish unresolved clipped rows with no item, count or action.",
+      "rows": [
+        {
+          "edge": "top",
+          "card": [
+            9,
+            278,
+            882,
+            66
+          ],
+          "expected_kind": "resource_inventory_unresolved",
+          "expected_status": "clipped"
+        },
+        {
+          "title": "500 Gold (Safe)",
+          "owned": 2234,
+          "card": [
+            9,
+            363,
+            882,
+            200
+          ],
+          "Use": [
+            648,
+            389,
+            217,
+            67
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:500:safe",
+            "resource": "gold",
+            "amount": 500,
+            "owned": 2234
+          }
+        },
+        {
+          "title": "2.5K Gold",
+          "owned": 62,
+          "card": [
+            9,
+            582,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            608,
+            217,
+            67
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:2500:normal",
+            "resource": "gold",
+            "amount": 2500,
+            "owned": 62
+          }
+        },
+        {
+          "title": "2.5K Gold (Safe)",
+          "owned": 121,
+          "card": [
+            9,
+            801,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            827,
+            217,
+            67
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:2500:safe",
+            "resource": "gold",
+            "amount": 2500,
+            "owned": 121
+          }
+        },
+        {
+          "title": "3K Gold",
+          "owned": 370,
+          "card": [
+            9,
+            1020,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            1046,
+            217,
+            68
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:3000:normal",
+            "resource": "gold",
+            "amount": 3000,
+            "owned": 370
+          }
+        },
+        {
+          "title": "7.5K Gold",
+          "owned": 526,
+          "card": [
+            9,
+            1239,
+            882,
+            201
+          ],
+          "Use": [
+            648,
+            1265,
+            217,
+            68
+          ],
+          "expected_kind": "resource_item",
+          "expected_status": "complete",
+          "expected_metadata": {
+            "item_id": "gold:7500:normal",
+            "resource": "gold",
+            "amount": 7500,
+            "owned": 526
+          }
+        },
+        {
+          "edge": "bottom",
+          "card": [
+            9,
+            1458,
+            882,
+            141
+          ],
+          "expected_kind": "resource_inventory_unresolved",
+          "expected_status": "clipped"
+        }
+      ]
+    },
+    {
+      "image": "bag_variants/bag_speedup_tab.png",
+      "screen": "PNC_BAG",
+      "state": "speedup_selected",
+      "group": "vision_live_tour_20260915",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/artifacts/vision_live_tour_20260915/2026-09-15/testing/20260915T162133Z_core_20260915T161857Z_b519129c_0031_22_bag_speedup_bag_speedup_tab.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "44080718f2588ec4df88d97ad2ecd6b3fcfb64dbf3a4c0e598ceea0f72f21eac",
+      "reviewed_at": "2026-09-16T00:15:00Z",
+      "build": null,
+      "locale": null,
+      "selected_subtab": "speedup",
+      "annotation_note": "Bag shell with the Speedup tab selected from the September 15 live tour (22_bag_speedup). The Resource selected-tab gate must publish no Resource rows or actions on this frame.",
+      "rows": []
+    },
+    {
+      "image": "bag_variants/bag_treasure_tab.png",
+      "screen": "PNC_BAG",
+      "state": "treasure_selected",
+      "group": "vision_live_tour_20260915",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/artifacts/vision_live_tour_20260915/2026-09-15/testing/20260915T162153Z_core_20260915T161857Z_b519129c_0032_23_bag_treasure_bag_treasure_tab.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "717ba8a0ffb431b65a003af2f8248268d1aaf61bf5633abc72f0fe10cc716275",
+      "reviewed_at": "2026-09-16T00:15:00Z",
+      "build": null,
+      "locale": null,
+      "selected_subtab": "treasure",
+      "annotation_note": "Bag shell with the Treasure tab selected from the September 15 live tour (23_bag_treasure). The Resource selected-tab gate must publish no Resource rows or actions on this frame.",
+      "rows": []
+    },
+    {
       "image": "quest_daily.png",
       "screen": "PNC_QUEST_DAILY",
       "state": "clear",

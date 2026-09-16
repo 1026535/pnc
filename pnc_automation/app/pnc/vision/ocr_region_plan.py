@@ -12,7 +12,7 @@ from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.daily_quest_rows import daily_quest_body_bounds_for_size
 from pnc_automation.app.pnc.domain.screen_decision import is_reviewed_viewport
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.resource_inventory import resource_inventory_body_bounds_for_size
+from pnc_automation.app.pnc.vision.bag_layout import bag_body_bounds_for_size
 from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
     CAMPAIGN_CHAPTER_TITLE_REGION,
     CAMPAIGN_MAP_CHAPTER_ROW,
@@ -293,7 +293,7 @@ def compile_screen_content_ocr_region_plans(
             required_fact=campaign_fact,
             failure_policy=OcrRegionFailurePolicy.ABSTAIN,
         ),)
-    if resolved_screen in {ScreenType.PNC_BAG, ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}:
+    if resolved_screen in {ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}:
         # Their canonical parsers own the body and per-row resegmentation.
         regions = (("selected_tab_labels", 0.0, 0.055, 1.0, 0.10),)
     elif resolved_screen == ScreenType.PNC_CHAT:
@@ -464,7 +464,7 @@ def compile_ocr_region_plans(
             OcrRegionPlan(
                 family=resolved_screen,
                 purpose=OcrRegionPurpose.ROW_BODY,
-                bounds=resource_inventory_body_bounds_for_size(image_size),
+                bounds=bag_body_bounds_for_size(image_size),
                 required_fact="resource_inventory_rows",
                 failure_policy=OcrRegionFailurePolicy.ABSTAIN,
                 read_purpose=read_purpose,

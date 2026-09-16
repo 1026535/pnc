@@ -22,7 +22,8 @@ from pnc_automation.app.authoring.config.daily_maintenance import (
     DailyCapabilityPolicy,
     DailyMaintenanceTargetConfig,
 )
-from pnc_automation.app.pnc.domain.action_requests import TapListEntryAction
+from pnc_automation.app.pnc.domain.action_requests import TapAction, TapListEntryAction
+from pnc_automation.app.pnc.domain.bag import BagTab, bag_tab_selector_id
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     CoordinateProvenance,
@@ -85,6 +86,7 @@ def _resource_frame(
         visible_ids=visible,
         source_kinds={UiElementId.PNC_BAG_SUBTAB_RESOURCE: VisibleElementSourceKind.TEMPLATE},
         list_entries=(entry,),
+        active_bag_tab=BagTab.RESOURCE if selected else None,
         artifact_path=None if artifact is None else Path(artifact),
     )
 
@@ -156,6 +158,23 @@ class _Navigation:
         observe_content("resource_scroll_source")
         return confirm_scroll()
 
+    def select_bag_tab(self, tab: BagTab, *, observe_content):
+        """Mirror the typed subtab contract: no-op, measured tap, or fail-closed."""
+
+        source = observe_content("bag_tab_source")
+        if source.active_bag_tab == tab:
+            return source
+        selector = bag_tab_selector_id(tab)
+        element = source.visible_elements.get(selector)
+        if element is None or element.source_kind != VisibleElementSourceKind.TEMPLATE:
+            raise RuntimeError("Bag tab control lacks current-frame visual evidence; no action sent.")
+        if not self.runtime.actuator.execute_action(
+            TapAction(selector_id=selector, reason="replacement_select_bag_tab"), source,
+        ):
+            raise RuntimeError("Navigation actuator did not execute the content action.")
+        self.runtime.selected_tab = tab
+        return self.runtime.fresh(self.runtime.resource_frame())
+
     def scroll_daily_quest(self, *, adjusted: bool, observe_content):
         """Return one fresh Daily frame; the fixture already has a bottom marker."""
 
@@ -183,6 +202,7 @@ class _Runtime:
         self.castle = castle
         self.item = item
         self.selected = selected
+        self.selected_tab: BagTab | None = BagTab.RESOURCE if selected else None
         self.generic_use = generic_use
         self.consumed = consumed
         self.daily_completed = daily_completed
@@ -226,7 +246,7 @@ class _Runtime:
             item = replace(item, owned=item.owned - 1, fingerprint="after")
         return _resource_frame(
             item,
-            selected=self.selected,
+            selected=self.selected_tab == BagTab.RESOURCE,
             generic_use=self.generic_use,
             artifact="resource.png",
         )
@@ -282,7 +302,7 @@ class CoreResourceItemMutationTests(unittest.TestCase):
                     self.castle, item=self.item, selected=selected,
                     generic_use=generic, store=self.store,
                 )
-                with self.assertRaisesRegex(RuntimeError, "selected Resource tab"):
+                with self.assertRaisesRegex(RuntimeError, "visual evidence"):
                     CoreWorkflowRunner(runtime, self.scope).run(CoreResourceItemWorkflow(self.checkpoint))
                 runtime.actuator.execute_action.assert_not_called()
                 self.assertIsNone(self._load())

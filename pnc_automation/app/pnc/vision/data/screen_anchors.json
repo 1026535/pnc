@@ -356,7 +356,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 2,
+      "revision": 3,
       "source": {
         "fixture": "bag.png",
         "decoded_sha256": "16d09ecbd0383d86d1e29566008499ee81977227cf13c70b9ddb65e4a2a2f1a8",
@@ -364,7 +364,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed PNC_BAG identity anchor group from the frozen reference fixture.",
+        "description": "Reviewed PNC_BAG identity anchor group from the frozen reference fixture. Subtab control crops are badge-trimmed slot material qualified on the saved Resource, Speedup and Treasure tab captures (capture_group 2026-09-13/mega_old_acc_manual_update).",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -389,6 +389,71 @@
             "image": "screen_anchors/bag_subtab_resource_selected.png",
             "search_region": [
               0,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_RESOURCE",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_resource_unselected.png",
+            "search_region": [
+              0,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_SPEEDUP",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_speedup_selected.png",
+            "search_region": [
+              107,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_SPEEDUP",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_speedup_unselected.png",
+            "search_region": [
+              107,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_TREASURE",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_treasure_selected.png",
+            "search_region": [
+              321,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_TREASURE",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_treasure_unselected.png",
+            "search_region": [
+              321,
               123,
               107,
               39

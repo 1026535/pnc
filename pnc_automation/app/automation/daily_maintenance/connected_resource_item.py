@@ -9,7 +9,8 @@ from pnc_automation.app.automation.daily_maintenance.resource_inventory_session 
 from pnc_automation.app.automation.daily_maintenance.resource_item import resource_item_daily_completed
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import SwipeAction, TapAction, TapListEntryAction
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.bag import BagTab, bag_tab_selector_id
+from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -51,14 +52,10 @@ class ConnectedResourceItemSession(ResourceInventorySession):
         for index in range(8):
             current = self._observe_with_update_recovery(f"resource_open_{index}")
             if current.screen_type == ScreenType.PNC_BAG:
-                if (
-                    current.entries(ListEntryKind.RESOURCE_ITEM)
-                    or current.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION)
-                    or current.entries(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED)
-                ):
+                if current.active_bag_tab == BagTab.RESOURCE:
                     return
                 action = TapAction(
-                    selector_id=UiElementId.PNC_BAG_SUBTAB_RESOURCE,
+                    selector_id=bag_tab_selector_id(BagTab.RESOURCE),
                     reason="select_resource_tab", observe_after=True,
                 )
             elif current.screen_type == ScreenType.PNC_HOME_CITY:

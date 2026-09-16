@@ -8,6 +8,7 @@ from itertools import count
 from pathlib import Path
 from typing import Any
 
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
@@ -102,6 +103,7 @@ def make_observation(
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
     available_march_slots: int | None = None,
     active_chat_channel: ChatChannel | None = None,
+    active_bag_tab: BagTab | None = None,
     profile_player_name: str | None = None,
     mailbox_type: MailboxType | None = None,
     mailbox_empty: bool | None = None,
@@ -192,6 +194,7 @@ def make_observation(
         castle_roster_snapshot=castle_roster_snapshot,
         available_march_slots=available_march_slots,
         active_chat_channel=active_chat_channel,
+        active_bag_tab=active_bag_tab,
         profile_player_name=profile_player_name,
         mailbox_type=mailbox_type,
         mailbox_empty=mailbox_empty,

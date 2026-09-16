@@ -23,7 +23,6 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
-from pnc_automation.app.pnc.vision.text_anchors import TextAnchorDetector
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine
@@ -54,8 +53,6 @@ def _build_bag_semantics(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> O
     ocr_context.require_bounded_regions()
     additions = _build_bag_additions(
         image=image,
-        lines=lines,
-        anchors=TextAnchorDetector().detect(lines),
         ocr_context=ocr_context,
         selector_registry=build_default_selector_registry(),
     )

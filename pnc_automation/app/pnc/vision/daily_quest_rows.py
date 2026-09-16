@@ -16,10 +16,10 @@ from pnc_automation.app.pnc.domain.observation import (
     RowRecognitionStatus,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.vision.bag_layout import is_gold_button_pixel
 from pnc_automation.app.pnc.vision.resource_inventory import (
     detect_button_runs,
     is_blue_button_pixel,
-    is_gold_button_pixel,
 )
 from pnc_automation.app.pnc.vision.numeric_parsing import parse_grouped_integer
 from pnc_automation.core.text.normalization import normalize_ocr_text

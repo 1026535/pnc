@@ -1,6 +1,6 @@
 # PNC vision roadmap — 43 implementation packets
 
-Updated: 2026-09-15. Status: **planning complete; bounded Campaign/Trial/chest navigation correction ported; V01-V43 remain planned**.
+Updated: 2026-09-16. Status: **V01 integrated; V09 accepted after review and live proof; V02/V04 implementation active. Remaining packets follow the dependency order below.**
 
 [Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [Building coverage](vision_modules/BUILDING_MENU_COVERAGE.md) · [Evidence](vision_modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](vision_modules/PLAN_RETIREMENT.md)
 
@@ -166,19 +166,20 @@ This track is **not the final mandatory barrier for ordinary menus**:
 4. Take **V09** and **V13** next, then **V16** and the highest-priority ready W3 feature, typically V15 or a Bag tab.
 5. Continue from the earliest useful ready packet. A dependency that is only needed for live Home entry may remain pending while offline producer work proceeds.
 
-### One coherent packet per Luna xhigh worker
+### One coherent packet per worker
 
 Use the dispatch prompt in the plan index. Each worker owns its feature's producer, controls, navigation/callers and proof. This roadmap does not start workers or authorize implementation by itself.
 
-When implementation is requested, **two concurrent feature workers** are a practical starting arrangement. Increase concurrency only when their symbols/profile IDs are independent and shared contracts are already integrated. Keep one owner for Home localization, common research, common Bag and common equipment helpers. A small shared correction belongs to that owner and should land before dependent feature edits.
+For the current implementation, the user requested **up to three persistent Devin SWE-2 Max workers** for independent concrete packages. The lead owns uncertain analysis, shared interfaces, architecture review and integration. Increase concurrency only when symbols/profile IDs are independent and consumed shared contracts are already integrated. Keep one owner for Home localization, common research, common Bag and common equipment helpers. A small shared correction belongs to that owner and should land before dependent feature edits.
 
-One worker at a time holds the configured testing instance for dependent live steps. Other workers can use saved evidence/offline checks. Coordinate by feature symbols and profile/control keys rather than assigning the entire enricher file to one worker. Do not revive the dropped A/B wait rules.
+The lead alone holds the canonical process lease for live validation, using the explicitly authorized mega old acc or configured testing instance and its active castle. Devin workers use saved evidence and offline checks. Continue automatically through all 43 packets: review each handback, resolve findings, run applicable live proof, merge/push accepted changes and assign the next ready packet without another user prompt. Coordinate by feature symbols and profile/control keys rather than assigning the entire enricher file to one worker. Do not revive the dropped A/B wait rules.
 
 ### Acceptance and integration gates
 
 - **Contract ready:** the dependency's consumed interface is reviewed, tested and present on the worker's base.
 - **Offline ready:** the changed parser/control path passes relevant real-capture checks through both production publishers. Synthetic semantic tests supplement those checks.
-- **Route qualified:** the packet's required non-spending route passes, or the exact unavailable boundary is recorded as pending. A current screenshot and process exit do not prove the route.
+- **Review complete:** the lead has reviewed the actual combined change for correctness, canonical ownership, caller integration and meaningful regression coverage. Worker completion alone is not acceptance.
+- **Route qualified:** after review and before merge/push, the lead runs one bounded non-spending proof of the changed behavior when it applies to an observable live instance. A current screenshot and process exit do not prove the route. If a required live boundary is unavailable, record the exact blocker and hold that merge while independent packets continue. Offline-only changes need no unrelated live route.
 - **Accepted for stated coverage:** the supported layouts, behavior, review and required checks are complete; unresolved variants remain explicitly listed.
 - **Integrated:** the exact accepted change is combined with its dependencies and the required combined checks pass. Commit/push follows the implementation task's delivery authorization.
 
@@ -193,7 +194,10 @@ Record status changes here in the following compact log; use the linked packet f
 | Packet | Status | Base / result commit | Evidence, supported coverage and remaining condition |
 |---|---|---|---|
 | Baseline correction | Integrated with these plans; no packet completed | Exact runtime/fixture port of `4d317db` after `ff38127` | Chapter 6 recognition/Home portal, Tower destination/return and chest-preview ownership/close. V01-V43 remain planned; V11/V13/V15 retain their content and broader route acceptance. |
-| V01 | Integrated into local main | Base `552bb766619e7997c8d7898ccd7bfd414f7bdf6f`; accepted on `codex/vision-v01-foundation` | 2026-09-16 UTC: both publishers qualified with real bounded OCR on Bag reference and independent validation capture; Home negative, demand/cache/provenance and guard regressions passed. 56 core vision tests, 445 vision integration passes (6 optional skips), 198 final affected passes; merge gate: 2,186 full portable passes and 7 expected skips. No runtime change or new live route required. One reference Safe Food row remains explicitly unreadable; V09 owns that improvement. See V01 for evidence and extension owners. |
+| V01 | Integrated and pushed to main | Base `552bb766619e7997c8d7898ccd7bfd414f7bdf6f`; result `f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65` | 2026-09-16 UTC: both publishers qualified with real bounded OCR on Bag reference and independent validation capture; Home negative, demand/cache/provenance and guard regressions passed. 56 core vision tests, 445 vision integration passes (6 optional skips), 198 final affected passes; merge gate: 2,186 full portable passes and 7 expected skips. No runtime change or new live route required. One reference Safe Food row remains explicitly unreadable; V09 owns that improvement. See V01 for evidence and extension owners. |
+| V02 | In progress | `f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65`; `codex/vision-v02-home-camera` | Same Devin worker implementing the lead-resolved normalized camera, target-body and measured-pan contract after saved-capture qualification. The lead owns the calibration/design decision, subsequent implementation brief, architecture review and bounded core-runtime live acceptance. No V02 live route or final implementation acceptance yet. |
+| V04 | In progress | `f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65`; `codex/vision-v04-research` | Second Devin worker implementing lead-resolved typed Research producers, geometry-first rows, matching detail and core/caller integration. Automatic Home entry still depends on V02. No live route or final implementation acceptance yet. |
+| V09 | Accepted for integration | Base `f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65`; `codex/vision-v09-bag` | September 16: shared Bag geometry/typed selection, selected and unselected Resource/Speedup/Treasure controls, clipped rows and Safe Food crop retry. Lead architecture/caller review resolved ambiguous-source selection locally. Full offline: 2,208 passed, 7 skipped; lead 17 captured/navigation checks plus 13 correction checks passed. Core live on mega_old_acc: Home → Bag → Speedup → Treasure → Resource → one scroll → Home, five complete and two non-actionable clipped rows. No spending; instance preserved. V10–12 own remaining tab semantics/controls. |
 
 To choose the next assignment: filter out integrated/accepted work as appropriate, check the packet's own dependencies and available evidence, then select the earliest useful ready item. A blocked packet is not a reason to repeat the same failed live action.
 

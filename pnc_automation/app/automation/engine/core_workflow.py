@@ -36,6 +36,7 @@ from pnc_automation.app.pnc.domain.building_operations import (
     observable_building_instance_key,
     observable_construction_slot_key,
 )
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
@@ -259,6 +260,7 @@ class WorkflowContext:
         """Use the reviewed Bag route; an unselected tab supplies no entry authority."""
 
         self.navigate(ScreenType.PNC_BAG)
+        self.select_bag_tab(BagTab.RESOURCE)
         self._observe_resource_inventory("resource_inventory_entry")
 
     def _survey_daily_requirements(self) -> DailyReadOnlySurvey:
@@ -778,6 +780,24 @@ class WorkflowContext:
             raise RuntimeError("Active castle identity did not exactly match the requested castle target.")
         self._sync_from_runtime()
         return active_castle
+
+    def select_bag_tab(self, tab: BagTab) -> Observation:
+        """Select one typed Bag subtab and require fresh content confirming it."""
+
+        if not isinstance(tab, BagTab):
+            raise ValueError("Bag tab selection requires a BagTab value.")
+        try:
+            return self._runtime.navigation.select_bag_tab(
+                tab,
+                observe_content=self._observe_bag_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_bag_content(self, label: str) -> Observation:
+        """Capture fresh Bag content for one constrained subtab operation."""
+
+        return self._observe_operation_content(label, operation="Bag")
 
     def select_chat_channel(self, channel: ChatChannel) -> Observation:
         """Select one typed chat channel and require fresh content confirming it."""

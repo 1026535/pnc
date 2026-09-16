@@ -46,18 +46,61 @@ It returned unknown inventory and Home without selecting a pack, writing a
 mutation intent or issuing Use. This is consistent with the source's partial
 cell visibility, not evidence of a complete inventory.
 
-**Offline checked:** real RapidOCR through both production observation paths
-agreed on the three final scroll frames. Taller fragments were UNREADABLE with
-missing title/count evidence. An additional geometry replay found omitted
-60-pixel and 66-pixel fragments below the detector's 120-pixel minimum at
-900 by 1600. All three frames yielded zero CLIPPED rows. A full inventory cannot
-be inferred from that publication.
+**Offline checked:** real RapidOCR through both production observation paths on
+the retained September 13 scroll frames now publishes five COMPLETE interior
+rows and two unresolved CLIPPED edge rows per frame. The retained fragments
+include the previously omitted 60-pixel bottom band and 66-pixel top band, plus
+the 146-pixel and 141-pixel edge cards previously labelled unreadable. Clipped
+rows carry measured card bounds but no title, item identity, quantity or action.
+Complete first/last rows in `bag.png` and `bag_current_testing.png` remain
+outside the normalized edge insets.
 
-Artifacts are under the integration candidate's ignored
-`.local-data/artifacts/core_resume/`. The original frames and OCR replay are in
-`manual_update_20260913T214455Z/`; `resource_edge_geometry.json` records the
-additional geometry check. Exact filenames, target, results and cleanup are in
-the [validation ledger](../../../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md#published-checkpoint-and-resource-edge-investigation).
+**Offline checked, September 16 (V09 shell slice):** the shared Bag layout owner
+(`pnc_automation/app/pnc/vision/bag_layout.py`) now measures one gold selected
+subtab container in the five-slot band and publishes it as the typed
+`Observation.active_bag_tab` (`BagTab` in `pnc_automation/app/pnc/domain/bag.py`).
+Saved Resource, Speedup and Treasure captures each measure their own selection;
+absent or ambiguous gold containers publish no tab. The same body/card-band
+geometry returns identical card bounds on all three tabs. Measured
+selected/unselected template controls for the Resource, Speedup and Treasure
+buttons publish on every Bag frame; Military and Misc. selectors remain
+unsupported. Resource rows and the Resource body OCR read stay gated to a
+positively measured Resource selection; the Speedup and Treasure captures
+publish `active_bag_tab` with no Resource rows, actions or body reads, and no
+tab state carries across frames. `NavigationCore.select_bag_tab` /
+`WorkflowContext.select_bag_tab` tap one measured subtab control once and
+require a fresh frame with the requested typed tab; already-selected frames
+no-op. On `bag.png` the fifth card's `10K Food (Safe)` row, previously
+unreadable under the shared body read, now resolves `food:10000:safe` (owned
+873) through one bounded per-card title/owned-column retry that only runs when
+the body read leaves a complete card unresolved. These are offline replay
+results on saved captures; the live proof below additionally validates navigation.
+
+Portable fixtures are tracked under `tests/data/screen_recognition/bag_variants/`
+with reviewed row and provenance entries in `manual_annotations.json`. The
+original frames and OCR replay remain under the integration candidate's ignored
+`.local-data/artifacts/core_resume/manual_update_20260913T214455Z/`;
+`resource_edge_geometry.json` records the pre-repair geometry check. Exact
+filenames, target, results and cleanup are in the [validation ledger](../../../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md#published-checkpoint-and-resource-edge-investigation).
+
+## Live confirmation — September 16
+
+The lead reviewed the integrated V09 candidate, corrected ambiguous source-tab
+selection to stop before input, and then ran the core route on the explicitly
+authorized `mega_old_acc` daily-canary instance. Its active castle was verified
+without selection. Home → Bag → Speedup → Treasure → Resource → one scroll →
+Home passed. Speedup/Treasure had their correct typed selection and no Resource
+rows; returning to Resource restored six current rows. The scrolled viewport
+contained five complete Wood/Iron rows and two clipped edge fragments with no
+item facts or actions. No item was consumed and the pre-existing instance was
+left at Home after releasing the process lease.
+
+Provenance: the V09 checkout's ignored `.local-data/devin-v09/live_ready/`
+contains `result.json`, `trace.jsonl` and per-step observations. Runtime
+`20260916T055657Z_a7e1320c` captured `0039_resource_scroll_settled.png` and final
+Home `0043_core_12_after_1.png`. Confidence is high for this supported layout and
+route. Military/Misc. controls and non-Resource item semantics remain with
+V10–12; no full inventory or spending qualification is implied.
 
 ## Automation implications
 

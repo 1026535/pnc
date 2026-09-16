@@ -5,20 +5,30 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     ListEntryKind,
     RowRecognitionStatus,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.vision.bag_layout import (
+    bag_body_bounds,
+    detect_bag_card_geometry,
+    detect_selected_bag_tab,
+)
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrLine,
+    OcrReadPurpose,
+)
 from pnc_automation.app.pnc.vision.numeric_parsing import (
     AMOUNT_TOKEN_PATTERN,
     parse_amount,
@@ -36,7 +46,7 @@ _OWNED = re.compile(r"^OWNED\s*:\s*(?P<owned>.*)$", re.I)
 _EXCLUDED_TITLE = re.compile(
     r"^(?:\d+(?:\.\d+)?[KM]?\s*Soulstones|24-hr\s*(?:Farm|Lumber|Iron|Gold)(?:\s*Mine)?\s*Output\s*Boost)$", re.I,
 )
-_RESOURCE_BODY_TOP_RATIO = 0.17
+_ROW_TEXT_COLUMN_END_RATIO = 0.70
 
 
 def parse_resource_inventory(
@@ -44,6 +54,7 @@ def parse_resource_inventory(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     proved_screen: ScreenType | None = None,
+    ocr_context: ObservationOcrContext | None = None,
 ) -> tuple[DetectedListEntry, ...] | None:
     """Return visually bounded Bag rows, preserving unresolved visible cards."""
 
@@ -57,14 +68,15 @@ def parse_resource_inventory(
     # owns the separate chrome proof before invoking this semantic parser.
     if proved is None and not resource_inventory_chrome_proven(image=image, lines=lines):
         return None
-    if not resource_inventory_tab_is_selected(rgb):
+    if detect_selected_bag_tab(rgb) != BagTab.RESOURCE:
         return None
     entries: list[DetectedListEntry] = []
-    card_bounds = detect_resource_card_bounds(rgb)
-    if not card_bounds:
+    cards = detect_bag_card_geometry(rgb)
+    if not cards:
         return (_unresolved_inventory_entry(image, reason="inventory_cards_unreadable"),)
-    for bounds in card_bounds:
-        if _row_is_clipped(bounds, image, body_top=resource_inventory_body_bounds(image).y):
+    for card in cards:
+        bounds = card.bounds
+        if card.clipped:
             entries.append(_unresolved_inventory_entry(
                 image,
                 bounds=bounds,
@@ -76,56 +88,47 @@ def parse_resource_inventory(
             line for line in lines
             if _line_contained(bounds, line)
         )
-        title_matches = tuple(
-            (line, _match_pack_title(line.text))
-            for line in row_lines if image.width * 0.20 <= line.bounds.x < image.width * 0.70
-        )
-        titles = tuple((line, match) for line, match in title_matches if match is not None)
-        counts = tuple(
-            (line, _OWNED.fullmatch(line.text.strip()))
-            for line in row_lines
-        )
-        owned = tuple(
-            (line, parse_grouped_integer(match.group("owned")))
-            for line, match in counts
-            if match is not None
-        )
-        exclusions = tuple(
-            line for line in row_lines
-            if image.width * 0.20 <= line.bounds.x < image.width * 0.70
-            and _EXCLUDED_TITLE.fullmatch(line.text.strip())
-        )
-        if not titles and len(exclusions) == 1 and len(owned) == 1 and owned[0][1] is not None:
+        resolution = _resolve_row_facts(image, bounds, row_lines)
+        if resolution is None and ocr_context is not None:
+            retry_lines = _read_row_facts_retry(
+                image=image,
+                bounds=bounds,
+                ocr_context=ocr_context,
+            )
+            if retry_lines:
+                resolution = _resolve_row_facts(image, bounds, retry_lines)
+                if resolution is not None:
+                    row_lines = (*row_lines, *retry_lines)
+        if resolution is None:
+            entries.append(_unresolved_inventory_entry(image, bounds=bounds, reason="missing_or_ambiguous_title_or_count"))
+            continue
+        if resolution.exclusion_title is not None:
             entries.append(DetectedListEntry(
                 kind=ListEntryKind.RESOURCE_INVENTORY_EXCLUSION,
-                bounds=bounds, title_text=exclusions[0].text,
-                metadata={"owned": owned[0][1]},
+                bounds=bounds, title_text=resolution.exclusion_title,
+                metadata={"owned": resolution.owned},
                 row_status=RowRecognitionStatus.NO_ACTION,
             ))
-            continue
-        if len(titles) != 1 or len(owned) != 1 or owned[0][1] is None:
-            entries.append(_unresolved_inventory_entry(image, bounds=bounds, reason="missing_or_ambiguous_title_or_count"))
             continue
         action_bounds = _detect_blue_action_bounds(rgb, bounds, row_lines)
         if action_bounds is None:
             entries.append(_unresolved_inventory_entry(image, bounds=bounds, reason="missing_or_ambiguous_single_use_button"))
             continue
-        title, match = titles[0]
-        raw_amount = match.group("amount")
-        multiplier = {"": 1, "K": 1000, "M": 1000000}[match.group("multiplier").upper()]
+        raw_amount = resolution.match.group("amount")
+        multiplier = {"": 1, "K": 1000, "M": 1000000}[resolution.match.group("multiplier").upper()]
         parsed_amount = parse_amount(raw_amount)
         amount = None if parsed_amount is None else parsed_amount * Decimal(multiplier)
         if amount is None or amount != amount.to_integral_value() or amount <= 0:
             entries.append(_unresolved_inventory_entry(
                 image,
                 bounds=bounds,
-                title_text=title.text,
+                title_text=resolution.title,
                 reason="invalid_pack_amount",
             ))
             continue
         crop = rgb.crop((bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height))
-        resource = match.group("resource").lower()
-        safe = match.group("safe") is not None
+        resource = resolution.match.group("resource").lower()
+        safe = resolution.match.group("safe") is not None
         action_point = (
             action_bounds.x + action_bounds.width // 2,
             action_bounds.y + action_bounds.height // 2,
@@ -133,7 +136,7 @@ def parse_resource_inventory(
         entries.append(DetectedListEntry(
             kind=ListEntryKind.RESOURCE_ITEM,
             bounds=bounds,
-            title_text=title.text,
+            title_text=resolution.title,
             action_point=action_point,
             action_bounds=action_bounds,
             row_status=RowRecognitionStatus.COMPLETE,
@@ -141,7 +144,7 @@ def parse_resource_inventory(
                 "item_id": f"{resource}:{int(amount)}:{'safe' if safe else 'normal'}",
                 "resource": resource,
                 "amount": int(amount),
-                "owned": owned[0][1],
+                "owned": resolution.owned,
                 "observation_fingerprint": hashlib.sha256(crop.tobytes()).hexdigest(),
                 "coordinate_provenance": "visual_geometry",
             },
@@ -149,20 +152,65 @@ def parse_resource_inventory(
     return _mark_duplicate_resource_ids(tuple(entries))
 
 
-def detect_resource_card_bounds(image: Image.Image) -> tuple[Bounds, ...]:
-    """Finds inventory card bands without relying on text line coordinates."""
+@dataclass(frozen=True, slots=True)
+class _RowResolution:
+    """Resolved per-card title/count facts or one exclusion identity."""
 
-    rgb = image.convert("RGB")
-    runs = _vertical_runs(
-        rgb, x=max(1, int(image.width * 0.025)),
-        start=resource_inventory_body_bounds(image).y, end=image.height,
-        predicate=lambda pixel: sum(pixel) >= 125 and pixel[2] >= pixel[0] + 20,
-        minimum=max(20, int(image.height * 0.075)),
+    owned: int
+    title: str | None = None
+    match: re.Match[str] | None = None
+    exclusion_title: str | None = None
+
+
+def _resolve_row_facts(
+    image: Image.Image,
+    bounds: Bounds,
+    row_lines: tuple[OcrLine, ...],
+) -> _RowResolution | None:
+    """Resolve one card's title, owned count or exclusion from its OCR lines."""
+
+    titles = tuple(
+        (line, match)
+        for line in row_lines
+        if image.width * 0.20 <= line.bounds.x < image.width * _ROW_TEXT_COLUMN_END_RATIO
+        if (match := _match_pack_title(line.text)) is not None
     )
-    return tuple(
-        Bounds(int(image.width * 0.01), top, int(image.width * 0.98), bottom - top)
-        for top, bottom in runs
+    owned = tuple(
+        (line, parse_grouped_integer(match.group("owned")))
+        for line in row_lines
+        if (match := _OWNED.fullmatch(line.text.strip())) is not None
     )
+    exclusions = tuple(
+        line for line in row_lines
+        if image.width * 0.20 <= line.bounds.x < image.width * _ROW_TEXT_COLUMN_END_RATIO
+        and _EXCLUDED_TITLE.fullmatch(line.text.strip())
+    )
+    if not titles and len(exclusions) == 1 and len(owned) == 1 and owned[0][1] is not None:
+        return _RowResolution(owned=owned[0][1], exclusion_title=exclusions[0].text)
+    if len(titles) != 1 or len(owned) != 1 or owned[0][1] is None:
+        return None
+    title, match = titles[0]
+    return _RowResolution(owned=owned[0][1], title=title.text, match=match)
+
+
+def _read_row_facts_retry(
+    *,
+    image: Image.Image,
+    bounds: Bounds,
+    ocr_context: ObservationOcrContext,
+) -> tuple[OcrLine, ...]:
+    """Re-read one unresolved complete card's title/owned column through the frame context."""
+
+    text_right = min(image.width, max(bounds.x + 1, int(image.width * _ROW_TEXT_COLUMN_END_RATIO)))
+    region = Bounds(bounds.x, bounds.y, max(1, text_right - bounds.x), bounds.height)
+    result = ocr_context.read_result(
+        image,
+        region,
+        purpose=OcrReadPurpose.CONTENT,
+        detail="retry:resource_inventory_row_facts",
+        required_fact="resource_inventory_row_facts",
+    )
+    return tuple(line for line in result.lines if _line_contained(bounds, line))
 
 
 def _match_pack_title(text: str) -> re.Match[str] | None:
@@ -190,57 +238,22 @@ def _match_pack_title(text: str) -> re.Match[str] | None:
     return _PACK_TITLE.fullmatch(corrected)
 
 
-def resource_inventory_tab_is_selected(image: Image.Image) -> bool:
-    """Require the reviewed Bag and Resource tab pixels even with proved header context."""
-
-    rgb = image.convert("RGB")
-    return all(
-        is_gold_button_pixel(rgb.getpixel((int(rgb.width * x), int(rgb.height * y))))
-        for x, y in ((0.24, 0.09), (0.09, 0.145))
-    )
-
-
 def _line_contained(bounds: Bounds, line: OcrLine) -> bool:
     """Keep only OCR lines wholly contained by the visual card."""
 
     return bounds.contains_bounds(line.bounds)
 
 
-def _row_is_clipped(bounds: Bounds, image: Image.Image, *, body_top: int) -> bool:
-    """Reject cards touching the screenshot edge as incomplete evidence."""
-
-    return (
-        bounds.x <= 0
-        or bounds.y <= body_top
-        or bounds.x + bounds.width >= image.width
-        or bounds.y + bounds.height >= image.height
-    )
-
-
 def resource_inventory_chrome_proven(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> bool:
     """Require the OCR-owned Bag and Resource chrome before reading body rows."""
 
-    body_top = resource_inventory_body_bounds(image).y
+    body_top = bag_body_bounds(image).y
     header = {
         normalize_ocr_text(line.text)
         for line in lines
         if line.bounds.y < body_top
     }
     return {"BAG", "RESOURCE"}.issubset(header)
-
-
-def resource_inventory_body_bounds(image: Image.Image) -> Bounds:
-    """Return the reviewed OCR body region shared by Bag detection and planning."""
-
-    return resource_inventory_body_bounds_for_size(image.size)
-
-
-def resource_inventory_body_bounds_for_size(image_size: tuple[int, int]) -> Bounds:
-    """Return the shared Bag body region for a decoded image size."""
-
-    width, height = image_size
-    top = int(height * _RESOURCE_BODY_TOP_RATIO)
-    return Bounds(x=0, y=top, width=width, height=max(1, height - top))
 
 
 def _detect_blue_action_bounds(
@@ -326,7 +339,7 @@ def _unresolved_inventory_entry(
 ) -> DetectedListEntry:
     """Represent visible but unresolved inventory evidence explicitly."""
 
-    resolved_bounds = bounds or resource_inventory_body_bounds(image)
+    resolved_bounds = bounds or bag_body_bounds(image)
     return DetectedListEntry(
         kind=ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED,
         bounds=resolved_bounds,
@@ -356,34 +369,6 @@ def _mark_duplicate_resource_ids(
         )
         for entry in entries
     )
-
-
-def _vertical_runs(
-    image: Image.Image, *, x: int, start: int, end: int,
-    predicate: Callable[[tuple[int, int, int]], bool], minimum: int,
-) -> tuple[tuple[int, int], ...]:
-    """Extracts contiguous pixel bands for this inventory detector."""
-
-    runs: list[tuple[int, int]] = []
-    begin: int | None = None
-    for y in range(start, min(end, image.height)):
-        matches = predicate(image.getpixel((x, y)))
-        if matches and begin is None:
-            begin = y
-        if not matches and begin is not None:
-            if y - begin >= minimum:
-                runs.append((begin, y))
-            begin = None
-    if begin is not None and min(end, image.height) - begin >= minimum:
-        runs.append((begin, min(end, image.height)))
-    return tuple(runs)
-
-
-def is_gold_button_pixel(pixel: tuple[int, int, int]) -> bool:
-    """Recognizes the selected tab's gold fill in reviewed normalized chrome."""
-
-    red, green, blue = pixel
-    return red > green and green > blue + 20 and red > 90
 
 
 def is_blue_button_pixel(pixel: tuple[int, int, int]) -> bool:

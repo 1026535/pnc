@@ -6,7 +6,9 @@ import unittest
 from unittest.mock import Mock
 
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy
-from pnc_automation.app.pnc.domain.action_requests import SwipeAction
+from pnc_automation.app.pnc.domain.action_requests import SwipeAction, TapAction
+from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -19,6 +21,7 @@ class ResourceInventoryNavigationTests(unittest.TestCase):
     def setUp(self):
         self.source = make_observation(
             ScreenType.PNC_BAG, visible_ids=(UiElementId.PNC_BAG_SUBTAB_RESOURCE,),
+            active_bag_tab=BagTab.RESOURCE,
         )
         self.actuator = Mock()
         self.actuator.execute_action.return_value = True
@@ -43,6 +46,11 @@ class ResourceInventoryNavigationTests(unittest.TestCase):
         completion = Mock()
         sources = (
             make_observation(ScreenType.PNC_BAG),
+            make_observation(
+                ScreenType.PNC_BAG,
+                visible_ids=(UiElementId.PNC_BAG_SUBTAB_RESOURCE,),
+                active_bag_tab=BagTab.SPEEDUP,
+            ),
             replace(self.source, decision=replace(self.source.decision, guard=GuardVerdict.UNRESOLVED)),
         )
         for source in sources:
@@ -94,6 +102,125 @@ class ResourceInventoryNavigationTests(unittest.TestCase):
             )
 
         self.actuator.execute_action.assert_called_once()
+
+
+class BagTabSelectionTests(unittest.TestCase):
+    """Typed Bag subtab selection uses measured controls and typed completion."""
+
+    def setUp(self):
+        self.actuator = Mock()
+        self.actuator.execute_action.return_value = True
+        self.navigation = NavigationCore(
+            self.actuator, Mock(), (),
+            policy=NavigationPolicy(max_observations=4, poll_seconds=0, stable_observations=2),
+            sleep=lambda _: None,
+        )
+
+    def _bag(self, tab: BagTab | None, *, seconds: int = 0):
+        observation = make_observation(
+            ScreenType.PNC_BAG,
+            visible_ids=(
+                UiElementId.PNC_BAG_SUBTAB_RESOURCE,
+                UiElementId.PNC_BAG_SUBTAB_SPEEDUP,
+                UiElementId.PNC_BAG_SUBTAB_TREASURE,
+            ),
+            active_bag_tab=tab,
+        )
+        if seconds:
+            observation = replace(
+                observation, captured_at=observation.captured_at + timedelta(seconds=seconds),
+            )
+        return observation
+
+    def _observer(self, *observations):
+        sequence = iter(observations)
+        return Mock(side_effect=lambda _label: next(sequence))
+
+    def test_speedup_start_selects_resource_with_measured_control(self):
+        before = self._bag(BagTab.SPEEDUP)
+        after_one = self._bag(BagTab.RESOURCE, seconds=1)
+        after_two = self._bag(BagTab.RESOURCE, seconds=2)
+        result = self.navigation.select_bag_tab(
+            BagTab.RESOURCE, observe_content=self._observer(before, after_one, after_two),
+        )
+        action, observed = self.actuator.execute_action.call_args.args
+        self.assertIsInstance(action, TapAction)
+        self.assertEqual(UiElementId.PNC_BAG_SUBTAB_RESOURCE, action.selector_id)
+        self.assertIs(before, observed)
+        self.assertIs(after_two, result)
+        self.assertEqual(1, self.actuator.execute_action.call_count)
+
+    def test_already_selected_tab_is_a_noop(self):
+        before = self._bag(BagTab.RESOURCE)
+        result = self.navigation.select_bag_tab(
+            BagTab.RESOURCE, observe_content=self._observer(before),
+        )
+        self.assertIs(before, result)
+        self.actuator.execute_action.assert_not_called()
+
+    def test_unknown_selection_or_unresolved_guard_does_not_tap(self):
+        selected = self._bag(BagTab.SPEEDUP)
+        sources = (
+            self._bag(None),
+            replace(selected, decision=replace(selected.decision, guard=GuardVerdict.UNRESOLVED)),
+        )
+        for before in sources:
+            with self.subTest(tab=before.active_bag_tab, guard=before.decision.guard):
+                with self.assertRaisesRegex(RuntimeError, "freshly observed"):
+                    self.navigation.select_bag_tab(
+                        BagTab.RESOURCE, observe_content=self._observer(before),
+                    )
+                self.actuator.execute_action.assert_not_called()
+
+    def test_unclear_target_completion_does_not_succeed(self):
+        before = self._bag(BagTab.SPEEDUP)
+        afters = tuple(
+            replace(after, decision=replace(after.decision, guard=GuardVerdict.UNRESOLVED))
+            for after in (self._bag(BagTab.RESOURCE, seconds=index + 1) for index in range(4))
+        )
+        with self.assertRaisesRegex(RuntimeError, "completion budget exhausted"):
+            self.navigation.select_bag_tab(
+                BagTab.RESOURCE, observe_content=self._observer(before, *afters),
+            )
+        self.assertEqual(1, self.actuator.execute_action.call_count)
+
+    def test_mismatched_tab_completion_fails_closed(self):
+        before = self._bag(BagTab.SPEEDUP)
+        afters = tuple(self._bag(BagTab.SPEEDUP, seconds=index + 1) for index in range(4))
+        with self.assertRaisesRegex(RuntimeError, "completion budget exhausted"):
+            self.navigation.select_bag_tab(
+                BagTab.RESOURCE, observe_content=self._observer(before, *afters),
+            )
+        self.assertEqual(1, self.actuator.execute_action.call_count)
+
+    def test_stale_completion_is_rejected(self):
+        before = self._bag(BagTab.SPEEDUP)
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            self.navigation.select_bag_tab(
+                BagTab.RESOURCE, observe_content=self._observer(before, before),
+            )
+        self.assertEqual(1, self.actuator.execute_action.call_count)
+
+    def test_unsupported_tab_has_no_measured_control(self):
+        before = self._bag(BagTab.SPEEDUP)
+        with self.assertRaisesRegex(RuntimeError, "visual evidence"):
+            self.navigation.select_bag_tab(
+                BagTab.MILITARY, observe_content=self._observer(before),
+            )
+        self.actuator.execute_action.assert_not_called()
+
+    def test_non_template_control_does_not_tap(self):
+        before = make_observation(
+            ScreenType.PNC_BAG,
+            visible_ids=(UiElementId.PNC_BAG_SUBTAB_RESOURCE,),
+            source_kinds={UiElementId.PNC_BAG_SUBTAB_RESOURCE: VisibleElementSourceKind.OCR},
+            active_bag_tab=BagTab.SPEEDUP,
+        )
+        with self.assertRaisesRegex(RuntimeError, "visual evidence"):
+            self.navigation.select_bag_tab(
+                BagTab.RESOURCE, observe_content=self._observer(before),
+            )
+        self.actuator.execute_action.assert_not_called()
 
 
 class _FakeClock:

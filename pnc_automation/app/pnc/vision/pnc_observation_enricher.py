@@ -11,6 +11,7 @@ from enum import StrEnum
 import numpy as np
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, normalize_castle_display_name
 from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind
@@ -73,13 +74,14 @@ from pnc_automation.app.pnc.vision.daily_quest_rows import (
     parse_daily_quest_screen,
     quest_screen_chrome_proven,
 )
+from pnc_automation.app.pnc.vision.bag_layout import (
+    detect_selected_bag_tab,
+    is_gold_button_pixel,
+)
 from pnc_automation.app.pnc.vision.resource_inventory import (
     detect_button_runs,
     is_blue_button_pixel,
-    is_gold_button_pixel,
     parse_resource_inventory,
-    resource_inventory_chrome_proven,
-    resource_inventory_tab_is_selected,
 )
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
@@ -2208,6 +2210,12 @@ class PncObservationEnricher:
                     ocr_context=ocr_context,
                 ) if layout_id else (),
             )
+        if screen_type == ScreenType.PNC_BAG and request.allows_screen(ScreenType.PNC_BAG):
+            return _build_bag_additions(
+                image=image,
+                ocr_context=ocr_context,
+                selector_registry=self.selector_registry,
+            )
         content_plans = compile_screen_content_ocr_region_plans(
             resolved_screen=screen_type, request=request, image_size=image.size,
             layout_id=layout_id,
@@ -2510,19 +2518,6 @@ class PncObservationEnricher:
             )
             if home_city_root is not None:
                 return home_city_root
-        if request.allows_screen(ScreenType.PNC_BAG) and can_attempt_screen_family_ocr(
-            request_screen=ScreenType.PNC_BAG,
-            observed_screen=screen_type,
-        ):
-            bag = _build_bag_additions(
-                image=image,
-                lines=lines,
-                anchors=anchors,
-                ocr_context=ocr_context,
-                selector_registry=self.selector_registry,
-            )
-            if bag is not None:
-                return bag
         if request.allows_screen(ScreenType.PNC_ALLIANCE_JOIN) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_ALLIANCE_JOIN,
             observed_screen=screen_type,
@@ -7802,31 +7797,29 @@ def _find_world_map_root_label_line(
 def _build_bag_additions(
     *,
     image: Image.Image,
-    lines: tuple[OcrLine, ...],
-    anchors: tuple[DetectedTextAnchor, ...],
     ocr_context: ObservationOcrContext,
     selector_registry: SelectorRegistry | None,
-) -> ObservationAdditions | None:
-    """Returns Bag identity and typed resource rows from the proven inventory layout."""
+) -> ObservationAdditions:
+    """Return Bag identity, the measured subtab and Resource rows only when selected."""
 
-    bag_anchor = _find_bag_tab_anchor(image=image, anchors=anchors)
-    if bag_anchor is None:
-        return None
-    if not resource_inventory_chrome_proven(image=image, lines=lines):
-        return None
     visible_elements = {
-        UiElementId.PNC_BAG_MAIN_TAB_BAG: _make_visible_from_anchor(
+        UiElementId.PNC_BAG_MAIN_TAB_BAG: _make_visible(
             selector_id=UiElementId.PNC_BAG_MAIN_TAB_BAG,
-            anchor=bag_anchor,
+            x=0, y=int(image.height * 0.068),
+            width=max(1, int(image.width * 0.494)),
+            height=max(1, int(image.height * 0.057)),
+            source_kind=VisibleElementSourceKind.GEOMETRY,
         ),
     }
-    # OCR chrome can prove the Bag family even when the selected-tab pixels or
-    # selector registry are unavailable.  In that case publish identity only;
-    # never issue a body read or expose row actions from an unproved subtab.
-    if not resource_inventory_tab_is_selected(image) or selector_registry is None:
+    active_tab = detect_selected_bag_tab(image)
+    if active_tab != BagTab.RESOURCE or selector_registry is None:
+        # Identity, the typed selection and template-measured controls publish
+        # for every Bag frame; Resource rows require a positively selected
+        # Resource subtab and a bounded body read.
         return ObservationAdditions(
             visible_elements=visible_elements,
-            screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "ocr_bag_chrome"),),
+            active_bag_tab=active_tab,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "bag_shell"),),
         )
     body_plans = compile_ocr_region_plans(
         registry=selector_registry,
@@ -7845,38 +7838,14 @@ def _build_bag_additions(
         image=image,
         lines=() if body_result is None else tuple(body_result.lines),
         proved_screen=ScreenType.PNC_BAG,
+        ocr_context=ocr_context,
     )
     return ObservationAdditions(
-        visible_elements={
-            **visible_elements,
-            UiElementId.PNC_BAG_SUBTAB_RESOURCE: _make_visible(
-                selector_id=UiElementId.PNC_BAG_SUBTAB_RESOURCE,
-                x=0, y=int(image.height * 0.128),
-                width=max(1, int(image.width * 0.20)),
-                height=max(1, int(image.height * 0.04)),
-                source_kind=VisibleElementSourceKind.GEOMETRY,
-            ),
-        },
+        visible_elements=visible_elements,
+        active_bag_tab=active_tab,
         list_entries=() if resource_rows is None else resource_rows,
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "ocr_bag_layout"),),
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "bag_shell"),),
     )
-
-
-def _find_bag_tab_anchor(
-    *,
-    image: Image.Image,
-    anchors: tuple[DetectedTextAnchor, ...],
-) -> DetectedTextAnchor | None:
-    """Returns the bag-tab anchor from the header band when it is present."""
-
-    candidates = tuple(
-        anchor
-        for anchor in anchors
-        if anchor.id == TextAnchorId.LABEL_BAG and anchor.bounds.y <= int(image.height * 0.15)
-    )
-    if not candidates:
-        return None
-    return max(candidates, key=lambda anchor: anchor.bounds.y)
 
 
 def _build_alliance_join_additions(

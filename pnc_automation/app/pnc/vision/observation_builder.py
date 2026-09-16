@@ -27,6 +27,7 @@ from pnc_automation.app.pnc.domain.castles import (
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.observation import (
@@ -144,6 +145,7 @@ class ObservationAdditions:
     current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
+    active_bag_tab: BagTab | None = None
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
@@ -807,6 +809,7 @@ class ObservationBuilder:
             current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
             active_chat_channel=additions.active_chat_channel,
+            active_bag_tab=additions.active_bag_tab,
             profile_player_name=additions.profile_player_name,
             mailbox_type=additions.mailbox_type,
             mailbox_empty=additions.mailbox_empty,
@@ -1234,6 +1237,7 @@ def _merge_observation_additions(
             else fallback.available_march_slots
         ),
         active_chat_channel=primary.active_chat_channel or fallback.active_chat_channel,
+        active_bag_tab=primary.active_bag_tab or fallback.active_bag_tab,
         profile_player_name=primary.profile_player_name or fallback.profile_player_name,
         mailbox_type=primary.mailbox_type or fallback.mailbox_type,
         empty_mailboxes=primary.empty_mailboxes | fallback.empty_mailboxes,

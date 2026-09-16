@@ -256,6 +256,7 @@ class NavigationPerception:
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
             active_chat_channel=content.active_chat_channel,
+            active_bag_tab=content.active_bag_tab,
             chat_draft_empty=content.chat_draft_empty,
             chat_draft_text=content.chat_draft_text,
         )

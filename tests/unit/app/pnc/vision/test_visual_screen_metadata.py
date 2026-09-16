@@ -82,12 +82,13 @@ class VisualScreenMetadataTests(unittest.TestCase):
                     self.assertIsNone(profile["review"]["build"])
                     self.assertIsNone(profile["review"]["locale"])
                 expected_revision = (
-                    2
+                    3
+                    if profile["id"] == "bag"
+                    else 2
                     if profile["id"] in {
                         "institute",
                         "hero_hall",
                         "alliance_invitation",
-                        "bag",
                         "world_map",
                         "campaign_chapter_10",
                         "campaign_stage_10_3",

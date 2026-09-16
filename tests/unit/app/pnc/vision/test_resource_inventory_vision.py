@@ -7,9 +7,11 @@ from dataclasses import replace
 
 from PIL import Image, ImageDraw
 
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, RowRecognitionStatus
+from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, RowRecognitionStatus
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.resource_inventory import parse_resource_inventory, resource_inventory_tab_is_selected
+from pnc_automation.app.pnc.vision.bag_layout import detect_selected_bag_tab
+from pnc_automation.app.pnc.vision.resource_inventory import parse_resource_inventory
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from tests.support.paths import TEST_DATA_ROOT
@@ -21,7 +23,7 @@ class ResourceInventoryVisionTests(unittest.TestCase):
     def test_selected_tab_predicate_accepts_rgba_captures(self) -> None:
         for mode in ("RGB", "RGBA"):
             with self.subTest(mode=mode):
-                self.assertTrue(resource_inventory_tab_is_selected(_image().convert(mode)))
+                self.assertEqual(BagTab.RESOURCE, detect_selected_bag_tab(_image().convert(mode)))
 
     def test_known_non_pack_rows_are_visible_but_never_actionable(self) -> None:
         """Keeps Soulstones and boosts in scan geometry without permitting their use."""
@@ -213,6 +215,22 @@ class ResourceInventoryVisionTests(unittest.TestCase):
         draw.rectangle((270, 65, 539, 110), fill=(140, 103, 50))
         self.assertIsNone(parse_resource_inventory(image=image, lines=_lines()))
 
+    def test_non_resource_subtab_captures_publish_no_resource_rows(self) -> None:
+        """Selected Speedup and Treasure tabs never emit Resource entries."""
+
+        for name in ("bag_speedup_tab.png", "bag_treasure_tab.png"):
+            with self.subTest(capture=name):
+                image = Image.open(
+                    TEST_DATA_ROOT / "screen_recognition" / "bag_variants" / name
+                ).convert("RGB")
+                self.assertIsNone(
+                    parse_resource_inventory(
+                        image=image,
+                        lines=_lines(),
+                        proved_screen=ScreenType.PNC_BAG,
+                    )
+                )
+
     def test_saved_bag_fixture_preserves_six_cards_and_actual_button_y(self) -> None:
         """The saved six-card Bag fixture keeps each blue Use control's visual Y."""
 
@@ -342,17 +360,126 @@ class ResourceInventoryVisionTests(unittest.TestCase):
         self.assertIsNone(rows[0].action_point)
         self.assertEqual("clipped_card", rows[0].metadata["unresolved_reason"])
 
+    def test_short_top_edge_fragment_is_retained_as_clipped(self) -> None:
+        """A captured 60-66px-class fragment at the viewport top keeps a clipped row."""
+
+        image = _edge_base_image()
+        ImageDraw.Draw(image).rectangle((6, 164, 532, 203), fill=(38, 50, 77))
+
+        rows = parse_resource_inventory(image=image, lines=(), proved_screen=ScreenType.PNC_BAG)
+
+        self.assertEqual(1, len(rows))
+        self._assert_clipped_fragment(rows[0], top=164, height=40)
+
+    def test_short_bottom_edge_fragment_is_retained_as_clipped(self) -> None:
+        """The observed 60px bottom fragment below the old minimum stays visible."""
+
+        image = _edge_base_image()
+        ImageDraw.Draw(image).rectangle((6, 920, 532, 959), fill=(38, 50, 77))
+
+        rows = parse_resource_inventory(image=image, lines=(), proved_screen=ScreenType.PNC_BAG)
+
+        self.assertEqual(1, len(rows))
+        self._assert_clipped_fragment(rows[0], top=920, height=40)
+
+    def test_tall_card_one_pixel_above_bottom_is_clipped_not_unreadable(self) -> None:
+        """A retained tall band ending inside the bottom inset is clipped evidence."""
+
+        image = _edge_base_image()
+        ImageDraw.Draw(image).rectangle((6, 830, 532, 957), fill=(38, 50, 77))
+
+        rows = parse_resource_inventory(image=image, lines=(), proved_screen=ScreenType.PNC_BAG)
+
+        self.assertEqual(1, len(rows))
+        self._assert_clipped_fragment(rows[0], top=830, height=128)
+
+    def test_tall_card_just_inside_top_inset_is_clipped_not_unreadable(self) -> None:
+        """The 146px-class top band starting within the top inset is clipped evidence."""
+
+        image = _edge_base_image()
+        ImageDraw.Draw(image).rectangle((6, 166, 532, 290), fill=(38, 50, 77))
+
+        rows = parse_resource_inventory(image=image, lines=(), proved_screen=ScreenType.PNC_BAG)
+
+        self.assertEqual(1, len(rows))
+        self._assert_clipped_fragment(rows[0], top=166, height=125)
+
+    def test_short_interior_band_below_minimum_produces_no_row(self) -> None:
+        """The small floor stays edge-only; interior fragments are not cards."""
+
+        image = _image()
+        ImageDraw.Draw(image).rectangle((6, 400, 532, 440), fill=(38, 50, 77))
+
+        rows = parse_resource_inventory(image=image, lines=_lines())
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual(RowRecognitionStatus.COMPLETE, rows[0].row_status)
+
+    def test_complete_edge_adjacent_rows_stay_outside_clip_envelope(self) -> None:
+        """First/last rows just outside the captured insets still publish COMPLETE."""
+
+        for card_top, card_bottom in ((168, 297), (830, 956)):
+            with self.subTest(card_top=card_top):
+                image = _edge_base_image()
+                draw = ImageDraw.Draw(image)
+                draw.rectangle((6, card_top, 532, card_bottom), fill=(38, 50, 77))
+                draw.rectangle((390, card_top + 20, 518, card_top + 52), fill=(45, 104, 170))
+                lines = (
+                    _line("1K Food", 123, card_top + 22, 170, 22),
+                    _line("Owned: 35,174", 20, card_bottom - 31, 115, 15),
+                    _line("Use", 440, card_top + 26, 40, 20),
+                )
+
+                rows = parse_resource_inventory(image=image, lines=lines, proved_screen=ScreenType.PNC_BAG)
+
+                self.assertEqual(1, len(rows))
+                self.assertEqual(RowRecognitionStatus.COMPLETE, rows[0].row_status)
+                self.assertIsNotNone(rows[0].action_point)
+
+    def test_interior_unreadable_card_remains_unreadable_not_clipped(self) -> None:
+        """Interior content failures keep the honest UNREADABLE status."""
+
+        image = _edge_base_image()
+        ImageDraw.Draw(image).rectangle((6, 400, 532, 530), fill=(38, 50, 77))
+
+        rows = parse_resource_inventory(image=image, lines=(), proved_screen=ScreenType.PNC_BAG)
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED, rows[0].kind)
+        self.assertEqual(RowRecognitionStatus.UNREADABLE, rows[0].row_status)
+        self.assertEqual("missing_or_ambiguous_title_or_count", rows[0].metadata["unresolved_reason"])
+
+    def _assert_clipped_fragment(self, row: DetectedListEntry, *, top: int, height: int) -> None:
+        """A retained edge fragment carries bounds but never invented facts."""
+
+        self.assertEqual(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED, row.kind)
+        self.assertEqual(RowRecognitionStatus.CLIPPED, row.row_status)
+        self.assertEqual((5, top, 529, height), (row.bounds.x, row.bounds.y, row.bounds.width, row.bounds.height))
+        self.assertIsNone(row.title_text)
+        self.assertIsNone(row.action_point)
+        self.assertIsNone(row.action_bounds)
+        self.assertEqual("clipped_card", row.metadata["unresolved_reason"])
+        self.assertFalse({"item_id", "resource", "amount", "owned"} & row.metadata.keys())
+
 
 def _image() -> Image.Image:
     """Builds a synthetic version of the inspected resource Bag layout."""
+
+    image = _edge_base_image()
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((6, 172, 532, 291), fill=(38, 50, 77))
+    draw.rectangle((390, 190, 518, 222), fill=(45, 104, 170))
+    draw.rectangle((390, 239, 518, 273), fill=(175, 131, 49))
+    return image
+
+
+def _edge_base_image() -> Image.Image:
+    """Selected Bag chrome without cards for viewport-edge cases."""
 
     image = Image.new("RGB", (540, 960), (19, 28, 44))
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 65, 269, 110), fill=(140, 103, 50))
     draw.rectangle((0, 124, 106, 160), fill=(140, 103, 50))
-    draw.rectangle((6, 172, 532, 291), fill=(38, 50, 77))
-    draw.rectangle((390, 190, 518, 222), fill=(45, 104, 170))
-    draw.rectangle((390, 239, 518, 273), fill=(175, 131, 49))
     return image
 
 

@@ -19,6 +19,7 @@ from typing import Any
 
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     ListEntryKind,
@@ -61,23 +62,27 @@ _BAG_LAYOUT_ID = "bag"
 _BAG_CONTROL_BOUNDS = {
     "bag.png": {
         UiElementId.PNC_BACK_BUTTON_TOP_LEFT: Bounds(25, 11, 52, 32),
-        UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(0, 123, 107, 39),
+        UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(1, 124, 88, 36),
+        UiElementId.PNC_BAG_SUBTAB_SPEEDUP: Bounds(109, 124, 88, 36),
+        UiElementId.PNC_BAG_SUBTAB_TREASURE: Bounds(325, 124, 88, 36),
     },
     "bag_current_testing.png": {
         UiElementId.PNC_BACK_BUTTON_TOP_LEFT: Bounds(42, 18, 86, 54),
-        UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(0, 205, 178, 65),
+        UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(2, 207, 146, 60),
+        UiElementId.PNC_BAG_SUBTAB_SPEEDUP: Bounds(182, 207, 146, 60),
+        UiElementId.PNC_BAG_SUBTAB_TREASURE: Bounds(542, 207, 146, 60),
     },
 }
 
 # Reviewed card content of the frozen reference capture bag.png. The fifth
-# card ("10K Food (Safe)", Owned: 873) is visible but stays explicitly
-# unresolved under real body OCR; no partial facts are invented for it.
+# card ("10K Food (Safe)", Owned: 873) is resolved by the bounded row-facts
+# retry after the shared body read leaves its title ambiguous.
 _REFERENCE_BAG_ROWS: tuple[dict[str, Any] | None, ...] = (
     {"item_id": "food:1000:normal", "resource": "food", "amount": 1000, "owned": 35174, "action_point": (454, 208)},
     {"item_id": "food:2000:normal", "resource": "food", "amount": 2000, "owned": 1898, "action_point": (454, 339)},
     {"item_id": "food:5000:normal", "resource": "food", "amount": 5000, "owned": 228, "action_point": (454, 471)},
     {"item_id": "food:10000:normal", "resource": "food", "amount": 10000, "owned": 1131, "action_point": (454, 602)},
-    None,
+    {"item_id": "food:10000:safe", "resource": "food", "amount": 10000, "owned": 873, "action_point": (454, 734)},
     {"item_id": "food:500000:normal", "resource": "food", "amount": 500000, "owned": 1, "action_point": (454, 891)},
 )
 
@@ -202,6 +207,7 @@ class BagFoundationPublicationTests(unittest.TestCase):
         """Require independent Bag identity, a clear decision, and measured controls."""
 
         self.assertEqual(ScreenType.PNC_BAG, observation.screen_type)
+        self.assertEqual(BagTab.RESOURCE, observation.active_bag_tab)
         self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
         self.assertTrue(observation.decision.action_eligible)
         self.assertEqual(_BAG_LAYOUT_ID, observation.decision.layout_id)
@@ -467,6 +473,7 @@ class BagFoundationPublicationTests(unittest.TestCase):
         ):
             with self.subTest(publisher=name):
                 self.assertEqual(ScreenType.PNC_HOME_CITY, observation.screen_type)
+                self.assertIsNone(observation.active_bag_tab)
                 self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
                 self.assertEqual("home_city", observation.decision.layout_id)
                 self.assertEqual(home_capture.frame_ref, observation.frame_ref)

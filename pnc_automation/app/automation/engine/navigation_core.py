@@ -35,6 +35,7 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_matches,
     castle_entry_identity_matches,
 )
+from pnc_automation.app.pnc.domain.bag import BagTab, bag_tab_selector_id
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
@@ -364,6 +365,43 @@ class NavigationCore:
             label,
             observe_content,
             completion_predicate=lambda observation: observation.active_chat_channel == channel,
+        )
+
+    def select_bag_tab(
+        self, tab: BagTab, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Select one measured Bag subtab and require fresh frames confirming it."""
+
+        if not isinstance(tab, BagTab):
+            raise ValueError("Bag tab selection requires a BagTab value.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_bag_tab"
+        before = observe_content(f"{label}_source")
+        if (
+            before.blocking_popup
+            or before.screen_type != ScreenType.PNC_BAG
+            or before.decision.guard != GuardVerdict.CLEAR
+            or before.active_bag_tab is None
+        ):
+            raise RuntimeError("Bag tab selection requires a freshly observed, unblocked Bag screen.")
+        if before.active_bag_tab == tab:
+            return before
+        selector = bag_tab_selector_id(tab)
+        element = before.visible_elements.get(selector)
+        if element is None or element.source_kind != VisibleElementSourceKind.TEMPLATE:
+            raise RuntimeError("Bag tab control lacks current-frame visual evidence; no action sent.")
+        self.record({"event": "pending_bag_tab", "tab": tab.value,
+                     "selector": selector.value, "artifact": str(before.artifact_path)})
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=selector, reason="replacement_select_bag_tab"),
+            before,
+            frozenset({ScreenType.PNC_BAG}),
+            label,
+            observe_content,
+            completion_predicate=lambda observation: (
+                observation.decision.guard == GuardVerdict.CLEAR
+                and observation.active_bag_tab == tab
+            ),
         )
 
     def send_chat_message(
@@ -889,12 +927,13 @@ class NavigationCore:
 
 
 def require_resource_inventory_surface(observation: Observation) -> None:
-    """Require B's selected Resource anchor before inventory observation or a list action."""
+    """Require a guarded Bag whose typed selection is the measured Resource tab."""
 
     if (
         observation.screen_type != ScreenType.PNC_BAG
         or observation.blocking_popup
         or observation.decision.guard != GuardVerdict.CLEAR
+        or observation.active_bag_tab != BagTab.RESOURCE
         or not _template_control(observation, UiElementId.PNC_BAG_SUBTAB_RESOURCE)
     ):
         raise RuntimeError("Resource inventory requires a guarded Bag with the selected Resource tab.")
