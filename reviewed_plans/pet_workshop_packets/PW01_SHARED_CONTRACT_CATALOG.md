@@ -39,3 +39,13 @@ Follow the [common validation and acceptance gates](../PNC_PET_WORKSHOP_ROADMAP.
 Shared model/interface and catalog commit, provenance hashes, portable seed fixtures, canonical design/behavior documents and catalog/model check results. Lead acceptance of this commit releases PW02, PW03 and PW06.
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
+
+### Execution record — 2026-09-16
+
+- Status: **Delegated**, not reviewed or accepted.
+- Accepted starting repository: `origin/main` at `0aab4d7f5a22dd89d85476c8359a05ab3981e28b`; worker baseline with approved plans `f346d91fbb7458a17b0cfbb3f0d82c3b1c11d3ab`.
+- Worker checkout/branch: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-pw01`, `codex/pet-workshop-pw01`.
+- Devin session `spectacled-jaborosa`, run `.local-data/devin-implement/pw01`, turn `001` within that checkout; brief `.local-data/devin-briefs/pw01.md`.
+- Scope: shared models/catalog/fixtures and canonical documentation; no live access. Lead owns review, focused independent checks, queue records, merge and push.
+- Native completion callback targets this coordinating task. Monitor acknowledgement: active; lead monitor evidence at `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-castle-identity-plan/.local-data/devin-monitor`.
+- Reviewed/tested candidate and acceptance evidence: pending worker handoff.
