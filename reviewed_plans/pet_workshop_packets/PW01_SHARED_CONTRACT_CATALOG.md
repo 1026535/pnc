@@ -42,10 +42,31 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 
 ### Execution record — 2026-09-16
 
-- Status: **Delegated**, not reviewed or accepted.
-- Accepted starting repository: `origin/main` at `0aab4d7f5a22dd89d85476c8359a05ab3981e28b`; worker baseline with approved plans `f346d91fbb7458a17b0cfbb3f0d82c3b1c11d3ab`.
+**Current status: Delegated.** The catalog slice is independently reviewed and saved at `0fb4af03acff0c5e9f32abe2b42722b55e016849`; shared-state/observation work is running. PW01 is not yet accepted, merged or pushed. PW02/PW03/PW06 remain gated on complete PW01 acceptance.
+
 - Worker checkout/branch: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-pw01`, `codex/pet-workshop-pw01`.
-- Devin session `spectacled-jaborosa`, run `.local-data/devin-implement/pw01`, turn `001` within that checkout; brief `.local-data/devin-briefs/pw01.md`.
-- Scope: shared models/catalog/fixtures and canonical documentation; no live access. Lead owns review, focused independent checks, queue records, merge and push.
-- Native completion callback targets this coordinating task. Monitor acknowledgement: active; lead monitor evidence at `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-castle-identity-plan/.local-data/devin-monitor`.
-- Reviewed/tested candidate and acceptance evidence: pending worker handoff.
+- Base: `b8c96b8e36b943a47006fde320629e1ae313ad29`, incorporating accepted `origin/main` `a73843cebfcee2105d8efd07706dd7fcb94fda10`. First dispatch used `f346d91` before that synchronization.
+- Active worker: session `cedar-stealer`, `.local-data/devin-implement/pw01-platform-check`, turn `003`; brief `.local-data/devin-briefs/pw01-shared-state.md`. Startup confirmed. The existing native completion callback and lead monitor cover this run; monitor evidence is in the coordinating checkout's `.local-data/devin-monitor`.
+- The catalog and shared-state portions are internal handoffs of PW01, not new packets/dependencies. Lead reviews actual implementation and combined checks before releasing consumers. No live effect/access is needed for this foundation; live validation for later packets remains on hold for the user's replacement account.
+
+#### Independent catalog review
+
+- Catalog contains 114 items, 20 producers and 123 drop entries. All seven decoded source hashes matched the original evidence.
+- `PW01-C1` fixed: the JSON loader now rejects duplicate object keys before Python can silently discard earlier values; a focused regression reproduces the original acceptance defect.
+- `PW01-C2` fixed: authored `randomItems` candidates are explicitly distinct from current occupancy. The recovered client's `MergeAdventureData:InitChessboard` uses server `gridMap`; the runtime must observe actual pieces.
+- Lead command `py -m unittest tests.unit.app.pnc.test_pet_workshop_catalog`: **17 passed** after corrections. `git diff --check`: **passed**. Prior worker `unit.app.pnc` evidence contains **573 passed**, including the original 16 catalog tests; it is not a full-suite acceptance run.
+- Reviewed revision and file hashes: worker `.local-data/reports/pet-workshop/pw01-catalog-lead-review.json`. Worker group evidence: `.test-impact/results.json`, run `95b2c16a751a4a628e194825c2f1f466`. Full combined PW01 checks and installed-package loading remain assigned to the shared-state handoff.
+
+#### Handled attempts and recovery evidence
+
+Paths below are relative to the worker's `.local-data/devin-implement/`. Each turn retains `result.json`, error logs and any actual handoff. Do not re-handle completed turns or read the full conversation/export. All stopped attempts reported `writers_stopped: true`; no competing writer was started.
+
+| Run / turn | Outcome | Lead disposition |
+| --- | --- | --- |
+| `pw01/turn-001` (`spectacled-jaborosa`) | Internal service error after 659.63 seconds; trace `5f6eb6de10cb0404c172ade961f1acba`; no edits/tests. | Verified exact saved session with `devin list --format json`, synchronized the clean checkout, resumed once. |
+| `pw01/turn-002` | Same error after 2.79 seconds; trace `5c7ebafa441f353f7a6f95688aec6519`; no edits/tests. | Preserved failed session and used a clean implementation session. |
+| `pw01-recovery/turn-001` (`tricolor-bearskin`) | Same error after 484.20 seconds; trace `a71b01b33e6b0bc2ce5767635e56e736`; no edits/tests. | Ran a materially smaller read-only platform diagnostic rather than another unchanged package attempt. |
+| `pw01-platform-check/turn-001` (`cedar-stealer`) | Passed in 12.15 seconds; verified `swe-2-max` final response, Python 3.13 and expected HEAD; clean checkout. | Basic command/final-response path works. Resumed with the bounded catalog slice. |
+| `pw01-platform-check/turn-002` | Same service error after 1235.56 seconds; trace `d96576f355ffb2f172187a0a18bb5c56`; catalog/docs/tests preserved, 573-test group passed. | Reviewed saved implementation, applied the two findings above, independently checked and committed the catalog slice, resumed shared-state work. |
+
+The reported service error is `-32013`, internal `Protocol error (invalid_argument)`, marked retryable by Devin. Root cause remains unknown; diagnostic success does not prove it fixed. Installed CLI recorded `3000.10.27 (bcbe88c7)` and `swe-2-max`. No permission or model substitution occurred. The user confirmed these should be treated as recoverable: preserve useful work, continue automatically, and notify again only when recovery stops making progress or requires input.

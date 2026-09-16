@@ -42,7 +42,7 @@ Status is maintained here. Keep detailed review findings, commands, supported co
 
 | Packet | Former ID | Offline implementation dependency | Status | Accepted base / result and remaining condition |
 | --- | --- | --- | --- | --- |
-| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Delegated | Baseline `f346d91`; isolated `codex/pet-workshop-pw01`, Devin turn 001. No live effect; lead review and portable checks pending. |
+| [PW01 — Shared contract and catalog](pet_workshop_packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Delegated | Catalog reviewed at `0fb4af0` (17 focused tests passed); `cedar-stealer` turn 003 implements shared state/publication and combined checks. PW01 acceptance pending. |
 | [PW02 — Recognition and controls](pet_workshop_packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Planned | Saved captures available; missing action-state coverage remains explicit. |
 | [PW03 — Effort, reservations and policy](pet_workshop_packets/PW03_EFFORT_RESERVATIONS_POLICY.md) | S1 | PW01 | Planned | Offline solver lane; independent of PW02. |
 | [PW04 — One-step solver](pet_workshop_packets/PW04_ONE_STEP_SOLVER.md) | S2 | PW03 policy implementation | Planned | Same worker may continue from tested PW03 code and hand both back together; a separate worker receives an accepted dependency commit. |
