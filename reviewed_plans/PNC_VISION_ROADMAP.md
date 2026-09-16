@@ -193,6 +193,7 @@ Record status changes here in the following compact log; use the linked packet f
 | Packet | Status | Base / result commit | Evidence, supported coverage and remaining condition |
 |---|---|---|---|
 | Baseline correction | Integrated with these plans; no packet completed | Exact runtime/fixture port of `4d317db` after `ff38127` | Chapter 6 recognition/Home portal, Tower destination/return and chest-preview ownership/close. V01-V43 remain planned; V11/V13/V15 retain their content and broader route acceptance. |
+| V01 | Integrated into local main | Base `552bb766619e7997c8d7898ccd7bfd414f7bdf6f`; accepted on `codex/vision-v01-foundation` | 2026-09-16 UTC: both publishers qualified with real bounded OCR on Bag reference and independent validation capture; Home negative, demand/cache/provenance and guard regressions passed. 56 core vision tests, 445 vision integration passes (6 optional skips), 198 final affected passes; merge gate: 2,186 full portable passes and 7 expected skips. No runtime change or new live route required. One reference Safe Food row remains explicitly unreadable; V09 owns that improvement. See V01 for evidence and extension owners. |
 
 To choose the next assignment: filter out integrated/accepted work as appropriate, check the packet's own dependencies and available evidence, then select the earliest useful ready item. A blocked packet is not a reason to repeat the same failed live action.
 
