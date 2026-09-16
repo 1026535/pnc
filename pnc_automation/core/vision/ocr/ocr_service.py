@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from io import BytesIO
+from pathlib import Path
 from threading import RLock
 from time import perf_counter
 from typing import Any, Protocol
@@ -18,7 +19,7 @@ from pnc_automation.core.errors import ScreenClassificationError
 from pnc_automation.core.vision.image.models import Bounds
 
 try:
-    from rapidocr_onnxruntime import RapidOCR
+    from rapidocr import RapidOCR
 except ImportError:
     RapidOCR = None
 
@@ -48,6 +49,13 @@ class OcrResult:
 
     lines: tuple[OcrLine, ...]
     words: tuple[OcrWord, ...]
+
+
+class OcrTextOrientation(StrEnum):
+    """Whether the caller proves that text is already upright."""
+
+    AUTO = "auto"
+    UPRIGHT = "upright"
 
 
 class OcrReadPurpose(StrEnum):
@@ -104,13 +112,22 @@ class OcrRequiredFieldDiagnostic:
 class OcrService(Protocol):
     """Reads OCR text from one screenshot or cropped region."""
 
-    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+    def read_result(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> OcrResult:
         """Returns localized OCR lines and words for the provided image region."""
 
-    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> tuple[OcrLine, ...]:
         """Returns localized OCR lines for the provided image region."""
 
-    def read_text(self, image: Image.Image, region: Bounds) -> str:
+    def read_text(
+        self, image: Image.Image, region: Bounds,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> str:
         """Returns OCR text for the provided region."""
 
 
@@ -136,6 +153,18 @@ class _OcrCacheEntry:
 
 
 _RAW_PREPROCESSING_ID = "__raw__"
+
+# Qualified PP-OCRv3 recognizer vendored under data/ (see data/NOTICE.txt);
+# the bundled detector/classifier stay unchanged. Recognition width follows
+# the text batch instead of padding every narrow glyph to 320 pixels.
+_RECOGNIZER_MODEL_PATH = (
+    Path(__file__).resolve().parent / "data" / "ch_PP-OCRv3_rec_infer.onnx"
+)
+# Thin single-line crops bypass detection: they re-pad and re-detect badly.
+_DIRECT_RECOGNITION_MAX_HEIGHT = 30
+_DIRECT_RECOGNITION_MIN_ASPECT = 8.0
+# Mirrors the engine's detection-path acceptance floor for direct output.
+_BACKEND_CONFIDENCE_FLOOR = 0.5
 
 
 def _validate_required_fact(required_fact: str | None) -> None:
@@ -164,10 +193,10 @@ class ObservationOcrContext:
     _backend_revision: str = field(init=False, repr=False)
     _max_entries: int = field(init=False, repr=False)
     _owned_image: Image.Image = field(init=False, repr=False)
-    _cache: OrderedDict[tuple[Bounds | None, str, str], _OcrCacheEntry] = field(
+    _cache: OrderedDict[tuple[Bounds | None, str, str, OcrTextOrientation], _OcrCacheEntry] = field(
         init=False, repr=False
     )
-    _pinned_fullframe_key: tuple[Bounds | None, str, str] | None = field(
+    _pinned_fullframe_key: tuple[Bounds | None, str, str, OcrTextOrientation] | None = field(
         default=None, init=False, repr=False
     )
     _lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -408,6 +437,7 @@ class ObservationOcrContext:
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
         required_fact: str | None = None,
+        orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
     ) -> OcrResult:
         """Returns OCR for a full image or bounded region using this frame's cache."""
 
@@ -417,7 +447,7 @@ class ObservationOcrContext:
             self._reject_unbounded_region(validated_region)
             _validate_required_fact(required_fact)
             self._requests += 1
-            key = self._cache_key(validated_region, _RAW_PREPROCESSING_ID)
+            key = self._cache_key(validated_region, _RAW_PREPROCESSING_ID, orientation)
             cached = self._lookup_cached(key)
             if cached is not None:
                 assert cached.result is not None
@@ -431,7 +461,7 @@ class ObservationOcrContext:
                 )
                 return cached.result
             if validated_region is not None and reuse_full_frame and not self._bounded_regions_required:
-                fullframe_key = self._cache_key(None, _RAW_PREPROCESSING_ID)
+                fullframe_key = self._cache_key(None, _RAW_PREPROCESSING_ID, orientation)
                 fullframe = self._cache.get(fullframe_key)
                 if fullframe is not None and fullframe.result is not None:
                     self._fullframe_reuses += 1
@@ -450,7 +480,8 @@ class ObservationOcrContext:
                     key=key,
                     region=validated_region,
                     prepare=None,
-                    pin_fullframe=validated_region is None,
+                    pin_fullframe=validated_region is None and orientation is OcrTextOrientation.AUTO,
+                    orientation=orientation,
                 )
             except Exception:
                 self._record_diagnostic(
@@ -480,6 +511,7 @@ class ObservationOcrContext:
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
         required_fact: str | None = None,
+        orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
     ) -> tuple[OcrLine, ...]:
         """Returns OCR lines through the frame-local result cache."""
 
@@ -490,6 +522,7 @@ class ObservationOcrContext:
             purpose=purpose,
             detail=detail,
             required_fact=required_fact,
+            orientation=orientation,
         ).lines
 
     def read_text(
@@ -501,6 +534,7 @@ class ObservationOcrContext:
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
         required_fact: str | None = None,
+        orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
     ) -> str:
         """Returns newline-joined OCR text through the frame-local result cache."""
 
@@ -513,6 +547,7 @@ class ObservationOcrContext:
                 purpose=purpose,
                 detail=detail,
                 required_fact=required_fact,
+                orientation=orientation,
             ).lines
         )
 
@@ -526,6 +561,7 @@ class ObservationOcrContext:
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
         required_fact: str | None = None,
+        orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
     ) -> OcrResult | None:
         """Runs one named preprocessing variant and projects its OCR back once.
 
@@ -549,7 +585,7 @@ class ObservationOcrContext:
             if not callable(prepare):
                 raise TypeError("prepare must be callable.")
             self._requests += 1
-            key = self._cache_key(validated_region, preprocessing_id)
+            key = self._cache_key(validated_region, preprocessing_id, orientation)
             cached = self._lookup_cached(key)
             if cached is not None:
                 self._record_diagnostic(
@@ -567,6 +603,7 @@ class ObservationOcrContext:
                     region=validated_region,
                     prepare=prepare,
                     pin_fullframe=False,
+                    orientation=orientation,
                 )
             except Exception:
                 self._record_diagnostic(
@@ -623,12 +660,15 @@ class ObservationOcrContext:
         self,
         region: Bounds | None,
         preprocessing_id: str,
-    ) -> tuple[Bounds | None, str, str]:
-        """Builds the frame-local cache key from region, variant, and backend revision."""
+        orientation: OcrTextOrientation,
+    ) -> tuple[Bounds | None, str, str, OcrTextOrientation]:
+        """Builds the frame-local cache key from region, variant, backend revision, and orientation."""
 
-        return region, preprocessing_id, self.backend_revision
+        if not isinstance(orientation, OcrTextOrientation):
+            raise TypeError("orientation must be an OcrTextOrientation.")
+        return region, preprocessing_id, self.backend_revision, orientation
 
-    def _lookup_cached(self, key: tuple[Bounds | None, str, str]) -> _OcrCacheEntry | None:
+    def _lookup_cached(self, key: tuple[Bounds | None, str, str, OcrTextOrientation]) -> _OcrCacheEntry | None:
         """Returns and promotes a cached entry while counting a direct hit."""
 
         entry = self._cache.get(key)
@@ -642,10 +682,11 @@ class ObservationOcrContext:
     def _run_backend(
         self,
         *,
-        key: tuple[Bounds | None, str, str],
+        key: tuple[Bounds | None, str, str, OcrTextOrientation],
         region: Bounds | None,
         prepare: Callable[[Image.Image, Bounds], Image.Image | None] | None,
         pin_fullframe: bool,
+        orientation: OcrTextOrientation,
     ) -> OcrResult | None:
         """Prepares one owned input, runs the backend once, and caches only success."""
 
@@ -673,10 +714,13 @@ class ObservationOcrContext:
         self._processed_pixel_area += processed_pixel_area
         started = perf_counter()
         try:
-            raw_result = self._backend.read_result(
-                source,
-                None if prepare is not None else region,
-            )
+            backend_region = None if prepare is not None else region
+            if orientation is OcrTextOrientation.AUTO:
+                raw_result = self._backend.read_result(source, backend_region)
+            else:
+                raw_result = self._backend.read_result(
+                    source, backend_region, orientation=orientation,
+                )
         except Exception:
             self._engine_seconds += perf_counter() - started
             raise
@@ -695,7 +739,7 @@ class ObservationOcrContext:
 
     def _store_cache(
         self,
-        key: tuple[Bounds | None, str, str],
+        key: tuple[Bounds | None, str, str, OcrTextOrientation],
         entry: _OcrCacheEntry,
         *,
         pin: bool = False,
@@ -817,45 +861,89 @@ class RapidOcrService:
     """Runs OCR through the configured RapidOCR backend."""
 
     _engine: Any = field(init=False, repr=False)
+    _engine_lock: RLock = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Constructs the OCR backend or fails fast when the dependency is unavailable."""
 
         if RapidOCR is None:
-            raise ScreenClassificationError("rapidocr_onnxruntime is required for OCR-backed observations.")
-        self._engine = RapidOCR()
+            raise ScreenClassificationError("rapidocr is required for OCR-backed observations.")
+        if not _RECOGNIZER_MODEL_PATH.exists():
+            raise ScreenClassificationError(
+                "Bundled OCR recognizer model is missing from the installation."
+            )
+        self._engine = RapidOCR(
+            params={
+                "Global.log_level": "warning",
+                "Rec.model_path": str(_RECOGNIZER_MODEL_PATH),
+                "Rec.rec_img_shape": [3, 48, 0],
+            }
+        )
+        self._engine_lock = RLock()
 
-    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+    def read_result(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> OcrResult:
         """Returns OCR lines and synthesized words from the full screenshot or the requested crop."""
 
+        if not isinstance(orientation, OcrTextOrientation):
+            raise TypeError("orientation must be an OcrTextOrientation.")
         crop, offset_x, offset_y = _crop_image(image, region)
         payload = _encode_image(crop)
-        raw_lines, _ = self._engine(payload)
-        if raw_lines is None:
-            return OcrResult(lines=(), words=())
-        lines = tuple(
-            _to_ocr_line(points, text, confidence, offset_x=offset_x, offset_y=offset_y)
-            for points, text, confidence in raw_lines
-            if str(text).strip() != ""
+        # Thin single-line crops re-pad and re-detect badly: recognize them
+        # directly instead, matching the previous backend's crop behavior.
+        direct = (
+            crop.height <= _DIRECT_RECOGNITION_MAX_HEIGHT
+            or crop.width / crop.height > _DIRECT_RECOGNITION_MIN_ASPECT
         )
+        with self._engine_lock:
+            result = self._engine(
+                payload, use_det=not direct,
+                use_cls=orientation is OcrTextOrientation.AUTO,
+            )
+        if direct:
+            lines = _direct_recognition_lines(
+                result,
+                crop_size=crop.size,
+                offset_x=offset_x,
+                offset_y=offset_y,
+            )
+        else:
+            if result.boxes is None or result.txts is None:
+                return OcrResult(lines=(), words=())
+            lines = tuple(
+                _to_ocr_line(points, text, confidence, offset_x=offset_x, offset_y=offset_y)
+                for points, text, confidence in zip(result.boxes, result.txts, result.scores)
+                if str(text).strip() != ""
+            )
         words = tuple(word for line in lines for word in line.words)
         return OcrResult(lines=lines, words=words)
 
-    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> tuple[OcrLine, ...]:
         """Returns OCR lines from the full screenshot or the requested crop."""
 
-        return self.read_result(image, region).lines
+        return self.read_result(image, region, orientation=orientation).lines
 
-    def read_text(self, image: Image.Image, region: Bounds) -> str:
+    def read_text(
+        self, image: Image.Image, region: Bounds,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> str:
         """Returns newline-joined OCR text for the requested region."""
 
-        return "\n".join(line.text for line in self.read_lines(image, region))
+        return "\n".join(line.text for line in self.read_lines(image, region, orientation=orientation))
 
 
 class UnavailableOcrService:
     """Fail-fast OCR implementation used when no OCR backend is configured."""
 
-    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+    def read_result(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> OcrResult:
         """Raises because OCR-dependent observations are unsupported without a backend."""
 
         del image
@@ -864,15 +952,21 @@ class UnavailableOcrService:
             region=region,
         )
 
-    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> tuple[OcrLine, ...]:
         """Raises because OCR-dependent observations are unsupported without a backend."""
 
-        return self.read_result(image, region).lines
+        return self.read_result(image, region, orientation=orientation).lines
 
-    def read_text(self, image: Image.Image, region: Bounds) -> str:
+    def read_text(
+        self, image: Image.Image, region: Bounds,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> str:
         """Raises because OCR-dependent selectors are unsupported without a backend."""
 
-        return "\n".join(line.text for line in self.read_result(image, region).lines)
+        return "\n".join(line.text for line in self.read_result(image, region, orientation=orientation).lines)
 
 
 def _crop_image(image: Image.Image, region: Bounds | None) -> tuple[Image.Image, int, int]:
@@ -889,6 +983,24 @@ def _encode_image(image: Image.Image) -> bytes:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def _direct_recognition_lines(
+    result: Any,
+    *,
+    crop_size: tuple[int, int],
+    offset_x: int,
+    offset_y: int,
+) -> tuple[OcrLine, ...]:
+    """Converts detector-free recognizer output into crop-covering OCR lines."""
+
+    width, height = crop_size
+    box = [[0, 0], [width, 0], [width, height], [0, height]]
+    return tuple(
+        _to_ocr_line(box, text, confidence, offset_x=offset_x, offset_y=offset_y)
+        for text, confidence in zip(result.txts or (), result.scores or ())
+        if str(text).strip() != "" and float(confidence) >= _BACKEND_CONFIDENCE_FLOOR
+    )
 
 
 def _to_ocr_line(

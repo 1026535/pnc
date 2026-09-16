@@ -56,6 +56,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
     OcrReadPurpose,
+    OcrTextOrientation,
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher, PreparedFrame
 
@@ -83,6 +84,8 @@ _ICON_GAP_RATIO = 0.15
 # The n/m counter sits at the icon's top-left inside its blue frame.
 _LEVEL_REGION_WIDTH_RATIO = 0.62
 _LEVEL_REGION_HEIGHT_RATIO = 0.30
+# A retry excludes the icon decoration below the native 30px badge text.
+_LEVEL_TEXT_HEIGHT_RATIO = 0.21
 _LEVEL_PATTERN = re.compile(r"^(\d+)\s*/\s*(\d+)$")
 
 # The icon carries a blue square frame; a component that claims to be a node
@@ -246,12 +249,14 @@ class ResearchContentProducer:
     ) -> _NodeCandidate | None:
         """Resolve one measured label component to a node candidate or drop chrome."""
 
+        region = _inset_bounds(component, padding=2, image=image)
         label_lines = ocr_context.read_lines(
             image,
-            _inset_bounds(component, padding=2, image=image),
+            region,
             purpose=OcrReadPurpose.CONTENT,
             detail="research_node_label",
             required_fact="research_node_label",
+            orientation=OcrTextOrientation.UPRIGHT,
         )
         raw_text = _join_label_text(label_lines)
         normalized = normalize_ocr_text(raw_text)
@@ -260,14 +265,15 @@ class ResearchContentProducer:
         node_id = research_node_for_label(raw_text, category=category)
         clipped = _component_is_partial(component, image=image)
         if node_id is None and not clipped:
-            # Native Economy borders caused rotated/fragmented OCR on Wood/Iron
-            # Output. A bounded 2x text crop restores the observed label words.
+            # A bounded 2x crop recovers small native label fragments while
+            # preserving the same upright-text contract and one retry budget.
             label_result = ocr_context.read_preprocessed_result(
                 image, _inset_bounds(component, padding=6, image=image),
                 preprocessing_id="research_node_label_rgb_2x",
                 prepare=_prepare_research_text_2x,
                 purpose=OcrReadPurpose.CONTENT, detail="research_node_label_inset",
                 required_fact="research_node_label",
+                orientation=OcrTextOrientation.UPRIGHT,
             )
             label_lines = () if label_result is None else label_result.lines
             raw_text = _join_label_text(label_lines) or raw_text
@@ -383,21 +389,27 @@ class ResearchContentProducer:
             ),
             Bounds(0, 0, image.width, image.height),
         )
-        readings: set[tuple[int | None, int | None, bool]] = set()
-        for line in ocr_context.read_lines(
+        lines = ocr_context.read_lines(
             image,
             level_region,
             purpose=OcrReadPurpose.CONTENT,
             detail="research_node_level",
             required_fact="research_node_level",
-        ):
-            match = _LEVEL_PATTERN.match(line.text.strip())
-            if match is not None:
-                current, maximum = int(match.group(1)), int(match.group(2))
-                if current <= maximum:
-                    readings.add((current, maximum, current == maximum))
-            elif normalize_ocr_text(line.text) == "MAX":
-                readings.add((None, None, True))
+        )
+        readings = _node_level_readings(lines)
+        if not readings:
+            # One tighter text-band read can recover a fragmented counter.
+            # Never replace conflicting complete readings with a retry.
+            readings = _node_level_readings(ocr_context.read_lines(
+                image,
+                Bounds(
+                    level_region.x, level_region.y, level_region.width,
+                    min(level_region.height, max(1, round(icon_bounds.height * _LEVEL_TEXT_HEIGHT_RATIO))),
+                ),
+                purpose=OcrReadPurpose.CONTENT,
+                detail="research_node_level_retry",
+                required_fact="research_node_level",
+            ))
         return next(iter(readings)) if len(readings) == 1 else None
 
     def _detect_node_lock(
@@ -807,11 +819,54 @@ def _join_label_text(lines: tuple[OcrLine, ...]) -> str:
 
     if not lines:
         return ""
-    ordered = sorted(lines, key=lambda line: (line.bounds.y, line.bounds.x))
+    # Detector fragments on one text row have slightly different top edges.
+    # Group by vertical overlap before reading left-to-right; wrapped labels
+    # still read their upper row before their lower row.
+    rows: list[list[OcrLine]] = []
+    for line in sorted(lines, key=lambda item: (item.bounds.y, item.bounds.x)):
+        for row in rows:
+            anchor = row[0].bounds
+            overlap = (
+                min(anchor.y + anchor.height, line.bounds.y + line.bounds.height)
+                - max(anchor.y, line.bounds.y)
+            )
+            if overlap * 2 >= min(anchor.height, line.bounds.height):
+                row.append(line)
+                break
+        else:
+            rows.append([line])
+    ordered = [line for row in rows for line in sorted(row, key=lambda item: item.bounds.x)]
     merged = ordered[0]
     for line in ordered[1:]:
         merged = merge_ocr_lines(merged, line)
     return merged.text
+
+
+def _node_level_readings(
+    lines: tuple[OcrLine, ...],
+) -> set[tuple[int | None, int | None, bool]]:
+    """Keep complete n/m and MAX readings distinct; join only split counters."""
+
+    readings: set[tuple[int | None, int | None, bool]] = set()
+    for line in lines:
+        match = _LEVEL_PATTERN.match(line.text.strip())
+        if match is not None:
+            current, maximum = int(match.group(1)), int(match.group(2))
+            if current <= maximum:
+                readings.add((current, maximum, current == maximum))
+        elif normalize_ocr_text(line.text) == "MAX":
+            readings.add((None, None, True))
+    if readings:
+        return readings
+    joined = "".join(
+        line.text.strip() for line in sorted(lines, key=lambda line: line.bounds.x)
+    )
+    match = _LEVEL_PATTERN.match(joined)
+    if match is not None:
+        current, maximum = int(match.group(1)), int(match.group(2))
+        if current <= maximum:
+            readings.add((current, maximum, current == maximum))
+    return readings
 
 
 def _queue_row(

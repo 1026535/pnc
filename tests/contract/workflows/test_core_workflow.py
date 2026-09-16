@@ -179,6 +179,42 @@ class CoreWorkflowTests(unittest.TestCase):
             context.scroll_mailbox()
         runtime.navigation.scroll_mailbox.assert_called_once()
 
+    def test_campaign_chapter_context_delegates_once_and_synchronizes_freshness(self) -> None:
+        """The typed chapter number routes through the constrained core operation."""
+
+        initial = _home_observation(datetime(2026, 9, 16, 12, 0, 0, tzinfo=UTC))
+        opened = Observation(
+            screen_type=ScreenType.PNC_CAMPAIGN_CHAPTER,
+            visible_elements={},
+            captured_at=initial.captured_at + timedelta(seconds=1),
+        )
+        runtime = Mock()
+        runtime.observation_count = 0
+        runtime.last_observation = None
+
+        def observe(_label: str, *, include_content: bool = False) -> Observation:
+            self.assertTrue(include_content)
+            runtime.observation_count += 1
+            runtime.last_observation = opened
+            return opened
+
+        runtime.observe.side_effect = observe
+        runtime.navigation.open_campaign_chapter.side_effect = (
+            lambda _chapter, observe_content: observe_content("campaign_chapter_source")
+        )
+        context = WorkflowContext(runtime, last_observation=initial)
+
+        result = context.open_campaign_chapter(10)
+
+        self.assertIs(opened, result)
+        runtime.navigation.open_campaign_chapter.assert_called_once()
+        self.assertEqual(
+            10, runtime.navigation.open_campaign_chapter.call_args.args[0]
+        )
+        self.assertTrue(callable(runtime.navigation.open_campaign_chapter.call_args.kwargs["observe_content"]))
+        self.assertEqual(1, context._last_navigation_count)
+        self.assertIs(opened, context._last_observation)
+
     def test_chat_context_validates_type_and_synchronizes_fresh_content(self) -> None:
         """Validates the typed channel and synchronizes after the core invokes its content callback."""
 

@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDeb
 from pnc_automation.app.pnc.vision.building_details import filter_building_detail_controls
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
+    bind_campaign_chapter_identity,
     bind_list_entry,
     bind_spatial_surface,
     bind_hero_recruit_result,
@@ -274,6 +275,12 @@ class NavigationPerception:
             ),
             spatial_surface=bind_spatial_surface(
                 content.spatial_surface,
+                frame_ref=screenshot.frame_ref,
+                source_screen=screen,
+                source_layout_id=decision.layout_id,
+            ),
+            campaign_chapter=bind_campaign_chapter_identity(
+                content.campaign_chapter,
                 frame_ref=screenshot.frame_ref,
                 source_screen=screen,
                 source_layout_id=decision.layout_id,

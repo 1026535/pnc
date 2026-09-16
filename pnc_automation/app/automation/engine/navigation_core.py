@@ -937,6 +937,50 @@ class NavigationCore:
             ),
         )
 
+    def open_campaign_chapter(
+        self, chapter_number: int, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open one observed unlocked Campaign chapter row and prove its path title."""
+
+        if isinstance(chapter_number, bool) or not isinstance(chapter_number, int) or chapter_number <= 0:
+            raise ValueError("Campaign chapter navigation requires a positive integer chapter number.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_campaign_chapter"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_CAMPAIGN_MAP or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+        ):
+            raise RuntimeError("Campaign chapter navigation requires a freshly observed, unblocked Campaign map.")
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+            if entry.campaign_node is not None
+            and entry.campaign_node.chapter_number == chapter_number
+            and entry.campaign_node.locked is False
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError(
+                "Requested Campaign chapter is missing, locked, clipped, unreadable or ambiguous; no tap sent."
+            )
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.CAMPAIGN_CHAPTER,
+                metadata_key="chapter_number", metadata_value=chapter_number,
+                use_action_point=True, reason="open_campaign_chapter",
+            ),
+            source, frozenset({ScreenType.PNC_CAMPAIGN_CHAPTER}), label, observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and frame.campaign_chapter is not None
+                and frame.campaign_chapter.chapter_number == chapter_number
+            ),
+        )
+
     def open_trial_stats(
         self, category: TrialCategory, *,
         observe_content: Callable[[str], Observation],

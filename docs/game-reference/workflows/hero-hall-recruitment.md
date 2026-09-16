@@ -57,3 +57,38 @@ Confirm/Close controls before the core can own their bounded navigation. Keep
 UNKNOWN fail-closed. Reconcile the existing durable intent using freshly guarded
 attempt-decrement or cooldown evidence; do not replay the recruit. One observed
 single does not prove the full five-single Daily requirement.
+
+
+## Saved-result implementation, September 16
+
+The V18 candidate separates two stable `PNC_HERO_RECRUIT_RESULT` layouts:
+`hero_recruit_presentation` and `hero_recruit_fragments`. Their reference images
+are the September 13 frames 0080 and 0081 above, copied without rescaling to
+`tests/data/screen_recognition/hero_recruit_*_20260913.png`. The profile catalog
+records the original capture group and build `5.2.77 / 5.0.204.235`. These are
+same-run references; no independent result holdout is claimed.
+
+One feature producer publishes phase-bound raw title text, quantity, visible
+stars, Items left and the displayed next Recruit cost through both observation
+paths. Unreadable fields remain unknown. The cost has no inferred currency or
+permission meaning. The presentation's Confirm and fragment screen's Close
+have independent measured template controls; the paid Recruit control is not
+published as an acknowledgment or Free control.
+
+The existing Hero Hall session retains each result observation and artifact
+before asking the shared navigator to acknowledge it. Confirm must settle to
+the fragment phase; Close must settle to Hero Hall. A repeated phase exhausts
+the existing confirmation bound without another tap. Passive settling from an
+unknown first frame requires that this session actually dispatched its one
+free action. A saved unknown frame remains unresolved. Attempts/cooldown and
+the existing journal still own transaction reconciliation and terminal receipts.
+
+This implementation uses the saved result sequence. Current live result proof
+remains unavailable; validation must not create another recruitment.
+
+**Live observed, September 16, 19:07 UTC:** canonical runtime
+`20260916T185736Z_14d3e76b` verified K157 / NPC 2 / level 22, acquired Hero Hall
+through the Home navigator, observed its Recruit menu (frame 0079), and returned
+Home (frame 0084). The lead inspected both images. This route did not recruit or
+acknowledge a newly manufactured result. Evidence is in the V18 candidate's
+ignored `.local-data/devin-v18/live_combined_acceptance/` directory.

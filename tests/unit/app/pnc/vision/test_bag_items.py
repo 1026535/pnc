@@ -503,6 +503,39 @@ class DuplicateIdentityTests(unittest.TestCase):
 class ProducerDispatchTests(unittest.TestCase):
     """The producer only runs under qualified screen/layout/tab gates."""
 
+    def test_name_retry_preserves_selected_family_and_observation_only_rows(self) -> None:
+        for tab, retry_name, expected in (
+            (BagTab.MILITARY, "6-hr Anti-Scout",
+             MilitaryItemIdentity(MilitaryKind.ANTI_SCOUT, duration_minutes=360)),
+            (BagTab.MISC, "Pickaxe", MiscItemIdentity(MiscKind.PICKAXE)),
+            (BagTab.MILITARY, "5 Min Speedup", None),
+            (BagTab.MISC, "5 Min Speedup", None),
+        ):
+            with self.subTest(tab=tab, retry_name=retry_name):
+                context = Mock()
+                context.read_lines.side_effect = [
+                    (_line("Unreadable name", Bounds(205, 306, 300, 30)),
+                     _line("Owned: 7", Bounds(49, 450, 150, 24))),
+                    (_line(retry_name, Bounds(205, 306, 300, 30)),),
+                ]
+                matcher = Mock()
+                matcher.find_best_match.return_value = None
+                entry = BagItemContentProducer(matcher=matcher)._card_entry(
+                    image=Image.new("RGB", (900, 1600)), prepared=Mock(),
+                    card_bounds=Bounds(9, 286, 882, 202), card_clipped=False,
+                    card_index=0, tab=tab, ocr_context=context,
+                )
+                self.assertEqual(expected, entry.bag_item_facts.identity)
+                self.assertEqual(tab, entry.bag_item_facts.selected_tab)
+                self.assertEqual(7, entry.bag_item_facts.owned_count)
+                self.assertEqual(
+                    RowRecognitionStatus.NO_ACTION if expected is not None
+                    else RowRecognitionStatus.UNREADABLE, entry.row_status,
+                )
+                self.assertIsNone(entry.action_point)
+                self.assertIsNone(entry.action_bounds)
+                self.assertEqual(2, context.read_lines.call_count)
+
     def test_clipped_preview_owned_text_never_becomes_a_count(self) -> None:
         context = Mock()
         context.read_lines.side_effect = [(), (), (), (), (

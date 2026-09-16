@@ -275,6 +275,107 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.matcher.find_best_match(template, Path(self.temp_dir.name) / "missing.png", threshold=0.9)
 
+    def test_find_matches_returns_each_separated_glyph_once(self) -> None:
+        image = _textured_image((120, 40))
+        patch = image.crop((23, 13, 35, 25))
+        image.paste(patch, (75, 9))
+        path = self._save(patch)
+
+        matches = self.matcher.find_matches(image, path, threshold=0.98)
+
+        self.assertEqual(
+            {match.bounds for match in matches},
+            {Bounds(23, 13, 12, 12), Bounds(75, 9, 12, 12)},
+        )
+        self.assertTrue(all(match.confidence >= 0.98 for match in matches))
+
+    def test_find_matches_suppresses_overlapping_duplicate_candidates(self) -> None:
+        image = _textured_image((60, 40))
+        patch = image.crop((23, 13, 35, 25))
+        path = self._save(patch)
+
+        matches = self.matcher.find_matches(image, path, threshold=0.98)
+
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].bounds, Bounds(23, 13, 12, 12))
+
+    def test_find_matches_respects_max_matches_and_threshold(self) -> None:
+        image = _textured_image((160, 40))
+        patch = image.crop((11, 13, 23, 25))
+        image.paste(patch, (60, 9))
+        image.paste(patch, (110, 17))
+        path = self._save(patch)
+
+        absent = self._save(Image.new("RGB", (12, 12), (255, 0, 255)))
+
+        capped = self.matcher.find_matches(image, path, threshold=0.98, max_matches=2)
+        rejected = self.matcher.find_matches(image, absent, threshold=0.98)
+
+        self.assertEqual(len(capped), 2)
+        self.assertEqual(rejected, ())
+        with self.assertRaises(ValueError):
+            self.matcher.find_matches(image, path, threshold=0.9, max_matches=0)
+
+    def test_find_matches_prefers_confidence_over_correlation_when_candidates_compete(self) -> None:
+        """A brightened copy out-correlates a faithful one but must not win suppression."""
+        template_values = np.random.default_rng(7).integers(
+            0, 190, size=(12, 12, 3), dtype=np.uint8
+        )
+        template = Image.fromarray(template_values, mode="RGB")
+        brightened = Image.fromarray(
+            (template_values.astype(np.int16) + 60).astype(np.uint8), mode="RGB"
+        )
+        faithful_values = template_values.copy()
+        for y, x in ((2, 3), (7, 9), (10, 1), (4, 11)):
+            faithful_values[y, x] = np.clip(
+                faithful_values[y, x].astype(np.int16) + 25, 0, 255
+            ).astype(np.uint8)
+        image = Image.new("RGB", (80, 50), (32, 32, 32))
+        image.paste(brightened, (20, 15))
+        image.paste(Image.fromarray(faithful_values, mode="RGB"), (22, 16))
+        path = self._save(template)
+
+        matches = self.matcher.find_matches(image, path, threshold=0.5)
+        best = self.matcher.find_best_match(image, path, threshold=0.5)
+
+        self.assertEqual([Bounds(22, 16, 12, 12)], [match.bounds for match in matches])
+        self.assertGreater(matches[0].confidence, 0.9)
+        assert best is not None
+        self.assertEqual(Bounds(22, 16, 12, 12), best.bounds)
+
+    def test_find_matches_stays_inside_search_region(self) -> None:
+        image = _textured_image((120, 60))
+        patch = image.crop((23, 13, 35, 25))
+        image.paste(patch, (90, 40))
+        path = self._save(patch)
+
+        matches = self.matcher.find_matches(
+            image,
+            path,
+            threshold=0.98,
+            search_region=Bounds(x=0, y=0, width=60, height=40),
+        )
+
+        self.assertEqual(
+            [match.bounds for match in matches],
+            [Bounds(23, 13, 12, 12)],
+        )
+
+    def test_find_matches_projects_bounds_to_original_pixels(self) -> None:
+        reference = _textured_image((80, 40))
+        template = reference.crop((21, 11, 31, 19))
+        image = reference.resize((160, 80), Image.Resampling.NEAREST)
+        image.paste(template.resize((20, 16), Image.Resampling.NEAREST), (120, 40))
+        path = self._save(template)
+        prepared = self.matcher.prepare_frame(image, reference_size=(80, 40))
+        assert prepared is not None
+
+        matches = self.matcher.find_matches(prepared, path, threshold=0.85)
+
+        self.assertEqual(len(matches), 2)
+        self.assertIn(Bounds(42, 22, 20, 16), {match.bounds for match in matches})
+        self.assertIn(Bounds(120, 40, 20, 16), {match.bounds for match in matches})
+
     def _save(self, image: Image.Image) -> Path:
         path = Path(self.temp_dir.name) / f"template-{len(list(Path(self.temp_dir.name).iterdir()))}.png"
         image.save(path)

@@ -83,6 +83,9 @@ _MAGNIFIER_SEARCH = Bounds(x=130, y=-5, width=90, height=115)
 _CARD_TEXT_REGION = Bounds(x=28, y=5, width=597, height=195)
 _TEXT_COLUMN_MIN_X = 190
 _NAME_MAX_Y = 70
+# Bounded retry window for the name column only; the wide card read can merge
+# name glyphs with neighbouring pixels that the focused column read separates.
+_CARD_NAME_REGION = Bounds(x=190, y=0, width=435, height=75)
 
 _OWNED_PATTERN = re.compile(r"^[O0D]?wned\s*:\s*(.+)$", re.IGNORECASE)
 _SPEED_BONUS_NAME_PATTERN = re.compile(r"^(\d+)(BUILD|RESEARCH|TRAINING|HEAL)SPEEDUP$")
@@ -309,14 +312,25 @@ class BagItemContentProducer:
             if card_line.rel_x >= _TEXT_COLUMN_MIN_X and card_line.rel_y > _NAME_MAX_Y
         )
         owned_count = _owned_count(card_lines)
-        if tab == BagTab.TREASURE:
-            identity: BagItemIdentity | None = treasure_identity_for_label(name_text)
-        elif tab == BagTab.MILITARY:
-            identity = _military_identity(name_text, description_text)
-        elif tab == BagTab.MISC:
-            identity = _misc_identity(name_text, description_text)
-        else:
-            identity = _speedup_identity(name_text, description_text)
+        identity = _identity_for_tab(tab, name_text, description_text)
+        if identity is None and name_text is not None:
+            retry_text = _join_lines(
+                sorted(
+                    ocr_context.read_lines(
+                        image,
+                        _native_offset_region(_CARD_NAME_REGION, card_bounds, image),
+                        purpose=OcrReadPurpose.CONTENT,
+                        detail=f"bag_card_name_{tab}_{card_index}",
+                        required_fact="bag_card_fields",
+                    ),
+                    key=lambda line: line.bounds.x,
+                )
+            )
+            if retry_text is not None:
+                retry_identity = _identity_for_tab(tab, retry_text, description_text)
+                if retry_identity is not None:
+                    name_text = retry_text
+                    identity = retry_identity
         magnifier = self._glyph_match(
             prepared, _MAGNIFIER_TEMPLATE, _reference_offset_region(_MAGNIFIER_SEARCH, card_bounds, image)
         )
@@ -543,6 +557,22 @@ def _owned_count(card_lines: list[_CardLine]) -> int | None:
         match = _OWNED_PATTERN.fullmatch(card_line.line.text.strip())
         if match is not None:
             return parse_grouped_integer(match.group(1))
+    return None
+
+
+def _identity_for_tab(
+    tab: BagTab, name_text: str | None, description_text: str | None,
+) -> BagItemIdentity | None:
+    """Resolve both initial and retry reads under the selected item's family."""
+
+    if tab == BagTab.TREASURE:
+        return treasure_identity_for_label(name_text)
+    if tab == BagTab.MILITARY:
+        return _military_identity(name_text, description_text)
+    if tab == BagTab.MISC:
+        return _misc_identity(name_text, description_text)
+    if tab == BagTab.SPEEDUP:
+        return _speedup_identity(name_text, description_text)
     return None
 
 

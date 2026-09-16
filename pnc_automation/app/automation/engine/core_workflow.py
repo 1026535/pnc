@@ -920,6 +920,22 @@ class WorkflowContext:
 
         return self._observe_operation_content(label, operation="Bag")
 
+    def open_campaign_chapter(self, chapter_number: int) -> Observation:
+        """Open one observed unlocked Campaign chapter row and confirm its path identity."""
+
+        try:
+            return self._runtime.navigation.open_campaign_chapter(
+                chapter_number,
+                observe_content=self._observe_campaign_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_campaign_content(self, label: str) -> Observation:
+        """Capture fresh Campaign content for one constrained chapter operation."""
+
+        return self._observe_operation_content(label, operation="Campaign")
+
     def select_chat_channel(self, channel: ChatChannel) -> Observation:
         """Select one typed chat channel and require fresh content confirming it."""
 

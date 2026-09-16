@@ -87,6 +87,17 @@ class _DecodedTemplate:
         object.__setattr__(self, "alpha", alpha_owned)
 
 
+@dataclass(frozen=True, slots=True)
+class _MatchContext:
+    """Shared prepared inputs for one bounded template search."""
+
+    frame: PreparedFrame
+    region: Bounds
+    decoded: _DecodedTemplate
+    source: np.ndarray
+    response: np.ndarray
+
+
 class DecodedTemplateCache:
     """Thread-safe bounded cache for successfully decoded template images."""
 
@@ -207,6 +218,120 @@ class OpenCvTemplateMatcher:
         """
 
         _validate_threshold(threshold)
+        context = self._match_context(
+            image,
+            template_path,
+            search_region=search_region,
+            reference_size=reference_size,
+        )
+        if context is None:
+            return None
+        qualified = _qualified_candidates(
+            context.response,
+            source=context.source,
+            template=context.decoded.rgb,
+            alpha=context.decoded.alpha,
+            threshold=threshold,
+        )
+        if not qualified:
+            return None
+        match_x, match_y, _correlation, confidence = max(qualified, key=lambda item: item[3])
+        template_height, template_width = context.decoded.rgb.shape[:2]
+        return TemplateMatch(
+            bounds=_match_bounds(
+                frame=context.frame,
+                region=context.region,
+                x=match_x,
+                y=match_y,
+                width=template_width,
+                height=template_height,
+            ),
+            confidence=confidence,
+        )
+
+    def find_matches(
+        self,
+        image: Image.Image | PreparedFrame,
+        template_path: Path,
+        *,
+        threshold: float,
+        search_region: Bounds | None = None,
+        reference_size: tuple[int, int] | None = None,
+        max_matches: int = 8,
+    ) -> tuple[TemplateMatch, ...]:
+        """Return up to ``max_matches`` non-overlapping candidates above ``threshold``.
+
+        Every qualified candidate in the same bounded top-correlation set used
+        by ``find_best_match`` is scored by confidence first; suppression and
+        truncation then apply in descending confidence order. A candidate is
+        suppressed when its center falls inside an accepted match's half-size
+        neighborhood, so repeated glyphs must be separated by more than half a
+        template edge. Results are deterministic for a given frame.
+        """
+
+        _validate_threshold(threshold)
+        if isinstance(max_matches, bool) or not isinstance(max_matches, int) or max_matches <= 0:
+            raise ValueError("max_matches must be a positive integer.")
+        context = self._match_context(
+            image,
+            template_path,
+            search_region=search_region,
+            reference_size=reference_size,
+        )
+        if context is None:
+            return ()
+        qualified = _qualified_candidates(
+            context.response,
+            source=context.source,
+            template=context.decoded.rgb,
+            alpha=context.decoded.alpha,
+            threshold=threshold,
+        )
+        template_height, template_width = context.decoded.rgb.shape[:2]
+        half_width = template_width / 2.0
+        half_height = template_height / 2.0
+        ranked = sorted(
+            qualified,
+            key=lambda item: (-item[3], -item[2], item[1], item[0]),
+        )
+        accepted: list[tuple[int, int, float]] = []
+        for match_x, match_y, _correlation, confidence in ranked:
+            center_x = match_x + half_width
+            center_y = match_y + half_height
+            if any(
+                abs(center_x - (other_x + half_width)) < half_width
+                and abs(center_y - (other_y + half_height)) < half_height
+                for other_x, other_y, _ in accepted
+            ):
+                continue
+            accepted.append((match_x, match_y, confidence))
+            if len(accepted) >= max_matches:
+                break
+        return tuple(
+            TemplateMatch(
+                bounds=_match_bounds(
+                    frame=context.frame,
+                    region=context.region,
+                    x=match_x,
+                    y=match_y,
+                    width=template_width,
+                    height=template_height,
+                ),
+                confidence=confidence,
+            )
+            for match_x, match_y, confidence in accepted
+        )
+
+    def _match_context(
+        self,
+        image: Image.Image | PreparedFrame,
+        template_path: Path,
+        *,
+        search_region: Bounds | None,
+        reference_size: tuple[int, int] | None,
+    ) -> _MatchContext | None:
+        """Resolve the shared frame, region, template, and correlation response."""
+
         frame = self._coerce_frame(image, reference_size=reference_size)
         if frame is None:
             return None
@@ -226,42 +351,18 @@ class OpenCvTemplateMatcher:
         template_height, template_width = decoded.rgb.shape[:2]
         if template_width > region.width or template_height > region.height:
             return None
-
         source = frame.pixels[
             region.y : region.y + region.height,
             region.x : region.x + region.width,
         ]
         response = _correlation_response(source, decoded.rgb, decoded.alpha)
-        best = _select_best_candidate(
-            response,
+        return _MatchContext(
+            frame=frame,
+            region=region,
+            decoded=decoded,
             source=source,
-            template=decoded.rgb,
-            alpha=decoded.alpha,
-            threshold=threshold,
+            response=response,
         )
-        if best is None:
-            return None
-
-        match_x, match_y, confidence = best
-        reference_x = region.x + match_x
-        reference_y = region.y + match_y
-        if frame.original_size == frame.reference_size:
-            bounds = Bounds(
-                x=reference_x,
-                y=reference_y,
-                width=template_width,
-                height=template_height,
-            )
-        else:
-            bounds = _project_bounds(
-                x=reference_x,
-                y=reference_y,
-                width=template_width,
-                height=template_height,
-                original_size=frame.original_size,
-                reference_size=frame.reference_size,
-            )
-        return TemplateMatch(bounds=bounds, confidence=confidence)
 
     def _coerce_frame(
         self,
@@ -409,24 +510,32 @@ def _correlation_response(
     return np.clip(np.nan_to_num(result, nan=-1.0), 0.0, 1.0)
 
 
-def _select_best_candidate(
+def _qualified_candidates(
     response: np.ndarray,
     *,
     source: np.ndarray,
     template: np.ndarray,
     alpha: np.ndarray,
     threshold: float,
-) -> tuple[int, int, float] | None:
+) -> list[tuple[int, int, float, float]]:
+    """Score every bounded candidate above ``threshold``.
+
+    Returns ``(x, y, correlation, confidence)`` tuples in descending
+    correlation order. Confidence is ``min(correlation, color_closeness)``,
+    so callers that rank or suppress candidates must order by confidence,
+    not by the correlation score alone.
+    """
+
     finite_response = np.nan_to_num(response, nan=-1.0, posinf=-1.0, neginf=-1.0)
     flat = finite_response.ravel()
     if not flat.size:
-        return None
+        return []
 
     candidate_count = min(_MAX_CANDIDATES_TO_CHECK, flat.size)
     candidate_indices = np.argpartition(flat, -candidate_count)[-candidate_count:]
     candidate_indices = candidate_indices[np.argsort(flat[candidate_indices])[::-1]]
 
-    best: tuple[int, int, float] | None = None
+    qualified: list[tuple[int, int, float, float]] = []
     response_width = response.shape[1]
     for index in candidate_indices:
         y, x = divmod(int(index), response_width)
@@ -438,9 +547,33 @@ def _select_best_candidate(
         confidence = min(correlation, color_closeness)
         if confidence < threshold:
             continue
-        if best is None or confidence > best[2]:
-            best = (x, y, confidence)
-    return best
+        qualified.append((x, y, correlation, confidence))
+    return qualified
+
+
+def _match_bounds(
+    *,
+    frame: PreparedFrame,
+    region: Bounds,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> Bounds:
+    """Project one accepted candidate into original screenshot coordinates."""
+
+    reference_x = region.x + x
+    reference_y = region.y + y
+    if frame.original_size == frame.reference_size:
+        return Bounds(x=reference_x, y=reference_y, width=width, height=height)
+    return _project_bounds(
+        x=reference_x,
+        y=reference_y,
+        width=width,
+        height=height,
+        original_size=frame.original_size,
+        reference_size=frame.reference_size,
+    )
 
 
 def _color_closeness(candidate: np.ndarray, template: np.ndarray, alpha: np.ndarray) -> float:

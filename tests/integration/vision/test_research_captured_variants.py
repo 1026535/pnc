@@ -22,7 +22,7 @@ from pnc_automation.app.pnc.vision.selectors import build_default_selector_regis
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult, OcrTextOrientation
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.paths import TEST_DATA_ROOT
@@ -42,7 +42,10 @@ class _BoundedOcrService:
     lines: tuple[OcrLine, ...]
     calls: list[Bounds | None] = field(default_factory=list)
 
-    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+    def read_result(
+        self, image: Image.Image, region: Bounds | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> OcrResult:
         """Return only lines contained by the requested crop."""
 
         self.calls.append(region)

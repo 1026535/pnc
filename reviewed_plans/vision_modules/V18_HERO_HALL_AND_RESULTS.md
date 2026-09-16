@@ -21,3 +21,26 @@ Reuse Hero Hall functions/profile data in `app/pnc/vision`, typed observation an
 Extend captured Hero Hall/result tests through real production OCR planning and both publishers. Require the correct result identity/content, owned controls, no paid-action inheritance and no replay after an uncertain/committed result. Use saved transaction evidence; do not manufacture a new result.
 
 Start `py tools/run_tests.py group unit.app.pnc.vision`, then affected checks including the existing Hero Hall operation/receipt consumer. One core-runtime live route may inspect Home → Hero Hall → Home. If a saved-result boundary was changed, qualify it offline and state that current live result proof is unavailable unless an already-present result can be safely acknowledged. Save menu frames/trace. Do not recruit, including a nominally free recruitment, merely to validate the screen parser.
+
+
+## Candidate implementation — 2026-09-16
+
+The lead implemented the settled package after the persistent SWE-2 Max worker
+repeatedly failed with ACP `invalid_argument` before editing. Candidate commit
+`cbd2a37` adds one typed result producer, two reference profiles, both publisher
+bindings and explicit phase-owned acknowledgment in the existing navigation
+and Hero Hall session owners. It preserves the mutation executor and journal.
+
+Before OCR integration, `unit.app.pnc.vision` passed 238 tests. The focused
+consumer/profile checks passed, including the real WorkflowContext observation
+boundary, retention before acknowledgment, paid-button exclusion and no replay.
+Saved native results now pass through both publishers with the integrated real
+OCR backend: Albertus with two stars, and Albertus Frag. quantity 10, Items left 8,
+next Recruit cost 1. Cross-phase/menu and missing-control negatives pass.
+Home → Hero Hall → Home passed on mega_old_acc, K157 / NPC 2 / level 22,
+in runtime `20260916T185736Z_14d3e76b`. The lead inspected menu frame 0079 and
+final Home frame 0084. No recruitment or spending occurred; the canonical
+reservation was released and the pre-existing instance preserved. The combined
+affected/full check remains pending. This is
+an implementation record, not acceptance. The saved result boundaries have no
+new live result or independent holdout; no recruitment will create one.

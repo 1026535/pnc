@@ -3059,6 +3059,61 @@
       "layout_id": "campaign_chapter_10"
     },
     {
+      "id": "campaign_chapter_6",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_chapter_6_path_title.png",
+          "search_region": [
+            225,
+            35,
+            315,
+            65
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_chapter_6_path_terrain.png",
+          "search_region": [
+            95,
+            105,
+            180,
+            95
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_BACK_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_back_button.png",
+            "search_region": [
+              450,
+              760,
+              85,
+              70
+            ],
+            "threshold": 0.85
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_chapter_6_path.png",
+        "decoded_sha256": "180e1cfea3856c7ef79fd332f9c695732a6010cd0eac54639a9e4f6b6cec2857",
+        "capture_group": "2026-08-28/mega_old_acc/campaign_chapter_6"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Chapter 6 Campaign path evidence only: the title and upper-terrain anchors are bound to the observed Marsh of Tear layout on the mega_old_acc account; no all-chapters claim is made.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "campaign_chapter_6"
+    },
+    {
       "id": "campaign_map_chapter_6",
       "screen": "PNC_CAMPAIGN_MAP",
       "anchors": [
@@ -4928,7 +4983,7 @@
       "id": "campaign_map_southern_view",
       "layout_id": "campaign_map",
       "screen": "PNC_CAMPAIGN_MAP",
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_map_southern_view_20260916.png",
         "decoded_sha256": "3ecd28ef81e61596428f3d1f61c4c5bc580d42076b6e72c483adf0bbe08e86fc",
@@ -4936,7 +4991,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Current persisted southern Campaign map position, independently identified by the Costa Dorad and Misty Bay chapter rows. Reuses the existing measured Home portal; the observed rows do not imply an active chapter or mode.",
+        "description": "Observed southern Campaign map and its post-chapter recentered position. Both distinct Costa Dorad and Misty Bay row anchors are searched within the map body, independently of their scroll position. Retains measured Home portal; no chapter/mode inferred.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -4945,22 +5000,22 @@
         {
           "image": "screen_anchors/campaign_map_costa_dorad.png",
           "search_region": [
-            88,
-            355,
-            166,
-            54
+            0,
+            160,
+            465,
+            675
           ],
-          "threshold": 0.95
+          "threshold": 0.9
         },
         {
           "image": "screen_anchors/campaign_map_misty_bay.png",
           "search_region": [
+            0,
             160,
-            672,
-            166,
-            52
+            465,
+            675
           ],
-          "threshold": 0.95
+          "threshold": 0.9
         }
       ],
       "controls": [
@@ -5021,6 +5076,61 @@
       "controls": []
     },
     {
+      "id": "campaign_chapter_5",
+      "layout_id": "campaign_chapter_5",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_chapter_5_path_20260916.png",
+        "decoded_sha256": "3cf488da9756a81778d069c4247df536bdf24db985f362a32b159ecb6d8ce463",
+        "capture_group": "2026-09-16/mega_old_acc/v13_chapter5"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Live-observed Costa Dorad path title and independent lower coastline; recognizes the empty entrance animation without inventing stages. Back is separately measured. Only Chapter5 is qualified.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_chapter_5_title.png",
+          "search_region": [
+            250,
+            35,
+            290,
+            65
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_chapter_5_coast.png",
+          "search_region": [
+            125,
+            662,
+            188,
+            88
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_BACK_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_back_button.png",
+            "search_region": [
+              450,
+              760,
+              85,
+              70
+            ],
+            "threshold": 0.82
+          }
+        }
+      ]
+},
+{
       "id": "trial_gear_applicable_stats",
       "layout_id": "trial_applicable_stats",
       "screen": "PNC_TRIAL_APPLICABLE_STATS",

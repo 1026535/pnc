@@ -13,6 +13,7 @@ from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCast
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity, CampaignNodeFacts
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.mail import MailboxType
@@ -170,6 +171,7 @@ class DetectedListEntry:
     row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED
     action_bounds: Bounds | None = None
     research_facts: ResearchNodeFacts | None = None
+    campaign_node: CampaignNodeFacts | None = None
     trial_card_facts: TrialCardFacts | None = None
     bag_item_facts: BagItemFacts | None = None
     bag_reward_facts: BagPreviewRewardFacts | None = None
@@ -180,6 +182,8 @@ class DetectedListEntry:
     def __post_init__(self) -> None:
         """Require independently bounded action geometry for complete actionable rows."""
 
+        if self.campaign_node is not None and not isinstance(self.campaign_node, CampaignNodeFacts):
+            raise TypeError("campaign_node must be a CampaignNodeFacts value or None.")
         if self.row_status != RowRecognitionStatus.COMPLETE:
             return
         if self.action_point is None or self.action_bounds is None:
@@ -514,6 +518,7 @@ class Observation:
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
     active_bag_tab: BagTab | None = None
+    campaign_chapter: CampaignChapterIdentity | None = None
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
@@ -549,6 +554,7 @@ class Observation:
         available_march_slots: int | None = None,
         active_chat_channel: ChatChannel | None = None,
         active_bag_tab: BagTab | None = None,
+        campaign_chapter: CampaignChapterIdentity | None = None,
         profile_player_name: str | None = None,
         mailbox_type: MailboxType | None = None,
         mailbox_empty: bool | None = None,
@@ -607,6 +613,7 @@ class Observation:
             "available_march_slots": available_march_slots,
             "active_chat_channel": active_chat_channel,
             "active_bag_tab": active_bag_tab,
+            "campaign_chapter": campaign_chapter,
             "profile_player_name": profile_player_name,
             "mailbox_type": mailbox_type,
             "mailbox_empty": mailbox_empty,

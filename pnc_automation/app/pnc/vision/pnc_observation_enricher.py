@@ -43,10 +43,9 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.alliance_member_rows import parse_alliance_member_rows
+from pnc_automation.app.pnc.vision.campaign import build_campaign_additions
 from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
-    CAMPAIGN_CHAPTER_STAGE_THREE_ROW,
     CAMPAIGN_CHAPTER_TITLE_REGION,
-    CAMPAIGN_MAP_CHAPTER_ROW,
     scale_campaign_bounds,
 )
 from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
@@ -100,6 +99,7 @@ from pnc_automation.app.pnc.vision.observation_request import (
     world_map_coordinate_dialog_text_field_selector_ids,
 )
 from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
@@ -294,8 +294,6 @@ _RESEARCH_QUEUE_SUPPORT_TEXTS = frozenset({"GO", "IDLE"})
 _BUILD_QUEUE_ACTIVE_TITLE_PATTERN = re.compile(r"^\s*UPGRADING\s*[:.]?\s*(?P<title>.+?)\s*$", re.IGNORECASE)
 _QUEUE_TIMER_PATTERN = re.compile(r"^\d{1,2}:\d{2}:\d{2}$")
 _CURRENCY_TEXT_PATTERN = re.compile(r"\$\s*\d+(?:[.,]\d+)?")
-_CAMPAIGN_MAP_CHAPTER_TITLE = "10GRANDIARUINS"
-_CAMPAIGN_CHAPTER_TITLE = "CH10GRANDIARUINS"
 _DAILY_TO_DO_SECTION_TEXTS = frozenset(
     {
         "CAMP",
@@ -1726,6 +1724,7 @@ class PncObservationEnricher:
     trial_producer: TrialContentProducer = field(default_factory=TrialContentProducer)
     bag_item_producer: BagItemContentProducer = field(default_factory=BagItemContentProducer)
     building_producer: BuildingContentProducer = field(default_factory=BuildingContentProducer)
+    template_matcher: OpenCvTemplateMatcher | None = None
 
     def content_labels(
         self,
@@ -2091,6 +2090,16 @@ class PncObservationEnricher:
         )
         if hero_result is not None:
             return hero_result
+        if request.allows_screen(screen_type) and screen_type in {
+            ScreenType.PNC_CAMPAIGN_MAP,
+            ScreenType.PNC_CAMPAIGN_CHAPTER,
+        }:
+            return build_campaign_additions(
+                image=image,
+                screen_type=screen_type,
+                ocr_context=ocr_context,
+                template_matcher=self.template_matcher,
+            )
         trial_additions = self.trial_producer.additions_for_screen(
             image=image,
             screen_type=screen_type,
@@ -2314,14 +2323,6 @@ class PncObservationEnricher:
             build_speedup = _build_build_speedup_additions(image=image, lines=lines)
             if build_speedup is not None:
                 return build_speedup
-        campaign = _build_campaign_additions(
-            image=image,
-            lines=lines,
-            screen_type=screen_type,
-            visible_elements=visible_elements,
-        )
-        if campaign is not None:
-            return campaign
         text_screen = _build_matching_text_screen_additions(
             image=image,
             lines=lines,
@@ -8016,64 +8017,6 @@ def _bounded_edit_distance(*, left: str, right: str, max_distance: int) -> int:
     return previous_row[-1]
 
 
-def _build_campaign_additions(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-    screen_type: ScreenType,
-    visible_elements: Mapping[UiElementId, VisibleElement],
-) -> ObservationAdditions | None:
-    """Returns only the Campaign facts proved by the reviewed screen profile."""
-
-    if screen_type == ScreenType.PNC_CAMPAIGN_MAP:
-        title_region = scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, image.size)
-        # The numbered badge and name are separate OCR lines on the real frame.
-        title = "".join(
-            normalize_ocr_text(line.text)
-            for line in sorted(lines, key=lambda item: item.bounds.x)
-            if title_region.contains_bounds(line.bounds)
-        )
-        if title != _CAMPAIGN_MAP_CHAPTER_TITLE:
-            return ObservationAdditions()
-        entry = DetectedListEntry(
-            kind=ListEntryKind.CAMPAIGN_CHAPTER,
-            bounds=title_region,
-            title_text="10 Grandia Ruins",
-            action_point=title_region.center(),
-            metadata={"chapter_number": 10},
-            row_status=RowRecognitionStatus.COMPLETE,
-            action_bounds=title_region,
-        )
-        return ObservationAdditions(list_entries=(entry,))
-
-    if screen_type == ScreenType.PNC_CAMPAIGN_CHAPTER:
-        header = _find_line_matching(
-            lines=lines,
-            predicate=lambda line: normalize_ocr_text(line.text) == _CAMPAIGN_CHAPTER_TITLE,
-        )
-        header_region = scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, image.size)
-        row_region = scale_campaign_bounds(CAMPAIGN_CHAPTER_STAGE_THREE_ROW, image.size)
-        stage = visible_elements.get(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE)
-        if (
-            header is None
-            or not header_region.contains_bounds(header.bounds)
-            or stage is None
-            or not row_region.contains_bounds(stage.bounds)
-            or stage.source_kind != VisibleElementSourceKind.TEMPLATE
-        ):
-            return ObservationAdditions()
-        entry = DetectedListEntry(
-            kind=ListEntryKind.CAMPAIGN_STAGE,
-            bounds=row_region,
-            title_text="3",
-            action_point=row_region.center(),
-            metadata={"chapter_number": 10, "stage_number": 3},
-            row_status=RowRecognitionStatus.COMPLETE,
-            action_bounds=row_region,
-        )
-        return ObservationAdditions(list_entries=(entry,))
-
-    return None
 
 
 def _has_loading_support(lines: tuple[OcrLine, ...]) -> bool:

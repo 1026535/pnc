@@ -14,11 +14,6 @@ from pnc_automation.app.pnc.vision.daily_quest_rows import daily_quest_body_boun
 from pnc_automation.app.pnc.domain.screen_decision import is_reviewed_viewport
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.bag_layout import bag_body_bounds_for_size
-from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
-    CAMPAIGN_CHAPTER_TITLE_REGION,
-    CAMPAIGN_MAP_CHAPTER_ROW,
-    scale_campaign_bounds,
-)
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import (
@@ -55,7 +50,7 @@ class OcrRegionPreprocessing(StrEnum):
 
     RAW = "raw"
     RGB = "rgb"
-    RGB_3X = "rgb_3x"
+    RGB_REFERENCE_3X = "rgb_reference_3x"
 
 
 class OcrRegionReadStatus(StrEnum):
@@ -296,24 +291,9 @@ def compile_screen_content_ocr_region_plans(
             )
         else:
             return ()
-    if resolved_screen == ScreenType.PNC_CAMPAIGN_MAP:
-        campaign_region = CAMPAIGN_MAP_CHAPTER_ROW
-        campaign_fact = "campaign_chapter_row"
-    elif resolved_screen == ScreenType.PNC_CAMPAIGN_CHAPTER:
-        campaign_region = CAMPAIGN_CHAPTER_TITLE_REGION
-        campaign_fact = "campaign_chapter_title"
-    else:
-        campaign_region = None
-    if campaign_region is not None:
-        # Stage ownership is already proved by its template; only its chapter
-        # title is an OCR input to the existing Campaign row parser.
-        return (OcrRegionPlan(
-            family=resolved_screen,
-            purpose=OcrRegionPurpose.SCREEN_FIELDS,
-            bounds=scale_campaign_bounds(campaign_region, image_size),
-            required_fact=campaign_fact,
-            failure_policy=OcrRegionFailurePolicy.ABSTAIN,
-        ),)
+    if resolved_screen in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_CHAPTER}:
+        # The Campaign producer owns its candidate-local bounded reads.
+        return ()
     if resolved_screen in {ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}:
         # Their canonical parsers own the body and per-row resegmentation.
         regions = (("selected_tab_labels", 0.0, 0.055, 1.0, 0.10),)
@@ -368,7 +348,7 @@ def compile_screen_content_ocr_region_plans(
             ),
             bounds=Bounds(round(x * width), round(y * height), round(w * width), round(h * height)),
             required_fact=fact, failure_policy=OcrRegionFailurePolicy.OMIT,
-            preprocessing=(OcrRegionPreprocessing.RGB_3X
+            preprocessing=(OcrRegionPreprocessing.RGB_REFERENCE_3X
                            if resolved_screen == ScreenType.PNC_CASTLE
                            else OcrRegionPreprocessing.RAW),
         )
@@ -393,14 +373,14 @@ def execute_ocr_region_plans(
         if plan.fallback_reason is not None:
             detail += f";fallback={plan.fallback_reason}"
         try:
-            if plan.preprocessing in {OcrRegionPreprocessing.RGB, OcrRegionPreprocessing.RGB_3X}:
+            if plan.preprocessing in {OcrRegionPreprocessing.RGB, OcrRegionPreprocessing.RGB_REFERENCE_3X}:
                 result = ocr_context.read_preprocessed_result(
                     image,
                     plan.bounds,
                     preprocessing_id=f"ocr_region_{plan.preprocessing.value}_v1",
                     prepare=(
-                        _prepare_rgb_3x_region
-                        if plan.preprocessing == OcrRegionPreprocessing.RGB_3X
+                        _prepare_rgb_reference_3x_region
+                        if plan.preprocessing == OcrRegionPreprocessing.RGB_REFERENCE_3X
                         else _prepare_rgb_region
                     ),
                     purpose=plan.read_purpose,
@@ -447,11 +427,18 @@ def _prepare_rgb_region(image: Image.Image, region: Bounds) -> Image.Image:
     return image.crop((region.x, region.y, region.x + region.width, region.y + region.height)).convert("RGB")
 
 
-def _prepare_rgb_3x_region(image: Image.Image, region: Bounds) -> Image.Image:
-    """Enlarge only the owned numeric field; the OCR context restores native bounds."""
+def _prepare_rgb_reference_3x_region(image: Image.Image, region: Bounds) -> Image.Image:
+    """Read a fixed field at three times its 540×960 reference dimensions.
+
+    Native 3x scaling over-enlarges the 900px Castle field and loses its slash
+    with the qualified recognizer. A consistent glyph size works at both
+    reviewed viewports; the OCR context restores the original native bounds.
+    """
 
     crop = _prepare_rgb_region(image, region)
-    return crop.resize((crop.width * 3, crop.height * 3), Image.Resampling.LANCZOS)
+    target_size = (round(crop.width * 540 / image.width) * 3,
+                   round(crop.height * 960 / image.height) * 3)
+    return crop.resize(target_size, Image.Resampling.LANCZOS)
 
 
 def compile_ocr_region_plans(

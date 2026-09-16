@@ -11,7 +11,7 @@ from pnc_automation.app.pnc.domain.research import (
 )
 from pnc_automation.app.pnc.vision.research import ResearchContentProducer
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrTextOrientation
 
 
 class ResearchCategoryFactsTests(unittest.TestCase):
@@ -27,6 +27,41 @@ class ResearchCategoryFactsTests(unittest.TestCase):
         self.assertEqual(ResearchNodeId.DEFENDER_ATK_I, research_node_for_label(
             "Defender ATK\nI", category=ResearchCategory.FORTIFICATION,
         ))
+
+    def test_label_fragments_read_left_to_right_and_wrapped_rows_read_top_down(self):
+        producer = ResearchContentProducer()
+        for lines, expected in (
+            ((OcrLine("Speedi", Bounds(443, 289, 101, 33), .89),
+              OcrLine("March", Bounds(366, 290, 90, 29), .85)), ResearchNodeId.MARCH_SPEED_I),
+            ((OcrLine("Survival I", Bounds(395, 914, 121, 29), .87),
+              OcrLine("Miraculous", Bounds(384, 889, 140, 30), .99)), ResearchNodeId.MIRACULOUS_SURVIVAL_I),
+        ):
+            with self.subTest(expected=expected):
+                context = Mock()
+                context.read_lines.return_value = lines
+                candidate = producer._node_candidate(
+                    image=Image.new("RGB", (900, 1600)), component=Bounds(365, 278, 179, 59),
+                    ocr_context=context, category=None,
+                )
+                self.assertEqual(expected, candidate.node_id)
+                self.assertEqual(OcrTextOrientation.UPRIGHT,
+                                 context.read_lines.call_args.kwargs["orientation"])
+                context.read_preprocessed_result.assert_not_called()
+
+    def test_label_retry_preserves_upright_contract_and_abstains_on_partial_words(self):
+        context = Mock()
+        context.read_lines.return_value = (OcrLine("Food", Bounds(369, 304, 72, 28), .99),)
+        context.read_preprocessed_result.return_value = OcrResult(
+            lines=context.read_lines.return_value, words=(),
+        )
+        candidate = ResearchContentProducer()._node_candidate(
+            image=Image.new("RGB", (900, 1600)), component=Bounds(365, 294, 179, 55),
+            ocr_context=context, category=ResearchCategory.ECONOMY,
+        )
+        self.assertIsNone(candidate.node_id)
+        context.read_preprocessed_result.assert_called_once()
+        self.assertEqual(OcrTextOrientation.UPRIGHT,
+                         context.read_preprocessed_result.call_args.kwargs["orientation"])
 
     def test_level_badges_have_one_owned_coherent_interpretation(self):
         image = Image.new("RGB", (540, 960))
@@ -50,7 +85,36 @@ class ResearchCategoryFactsTests(unittest.TestCase):
                     image=image, icon_bounds=Bounds(100, 100, 100, 100), ocr_context=context,
                 )
                 self.assertEqual(expected, actual)
-                self.assertEqual(1, context.read_lines.call_count)
+                expected_reads = 2 if texts in (("4/3",), ("M AXIMUM",), ()) else 1
+                self.assertEqual(expected_reads, context.read_lines.call_count)
+
+    def test_split_counter_and_one_bounded_retry_keep_maximum_semantics(self):
+        producer = ResearchContentProducer()
+        split = (
+            OcrLine("/3", Bounds(116, 100, 20, 20), 1.0),
+            OcrLine("3", Bounds(100, 100, 16, 20), 1.0),
+        )
+        fragmented = (
+            OcrLine("1", Bounds(100, 100, 12, 20), .89),
+            OcrLine("13", Bounds(112, 100, 24, 20), .84),
+        )
+        for reads, expected_calls in (([split], 1), ([(), split], 2), ([fragmented, split], 2)):
+            with self.subTest(expected_calls=expected_calls):
+                context = Mock()
+                context.read_lines.side_effect = reads
+                self.assertEqual((3, 3, True), producer._read_node_level(
+                    image=Image.new("RGB", (540, 960)),
+                    icon_bounds=Bounds(100, 100, 100, 100), ocr_context=context,
+                ))
+                self.assertEqual(expected_calls, context.read_lines.call_count)
+                if expected_calls == 2:
+                    first_region = context.read_lines.call_args_list[0].args[1]
+                    retry_region = context.read_lines.call_args_list[1].args[1]
+                    self.assertEqual(first_region.x, retry_region.x)
+                    self.assertEqual(first_region.y, retry_region.y)
+                    self.assertEqual(first_region.width, retry_region.width)
+                    self.assertLess(retry_region.height, first_region.height)
+                    self.assertTrue(first_region.contains_bounds(retry_region))
 
     def test_maximum_fact_does_not_require_an_invented_numeric_cap(self):
         facts = ResearchNodeFacts(maximum_reached=True)

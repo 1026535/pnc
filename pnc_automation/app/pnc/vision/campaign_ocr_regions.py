@@ -8,14 +8,8 @@ from pnc_automation.core.vision.image.models import Bounds
 CAMPAIGN_REFERENCE_SIZE: tuple[int, int] = (540, 960)
 """Reference viewport used to measure the reviewed Campaign regions."""
 
-CAMPAIGN_MAP_CHAPTER_ROW = Bounds(x=194, y=454, width=151, height=50)
-"""Measured chapter title row on the Campaign map."""
-
 CAMPAIGN_CHAPTER_TITLE_REGION = Bounds(x=205, y=38, width=325, height=60)
 """Measured chapter title header region on the Campaign chapter screen."""
-
-CAMPAIGN_CHAPTER_STAGE_THREE_ROW = Bounds(x=293, y=576, width=59, height=74)
-"""Measured stage-three row on the reviewed chapter screen."""
 
 
 def scale_campaign_bounds(bounds: Bounds, image_size: tuple[int, int]) -> Bounds:

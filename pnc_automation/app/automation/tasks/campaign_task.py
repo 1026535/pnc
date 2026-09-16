@@ -16,8 +16,14 @@ from pnc_automation.app.automation.engine.task import (
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
-from pnc_automation.app.pnc.domain.policy_models import CampaignMode, CampaignPolicy
+from pnc_automation.app.pnc.domain.campaign import CampaignMode
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    RowRecognitionStatus,
+)
+from pnc_automation.app.pnc.domain.policy_models import CampaignPolicy
 from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -63,11 +69,11 @@ class CampaignTask(BaseAutomationTask):
                 )
             ]
 
-        candidates = observation.entries(ListEntryKind.CAMPAIGN_STAGE)
+        candidates = _eligible_stages(observation, context.params.enabled_modes)
         target = choose_priority_entry(
             candidates,
             context.params.enabled_modes,
-            key_selector=lambda entry: CampaignMode(str(entry.require_metadata("mode"))),
+            key_selector=lambda entry: entry.campaign_node.mode if entry.campaign_node is not None else None,
         )
         if target is None:
             return []
@@ -91,13 +97,40 @@ class CampaignTask(BaseAutomationTask):
             return TaskResult.failure("Campaign task could not reach the campaign flow.", retryable=True)
         if before.screen_type == ScreenType.PNC_BATTLE_PREP:
             return TaskResult.skipped("Campaign battle preparation was already open.")
-        if before.screen_type == ScreenType.PNC_CAMPAIGN_MAP and not before.entries(ListEntryKind.CAMPAIGN_STAGE):
+        if before.screen_type in {
+            ScreenType.PNC_CAMPAIGN_MAP,
+            ScreenType.PNC_CAMPAIGN_CHAPTER,
+        } and not _eligible_stages(before, context.params.enabled_modes):
             return TaskResult.skipped("No eligible campaign stages were visible.")
         if after.screen_type == ScreenType.PNC_BATTLE_PREP:
             return TaskResult.success("Campaign advanced to battle preparation.")
         if before.screen_type == ScreenType.PNC_CAMPAIGN_MAP and after.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
             return TaskResult.replan("Opened campaign stage details.")
         return TaskResult.failure("Campaign did not produce a verified state change.", retryable=True)
+
+
+def _eligible_stages(
+    observation: Observation, enabled_modes: tuple[CampaignMode, ...]
+) -> tuple[DetectedListEntry, ...]:
+    """Stage rows safe to plan or verify against on either campaign surface.
+
+    Eligibility requires a COMPLETE row (which already proves measured action
+    geometry), typed node facts with an observed positive stage number,
+    ``locked is False``, and an observed mode configured for this run. Unknown
+    or unsupported evidence is skipped rather than converted to a default.
+    """
+
+    return tuple(
+        entry
+        for entry in observation.entries(ListEntryKind.CAMPAIGN_STAGE)
+        if entry.row_status == RowRecognitionStatus.COMPLETE
+        and entry.campaign_node is not None
+        and entry.campaign_node.stage_number is not None
+        and entry.campaign_node.locked is False
+        and entry.campaign_node.mode in enabled_modes
+        and entry.action_point is not None
+        and entry.action_bounds is not None
+    )
 
 
 def _tap_entry(entry: object, *, kind: ListEntryKind, reason: str) -> TapListEntryAction:
