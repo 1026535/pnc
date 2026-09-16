@@ -139,6 +139,67 @@ Home identity therefore does not prove building acquisition; V02–V03 now own
 Home localization/acquisition, with V04 consuming Institute entry. Keep that
 evidence separate from account selection and More/Settings checks.
 
+### September 16 regression: native screenshot drops the selected Hopium row
+
+**Open; reproduced offline on `71272665667baf787538ca8377ed29746d440e22`.**
+This is a concrete package-06 regression, not a new V01–V43 menu assignment.
+During authorized Pet Workshop exploration on `main`, the agent left Workshop,
+returned Home and ran the canonical active-castle preflight. Manage Characters
+clearly showed selected **K157 / NPC on Hopium / C31**, with Hopeful NPC as a
+separate unselected row. The bounded preflight failed with
+`Active castle identity was not found within the bounded roster scan; no castle switch is allowed.`
+Settings displayed build `5.2.80_5.0.204.235`. These identities describe saved
+evidence; they do not allocate a future live target.
+
+The initial description of a missed checkmark was too narrow. The saved OCR
+diagnostic locates the full name in the roster pass, but its authoritative name
+crop splits it into overlapping `NPC` and `on Hopium` lines (another captured
+position yielded `NPC` and `C on Hopium`). `_read_castle_name_field` abstains on
+multiple candidates, so `_build_castle_entry` drops the row before checking its
+marker. Do not fix this by accepting partial names, concatenating overlapping
+fragments or supplying the expected identity from config.
+
+Paired real-RapidOCR replays through **both** `NavigationPerception.build` and
+`ObservationBuilder.build` establish a material input-format difference:
+
+| Same saved frame | Selected identity result |
+| --- | --- |
+| Native BlueStacks PNG, RGBA | `PNC_CASTLE_SELECTION`, `CLEAR`, `manage_char`, but `current_castle=None`; Hopium row omitted |
+| Explicit RGB conversion | Exact `CastleIdentity("K157", "NPC on Hopium", 31)` |
+| Existing marker detector on the selected row | `True` |
+
+The native image has fully opaque alpha. The six canonical castle row/name/
+selection functions are unchanged from the exploration's V01-era checkpoint
+`f1ecc683` to this replay revision. Current captured identity tests convert loaded
+fixtures to RGB; a passing RGB replay therefore does not close this native-input
+failure. This establishes format-sensitive OCR behavior, not a diagnosis of the
+backend's internal conversion. Fix the demonstrated difference at the appropriate
+existing capture/OCR or field-preprocessing owner after tracing that boundary;
+keep one canonical implementation and preserve exact-identity abstention.
+
+Evidence root on the originating host:
+`C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/`.
+The failed frame and its retained OCR diagnostic are respectively
+`20260916T050902Z_core_20260916T050630Z_5fecd708_0021_core_6_castle_roster_scroll_after_0.png`
+and the same stem with `_recognition_gap.json`. An additional position's fragment
+evidence is `20260916T050809Z_core_20260916T050630Z_5fecd708_0015_core_4_castle_roster_scroll_after_0_recognition_gap.json`.
+Replay entry point and results are under
+`C:/Users/lebel/pnc/.local-data/reports/pet-workshop/`: `replay_castle_identity.py`,
+`replay_castle_identity_failed_frame.json` (RGB) and
+`replay_castle_identity_failed_frame_native.json` (native RGBA).
+Pass the failed PNG path to the replay; add `--native` to preserve capture mode.
+These paired replays use the same frame and are not independent holdout captures.
+
+**Closure checks:** retain a mode-preserving captured regression, run real bounded
+OCR through both production publishers and require the exact selected Hopium
+identity from the native input. Preserve wrong-name/kingdom/level and genuinely
+fragmented-name negatives. Investigate the producer boundary before choosing
+the smallest normalization correction; do not mask the issue by converting only
+the test fixture. Fold one fresh production preflight into this package's
+already-required authorized round trip; no additional spending or broad live tour
+is needed. Until those checks pass, this issue remains open even if RGB fixtures
+and other V packets pass.
+
 ## Decisions, target and authority
 
 Bind this proof to the current execution assignment's explicitly authorized
@@ -206,7 +267,8 @@ transfer responsibility back to B.
 ## Remaining implementation sequence
 
 1. **Own the selected-roster and control facts.** Check the saved K157 and bottom
-   row regressions through both real observers. Fix any demonstrated feature
+   row regressions and the native-RGBA Hopium failure above through both real
+   observers. Fix any demonstrated feature
    name/kingdom/level/selection/geometry issue in the canonical producer, with
    feature-specific semantic OCR requests, models/IDs, anchors and tests. Qualify
    a new changed layout on an independent capture group when required; no switch
