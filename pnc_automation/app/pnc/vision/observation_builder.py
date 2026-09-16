@@ -31,6 +31,10 @@ from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
+from pnc_automation.app.pnc.domain.trial_challenge import (
+    TrialApplicableStatsDetail,
+    TrialChallengeSummary,
+)
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     DetectedListEntry,
@@ -64,6 +68,8 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_spatial_surface,
     bind_research_detail,
     bind_research_queue_row,
+    bind_trial_stats_detail,
+    bind_trial_summary,
     bind_visible_elements,
     select_content_labels,
 )
@@ -159,6 +165,8 @@ class ObservationAdditions:
     chat_draft_text: str | None = None
     research_detail: ResearchDetail | None = None
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
+    trial_summary: TrialChallengeSummary | None = None
+    trial_stats_detail: TrialApplicableStatsDetail | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -846,6 +854,26 @@ class ObservationBuilder:
                     source_layout_id=decision.layout_id,
                 )
                 for row in additions.research_queue_rows
+            ),
+            trial_summary=(
+                bind_trial_summary(
+                    additions.trial_summary,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.trial_summary is not None
+                else None
+            ),
+            trial_stats_detail=(
+                bind_trial_stats_detail(
+                    additions.trial_stats_detail,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.trial_stats_detail is not None
+                else None
             ),
             frame_ref=getattr(screenshot, "frame_ref", None),
         )

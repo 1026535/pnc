@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
 from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.trial_challenge import TrialCategory
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     require_building_construction_source,
@@ -339,6 +340,21 @@ class WorkflowContext:
             )
         finally:
             self._sync_from_runtime()
+
+    def open_trial_stats(self, category: TrialCategory) -> Observation:
+        """Open the proved Gear Stats entry and return its fresh detail observation."""
+
+        try:
+            return self._runtime.navigation.open_trial_stats(
+                category, observe_content=self._observe_trial_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_trial_content(self, label: str) -> Observation:
+        """Keep Trial captures fresh; operation owners evaluate their published facts."""
+
+        return self._observe_operation_content(label, operation="Trial")
 
     def _observe_research_content(self, label: str) -> Observation:
         """Keep research captures fresh; operation owners evaluate their published facts."""

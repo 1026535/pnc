@@ -45,6 +45,10 @@ from pnc_automation.app.pnc.domain.research import (
     ResearchNodeId,
     research_node_for_title,
 )
+from pnc_automation.app.pnc.domain.trial_challenge import (
+    TrialCategory,
+    trial_category_title,
+)
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.chat import (
     ChatChannel,
@@ -725,6 +729,59 @@ class NavigationCore:
             ),
         )
 
+    def open_trial_stats(
+        self, category: TrialCategory, *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open one proved category Stats entry and require the matching read-only detail.
+
+        Only Gear Trial's Stats control is a qualified non-spending inspection
+        destination; other categories are explicitly unsupported rather than
+        force-fit to the Gear detail. Completion requires fresh Applicable
+        Stats frames whose bounded footer fact agrees with the selected card.
+        """
+
+        if not isinstance(category, TrialCategory):
+            raise ValueError("Trial Stats inspection requires a TrialCategory.")
+        if category != TrialCategory.GEAR:
+            raise ValueError("Only Gear Trial Stats is a qualified inspection target.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_trial_stats"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_TRIAL_CHALLENGE or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or not any(
+                evidence.reason == "visual_anchor:trial_challenge_live"
+                for evidence in source.decision.evidence
+            )
+        ):
+            raise RuntimeError("Trial Stats inspection requires the proved Trial Challenge list.")
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.TRIAL_CATEGORY)
+            if entry.trial_card_facts is not None
+            and entry.trial_card_facts.category == category
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError("Gear Trial Stats entry is missing, changed or ambiguous; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.TRIAL_CATEGORY,
+                title_text=trial_category_title(category),
+                metadata_key="category", metadata_value=category.value,
+                use_action_point=True, reason="open_trial_stats",
+            ),
+            source, frozenset({ScreenType.PNC_TRIAL_APPLICABLE_STATS}), label, observe_content,
+            completion_predicate=lambda frame: _trial_stats_detail_matches(
+                frame, category=category
+            ),
+        )
+
     def scroll_daily_quest(
         self, *, adjusted: bool, observe_content: Callable[[str], Observation],
     ) -> Observation:
@@ -1325,6 +1382,25 @@ def _research_detail_matches(
     )
 
 
+def _trial_stats_detail_matches(frame: Observation, *, category: TrialCategory) -> bool:
+    """Prove the fresh Applicable Stats detail belongs to the requested category.
+
+    The footer's typed category must agree with the selected source card; an
+    unreadable footer never confirms the wrong destination was not opened.
+    """
+
+    detail = frame.trial_stats_detail
+    return (
+        frame.decision.guard == GuardVerdict.CLEAR
+        and any(
+            evidence.reason == "visual_anchor:trial_gear_applicable_stats"
+            for evidence in frame.decision.evidence
+        )
+        and detail is not None
+        and detail.category == category
+    )
+
+
 def _require_chat_send_source(
     observation: Observation,
     *,
@@ -1486,6 +1562,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_RESEARCH_QUEUE, selector.PNC_RESEARCH_QUEUE_GO, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_INSTITUTE, selector.PNC_INSTITUTE_DEVELOPMENT_BUTTON, frozenset({screen.PNC_RESEARCH_TREE})),
         NavigationEdge(screen.PNC_RESEARCH_TREE, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_INSTITUTE})),
+        NavigationEdge(screen.PNC_TRIAL_APPLICABLE_STATS, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_TRIAL_CHALLENGE})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_COORDINATE_BAR, frozenset({screen.PNC_WORLD_COORDINATE_DIALOG})),
         NavigationEdge(screen.PNC_WORLD_COORDINATE_DIALOG, selector.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON, frozenset({screen.PNC_WORLD_MAP})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_EXPAND_BUTTON, frozenset({screen.PNC_WORLD_MAP_OVERVIEW})),

@@ -34,6 +34,11 @@ if TYPE_CHECKING:
         ResearchNodeFacts,
         ResearchQueueRow,
     )
+    from pnc_automation.app.pnc.domain.trial_challenge import (
+        TrialApplicableStatsDetail,
+        TrialCardFacts,
+        TrialChallengeSummary,
+    )
 
 
 class VisibleElementSourceKind(StrEnum):
@@ -81,6 +86,7 @@ class ListEntryKind(StrEnum):
     RESOURCE_ITEM = "resource_item"
     RESOURCE_INVENTORY_EXCLUSION = "resource_inventory_exclusion"
     RESOURCE_INVENTORY_UNRESOLVED = "resource_inventory_unresolved"
+    TRIAL_CATEGORY = "trial_category"
 
 
 class RowRecognitionStatus(StrEnum):
@@ -155,6 +161,7 @@ class DetectedListEntry:
     row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED
     action_bounds: Bounds | None = None
     research_facts: ResearchNodeFacts | None = None
+    trial_card_facts: TrialCardFacts | None = None
     frame_ref: FrameRef | None = None
     source_screen: ScreenType | None = None
     source_layout_id: str | None = None
@@ -505,6 +512,8 @@ class Observation:
     chat_draft_text: str | None = None
     research_detail: ResearchDetail | None = None
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
+    trial_summary: TrialChallengeSummary | None = None
+    trial_stats_detail: TrialApplicableStatsDetail | None = None
     frame_ref: FrameRef | None = None
 
     def __init__(
@@ -535,6 +544,8 @@ class Observation:
         chat_draft_text: str | None = None,
         research_detail: ResearchDetail | None = None,
         research_queue_rows: tuple[ResearchQueueRow, ...] = (),
+        trial_summary: TrialChallengeSummary | None = None,
+        trial_stats_detail: TrialApplicableStatsDetail | None = None,
         frame_ref: FrameRef | None = None,
         *,
         screen_type: ScreenType | None = None,
@@ -588,6 +599,8 @@ class Observation:
             "chat_draft_text": chat_draft_text,
             "research_detail": research_detail,
             "research_queue_rows": research_queue_rows,
+            "trial_summary": trial_summary,
+            "trial_stats_detail": trial_stats_detail,
             "frame_ref": frame_ref,
         }
         for field_name, value in values.items():

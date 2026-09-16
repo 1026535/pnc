@@ -65,6 +65,7 @@ class ScreenType(StrEnum):
     PNC_RELICS = "pnc_relics"
     PNC_TOWER_OF_TRIAL = "pnc_tower_of_trial"
     PNC_TRIAL_CHALLENGE = "pnc_trial_challenge"
+    PNC_TRIAL_APPLICABLE_STATS = "pnc_trial_applicable_stats"
     PNC_GODDESS_STATUE = "pnc_goddess_statue"
     PNC_BUILD_MENU_FIXED_SLOT = "pnc_build_menu_fixed_slot"
     PNC_BUILD_MENU_LARGE_SLOT = "pnc_build_menu_large_slot"

@@ -1169,6 +1169,19 @@
       "source_artifact": "20260916T084501Z_core_20260916T084241Z_a52974fe_0046_core_13_research_node_after_1.png",
       "source_sha256": "981dd54988926f403b1d1001294bcac5c37efa08b6f3082be587352fe7f465c6",
       "annotation": "Independent later live Infirmary Cap I 5/5 max-detail holdout; no anchor assets came from this frame."
+    },
+    {
+      "image": "trial_gear_stats_20260916.png",
+      "screen": "PNC_TRIAL_APPLICABLE_STATS",
+      "split": "reference",
+      "group": "2026-09-16/mega_old_acc/v15_stats_qualification",
+      "sha256": "e537ec3b42a4d664ce2b2b244d702430e867a68bbb9f080746925b3741d46c89",
+      "expected_visual_screens": [
+        "PNC_TRIAL_APPLICABLE_STATS"
+      ],
+      "source_artifact": "20260916T085752Z_core_20260916T085620Z_8e5a65ab_0030_v15_stats_destination_2.png",
+      "source_sha256": "afa0a7e91acec62fb6a2398d0a436c6d1e994465e2428e06c1551ba690521869",
+      "annotation": "Lead single freshly measured Gear Stats tap; Applicable Stats table, Gear-only footer, nine displayed troop boosts. No trial or reward action."
     }
   ]
 }

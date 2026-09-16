@@ -44,6 +44,7 @@ _SCREEN_FAMILIES = frozenset({
     ScreenType.PNC_RELICS,
     ScreenType.PNC_TOWER_OF_TRIAL,
     ScreenType.PNC_TRIAL_CHALLENGE,
+    ScreenType.PNC_TRIAL_APPLICABLE_STATS,
     ScreenType.PNC_GODDESS_STATUE,
     ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
     ScreenType.PNC_BUILD_MENU_LARGE_SLOT,

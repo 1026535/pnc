@@ -15,6 +15,10 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
+from pnc_automation.app.pnc.domain.trial_challenge import (
+    TrialApplicableStatsDetail,
+    TrialChallengeSummary,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
@@ -221,7 +225,7 @@ def bind_research_detail(
 ) -> ResearchDetail:
     """Adds missing research-detail provenance while rejecting contradictory proof."""
 
-    return _bind_research_fact(
+    return _bind_typed_fact(
         detail,
         frame_ref=frame_ref,
         source_screen=source_screen,
@@ -239,7 +243,7 @@ def bind_research_queue_row(
 ) -> ResearchQueueRow:
     """Adds missing research queue-row provenance while rejecting contradictory proof."""
 
-    return _bind_research_fact(
+    return _bind_typed_fact(
         row,
         frame_ref=frame_ref,
         source_screen=source_screen,
@@ -248,18 +252,60 @@ def bind_research_queue_row(
     )
 
 
-_ResearchFactT = TypeVar("_ResearchFactT", ResearchDetail, ResearchQueueRow)
+def bind_trial_summary(
+    summary: TrialChallengeSummary,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> TrialChallengeSummary:
+    """Adds missing Trial summary provenance while rejecting contradictory proof."""
+
+    return _bind_typed_fact(
+        summary,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Trial summary",
+    )
 
 
-def _bind_research_fact(
-    fact: _ResearchFactT,
+def bind_trial_stats_detail(
+    detail: TrialApplicableStatsDetail,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> TrialApplicableStatsDetail:
+    """Adds missing Trial stats-detail provenance while rejecting contradictory proof."""
+
+    return _bind_typed_fact(
+        detail,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Trial stats detail",
+    )
+
+
+_TypedFactT = TypeVar(
+    "_TypedFactT",
+    ResearchDetail,
+    ResearchQueueRow,
+    TrialChallengeSummary,
+    TrialApplicableStatsDetail,
+)
+
+
+def _bind_typed_fact(
+    fact: _TypedFactT,
     *,
     frame_ref: FrameRef | None,
     source_screen: ScreenType,
     source_layout_id: str | None,
     label: str,
-) -> _ResearchFactT:
-    """Stamp one typed research fact with the current capture provenance."""
+) -> _TypedFactT:
+    """Stamp one typed screen fact with the current capture provenance."""
 
     if fact.frame_ref is not None and fact.frame_ref != frame_ref:
         raise SelectorResolutionError(f"{label} proof belongs to a different capture frame.")

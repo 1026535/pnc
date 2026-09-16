@@ -57,6 +57,7 @@ from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.observation_provenance import select_content_labels
 from pnc_automation.app.pnc.vision.research import ResearchContentProducer
+from pnc_automation.app.pnc.vision.trial_challenge import TrialContentProducer
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionFailurePolicy,
     OcrRegionRead,
@@ -1814,6 +1815,7 @@ class PncObservationEnricher:
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
     home_city_camera: HomeCityCameraLocalizer | None = None
     research_producer: ResearchContentProducer = field(default_factory=ResearchContentProducer)
+    trial_producer: TrialContentProducer = field(default_factory=TrialContentProducer)
 
     def content_labels(
         self,
@@ -2165,6 +2167,14 @@ class PncObservationEnricher:
                 ocr_context=ocr_context,
                 selector_registry=self.selector_registry,
             )
+        trial_additions = self.trial_producer.additions_for_screen(
+            image=image,
+            screen_type=screen_type,
+            ocr_context=ocr_context,
+            layout_id=layout_id,
+        )
+        if trial_additions is not None:
+            return trial_additions
         content_plans = compile_screen_content_ocr_region_plans(
             resolved_screen=screen_type, request=request, image_size=image.size,
             layout_id=layout_id,

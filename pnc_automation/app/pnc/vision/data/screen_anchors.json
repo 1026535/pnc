@@ -4889,6 +4889,61 @@
         }
       ],
       "controls": []
+    },
+    {
+      "id": "trial_gear_applicable_stats",
+      "layout_id": "trial_applicable_stats",
+      "screen": "PNC_TRIAL_APPLICABLE_STATS",
+      "revision": 1,
+      "source": {
+        "fixture": "trial_gear_stats_20260916.png",
+        "decoded_sha256": "e537ec3b42a4d664ce2b2b244d702430e867a68bbb9f080746925b3741d46c89",
+        "capture_group": "2026-09-16/mega_old_acc/v15_stats_qualification"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Gear Trial Stats inspection opened this read-only Applicable Stats table. Fixed title and explicit Gear Trial footer qualify context independently of mutable troop percentages; only the measured Back arrow is exposed.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/trial_stats_title.png",
+          "search_region": [
+            101,
+            5,
+            241,
+            44
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/trial_gear_stats_footer.png",
+          "search_region": [
+            9,
+            901,
+            392,
+            36
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_bag_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     }
   ]
 }

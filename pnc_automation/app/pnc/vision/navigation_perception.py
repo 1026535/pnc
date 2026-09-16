@@ -25,6 +25,8 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_spatial_surface,
     bind_research_detail,
     bind_research_queue_row,
+    bind_trial_stats_detail,
+    bind_trial_summary,
     bind_visible_elements,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
@@ -293,6 +295,26 @@ class NavigationPerception:
                     source_layout_id=decision.layout_id,
                 )
                 for row in content.research_queue_rows
+            ),
+            trial_summary=(
+                bind_trial_summary(
+                    content.trial_summary,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.trial_summary is not None
+                else None
+            ),
+            trial_stats_detail=(
+                bind_trial_stats_detail(
+                    content.trial_stats_detail,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.trial_stats_detail is not None
+                else None
             ),
         )
         return self._finish(screenshot, observation, ocr_context, visual.profile_ids)

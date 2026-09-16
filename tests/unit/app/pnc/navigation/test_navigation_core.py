@@ -57,6 +57,12 @@ from pnc_automation.app.pnc.domain.research import (
     ResearchNodeId,
     research_node_title,
 )
+from pnc_automation.app.pnc.domain.trial_challenge import (
+    TrialApplicableStatsDetail,
+    TrialCardFacts,
+    TrialCategory,
+    trial_category_title,
+)
 from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
@@ -371,6 +377,79 @@ def research_detail_frame(
     )
 
 
+def trial_card_entry(
+    category: TrialCategory = TrialCategory.GEAR,
+    *,
+    status: RowRecognitionStatus = RowRecognitionStatus.COMPLETE,
+) -> DetectedListEntry:
+    """Build one typed Trial category card with measured Stats chip geometry."""
+
+    action_bounds = Bounds(215, 628, 45, 44)
+    complete = status == RowRecognitionStatus.COMPLETE
+    return DetectedListEntry(
+        kind=ListEntryKind.TRIAL_CATEGORY,
+        bounds=Bounds(14, 562, 511, 124),
+        title_text=trial_category_title(category),
+        action_point=action_bounds.center() if complete else None,
+        action_bounds=action_bounds if complete else None,
+        metadata={"category": category.value},
+        row_status=status,
+        trial_card_facts=TrialCardFacts(category=category),
+    )
+
+
+def trial_list_frame(
+    entries: tuple[DetectedListEntry, ...] = (),
+    *,
+    proved: bool = True,
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+) -> Observation:
+    """Build one Trial Challenge list frame with reviewed visual-anchor proof."""
+
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_TRIAL_CHALLENGE,
+            effective_screen=ScreenType.PNC_TRIAL_CHALLENGE,
+            guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
+            evidence=(
+                (ScreenEvidence(ScreenType.PNC_TRIAL_CHALLENGE, "visual_anchor:trial_challenge_live"),)
+                if proved
+                else ()
+            ),
+        ),
+        list_entries=entries,
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+    )
+
+
+def trial_stats_detail_frame(
+    category: TrialCategory | None = TrialCategory.GEAR,
+    *,
+    proved: bool = True,
+    captured_at: datetime | None = None,
+) -> Observation:
+    """Build one Applicable Stats detail frame with its typed footer fact."""
+
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_TRIAL_APPLICABLE_STATS,
+            effective_screen=ScreenType.PNC_TRIAL_APPLICABLE_STATS,
+            guard=GuardVerdict.CLEAR,
+            evidence=(
+                (ScreenEvidence(ScreenType.PNC_TRIAL_APPLICABLE_STATS, "visual_anchor:trial_gear_applicable_stats"),)
+                if proved
+                else ()
+            ),
+        ),
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        trial_stats_detail=TrialApplicableStatsDetail(category=category),
+    )
+
+
 def mailbox_category(mailbox: MailboxType, *, available: bool) -> DetectedListEntry:
     """Build one typed mail-hub category entry for constrained navigation tests."""
 
@@ -419,6 +498,7 @@ class NavigationCoreTests(unittest.TestCase):
     def test_new_surface_returns_require_their_measured_control(self):
         for source, selector, destination in (
             (ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
+            (ScreenType.PNC_TRIAL_APPLICABLE_STATS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_TRIAL_CHALLENGE),
             (ScreenType.PNC_BAG_CHEST_PREVIEW, UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE, ScreenType.PNC_BAG),
         ):
             for present in (True, False):
@@ -2528,3 +2608,147 @@ class ResearchNavigationCoreTests(unittest.TestCase):
                         observe_content=lambda _: source
                     )
                 self.assertEqual(0, len(actuator.actions))
+
+
+class TrialNavigationCoreTests(unittest.TestCase):
+    """Prove the read-only Gear Stats inspection route through typed content proof."""
+
+    def make_core(self, actuator=None):
+        return NavigationCore(
+            actuator or Actuator(),
+            lambda _: observation(ScreenType.PNC_HOME_CITY),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+    def test_open_trial_stats_taps_unique_gear_row_once_for_matching_detail(self):
+        """One qualified Gear row tap followed by two stable matching detail frames."""
+
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            trial_list_frame((trial_card_entry(),), captured_at=now),
+            trial_stats_detail_frame(captured_at=now + timedelta(seconds=1)),
+            trial_stats_detail_frame(captured_at=now + timedelta(seconds=2)),
+        ))
+        actuator = Actuator()
+        result = self.make_core(actuator).open_trial_stats(
+            TrialCategory.GEAR,
+            observe_content=lambda _: next(frames),
+        )
+
+        self.assertIsNotNone(result.trial_stats_detail)
+        self.assertEqual(TrialCategory.GEAR, result.trial_stats_detail.category)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, TapListEntryAction)
+        self.assertEqual(ListEntryKind.TRIAL_CATEGORY, action.entry_kind)
+        self.assertEqual("Gear Trial", action.title_text)
+        self.assertEqual("category", action.metadata_key)
+        self.assertEqual(TrialCategory.GEAR.value, action.metadata_value)
+        self.assertTrue(action.use_action_point)
+
+    def test_open_trial_stats_rejects_unsupported_categories_without_any_tap(self):
+        """Only Gear's Stats entry is qualified; other categories are unsupported."""
+
+        for category in (
+            TrialCategory.HERO, TrialCategory.CURIO, TrialCategory.TECH,
+            TrialCategory.RUNE, TrialCategory.SAUROI,
+        ):
+            with self.subTest(category=category):
+                actuator = Actuator()
+                with self.assertRaises(ValueError):
+                    self.make_core(actuator).open_trial_stats(
+                        category, observe_content=lambda _: trial_list_frame((trial_card_entry(),))
+                    )
+                self.assertEqual(0, len(actuator.actions))
+
+    def test_open_trial_stats_rejects_unqualified_sources_without_any_tap(self):
+        """Unproved, missing, duplicated, or unreadable Gear rows send no action."""
+
+        cases = (
+            ("unproved_list", trial_list_frame((trial_card_entry(),), proved=False)),
+            ("missing", trial_list_frame((trial_card_entry(TrialCategory.TECH, status=RowRecognitionStatus.NO_ACTION),))),
+            (
+                "ambiguous",
+                trial_list_frame((trial_card_entry(), trial_card_entry())),
+            ),
+            (
+                "unreadable",
+                trial_list_frame((trial_card_entry(status=RowRecognitionStatus.UNREADABLE),)),
+            ),
+            (
+                "no_action",
+                trial_list_frame((trial_card_entry(status=RowRecognitionStatus.NO_ACTION),)),
+            ),
+            ("wrong_screen", observation(ScreenType.PNC_HOME_CITY)),
+        )
+        for name, source in cases:
+            with self.subTest(reason=name):
+                actuator = Actuator()
+                with self.assertRaises(RuntimeError):
+                    self.make_core(actuator).open_trial_stats(
+                        TrialCategory.GEAR,
+                        observe_content=lambda _: source,
+                    )
+                self.assertEqual(0, len(actuator.actions))
+
+    def test_open_trial_stats_rejects_wrong_category_detail_without_replaying_tap(self):
+        """A detail whose footer names another category cannot prove completion."""
+
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            trial_list_frame((trial_card_entry(),), captured_at=now),
+            *(
+                trial_stats_detail_frame(
+                    TrialCategory.RUNE,
+                    captured_at=now + timedelta(seconds=index),
+                )
+                for index in range(1, 5)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            self.make_core(actuator).open_trial_stats(
+                TrialCategory.GEAR,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_trial_stats_rejects_unreadable_detail_without_replaying_tap(self):
+        """A detail with an unreadable footer category never confirms the route."""
+
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            trial_list_frame((trial_card_entry(),), captured_at=now),
+            *(
+                trial_stats_detail_frame(
+                    None,
+                    captured_at=now + timedelta(seconds=index),
+                )
+                for index in range(1, 5)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            self.make_core(actuator).open_trial_stats(
+                TrialCategory.GEAR,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_trial_stats_rejects_stale_detail_without_replaying_tap(self):
+        """A detail frame no newer than the source is a stale capture."""
+
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            trial_list_frame((trial_card_entry(),), captured_at=now),
+            trial_stats_detail_frame(captured_at=now),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "stale capture"):
+            self.make_core(actuator).open_trial_stats(
+                TrialCategory.GEAR,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
