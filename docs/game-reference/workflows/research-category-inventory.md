@@ -89,3 +89,8 @@ nodes and qualified shared details. No exhaustive technology or scroll catalog,
 unseen tiers, empty states or new spending flow is claimed. The build remains
 unknown. Source-only captures and the independent live holdout are distinguished
 in the manifest and provenance records.
+
+Final integration check against accepted V12: 59 tests passed in23.846s,
+including all six identities on the independent Economy tree, Home pan bounds,
+visual profile metadata and Bag identity contracts. No production behavior was
+changed by the V12 merge; the shared profile entries were combined by key.
