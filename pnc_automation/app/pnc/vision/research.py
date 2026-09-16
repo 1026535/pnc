@@ -60,6 +60,7 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 
 _RESEARCH_TREE_LAYOUT_ID = "research_tree_development"
 _RESEARCH_DETAIL_LAYOUT_ID = "research_tree_node_detail"
+_RESEARCH_MAX_DETAIL_LAYOUT_ID = "research_tree_node_detail_max"
 
 # Label tiles are blue rectangles; the same predicate proved the measured
 # component bounds on all four Development captures at both supported sizes.
@@ -165,8 +166,11 @@ class ResearchContentProducer:
         publishes detail facts, and anything else stays empty.
         """
 
-        if layout_id == _RESEARCH_DETAIL_LAYOUT_ID:
-            return self.detail_additions(image=image, lines=lines, ocr_context=ocr_context)
+        if layout_id in {_RESEARCH_DETAIL_LAYOUT_ID, _RESEARCH_MAX_DETAIL_LAYOUT_ID}:
+            return self.detail_additions(
+                image=image, lines=lines, ocr_context=ocr_context,
+                max_level_panel=layout_id == _RESEARCH_MAX_DETAIL_LAYOUT_ID,
+            )
         if layout_id == _RESEARCH_TREE_LAYOUT_ID:
             return self.tree_additions(image=image, lines=lines, ocr_context=ocr_context)
         return ObservationAdditions()
@@ -396,6 +400,7 @@ class ResearchContentProducer:
         image: Image.Image,
         lines: tuple[OcrLine, ...],
         ocr_context: ObservationOcrContext,
+        max_level_panel: bool = False,
     ) -> ObservationAdditions:
         """Parse the accepted node-detail panel into read-only typed facts."""
 
@@ -415,16 +420,27 @@ class ResearchContentProducer:
         elif lines:
             title_text = lines[0].text.strip() or None
         node_id = None if title_text is None else research_node_for_title(title_text)
-        prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
         effect_records = tuple(
             ResearchTextRecord(line.text.strip(), line.bounds)
             for line in lines
             if title_line is not None
             and title_line.bounds.y + title_line.bounds.height <= line.bounds.y
-            and line.bounds.y < image.height * 0.44
-            and normalize_ocr_text(line.text) not in {"RESEARCH", "RESEARCHNOW"}
+            and line.bounds.y < image.height * (0.63 if max_level_panel else 0.44)
+            and normalize_ocr_text(line.text) not in {"RESEARCH", "RESEARCHNOW", "MAX"}
             and _DETAIL_TIME_PATTERN.match(line.text.strip()) is None
         )
+        if max_level_panel:
+            # This independently proved layout has only a title and effects.
+            # Its gold Max banner is not a premium action or queue evidence.
+            return ObservationAdditions(
+                research_detail=ResearchDetail(
+                    title_text=title_text, node_id=node_id,
+                    current_level=current_level, max_level=max_level,
+                    effect_records=effect_records,
+                    queue_state=ResearchQueueState.UNKNOWN,
+                ),
+            )
+        prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
         prerequisite = next(
             (
                 ResearchTextRecord(line.text.strip(), line.bounds)

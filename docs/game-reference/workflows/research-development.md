@@ -55,7 +55,7 @@ conflicting category fails; an absent category relies on the proved source).
 sends one Android Back; failed confirmation never repeats a gesture.
 `WorkflowContext.open_research_node` primes mutation readiness only when the
 returned matching detail exposes the measured template `PNC_RESEARCH_START_BUTTON`;
-active or locked details stay read-only. Research Start authorization, budget
+active, max-level or locked details stay read-only. Research Start authorization, budget
 and receipts remain with the feature01 `CoreMutationBoundary` owners.
 
 ## Automation implications
@@ -69,9 +69,32 @@ and receipts remain with the feature01 `CoreMutationBoundary` owners.
 - Queue rows and detail queue state describe observed timers; an absent timer
   is `unknown`, not idle.
 
-## Remaining qualification
+## Live qualification, September 16
 
-The supported non-spending route (Home → Institute → Development → one bounded
-scroll → a complete node → matching detail → tree → Home) is proved offline on
-saved captures only. Its bounded live route remains gated on V02 automatic
-Home entry; no live run or spending was performed for this packet.
+**Live-observed, high confidence:** canonical core runtime
+`20260916T084241Z_a52974fe` on the configured `mega_old_acc` active castle completed
+Home → Institute → Development → one bounded scroll → Infirmary Cap I 5/5 detail
+→ Back → Home → Research Queue → Home without spending. Evidence is
+`.local-data/devin-v04/live_max_detail/` in the V04 worktree; destination frame
+`0046` at `08:45:01Z`, queue `0061` at `08:45:36Z`, final Home `0066` at
+`08:45:44Z`. The lead inspected actual frames and typed facts. The current build
+was not independently re-read in this run. Lease released; pre-existing emulator
+preserved; no account or castle switch.
+
+The initial live route stopped safely on Troop Load I 5/5's previously unseen
+max-level panel (runtime `20260916T082308Z_2b28b9b6`, frame `0044`). This panel is
+lower than idle/active details, with fixed Research header glyph and Max banner.
+It contains title `(n/m)`, Might and effect lines, but no Research button, premium
+button, costs, time or queue facts. The separate
+`research_tree_node_detail_max` profile owns bounded OCR and no controls.
+`research_node_detail_max_20260916.png` is the reference;
+`research_node_detail_max_infirmary_holdout_20260916.png` is the later independent
+native-size holdout, never used to create its anchors. Both production publishers
+and safe matching-detail/Back navigation are qualified.
+
+The current Research Queue first row explicitly says Idle. The second says
+Inactive; the current typed idle/active model reports that unsupported state as
+unknown and exposes no Activate action. Do not infer free queue capacity from a
+missing timer. A current active queue layout and non-Development trees still
+need their own evidence. This packet did not press Research or Research Now;
+spending behavior remains with feature01's separately authorized proof.

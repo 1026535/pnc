@@ -334,6 +334,7 @@ def research_detail_frame(
     *,
     category: ResearchCategory | None = None,
     active: bool = False,
+    max_level: bool = False,
     start: bool = True,
     captured_at: datetime | None = None,
     blocked: bool = False,
@@ -341,7 +342,9 @@ def research_detail_frame(
     """Build one typed node-detail frame with its measured anchor evidence."""
 
     anchor = (
-        "visual_anchor:research_tree_node_detail_active"
+        "visual_anchor:research_tree_node_detail_max"
+        if max_level
+        else "visual_anchor:research_tree_node_detail_active"
         if active
         else "visual_anchor:research_tree_node_detail"
     )
@@ -2477,6 +2480,33 @@ class ResearchNavigationCoreTests(unittest.TestCase):
         action = actuator.actions[0]
         self.assertIsInstance(action, KeyEventAction)
         self.assertEqual("KEYCODE_BACK", action.key_code)
+
+    def test_max_level_detail_can_be_inspected_and_closed_without_start(self):
+        """A fresh matching max panel completes the tap and allows only Back."""
+
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        node = ResearchNodeId.TROOP_LOAD_I
+        tree = lambda seconds: research_tree_frame(
+            (research_entry(node),), captured_at=now + timedelta(seconds=seconds),
+        )
+        detail = lambda seconds: research_detail_frame(
+            node, max_level=True, start=False,
+            captured_at=now + timedelta(seconds=seconds),
+        )
+        frames = iter((tree(0), detail(1), detail(2), detail(3), tree(4), tree(5)))
+        actuator = Actuator()
+        core = self.make_core(actuator)
+        opened = core.open_research_node(
+            title="Troop Load I", category=ResearchCategory.DEVELOPMENT,
+            observe_content=lambda _: next(frames),
+        )
+        self.assertEqual(node, opened.research_detail.node_id)
+        self.assertFalse(opened.has(UiElementId.PNC_RESEARCH_START_BUTTON))
+        closed = core.close_research_detail(observe_content=lambda _: next(frames))
+        self.assertEqual(ScreenType.PNC_RESEARCH_TREE, closed.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[-1], KeyEventAction)
+        self.assertEqual("KEYCODE_BACK", actuator.actions[-1].key_code)
 
     def test_close_research_detail_rejects_non_detail_sources_without_action(self):
         """A tree grid or blocked detail cannot trigger the Back gesture."""

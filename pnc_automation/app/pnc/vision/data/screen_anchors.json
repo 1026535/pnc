@@ -4848,6 +4848,47 @@
           }
         }
       ]
+    },
+    {
+      "id": "research_tree_node_detail_max",
+      "layout_id": "research_tree_node_detail_max",
+      "screen": "PNC_RESEARCH_TREE",
+      "revision": 1,
+      "source": {
+        "fixture": "research_node_detail_max_20260916.png",
+        "decoded_sha256": "1e0e896f59bee1b84089a7ce344898efbe40c442fb45c721c3157b308190e2bb",
+        "capture_group": "2026-09-16/mega_old_acc/v04_research_live"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Completed Research node panel, identified by the fixed Research header glyph and Max banner. The lower panel contains title, observed levels and effects only; it exposes no action controls.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/research_node_detail_max_header.png",
+          "search_region": [
+            17,
+            352,
+            46,
+            45
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/research_node_detail_max_banner.png",
+          "search_region": [
+            181,
+            403,
+            174,
+            70
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": []
     }
   ]
 }

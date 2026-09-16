@@ -275,6 +275,9 @@ def compile_screen_content_ocr_region_plans(
             # The detail panel spans the measured popup from its title band
             # through the resource cost rows; nothing below the panel is owned.
             regions = (("research_detail", 0.04, 0.24, 0.92, 0.58),)
+        elif layout_id == "research_tree_node_detail_max":
+            # The completed-node panel is lower and contains no action/cost area.
+            regions = (("research_detail", 0.10, 0.37, 0.84, 0.32),)
         elif layout_id == "research_tree_development":
             # Node discovery is geometry-owned; OCR reads only the fixed
             # category header plus each measured label/level region owned by
@@ -349,7 +352,7 @@ def compile_screen_content_ocr_region_plans(
     include_header = not (
         resolved_screen in {ScreenType.PNC_ALLIANCE_HOME, ScreenType.PNC_WORLD_MAP}
         or (resolved_screen == ScreenType.PNC_RESEARCH_TREE
-            and layout_id == "research_tree_node_detail")
+            and layout_id in {"research_tree_node_detail", "research_tree_node_detail_max"})
         or resolved_screen == ScreenType.PNC_RESEARCH_QUEUE
     )
     return (*((header,) if include_header else ()), *(

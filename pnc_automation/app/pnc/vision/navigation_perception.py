@@ -143,6 +143,11 @@ class NavigationPerception:
                 for control in visual.controls
             )
         )
+        research_detail_max_owned = (
+            matched_profiles == {"research_tree_node_detail_max"}
+            and matched_screens == {ScreenType.PNC_RESEARCH_TREE}
+            and not visual.controls
+        )
         research_queue_owned = (
             matched_screens == {ScreenType.PNC_RESEARCH_QUEUE}
             and any(
@@ -153,7 +158,7 @@ class NavigationPerception:
         owned_dismiss_bounds = tuple(control.bounds for control in visual.dismiss_controls)
         owned_navigation_screen = (
             ScreenType.PNC_RESEARCH_TREE
-            if research_detail_owned or research_detail_active_owned
+            if research_detail_owned or research_detail_active_owned or research_detail_max_owned
             else ScreenType.PNC_RESEARCH_QUEUE if research_queue_owned
             else None
         )

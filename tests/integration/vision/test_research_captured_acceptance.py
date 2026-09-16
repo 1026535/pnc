@@ -320,6 +320,67 @@ class ResearchCapturedAcceptanceTests(unittest.TestCase):
                 self.assertIsNone(observation.research_detail)
                 self.assertEqual((), observation.entries(ListEntryKind.RESEARCH))
 
+    def test_max_detail_reads_observed_levels_and_effects_without_actions(self) -> None:
+        """The live max-level panel is readable at both sizes and never primes Start."""
+
+        builder, perception = _production_components()
+        source = _image("research_node_detail_max_20260916.png")
+        for size in ((540, 960), (900, 1600)):
+            for observation in _observe(
+                builder, perception, source.resize(size), session_id=f"max-detail:{size}",
+            ):
+                with self.subTest(size=size, frame=observation.frame_ref):
+                    self.assertEqual(ScreenType.PNC_RESEARCH_TREE, observation.screen_type)
+                    self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
+                    self.assertEqual("research_tree_node_detail_max", observation.decision.layout_id)
+                    detail = observation.research_detail
+                    self.assertIsNotNone(detail)
+                    self.assertEqual(ResearchNodeId.TROOP_LOAD_I, detail.node_id)
+                    self.assertEqual((5, 5), (detail.current_level, detail.max_level))
+                    self.assertEqual(2, len(detail.effect_records))
+                    effects = " ".join(record.text for record in detail.effect_records)
+                    self.assertIn("+572", effects)
+                    self.assertIn("+5%", effects)
+                    self.assertEqual((), detail.costs)
+                    self.assertIsNone(detail.prerequisite_record)
+                    self.assertIsNone(detail.original_time_text)
+                    self.assertIsNone(detail.actual_time_text)
+                    self.assertIsNone(detail.premium_button_bounds)
+                    self.assertIsNone(detail.premium_gem_cost)
+                    self.assertEqual(ResearchQueueState.UNKNOWN, detail.queue_state)
+                    self.assertIsNone(detail.queue_timer_text)
+                    self.assertFalse(observation.has(START))
+                    self.assertEqual(observation.frame_ref, detail.frame_ref)
+                    self.assertEqual("research_tree_node_detail_max", detail.source_layout_id)
+                    self.assertEqual((), observation.entries(ListEntryKind.RESEARCH))
+
+    def test_independent_max_detail_holdout_keeps_its_own_identity(self) -> None:
+        """A later native-size Infirmary frame resolves independently of the anchor source."""
+
+        builder, perception = _production_components()
+        image = _image("research_node_detail_max_infirmary_holdout_20260916.png")
+        for observation in _observe(builder, perception, image, session_id="max-holdout"):
+            self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
+            self.assertEqual("research_tree_node_detail_max", observation.decision.layout_id)
+            detail = observation.research_detail
+            self.assertEqual(ResearchNodeId.INFIRMARY_CAP_I, detail.node_id)
+            self.assertEqual((5, 5), (detail.current_level, detail.max_level))
+            self.assertEqual(observation.frame_ref, detail.frame_ref)
+            self.assertFalse(observation.has(START))
+            self.assertEqual((), detail.costs)
+            effects = " ".join(record.text for record in detail.effect_records)
+            self.assertIn("+2,735", effects)
+            self.assertIn("+10,000", effects)
+
+    def test_max_detail_requires_both_independent_anchors(self) -> None:
+        """An isolated Max banner or Research header never establishes a detail."""
+
+        recognizer = load_visual_screen_recognizer()
+        for box in ((23, 358, 57, 391), (187, 409, 349, 467)):
+            image = _image("research_node_detail_max_20260916.png")
+            image.paste((80, 80, 80), box)
+            self.assertNotIn("research_tree_node_detail_max", recognizer.recognize(image).profile_ids)
+
     def test_fresh_frames_carry_no_prior_research_facts(self) -> None:
         """Detail and queue facts never survive onto a later tree or unknown frame."""
 

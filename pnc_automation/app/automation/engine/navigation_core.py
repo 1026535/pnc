@@ -86,6 +86,7 @@ _RESEARCH_DETAIL_ANCHOR_REASONS = frozenset(
     {
         "visual_anchor:research_tree_node_detail",
         "visual_anchor:research_tree_node_detail_active",
+        "visual_anchor:research_tree_node_detail_max",
     }
 )
 
@@ -704,7 +705,7 @@ class NavigationCore:
             or before.decision.guard != GuardVerdict.CLEAR
             or not any(
                 evidence.reason
-                in {"visual_anchor:research_tree_node_detail", "visual_anchor:research_tree_node_detail_active"}
+                in _RESEARCH_DETAIL_ANCHOR_REASONS
                 for evidence in before.decision.evidence
             )
         ):

@@ -1143,6 +1143,32 @@
       "source_artifact": "20260916T081216Z_core_20260916T081059Z_024dd4ac_0031_core_7_building_after_7.png",
       "source_sha256": "ffebf00dfb24b2df963f180d087543f23dfb52e18e627d808abf2912586fce21",
       "annotation": "V02 Home portal tap reached a persisted southern Campaign map view. Both distinct numbered chapter rows own this profile; no event overlay or header chapter text supplies identity."
+    },
+    {
+      "image": "research_node_detail_max_20260916.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-16/mega_old_acc/v04_research_live",
+      "sha256": "1e0e896f59bee1b84089a7ce344898efbe40c442fb45c721c3157b308190e2bb",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ],
+      "source_artifact": "20260916T082630Z_core_20260916T082308Z_2b28b9b6_0044_core_10_research_node_after_7.png",
+      "source_sha256": "e7fe95c77537718abe04f3b5430ce51afaeea19fe3ab044e57bea810a9b7137a",
+      "annotation": "Actual V04 live Troop Load I max-level 5/5 detail reached by one measured tree tile tap. No Research, premium or queue action is visible."
+    },
+    {
+      "image": "research_node_detail_max_infirmary_holdout_20260916.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "holdout",
+      "group": "2026-09-16/mega_old_acc/v04_research_live_holdout",
+      "sha256": "d7cff799ccca943105624211ddfff89746e6a864475b29c565604d60f5d4c4c1",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ],
+      "source_artifact": "20260916T084501Z_core_20260916T084241Z_a52974fe_0046_core_13_research_node_after_1.png",
+      "source_sha256": "981dd54988926f403b1d1001294bcac5c37efa08b6f3082be587352fe7f465c6",
+      "annotation": "Independent later live Infirmary Cap I 5/5 max-detail holdout; no anchor assets came from this frame."
     }
   ]
 }
