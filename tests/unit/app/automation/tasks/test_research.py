@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from pnc_automation.app.automation.engine.task import TaskId, TaskPreflight, TaskStatus
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
@@ -23,6 +24,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDe
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 
 from tests.support.pnc.observations import make_entry, make_observation
 from tests.support.automation.task_context.flow_and_task_fixtures import FlowAndTaskFixtures
@@ -189,6 +191,48 @@ class ResearchTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertEqual(len(task.plan(context, tree)), 1)
         self.assertEqual(task.plan(context, detail), [])
 
+    def test_start_completion_must_be_newer_than_the_start_source(self) -> None:
+        """An old active panel cannot prove a Start planned from a later idle frame."""
+        task = ResearchTask()
+        context = self._make_context(task_id=TaskId.RESEARCH, params=task.parse_params({}))
+        tree = _development_tree()
+        old_active = _active_detail()
+        detail = _idle_detail()
+        task.plan(context, tree)
+        task.verify(context, tree, detail)
+        self.assertEqual(1, len(task.plan(context, detail)))
+        result = task.verify(context, detail, old_active)
+        self.assertEqual(TaskStatus.FAILED, result.status)
+        self.assertFalse(result.retryable)
+
+    def test_start_rejects_stale_unclear_or_replaced_session_details(self) -> None:
+        """Selection proof expires if the current detail loses its verified context."""
+        for case in ("stale", "unclear", "session"):
+            with self.subTest(case=case):
+                task = ResearchTask()
+                context = self._make_context(task_id=TaskId.RESEARCH, params=task.parse_params({}))
+                tree = _development_tree()
+                stale = _idle_detail()
+                detail = _idle_detail()
+                tree = replace(tree, frame_ref=FrameRef(
+                    session_id="research", session_epoch=1, capture_sequence=1,
+                    input_sequence=0, captured_at=tree.captured_at,
+                ))
+                detail = replace(detail, frame_ref=FrameRef(
+                    session_id="research", session_epoch=1, capture_sequence=3,
+                    input_sequence=1, captured_at=detail.captured_at,
+                ))
+                task.plan(context, tree)
+                self.assertEqual(TaskStatus.REPLAN, task.verify(context, tree, detail).status)
+                invalid = stale if case == "stale" else (
+                    replace(detail, decision=replace(detail.decision, guard=GuardVerdict.NOT_EVALUATED))
+                    if case == "unclear" else replace(detail, frame_ref=replace(
+                        detail.frame_ref, session_id="replacement", session_epoch=2,
+                    ))
+                )
+                self.assertEqual([], task.plan(context, invalid))
+                self.assertEqual([], task.plan(context, detail))
+
     def test_research_task_rejects_a_wrong_node_detail_and_stays_readonly(self) -> None:
         """A fresh detail for another node fails verification and clears the selection."""
 
@@ -253,6 +297,7 @@ class ResearchTests(FlowAndTaskFixtures, unittest.TestCase):
         opened = task.verify(context, tree, active)
         self.assertEqual(opened.status, TaskStatus.REPLAN)
         self.assertEqual(task.plan(context, active), [])
+        self.assertEqual(task.plan(context, _idle_detail()), [])
 
     def test_research_task_does_not_share_selection_between_contexts(self) -> None:
         """An independent task context cannot inherit another step's verified selection."""

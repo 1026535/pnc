@@ -2498,4 +2498,3 @@ class ResearchNavigationCoreTests(unittest.TestCase):
                         observe_content=lambda _: source
                     )
                 self.assertEqual(0, len(actuator.actions))
-

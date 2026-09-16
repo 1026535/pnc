@@ -45,7 +45,6 @@ class _ResearchNodeSelection:
 
     node_id: ResearchNodeId
     category: ResearchCategory
-    title_text: str | None
     selected_frame: FrameRef | None
     selected_at: datetime
     confirmed: bool = False
@@ -112,7 +111,11 @@ class ResearchTask(BaseAutomationTask):
             # single Start tap; pre-opened, active, or mismatched panels stay
             # read-only inspection.
             selection = _pending_selection(context)
-            if selection is not None and not _detail_matches_selection(detail, selection):
+            if selection is not None and (
+                observation.decision.guard != GuardVerdict.CLEAR
+                or not _detail_matches_selection(detail, selection)
+                or not _is_newer_same_session(observation, selection, allow_same=True)
+            ):
                 _clear_selection(context)
                 return []
             if (
@@ -122,7 +125,10 @@ class ResearchTask(BaseAutomationTask):
                 or not _has_template_start(observation)
             ):
                 return []
-            _store_selection(context, replace(selection, start_planned=True))
+            _store_selection(context, replace(
+                selection, start_planned=True,
+                selected_frame=observation.frame_ref, selected_at=observation.captured_at,
+            ))
             return [
                 TapAction(
                     selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
@@ -166,7 +172,6 @@ class ResearchTask(BaseAutomationTask):
             _ResearchNodeSelection(
                 node_id=target.research_facts.node_id,
                 category=target.research_facts.category,
-                title_text=target.title_text,
                 selected_frame=observation.frame_ref,
                 selected_at=observation.captured_at,
             ),
@@ -190,7 +195,7 @@ class ResearchTask(BaseAutomationTask):
             ):
                 return TaskResult.success("Research started and the active detail has no start button.")
             return TaskResult.failure(
-                "Research start did not reach a fresh matching active detail.", retryable=True,
+                "Research start did not reach a fresh matching active detail.", retryable=False,
             )
         if selection is not None and not selection.confirmed:
             detail = after.research_detail
@@ -200,7 +205,13 @@ class ResearchTask(BaseAutomationTask):
                 and _detail_matches_selection(detail, selection)
                 and _is_newer_same_session(after, selection)
             ):
-                _store_selection(context, replace(selection, confirmed=True))
+                if _has_template_start(after):
+                    _store_selection(context, replace(
+                        selection, confirmed=True,
+                        selected_frame=after.frame_ref, selected_at=after.captured_at,
+                    ))
+                else:
+                    _clear_selection(context)
                 return TaskResult.replan("Opened the selected research detail.")
             _clear_selection(context)
             return TaskResult.failure(
@@ -261,10 +272,14 @@ def _detail_matches_selection(detail: ResearchDetail, selection: _ResearchNodeSe
     return detail.category is None or detail.category == selection.category
 
 
-def _is_newer_same_session(observation: Observation, selection: _ResearchNodeSelection) -> bool:
-    """Require a fresher capture from the same session epoch as the selection frame."""
+def _is_newer_same_session(
+    observation: Observation, selection: _ResearchNodeSelection, *, allow_same: bool = False,
+) -> bool:
+    """Compare with the latest verified detail or planned Start source, in its session."""
 
-    if observation.captured_at <= selection.selected_at:
+    if observation.captured_at < selection.selected_at or (
+        not allow_same and observation.captured_at == selection.selected_at
+    ):
         return False
     frame = observation.frame_ref
     selected = selection.selected_frame
@@ -273,7 +288,7 @@ def _is_newer_same_session(observation: Observation, selection: _ResearchNodeSel
     return (
         frame.session_id == selected.session_id
         and frame.session_epoch == selected.session_epoch
-        and frame.capture_sequence > selected.capture_sequence
+        and (frame.capture_sequence > selected.capture_sequence or (allow_same and frame == selected))
     )
 
 
