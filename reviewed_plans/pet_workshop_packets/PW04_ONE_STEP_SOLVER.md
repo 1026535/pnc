@@ -34,3 +34,14 @@ Follow the [common validation and acceptance gates](../PNC_PET_WORKSHOP_ROADMAP.
 Public plan_next implementation, typed scenario results and lead-reviewed decision examples. PW05 and PW07 consume the same accepted planner without screenshot-only or runtime substitutes.
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
+
+
+### Execution record — 2026-09-16
+
+- Status: **Delegated**, not accepted. Foundation implementation `14b7d68` is reviewed/tested and pushed; worker base `91afce6f9a817129f2e205b9479043744c4ca300` adds its acceptance record only.
+- Scope: One-step planner and synthetic scenario sequences following tested PW03 in the same worker. External consumers remain gated on lead acceptance of the combined handoff.
+- Checkout/branch: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-solver`, `codex/pet-workshop-solver`.
+- Native Devin session `absorbing-vicuna`, run `.local-data/devin-implement/pw03-pw04`, turn `001`. Startup confirmed with `swe-2-max`, expected base and native steering/cancellation controls.
+- Briefs: worker `.local-data/devin-briefs/pw03-pw04-solver.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
+- The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
+- Reviewed/tested result revision and acceptance evidence: pending handoff.

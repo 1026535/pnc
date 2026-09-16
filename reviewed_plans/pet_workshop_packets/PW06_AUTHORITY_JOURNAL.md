@@ -36,3 +36,14 @@ Follow the [common validation and acceptance gates](../PNC_PET_WORKSHOP_ROADMAP.
 Accepted scope/budget and invocation factory, journal migration/query operations, durable result contract and focused checks. PW07 connects actual policy, perception and action receipts through this boundary. PW08/PW09 later call the same factory through the common workflow; no authority or pending-operation logic moves into either adapter.
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
+
+
+### Execution record — 2026-09-16
+
+- Status: **Delegated**, not accepted. Foundation implementation `14b7d68` is reviewed/tested and pushed; worker base `91afce6f9a817129f2e205b9479043744c4ca300` adds its acceptance record only.
+- Scope: Canonical authority, invocation factory and durable journal/migration. UI interpretation/execution belongs to PW07; no live or account/config access.
+- Checkout/branch: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-authority`, `codex/pet-workshop-authority`.
+- Native Devin session `fearless-sprite`, run `.local-data/devin-implement/pw06`, turn `001`. Startup confirmed with `swe-2-max`, expected base and native steering/cancellation controls.
+- Briefs: worker `.local-data/devin-briefs/pw06-authority.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
+- The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
+- Reviewed/tested result revision and acceptance evidence: pending handoff.
