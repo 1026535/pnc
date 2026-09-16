@@ -1,0 +1,4 @@
+interface:
+  display_name: "Devin Game Knowledge"
+  short_description: "Consult Devin on game behavior and evidence"
+  default_prompt: "Use $devin-game-knowledge to consult Devin on a specific game-behavior question and return evidence, confidence, and automation implications."
