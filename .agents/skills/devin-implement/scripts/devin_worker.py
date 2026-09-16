@@ -536,7 +536,7 @@ def main(argv=None):
                         help="Hide the live Devin output console (shown by default).")
     action.add_argument("--notify-thread", default=os.environ.get("CODEX_THREAD_ID"),
                         help="Codex task to wake on completion/failure; defaults to the calling Codex task.")
-    action.add_argument("--permission-mode", choices=("normal", "accept-edits", "dangerous"), default="accept-edits")
+    action.add_argument("--permission-mode", choices=("normal", "accept-edits", "dangerous"), default="dangerous")
     action.add_argument("--allow-rule", action="append", default=[])
     args = parser.parse_args(argv)
     if args.action in ("ask", "steer"):

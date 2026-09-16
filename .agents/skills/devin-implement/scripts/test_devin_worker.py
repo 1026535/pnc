@@ -253,7 +253,7 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
                 command = [*command[:4], sys.executable, str(self.fake), *command[7:]]
             return original_popen(command, **kwargs)
 
-        expected = cli_permission or ("accept-edits" if through_cli else self.args.permission_mode)
+        expected = cli_permission or ("dangerous" if through_cli else self.args.permission_mode)
         with patch.object(worker, "executable", return_value="fake-devin.exe"), \
              patch.object(subprocess, "check_output", side_effect=output), \
              patch.object(subprocess, "Popen", side_effect=popen), \
@@ -283,30 +283,30 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertTrue(worker.read_json(self.run_dir / "state.json")["writers_stopped"])
 
     def test_fresh_and_resume_preserve_state(self):
-        """Public defaults keep edit approval without tool grants and preserve work/identity."""
+        """Public fresh/resume defaults grant full access and preserve unrelated work/identity."""
         self.assertEqual(self.invoke(through_cli=True), 0)
         state = worker.read_json(self.run_dir / "state.json")
         self.assertEqual(state["session_id"], "fixture-session")
-        self.assertEqual(state["permission_mode"], "accept-edits")
-        self.assertTrue(state["respect_workspace_trust"])
+        self.assertEqual(state["permission_mode"], "dangerous")
+        self.assertFalse(state["respect_workspace_trust"])
         self.args.resume = True
         self.assertEqual(self.invoke(through_cli=True), 0)
         state = worker.read_json(self.run_dir / "state.json")
         self.assertEqual(state["turn"], 2)
-        self.assertEqual(state["permission_mode"], "accept-edits")
-        self.assertTrue(state["respect_workspace_trust"])
+        self.assertEqual(state["permission_mode"], "dangerous")
+        self.assertFalse(state["respect_workspace_trust"])
         self.assertEqual(state["command"][-2:], ["--resume", "fixture-session"])
         self.assertTrue((self.run_dir / "turn-001/handoff.md").is_file())
         self.assertEqual((self.repo / "existing.txt").read_text(), "user's uncommitted work\n")
         self.assertTrue(state["writers_stopped"])
         self.assertFalse(state["head_drift"])
 
-    def test_explicit_dangerous_is_preserved(self):
-        """Dangerous auto-approval remains available only through an explicit CLI choice."""
-        self.assertEqual(self.invoke(through_cli=True, cli_permission="dangerous"), 0)
+    def test_explicit_accept_edits_is_preserved(self):
+        """An explicit accept-edits choice keeps workspace trust and denies tool grants."""
+        self.assertEqual(self.invoke(through_cli=True, cli_permission="accept-edits"), 0)
         state = worker.read_json(self.run_dir / "state.json")
-        self.assertEqual(state["permission_mode"], "dangerous")
-        self.assertFalse(state["respect_workspace_trust"])
+        self.assertEqual(state["permission_mode"], "accept-edits")
+        self.assertTrue(state["respect_workspace_trust"])
 
     def test_head_drift_fails_run(self):
         """A baseline moved mid-run fails closed instead of reporting silent success."""
