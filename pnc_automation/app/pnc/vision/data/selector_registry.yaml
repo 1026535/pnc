@@ -3874,6 +3874,20 @@ selectors:
     producer migration remains a separate runtime slice.
   - Existing enricher helper emits this semantic element; add catalog metadata without
     inferring geometry.
+- id: PNC_HERO_RESULT_CONFIRM
+  screens:
+  - PNC_HERO_RECRUIT_RESULT
+  status: screenshot_seeded
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+- id: PNC_HERO_RESULT_CLOSE
+  screens:
+  - PNC_HERO_RECRUIT_RESULT
+  status: screenshot_seeded
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
 surfaces:
 - id: PNC_WORLD_MAP_SURFACE
   surface_type: world_map

@@ -55,6 +55,7 @@ _SCREEN_FAMILIES = frozenset({
     ScreenType.PNC_TRAP_WORKSHOP,
     ScreenType.PNC_TRAP_WORKSHOP_EFFECT_TABLE,
     ScreenType.PNC_HERO_HALL,
+    ScreenType.PNC_HERO_RECRUIT_RESULT,
     ScreenType.PNC_WATCHTOWER,
     ScreenType.PNC_BLACKSMITH,
     ScreenType.PNC_GEAR,

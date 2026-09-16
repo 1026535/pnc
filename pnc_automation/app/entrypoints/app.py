@@ -430,6 +430,7 @@ def build_observation_builder(selector_registry: SelectorRegistry) -> Observatio
         enricher=PncObservationEnricher(
             selector_registry=selector_registry,
             home_city_camera=HomeCityCameraLocalizer(matcher=template_matcher),
+            template_matcher=template_matcher,
         ),
         debug_artifact_collector=ObservationDebugArtifactCollector(),
         visual_recognizer=load_visual_screen_recognizer(matcher=template_matcher),

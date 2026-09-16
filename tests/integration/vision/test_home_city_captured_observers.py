@@ -80,7 +80,7 @@ class HomeCityCapturedObserversTests(unittest.TestCase):
                     if item.metadata.get("home_city_object_id") == "blacksmith"
                 )
                 self.assertEqual(len(blacksmith), 1)
-                self.assertEqual(blacksmith[0].action_point, (458, 422))
+                self.assertEqual(blacksmith[0].action_point, (456, 423))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,19 @@
+ch_PP-OCRv3_rec_infer.onnx
+==========================
+
+PP-OCRv3 Chinese/English text-recognition model vendored for the canonical
+RapidOcrService backend (rapidocr 3.4.5, ONNX Runtime). Vendored so installed
+builds run the qualified recognizer offline, without user paths or runtime
+model downloads.
+
+Upstream asset (exact file this copy was taken from):
+  https://huggingface.co/spaces/RapidAI/RapidOCR/blob/ad05aa73dc29dbf3d2a4f3d8af303244cdf91634/models/text_rec/ch_PP-OCRv3_rec_infer.onnx
+
+File facts:
+  Size:   10,690,752 bytes
+  SHA256: 897a3ededb38fee0dae2c1ccee38241f37df202c9509e3abca02e9217c5ee615
+
+Attribution:
+  RapidAI RapidOCR MODEL_LICENSES.md attributes these converted PaddleOCR
+  weights to Baidu/PaddleOCR, licensed under the Apache License, Version 2.0.
+  The full license text ships alongside this file in LICENSE-Apache-2.0.txt.

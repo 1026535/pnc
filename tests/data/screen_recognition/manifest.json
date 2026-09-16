@@ -1171,6 +1171,66 @@
       "annotation": "Independent later live Infirmary Cap I 5/5 max-detail holdout; no anchor assets came from this frame."
     },
     {
+      "image": "campaign_chapter_6_path.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "reference",
+      "group": "2026-08-28/mega_old_acc/campaign_chapter_6",
+      "sha256": "180e1cfea3856c7ef79fd332f9c695732a6010cd0eac54639a9e4f6b6cec2857",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ]
+    },
+    {
+      "image": "campaign_chapter_6_path_return.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-08-28/mega_old_acc/campaign_chapter_6",
+      "sha256": "4966df140956918dfa95c4cae148204833ee0017fdc8d03133027f85187120d6",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ]
+    },
+    {
+      "image": "campaign_chapter_10_unmasked.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-12/serious_stuff/campaign_navigation",
+      "sha256": "c22d3271715fe5fa8b86d5aca8885d61da5843eabc199fc7c1e472f3320c3c43",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ]
+    },
+    {
+      "image": "campaign_chapter_5_path_20260916.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "reference",
+      "group": "2026-09-16/mega_old_acc/v13_chapter5",
+      "sha256": "3cf488da9756a81778d069c4247df536bdf24db985f362a32b159ecb6d8ce463",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ]
+    },
+    {
+      "image": "campaign_chapter_5_loading_20260916.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-16/mega_old_acc/v13_chapter5",
+      "sha256": "fbff89c0021bd025286f8e1987974c7ea8b560b52160fb62eb7c0ccbed233a39",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ]
+    },
+    {
+      "image": "campaign_map_recentered_20260916.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "validation",
+      "group": "2026-09-16/mega_old_acc/v13_chapter5_return",
+      "sha256": "079e0423bb1a7c59ccd4a5dce0fed65e2bbac25d119b9bb5366801eb5e2895f9",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
+      ]
+    },
+    {
       "image": "trial_gear_stats_20260916.png",
       "screen": "PNC_TRIAL_APPLICABLE_STATS",
       "split": "reference",
@@ -1242,6 +1302,40 @@
       "expected_visual_screens": [
         "PNC_RESEARCH_TREE"
       ]
+    },
+    {
+      "image": "hero_recruit_presentation_20260913.png",
+      "screen": "PNC_HERO_RECRUIT_RESULT",
+      "split": "reference",
+      "group": "2026-09-13/mega_old_acc/manual_update_hero_result",
+      "sha256": "4457eec968ee5bcd6fbc766e01e67c16d3612aca849ebb1a8bc4e9cdeaf73484",
+      "expected_visual_screens": [
+        "PNC_HERO_RECRUIT_RESULT"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\workflow-recognition-integration\\.local-data\\artifacts\\core_resume\\manual_update_20260913T214455Z\\2026-09-13\\mega_old_acc_manual_update\\20260913T215253Z_core_20260913T214457Z_b39f74f1_0080_hero_result_diagnostic.png",
+        "source_sha256": "795b4c876b663e76bcb951481543ca7aed17a5fd5a81690f47f6ceff07e2a5b2",
+        "derivative": "Unmodified native capture; no account/HUD/chat fields present."
+      },
+      "build": "5.2.77 / AppVersion 5.0.204.235",
+      "locale": "English"
+    },
+    {
+      "image": "hero_recruit_fragments_20260913.png",
+      "screen": "PNC_HERO_RECRUIT_RESULT",
+      "split": "reference",
+      "group": "2026-09-13/mega_old_acc/manual_update_hero_result",
+      "sha256": "814837f528e504c16d0e31450b06e8e975abe1149357a9eac608b574aebcce7c",
+      "expected_visual_screens": [
+        "PNC_HERO_RECRUIT_RESULT"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\workflow-recognition-integration\\.local-data\\artifacts\\core_resume\\manual_update_20260913T214455Z\\2026-09-13\\mega_old_acc_manual_update\\20260913T215425Z_core_20260913T214457Z_b39f74f1_0081_hero_after_manual_confirm.png",
+        "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+        "derivative": "Unmodified native capture; no account/HUD/chat fields present."
+      },
+      "build": "5.2.77 / AppVersion 5.0.204.235",
+      "locale": "English"
     }
   ]
 }

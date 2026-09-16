@@ -354,7 +354,12 @@ def _scaled_region(region: Bounds, image: Image.Image) -> Bounds:
 
 
 def _resolve_title(card_lines: list[_CardLine]) -> tuple[TrialCategory | None, str | None]:
-    """Resolve card identity only from a bounded title-zone OCR line."""
+    """Resolve card identity only from a bounded title-zone OCR line.
+
+    Each title-zone line is tried first; when none resolves alone, the same
+    bounded lines joined in reading order get one exact-match retry because
+    a detector split can break one displayed title into adjacent fragments.
+    """
 
     title_lines = [
         card_line
@@ -363,6 +368,14 @@ def _resolve_title(card_lines: list[_CardLine]) -> tuple[TrialCategory | None, s
     ]
     for card_line in title_lines:
         category = trial_category_for_label(card_line.line.text)
+        if category is not None:
+            return category, trial_category_title(category)
+    joined = "".join(
+        card_line.line.text.strip()
+        for card_line in sorted(title_lines, key=lambda card_line: card_line.line.bounds.x)
+    )
+    if joined:
+        category = trial_category_for_label(joined)
         if category is not None:
             return category, trial_category_title(category)
     if title_lines:

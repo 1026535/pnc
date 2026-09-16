@@ -28,6 +28,10 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
+from pnc_automation.app.pnc.domain.hero_recruit_result import (
+    HERO_RECRUIT_RESULT_LAYOUTS,
+    HeroRecruitResultPhase,
+)
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
@@ -632,6 +636,58 @@ class NavigationCore:
             ),
         )
 
+    def acknowledge_hero_recruit_result(
+        self, before: Observation, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Acknowledge one retained result through its phase-owned safe control.
+
+        The caller supplies its fresh content observation so it can retain the
+        result before input. This route never exposes the paid Recruit control.
+        """
+
+        result = before.hero_recruit_result
+        if (
+            before.screen_type != ScreenType.PNC_HERO_RECRUIT_RESULT
+            or before.blocking_popup or before.decision.guard != GuardVerdict.CLEAR
+            or result is None or before.frame_ref is None
+            or result.frame_ref != before.frame_ref
+            or result.source_screen != before.screen_type
+            or result.source_layout_id != before.decision.layout_id
+            or HERO_RECRUIT_RESULT_LAYOUTS.get(before.decision.layout_id) != result.phase
+        ):
+            raise RuntimeError("Hero result acknowledgment requires current, qualified phase facts.")
+        presentation = result.phase == HeroRecruitResultPhase.HERO_PRESENTATION
+        selector = (UiElementId.PNC_HERO_RESULT_CONFIRM if presentation
+                    else UiElementId.PNC_HERO_RESULT_CLOSE)
+        element = before.visible_elements.get(selector)
+        if (
+            element is None or element.source_kind != VisibleElementSourceKind.TEMPLATE
+            or element.frame_ref != before.frame_ref
+            or element.source_layout_id != before.decision.layout_id
+            or element.source_screen != before.screen_type
+            or element.action_point is None or not element.bounds.contains_point(element.action_point)
+        ):
+            raise RuntimeError("Hero result acknowledgment lacks its fresh phase-owned control; no tap sent.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_hero_result_acknowledge"
+        destination = (ScreenType.PNC_HERO_RECRUIT_RESULT if presentation else ScreenType.PNC_HERO_HALL)
+        self.record({"event": "pending_hero_result_acknowledgment", "phase": result.phase.value,
+                     "selector": selector.value, "artifact": str(before.artifact_path)})
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=selector, reason="acknowledge_hero_recruit_result"),
+            before, frozenset({destination}), label, observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and (not presentation or (
+                    frame.hero_recruit_result is not None
+                    and frame.hero_recruit_result.phase == HeroRecruitResultPhase.FRAGMENT_RESULT
+                    and frame.hero_recruit_result.frame_ref == frame.frame_ref
+                    and HERO_RECRUIT_RESULT_LAYOUTS.get(frame.decision.layout_id)
+                    == HeroRecruitResultPhase.FRAGMENT_RESULT
+                ))
+            ),
+        )
+
     def send_chat_message(
         self,
         channel: ChatChannel,
@@ -878,6 +934,50 @@ class NavigationCore:
             completion_predicate=lambda frame: (
                 (returned := _proved_research_category(frame)) is not None
                 and (category is None or returned == category)
+            ),
+        )
+
+    def open_campaign_chapter(
+        self, chapter_number: int, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open one observed unlocked Campaign chapter row and prove its path title."""
+
+        if isinstance(chapter_number, bool) or not isinstance(chapter_number, int) or chapter_number <= 0:
+            raise ValueError("Campaign chapter navigation requires a positive integer chapter number.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_campaign_chapter"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_CAMPAIGN_MAP or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+        ):
+            raise RuntimeError("Campaign chapter navigation requires a freshly observed, unblocked Campaign map.")
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+            if entry.campaign_node is not None
+            and entry.campaign_node.chapter_number == chapter_number
+            and entry.campaign_node.locked is False
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError(
+                "Requested Campaign chapter is missing, locked, clipped, unreadable or ambiguous; no tap sent."
+            )
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.CAMPAIGN_CHAPTER,
+                metadata_key="chapter_number", metadata_value=chapter_number,
+                use_action_point=True, reason="open_campaign_chapter",
+            ),
+            source, frozenset({ScreenType.PNC_CAMPAIGN_CHAPTER}), label, observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and frame.campaign_chapter is not None
+                and frame.campaign_chapter.chapter_number == chapter_number
             ),
         )
 

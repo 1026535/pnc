@@ -8,13 +8,15 @@ dependencies = [
     "Pillow>=12.1.1,<13.0.0",
     "numpy>=2.4.2,<3.0.0",
     "opencv-python>=4.13.0.92,<5.0.0",
-    "rapidocr_onnxruntime>=1.2.3,<2.0.0",
+    "rapidocr==3.4.5",
+    "onnxruntime>=1.24.3,<2.0.0",
     "tzdata>=2026.3,<2027.0",
 ]
 
 [project.optional-dependencies]
 test = ["coverage==7.10.7"]
-yolo = ["onnxruntime>=1.24.3,<2.0.0"]
+# Keep the existing install extra; ONNX Runtime is also required by OCR.
+yolo = []
 
 [build-system]
 requires = ["setuptools>=80", "wheel"]
@@ -29,3 +31,4 @@ include = ["pnc_automation*"]
 [tool.setuptools.package-data]
 "pnc_automation" = ["py.typed", "templates/pnc/*.png"]
 "pnc_automation.app.pnc.vision" = ["data/*.yaml", "data/*.json", "data/screen_anchors/*.png", "data/control_anchors/*.png", "data/home_city_camera/*.png"]
+"pnc_automation.core.vision.ocr" = ["data/*.onnx", "data/*.txt"]

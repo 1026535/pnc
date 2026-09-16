@@ -23,8 +23,10 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDeb
 from pnc_automation.app.pnc.vision.building_details import filter_building_detail_controls
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
+    bind_campaign_chapter_identity,
     bind_list_entry,
     bind_spatial_surface,
+    bind_hero_recruit_result,
     bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
@@ -277,6 +279,12 @@ class NavigationPerception:
                 source_screen=screen,
                 source_layout_id=decision.layout_id,
             ),
+            campaign_chapter=bind_campaign_chapter_identity(
+                content.campaign_chapter,
+                frame_ref=screenshot.frame_ref,
+                source_screen=screen,
+                source_layout_id=decision.layout_id,
+            ),
             current_castle=content.current_castle,
             current_castle_evidence=content.current_castle_evidence,
             mailbox_type=content.mailbox_type,
@@ -326,6 +334,16 @@ class NavigationPerception:
                     source_layout_id=decision.layout_id,
                 )
                 if content.trial_stats_detail is not None
+                else None
+            ),
+            hero_recruit_result=(
+                bind_hero_recruit_result(
+                    content.hero_recruit_result,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.hero_recruit_result is not None
                 else None
             ),
             bag_preview=(

@@ -1141,5 +1141,204 @@
     ],
     "capture_group": "2026-09-16/mega_old_acc/research_acceptance_a02dbcf6",
     "review": "Independent live acceptance frame 0033, captured 2026-09-16T17:12:13.738736Z. Lead visually inspected the unmodified native Economy tree. No private HUD or chat appears. Different vertical placement makes the Iron Harvest I row complete; unresolved Iron Output OCR must remain non-actionable."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_presentation_platform.png",
+    "source": "tests/data/screen_recognition/hero_recruit_presentation_20260913.png",
+    "source_sha256": "795b4c876b663e76bcb951481543ca7aed17a5fd5a81690f47f6ceff07e2a5b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      18,
+      616,
+      120,
+      690
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_presentation_confirm.png",
+    "source": "tests/data/screen_recognition/hero_recruit_presentation_20260913.png",
+    "source_sha256": "795b4c876b663e76bcb951481543ca7aed17a5fd5a81690f47f6ceff07e2a5b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      181,
+      847,
+      360,
+      894
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_fragments_platform.png",
+    "source": "tests/data/screen_recognition/hero_recruit_fragments_20260913.png",
+    "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      18,
+      771,
+      126,
+      830
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_fragments_items_label.png",
+    "source": "tests/data/screen_recognition/hero_recruit_fragments_20260913.png",
+    "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      303,
+      829,
+      389,
+      850
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_fragments_close.png",
+    "source": "tests/data/screen_recognition/hero_recruit_fragments_20260913.png",
+    "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      53,
+      866,
+      228,
+      910
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  }
+,
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_6_path.png",
+    "source": "artifacts/2026-08-28/mega_old_acc/20260828T235603Z_daily_plan_npc2_campaign_calamity_24_post_action_1.png",
+    "source_sha256": "17ffe571cb14bef0f3658125290975872d753674b4ca7a27454d087bcf44ddc8",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-08-28/mega_old_acc/campaign_chapter_6",
+    "notes": "Unmodified unmasked Chapter 6 path capture on the mega_old_acc account; the only saved ch6-path frame before the stage-5 action."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_6_path_return.png",
+    "source": "artifacts/2026-08-28/mega_old_acc/20260828T235900Z_daily_plan_npc2_campaign_stage5_close_post_action_1.png",
+    "source_sha256": "2f37c71111a2a2fdf31e975ee7e9d42178db2e9c7e3f8a70074621c0ad89ad81",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-08-28/mega_old_acc/campaign_chapter_6",
+    "notes": "Unmodified unmasked Chapter 6 path capture after the stage-5 detail closed; validation pair for the ch6-path profile."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_10_unmasked.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T200143Z_core_20260912T195338Z_6a8f4869_0025_campaign_detail_close_settled.png",
+    "source_sha256": "5bd696d4ce042bcf6db5b345d55e2f717800c361f185d0655358416c28387741",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Unmodified Chapter 10 path capture including the private HUD; retained unmasked for producer structure validation."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_map_chapter_6.png",
+    "source": ".local-data/artifacts/vision_live_tour_20260915/2026-09-15/testing/20260915T161036Z_core_20260915T160413Z_018f500d_0054_15_campaign_building_open_campaign_portal_failure.png",
+    "source_sha256": "e8906c81bdfadadafeb2b21560eafd8ee7b95a68dd78b4363b6086ae4a15c634",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-15/vision_live_tour_20260915",
+    "notes": "LANCZOS 540x960 downscale of the 900x1600 tour map6 capture; chapters 4-9 rows visible with chapter 6 current."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_map_chapter_6_pulse.png",
+    "source": ".local-data/artifacts/vision_navigation_fix_20260915/2026-09-15/testing/20260915T165404Z_core_20260915T165225Z_22df5ea2_0033_core_8_building_after_2.png",
+    "source_sha256": "6b1c7df3bcab9017378f666021e3381bd27871082605be655cb02643ee6ffb0b",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-15/vision_navigation_fix_20260915",
+    "notes": "Unmodified 900x1600 map6 capture with the current-chapter pulse ring mid-animation; validation frame for the shared layout."
+  },
+  {
+    "asset": "screen_anchors/campaign_chapter_6_path_title.png",
+    "source": "artifacts/2026-08-28/mega_old_acc/20260828T235603Z_daily_plan_npc2_campaign_calamity_24_post_action_1.png",
+    "source_sha256": "17ffe571cb14bef0f3658125290975872d753674b4ca7a27454d087bcf44ddc8",
+    "reference_size": [540, 960],
+    "crop": [243, 46, 538, 92],
+    "capture_group": "2026-08-28/mega_old_acc/campaign_chapter_6",
+    "notes": "Right-aligned 'Ch.6 Marsh of Tear' title art crop; ref-space bounds measured on the 900x1600 source."
+  },
+  {
+    "asset": "screen_anchors/campaign_chapter_6_path_terrain.png",
+    "source": "artifacts/2026-08-28/mega_old_acc/20260828T235603Z_daily_plan_npc2_campaign_calamity_24_post_action_1.png",
+    "source_sha256": "17ffe571cb14bef0f3658125290975872d753674b4ca7a27454d087bcf44ddc8",
+    "reference_size": [540, 960],
+    "crop": [110, 120, 260, 190],
+    "capture_group": "2026-08-28/mega_old_acc/campaign_chapter_6",
+    "notes": "Upper-left Marsh of Tear terrain art crop; ref-space bounds measured on the 900x1600 source."
+  },
+  {
+    "asset": "screen_anchors/campaign_map_padlock.png",
+    "source": ".local-data/artifacts/vision_live_tour_20260915/2026-09-15/testing/20260915T161036Z_core_20260915T160413Z_018f500d_0054_15_campaign_building_open_campaign_portal_failure.png",
+    "source_sha256": "e8906c81bdfadadafeb2b21560eafd8ee7b95a68dd78b4363b6086ae4a15c634",
+    "reference_size": [540, 960],
+    "crop": [247, 220, 281, 258],
+    "capture_group": "2026-09-15/vision_live_tour_20260915",
+    "notes": "Gold-body standalone padlock glyph for locked chapter 7; cropped from the sanitized 540x960 map6 fixture."
+  },
+  {
+    "asset": "screen_anchors/campaign_map_padlock_alt.png",
+    "source": ".local-data/artifacts/vision_live_tour_20260915/2026-09-15/testing/20260915T161036Z_core_20260915T160413Z_018f500d_0054_15_campaign_building_open_campaign_portal_failure.png",
+    "source_sha256": "e8906c81bdfadadafeb2b21560eafd8ee7b95a68dd78b4363b6086ae4a15c634",
+    "reference_size": [540, 960],
+    "crop": [196, 30, 226, 68],
+    "capture_group": "2026-09-15/vision_live_tour_20260915",
+    "notes": "Whitened-face standalone padlock glyph for locked chapter 8; second observed map-lock art variant."
+  },
+  {
+    "asset": "screen_anchors/campaign_chapter_5_title.png",
+    "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\vision-v13-live\\.local-data\\devin-v13\\live_chapter5_capture\\artifacts\\2026-09-16\\mega_old_acc\\20260916T095143Z_core_20260916T094904Z_0fcbdd92_0033_v13_chapter5_destination_2.png",
+    "source_sha256": "ce3fa41cab686e683ce38d392c593e5fe0bdaee8a46d723ebc9f7fbaf2f15108",
+    "reference_size": [540, 960],
+    "crop": [270, 52, 529, 89],
+    "capture_group": "2026-09-16/mega_old_acc/v13_chapter5",
+    "notes": "Read-only current chapter5 entry; source settled after2, loading after1 is an independent capture. No stage Challenge or spending."
+  },
+  {
+    "asset": "screen_anchors/campaign_chapter_5_coast.png",
+    "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\vision-v13-live\\.local-data\\devin-v13\\live_chapter5_capture\\artifacts\\2026-09-16\\mega_old_acc\\20260916T095143Z_core_20260916T094904Z_0fcbdd92_0033_v13_chapter5_destination_2.png",
+    "source_sha256": "ce3fa41cab686e683ce38d392c593e5fe0bdaee8a46d723ebc9f7fbaf2f15108",
+    "reference_size": [540, 960],
+    "crop": [143, 678, 295, 734],
+    "capture_group": "2026-09-16/mega_old_acc/v13_chapter5",
+    "notes": "Read-only current chapter5 entry; source settled after2, loading after1 is an independent capture. No stage Challenge or spending."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_5_path_20260916.png",
+    "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\vision-v13-live\\.local-data\\devin-v13\\live_chapter5_capture\\artifacts\\2026-09-16\\mega_old_acc\\20260916T095143Z_core_20260916T094904Z_0fcbdd92_0033_v13_chapter5_destination_2.png",
+    "source_sha256": "ce3fa41cab686e683ce38d392c593e5fe0bdaee8a46d723ebc9f7fbaf2f15108",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-16/mega_old_acc/v13_chapter5",
+    "notes": "Actual full native capture; no synthetic crop or resize used as independent evidence."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_5_loading_20260916.png",
+    "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\vision-v13-live\\.local-data\\devin-v13\\live_chapter5_capture\\artifacts\\2026-09-16\\mega_old_acc\\20260916T095140Z_core_20260916T094904Z_0fcbdd92_0032_v13_chapter5_destination_1.png",
+    "source_sha256": "b754390bbfab5c3b79a30c4ce42c9dfa523695f02d9169164c0d60e179d9467a",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-16/mega_old_acc/v13_chapter5",
+    "notes": "Actual full native capture; no synthetic crop or resize used as independent evidence."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_map_recentered_20260916.png",
+    "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\vision-v13-live\\.local-data\\devin-v13\\live_chapter5_return\\artifacts\\2026-09-16\\mega_old_acc\\20260916T095930Z_core_20260916T095835Z_4da5a483_0011_core_1_after_7.png",
+    "source_sha256": "aa05cf8655155f2f661f5577c8542c5fdf1ff29c6c38057b568b009b62c20ffe",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-16/mega_old_acc/v13_chapter5_return",
+    "notes": "Actual settled map after one Back from Chapter5; demonstrates recentering of the prior southern map. No repeated tap after failed classification."
   }
 ]

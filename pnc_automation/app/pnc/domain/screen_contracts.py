@@ -7,6 +7,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 _CAMPAIGN_FLOW_SCREEN_TYPES = frozenset(
     {
         ScreenType.PNC_CAMPAIGN_MAP,
+        ScreenType.PNC_CAMPAIGN_CHAPTER,
         ScreenType.PNC_CAMPAIGN_STAGE,
         ScreenType.PNC_BATTLE_PREP,
     }

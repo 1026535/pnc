@@ -28,7 +28,9 @@ from pnc_automation.core.infra.capture.screenshot_service import CapturedScreens
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
+from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.building_details import BuildingDetail
@@ -68,8 +70,10 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
 )
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
+    bind_campaign_chapter_identity,
     bind_list_entry,
     bind_spatial_surface,
+    bind_hero_recruit_result,
     bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
@@ -161,6 +165,7 @@ class ObservationAdditions:
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
     active_bag_tab: BagTab | None = None
+    campaign_chapter: CampaignChapterIdentity | None = None
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
@@ -172,6 +177,7 @@ class ObservationAdditions:
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
+    hero_recruit_result: HeroRecruitResult | None = None
     bag_preview: BagChestPreviewFacts | None = None
     building_detail: BuildingDetail | None = None
 
@@ -840,6 +846,12 @@ class ObservationBuilder:
             available_march_slots=additions.available_march_slots,
             active_chat_channel=additions.active_chat_channel,
             active_bag_tab=additions.active_bag_tab,
+            campaign_chapter=bind_campaign_chapter_identity(
+                additions.campaign_chapter,
+                frame_ref=getattr(screenshot, "frame_ref", None),
+                source_screen=decision.effective_screen,
+                source_layout_id=decision.layout_id,
+            ),
             profile_player_name=additions.profile_player_name,
             mailbox_type=additions.mailbox_type,
             mailbox_empty=additions.mailbox_empty,
@@ -884,6 +896,16 @@ class ObservationBuilder:
                     source_layout_id=decision.layout_id,
                 )
                 if additions.trial_stats_detail is not None
+                else None
+            ),
+            hero_recruit_result=(
+                bind_hero_recruit_result(
+                    additions.hero_recruit_result,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.hero_recruit_result is not None
                 else None
             ),
             bag_preview=(
@@ -1327,6 +1349,10 @@ def _merge_observation_additions(
         ),
         active_chat_channel=primary.active_chat_channel or fallback.active_chat_channel,
         active_bag_tab=primary.active_bag_tab or fallback.active_bag_tab,
+        campaign_chapter=_merge_campaign_chapter_identity(
+            primary.campaign_chapter,
+            fallback.campaign_chapter,
+        ),
         profile_player_name=primary.profile_player_name or fallback.profile_player_name,
         mailbox_type=primary.mailbox_type or fallback.mailbox_type,
         empty_mailboxes=primary.empty_mailboxes | fallback.empty_mailboxes,
@@ -1346,9 +1372,23 @@ def _merge_observation_additions(
         research_queue_rows=primary.research_queue_rows or fallback.research_queue_rows,
         trial_summary=primary.trial_summary or fallback.trial_summary,
         trial_stats_detail=primary.trial_stats_detail or fallback.trial_stats_detail,
+        hero_recruit_result=primary.hero_recruit_result or fallback.hero_recruit_result,
         bag_preview=primary.bag_preview or fallback.bag_preview,
         building_detail=primary.building_detail or fallback.building_detail,
     )
+
+
+def _merge_campaign_chapter_identity(
+    primary: CampaignChapterIdentity | None,
+    fallback: CampaignChapterIdentity | None,
+) -> CampaignChapterIdentity | None:
+    """Keep one same-frame chapter identity; contradictory numbers stay unresolved."""
+
+    if primary is None:
+        return fallback
+    if fallback is None or fallback.chapter_number == primary.chapter_number:
+        return primary
+    return None
 
 
 def reconcile_visual_modal_guard(

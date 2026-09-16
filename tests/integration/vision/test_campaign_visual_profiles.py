@@ -10,16 +10,18 @@ import unittest
 from PIL import Image, ImageDraw
 
 from pnc_automation.app.automation.engine.navigation_core import reviewed_navigation_edges
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import (
+    ListEntryKind,
+    RowRecognitionStatus,
+    VisibleElementSourceKind,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ImageSelectorEngine, ObservationBuilder
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
-    CAMPAIGN_CHAPTER_STAGE_THREE_ROW,
     CAMPAIGN_CHAPTER_TITLE_REGION,
-    CAMPAIGN_MAP_CHAPTER_ROW,
     CAMPAIGN_REFERENCE_SIZE,
     scale_campaign_bounds,
 )
@@ -42,6 +44,9 @@ from tests.support.pnc.capture_vision.modal_overlay import (
     with_update_modal,
 )
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
+from tests.support.pnc.capture_vision.require_rapid_ocr_service import (
+    _require_rapid_ocr_service,
+)
 
 
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
@@ -76,7 +81,7 @@ def _builder(ocr_lines: tuple[OcrLine, ...] = ()) -> ObservationBuilder:
         selector_registry=registry,
         selector_engine=ImageSelectorEngine(matcher),
         screen_classifier=ScreenClassifier(),
-        enricher=PncObservationEnricher(selector_registry=registry),
+        enricher=PncObservationEnricher(selector_registry=registry, template_matcher=matcher),
         ocr_service=_RecordingOcrService(lines=ocr_lines),
         visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
     )
@@ -86,10 +91,11 @@ def _navigation_perception(ocr_lines: tuple[OcrLine, ...] = ()) -> NavigationPer
     """Wire NavigationPerception to the same registry and controlled OCR."""
 
     registry = build_default_selector_registry()
+    matcher = OpenCvTemplateMatcher()
     ocr = _FakeOcrService(lines=ocr_lines)
     return NavigationPerception(
-        load_visual_screen_recognizer(),
-        PncObservationEnricher(selector_registry=registry),
+        load_visual_screen_recognizer(matcher=matcher),
+        PncObservationEnricher(selector_registry=registry, template_matcher=matcher),
         ScreenClassifier(),
         lambda capture: ObservationOcrContext(
             capture.image,
@@ -138,7 +144,7 @@ def _builder_with_backend(ocr_service: _CampaignCropOcrService) -> ObservationBu
         selector_registry=registry,
         selector_engine=ImageSelectorEngine(matcher),
         screen_classifier=ScreenClassifier(),
-        enricher=PncObservationEnricher(selector_registry=registry),
+        enricher=PncObservationEnricher(selector_registry=registry, template_matcher=matcher),
         ocr_service=ocr_service,
         visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
     )
@@ -148,9 +154,10 @@ def _navigation_perception_with_backend(ocr_service: _CampaignCropOcrService) ->
     """Wire replacement perception to one crop-aware OCR backend."""
 
     registry = build_default_selector_registry()
+    matcher = OpenCvTemplateMatcher()
     return NavigationPerception(
-        load_visual_screen_recognizer(),
-        PncObservationEnricher(selector_registry=registry),
+        load_visual_screen_recognizer(matcher=matcher),
+        PncObservationEnricher(selector_registry=registry, template_matcher=matcher),
         ScreenClassifier(),
         lambda capture: ObservationOcrContext(
             capture.image,
@@ -165,8 +172,9 @@ class CampaignVisualProfileTests(unittest.TestCase):
     """Require campaign identity and controls to remain evidence-backed and scoped."""
 
     def test_persisted_southern_map_view_has_owned_home_return_on_both_paths(self) -> None:
-        """The live reopened map needs both scene rows and its measured portal."""
+        """The live reopened map needs its measured portal and only honest rows."""
         image = _image("campaign_map_southern_view_20260916.png")
+        expected_counts = {(540, 960): (1, 2), (900, 1600): (2, 2)}
         for size in ((540, 960), (900, 1600)):
             capture = _capture(image.resize(size, Image.Resampling.LANCZOS))
             for path in ("builder", "navigation"):
@@ -181,7 +189,25 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertIsNotNone(control)
                     self.assertEqual(VisibleElementSourceKind.TEMPLATE, control.source_kind)
                     self.assertEqual(capture.frame_ref, control.frame_ref)
-                    self.assertFalse(observation.list_entries)
+                    rows = observation.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+                    clipped = [
+                        row for row in rows if row.row_status is RowRecognitionStatus.CLIPPED
+                    ]
+                    unreadable = [
+                        row for row in rows if row.row_status is RowRecognitionStatus.UNREADABLE
+                    ]
+                    expected_clipped, expected_unreadable = expected_counts[size]
+                    self.assertEqual(expected_clipped, len(clipped))
+                    self.assertEqual(expected_unreadable, len(unreadable))
+                    for row in rows:
+                        self.assertIsNone(row.action_point)
+                        self.assertIsNone(row.action_bounds)
+                        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, row.source_screen)
+                        self.assertEqual("campaign_map", row.source_layout_id)
+                        self.assertEqual(capture.frame_ref, row.frame_ref)
+                    for row in unreadable:
+                        self.assertIs(row.campaign_node.locked, False)
+                        self.assertIsNone(row.campaign_node.chapter_number)
         # One isolated chapter label cannot qualify this appearance.
         erased = image.copy()
         ImageDraw.Draw(erased).rectangle((85, 350, 260, 413), fill=(0, 0, 0))
@@ -218,15 +244,15 @@ class CampaignVisualProfileTests(unittest.TestCase):
 
         self.assertEqual(CAMPAIGN_REFERENCE_SIZE, (540, 960))
         self.assertEqual(
-            scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, (900, 1600)),
-            Bounds(323, 757, 252, 83),
+            scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, (900, 1600)),
+            Bounds(342, 63, 542, 100),
         )
         self.assertEqual(
             scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, CAMPAIGN_REFERENCE_SIZE),
             CAMPAIGN_CHAPTER_TITLE_REGION,
         )
         with self.assertRaisesRegex(ValueError, "positive image dimensions"):
-            scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, (0, 960))
+            scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, (0, 960))
 
     def test_benchmark_wrapper_preserves_owned_detail_close(self) -> None:
         """Timing instrumentation forwards the base-first visual contract."""
@@ -249,12 +275,35 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 ScreenType.PNC_CAMPAIGN_MAP,
                 {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
             ),
+            "campaign_map_chapter_6.png": (
+                ScreenType.PNC_CAMPAIGN_MAP,
+                {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
+            ),
+            "campaign_map_chapter_6_pulse.png": (
+                ScreenType.PNC_CAMPAIGN_MAP,
+                {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
+            ),
             "campaign_chapter_10.png": (
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
                 {
                     UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
                     UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE,
                 },
+            ),
+            "campaign_chapter_10_unmasked.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {
+                    UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE,
+                },
+            ),
+            "campaign_chapter_6_path.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
+            ),
+            "campaign_chapter_6_path_return.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
             ),
             "campaign_stage_10_3.png": (
                 ScreenType.PNC_CAMPAIGN_STAGE,
@@ -283,7 +332,15 @@ class CampaignVisualProfileTests(unittest.TestCase):
     def test_campaign_profiles_are_mutually_exclusive_at_reference_and_scaled_sizes(self) -> None:
         recognizer = load_visual_screen_recognizer()
         expected = {
-            "campaign_map.png": (ScreenType.PNC_CAMPAIGN_MAP, UiElementId.PNC_CAMPAIGN_HOME_PORTAL),
+            "campaign_map.png": (ScreenType.PNC_CAMPAIGN_MAP, {UiElementId.PNC_CAMPAIGN_HOME_PORTAL}),
+            "campaign_map_chapter_6.png": (
+                ScreenType.PNC_CAMPAIGN_MAP,
+                {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
+            ),
+            "campaign_map_chapter_6_pulse.png": (
+                ScreenType.PNC_CAMPAIGN_MAP,
+                {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
+            ),
             "campaign_chapter_10.png": (
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
                 {
@@ -291,16 +348,32 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE,
                 },
             ),
+            "campaign_chapter_10_unmasked.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {
+                    UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE,
+                },
+            ),
+            "campaign_chapter_6_path.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
+            ),
+            "campaign_chapter_6_path_return.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
+            ),
             "campaign_stage_10_3.png": (
                 ScreenType.PNC_CAMPAIGN_STAGE,
                 {UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON, UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON},
             ),
         }
-        for name, (screen, selector) in expected.items():
+        for name, (screen, expected_selectors) in expected.items():
             with self.subTest(name=name):
-                result = recognizer.recognize(_image(name).resize((900, 1600)))
+                image = _image(name)
+                alternate = image.resize((900, 1600) if image.size == (540, 960) else (540, 960))
+                result = recognizer.recognize(alternate)
                 self.assertEqual({item.screen_type for item in result.evidence}, {screen})
-                expected_selectors = selector if isinstance(selector, set) else {selector}
                 self.assertEqual({item.selector_id for item in result.controls}, expected_selectors)
 
     def test_campaign_detail_close_and_challenge_are_owned_controls(self) -> None:
@@ -360,47 +433,96 @@ class CampaignVisualProfileTests(unittest.TestCase):
             scaled_control.bounds.contains_point(scaled_control.action_point or scaled_control.bounds.center())
         )
 
-    def test_campaign_enricher_publishes_only_observed_rows_without_mode(self) -> None:
+    def test_campaign_producer_publishes_typed_rows_with_provenance(self) -> None:
+        """Map and chapter frames publish only evidence-backed typed node facts."""
+
         map_lines = (
-            OcrLine("10", Bounds(205, 473, 22, 14), 1.0),
-            OcrLine("Grandia Ruins", Bounds(236, 472, 106, 17), 1.0),
+            OcrLine("10", Bounds(205, 468, 20, 16), 1.0),
+            OcrLine("Grandia Ruins", Bounds(235, 470, 107, 20), 1.0),
         )
         map_observation = _builder(map_lines).build(
             _capture(_image("campaign_map.png")),
             request=ObservationRequest.campaign_map_follow_up(),
         )
         self.assertEqual(map_observation.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
-        self.assertEqual(len(map_observation.entries(ListEntryKind.CAMPAIGN_CHAPTER)), 1)
-        chapter = map_observation.entries(ListEntryKind.CAMPAIGN_CHAPTER)[0]
-        self.assertEqual(chapter.title_text, "10 Grandia Ruins")
-        self.assertEqual(chapter.metadata, {"chapter_number": 10})
-        self.assertNotIn("mode", chapter.metadata)
-        self.assertEqual(chapter.bounds, CAMPAIGN_MAP_CHAPTER_ROW)
-        self.assertEqual(chapter.action_bounds, CAMPAIGN_MAP_CHAPTER_ROW)
-        self.assertEqual(chapter.action_point, CAMPAIGN_MAP_CHAPTER_ROW.center())
-        self.assertEqual(chapter.source_screen, ScreenType.PNC_CAMPAIGN_MAP)
-        self.assertEqual(chapter.source_layout_id, "campaign_map")
-        self.assertEqual(chapter.frame_ref, map_observation.frame_ref)
+        self.assertIsNone(map_observation.campaign_chapter)
+        chapters = map_observation.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+        self.assertEqual(len(chapters), 2)
+        unreadable = next(
+            entry for entry in chapters if entry.row_status is RowRecognitionStatus.UNREADABLE
+        )
+        self.assertIsNotNone(unreadable.campaign_node)
+        self.assertIsNone(unreadable.campaign_node.chapter_number)
+        self.assertIs(unreadable.campaign_node.locked, False)
+        self.assertIsNone(unreadable.action_point)
+        self.assertEqual(unreadable.metadata, {})
+        complete = next(
+            entry for entry in chapters if entry.row_status is RowRecognitionStatus.COMPLETE
+        )
+        self.assertEqual(complete.campaign_node.chapter_number, 10)
+        self.assertEqual(complete.campaign_node.name, "Grandia Ruins")
+        self.assertIs(complete.campaign_node.locked, False)
+        self.assertIsNone(complete.campaign_node.mode)
+        self.assertEqual(complete.metadata, {"chapter_number": 10})
+        self.assertIsNotNone(complete.action_point)
+        self.assertTrue(complete.action_bounds.contains_point(complete.action_point))
+        self.assertTrue(complete.bounds.contains_bounds(complete.action_bounds))
+        for entry in chapters:
+            self.assertEqual(entry.source_screen, ScreenType.PNC_CAMPAIGN_MAP)
+            self.assertEqual(entry.source_layout_id, "campaign_map")
+            self.assertEqual(entry.frame_ref, map_observation.frame_ref)
 
         chapter_lines = (
-            OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
+            OcrLine("Ch.10 C", Bounds(224, 50, 140, 39), 1.0),
+            OcrLine("Grandia Ruins", Bounds(368, 50, 160, 39), 1.0),
+            OcrLine("3", Bounds(315, 610, 15, 20), 1.0),
         )
         chapter_observation = _builder(chapter_lines).build(
             _capture(_image("campaign_chapter_10.png")),
             request=ObservationRequest.campaign_map_follow_up(),
         )
         self.assertEqual(chapter_observation.screen_type, ScreenType.PNC_CAMPAIGN_CHAPTER)
-        self.assertEqual(len(chapter_observation.entries(ListEntryKind.CAMPAIGN_STAGE)), 1)
-        stage = chapter_observation.entries(ListEntryKind.CAMPAIGN_STAGE)[0]
-        self.assertEqual(stage.title_text, "3")
-        self.assertEqual(stage.metadata, {"chapter_number": 10, "stage_number": 3})
-        self.assertNotIn("mode", stage.metadata)
-        self.assertEqual(stage.bounds, CAMPAIGN_CHAPTER_STAGE_THREE_ROW)
-        self.assertEqual(stage.action_bounds, CAMPAIGN_CHAPTER_STAGE_THREE_ROW)
-        self.assertEqual(stage.action_point, CAMPAIGN_CHAPTER_STAGE_THREE_ROW.center())
-        self.assertEqual(stage.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
-        self.assertEqual(stage.source_layout_id, "campaign_chapter_10")
-        self.assertEqual(stage.frame_ref, chapter_observation.frame_ref)
+        identity = chapter_observation.campaign_chapter
+        self.assertIsNotNone(identity)
+        self.assertEqual(identity.chapter_number, 10)
+        self.assertEqual(identity.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
+        self.assertEqual(identity.source_layout_id, "campaign_chapter_10")
+        self.assertEqual(identity.frame_ref, chapter_observation.frame_ref)
+        stages = chapter_observation.entries(ListEntryKind.CAMPAIGN_STAGE)
+        self.assertEqual(len(stages), 9)
+        locked = [
+            entry for entry in stages if entry.row_status is RowRecognitionStatus.NO_ACTION
+        ]
+        self.assertEqual(len(locked), 6)
+        for entry in locked:
+            self.assertIs(entry.campaign_node.locked, True)
+            self.assertEqual(entry.campaign_node.chapter_number, 10)
+            self.assertIsNone(entry.campaign_node.stage_number)
+            self.assertIsNone(entry.action_point)
+        unreadable_stages = [
+            entry for entry in stages if entry.row_status is RowRecognitionStatus.UNREADABLE
+        ]
+        self.assertEqual(len(unreadable_stages), 2)
+        for entry in unreadable_stages:
+            self.assertIs(entry.campaign_node.locked, False)
+            self.assertIsNone(entry.campaign_node.stage_number)
+            self.assertIsNone(entry.action_point)
+        stage_three = next(
+            entry for entry in stages if entry.row_status is RowRecognitionStatus.COMPLETE
+        )
+        self.assertEqual(stage_three.campaign_node.chapter_number, 10)
+        self.assertEqual(stage_three.campaign_node.stage_number, 3)
+        self.assertIs(stage_three.campaign_node.locked, False)
+        self.assertEqual(
+            stage_three.metadata, {"chapter_number": 10, "stage_number": 3}
+        )
+        self.assertNotIn("mode", stage_three.metadata)
+        self.assertIsNotNone(stage_three.action_point)
+        self.assertTrue(stage_three.action_bounds.contains_point(stage_three.action_point))
+        for entry in stages:
+            self.assertEqual(entry.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
+            self.assertEqual(entry.source_layout_id, "campaign_chapter_10")
+            self.assertEqual(entry.frame_ref, chapter_observation.frame_ref)
         self.assertTrue(chapter_observation.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
         chapter_control = chapter_observation.visible_elements[UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE]
         self.assertEqual(chapter_control.source_kind, VisibleElementSourceKind.TEMPLATE)
@@ -409,30 +531,31 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(chapter_control.frame_ref, chapter_observation.frame_ref)
 
     def test_campaign_paths_use_bounded_ocr_and_retain_native_rows(self) -> None:
-        """Both observation paths keep Campaign rows while using only their semantic OCR crops."""
+        """Both observation paths keep typed Campaign rows using only candidate-local reads."""
 
         cases = (
             (
                 "campaign_map.png",
                 (
-                    OcrLine("10", Bounds(205, 473, 22, 14), 1.0),
-                    OcrLine("Grandia Ruins", Bounds(236, 472, 106, 17), 1.0),
+                    OcrLine("10", Bounds(205, 468, 20, 16), 1.0),
+                    OcrLine("Grandia Ruins", Bounds(235, 470, 107, 20), 1.0),
                 ),
                 ScreenType.PNC_CAMPAIGN_MAP,
                 ListEntryKind.CAMPAIGN_CHAPTER,
-                CAMPAIGN_MAP_CHAPTER_ROW,
                 "campaign_map",
             ),
             (
                 "campaign_chapter_10.png",
-                (OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),),
+                (
+                    OcrLine("Ch.10 C", Bounds(224, 50, 140, 39), 1.0),
+                    OcrLine("Grandia Ruins", Bounds(368, 50, 160, 39), 1.0),
+                ),
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
                 ListEntryKind.CAMPAIGN_STAGE,
-                CAMPAIGN_CHAPTER_STAGE_THREE_ROW,
                 "campaign_chapter_10",
             ),
         )
-        for name, lines, expected_screen, entry_kind, expected_row, layout_id in cases:
+        for name, lines, expected_screen, entry_kind, layout_id in cases:
             with self.subTest(path="builder", name=name):
                 backend = _CampaignCropOcrService(lines)
                 builder = _builder_with_backend(backend)
@@ -450,21 +573,31 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 )
                 self.assertEqual(observation.screen_type, expected_screen)
                 entries = observation.entries(entry_kind)
-                self.assertEqual(len(entries), 1)
-                entry = entries[0]
-                self.assertEqual(entry.bounds, expected_row)
-                self.assertEqual(entry.action_bounds, expected_row)
-                self.assertEqual(entry.source_screen, expected_screen)
-                self.assertEqual(entry.source_layout_id, layout_id)
-                self.assertEqual(entry.frame_ref, capture.frame_ref)
+                self.assertTrue(entries)
+                for entry in entries:
+                    self.assertEqual(entry.source_screen, expected_screen)
+                    self.assertEqual(entry.source_layout_id, layout_id)
+                    self.assertEqual(entry.frame_ref, capture.frame_ref)
                 self.assertTrue(backend.regions)
                 self.assertTrue(all(region is not None for region in backend.regions))
-                expected_ocr_region = (
-                    CAMPAIGN_MAP_CHAPTER_ROW
-                    if expected_screen is ScreenType.PNC_CAMPAIGN_MAP
-                    else CAMPAIGN_CHAPTER_TITLE_REGION
+                self.assertTrue(
+                    all(
+                        Bounds(0, 0, *capture.image.size).contains_bounds(region)
+                        for region in backend.regions
+                    )
                 )
-                self.assertIn(expected_ocr_region, backend.regions)
+                if expected_screen is ScreenType.PNC_CAMPAIGN_CHAPTER:
+                    self.assertIn(CAMPAIGN_CHAPTER_TITLE_REGION, backend.regions)
+                    self.assertIsNotNone(observation.campaign_chapter)
+                else:
+                    badge_disc = Bounds(196, 458, 39, 39)
+                    self.assertTrue(
+                        any(
+                            badge_disc.contains_bounds(region)
+                            for region in backend.regions
+                        ),
+                        "map producer must read the badge numeral inside its disc",
+                    )
 
             with self.subTest(path="navigation", name=name):
                 backend = _CampaignCropOcrService(lines)
@@ -475,21 +608,168 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 )
                 self.assertEqual(observation.screen_type, expected_screen)
                 entries = observation.entries(entry_kind)
-                self.assertEqual(len(entries), 1)
-                entry = entries[0]
-                self.assertEqual(entry.bounds, expected_row)
-                self.assertEqual(entry.action_bounds, expected_row)
-                self.assertEqual(entry.source_screen, expected_screen)
-                self.assertEqual(entry.source_layout_id, layout_id)
-                self.assertEqual(entry.frame_ref, capture.frame_ref)
+                self.assertTrue(entries)
+                for entry in entries:
+                    self.assertEqual(entry.source_screen, expected_screen)
+                    self.assertEqual(entry.source_layout_id, layout_id)
+                    self.assertEqual(entry.frame_ref, capture.frame_ref)
                 self.assertTrue(backend.regions)
                 self.assertTrue(all(region is not None for region in backend.regions))
-                expected_ocr_region = (
-                    CAMPAIGN_MAP_CHAPTER_ROW
-                    if expected_screen is ScreenType.PNC_CAMPAIGN_MAP
-                    else CAMPAIGN_CHAPTER_TITLE_REGION
+                if expected_screen is ScreenType.PNC_CAMPAIGN_CHAPTER:
+                    self.assertIn(CAMPAIGN_CHAPTER_TITLE_REGION, backend.regions)
+                    self.assertIsNotNone(observation.campaign_chapter)
+
+    def test_real_ocr_binds_current_typed_rows_on_both_publishers(self) -> None:
+        """RapidOCR 3.4.5 proves the measured chapter/stage ordinals end to end."""
+        backend = _require_rapid_ocr_service(self)
+        cases = (
+            (
+                "campaign_map.png",
+                ScreenType.PNC_CAMPAIGN_MAP,
+                ListEntryKind.CAMPAIGN_CHAPTER,
+                "campaign_map",
+                {9, 10},
+                (),
+                None,
+            ),
+            (
+                "campaign_map_chapter_6.png",
+                ScreenType.PNC_CAMPAIGN_MAP,
+                ListEntryKind.CAMPAIGN_CHAPTER,
+                "campaign_map_chapter_6",
+                {4, 5, 6},
+                {7, 8, 9},
+                None,
+            ),
+            (
+                "campaign_map_chapter_6_pulse.png",
+                ScreenType.PNC_CAMPAIGN_MAP,
+                ListEntryKind.CAMPAIGN_CHAPTER,
+                "campaign_map_chapter_6",
+                {4, 5, 6},
+                None,
+                None,
+            ),
+            (
+                "campaign_map_southern_view_20260916.png",
+                ScreenType.PNC_CAMPAIGN_MAP,
+                ListEntryKind.CAMPAIGN_CHAPTER,
+                "campaign_map",
+                {2, 5},
+                (),
+                None,
+            ),
+            (
+                "campaign_chapter_10_unmasked.png",
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                ListEntryKind.CAMPAIGN_STAGE,
+                "campaign_chapter_10",
+                {1, 2, 3},
+                (),
+                10,
+            ),
+            (
+                "campaign_chapter_6_path.png",
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                ListEntryKind.CAMPAIGN_STAGE,
+                "campaign_chapter_6",
+                {1, 2, 3, 4, 5},
+                (),
+                6,
+            ),
+            (
+                "campaign_chapter_6_path_return.png",
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                ListEntryKind.CAMPAIGN_STAGE,
+                "campaign_chapter_6",
+                {1, 2, 3, 4, 5},
+                (),
+                6,
+            ),
+        )
+        for name, screen, kind, layout_id, complete_numbers, locked_numbers, chapter in cases:
+            capture = _capture(_image(name))
+            for publisher in ("builder", "navigation"):
+                with self.subTest(frame=name, publisher=publisher):
+                    observation = (
+                        _builder_with_backend(backend).build(
+                            capture, request=ObservationRequest.campaign_map_follow_up()
+                        )
+                        if publisher == "builder"
+                        else _navigation_perception_with_backend(backend).build(
+                            capture, include_content=True
+                        )
+                    )
+                    self.assertEqual(screen, observation.screen_type)
+                    rows = observation.entries(kind)
+                    complete = [
+                        row for row in rows if row.row_status is RowRecognitionStatus.COMPLETE
+                    ]
+                    number_of = (
+                        (lambda row: row.campaign_node.chapter_number)
+                        if kind is ListEntryKind.CAMPAIGN_CHAPTER
+                        else (lambda row: row.campaign_node.stage_number)
+                    )
+                    self.assertEqual(
+                        complete_numbers, {number_of(row) for row in complete}
+                    )
+                    for row in complete:
+                        self.assertIs(row.campaign_node.locked, False)
+                        self.assertIsNone(row.campaign_node.mode)
+                        self.assertIsNone(row.campaign_node.completed)
+                        self.assertIsNotNone(row.action_point)
+                        self.assertTrue(row.bounds.contains_bounds(row.action_bounds))
+                        self.assertTrue(row.action_bounds.contains_point(row.action_point))
+                    locked = [
+                        row for row in rows if row.row_status is RowRecognitionStatus.NO_ACTION
+                    ]
+                    if locked_numbers:
+                        self.assertEqual(
+                            locked_numbers, {number_of(row) for row in locked}
+                        )
+                    for row in locked:
+                        self.assertIs(row.campaign_node.locked, True)
+                        self.assertIsNone(row.action_point)
+                        if kind is ListEntryKind.CAMPAIGN_STAGE:
+                            self.assertIsNone(row.campaign_node.stage_number)
+                    for row in rows:
+                        self.assertEqual(screen, row.source_screen)
+                        self.assertEqual(layout_id, row.source_layout_id)
+                        self.assertEqual(capture.frame_ref, row.frame_ref)
+                    if chapter is not None:
+                        self.assertIsNotNone(observation.campaign_chapter)
+                        self.assertEqual(chapter, observation.campaign_chapter.chapter_number)
+                        self.assertEqual(
+                            capture.frame_ref, observation.campaign_chapter.frame_ref
+                        )
+
+    def test_real_ocr_binds_scaled_return_path_stage_numbers(self) -> None:
+        """The reference-size return frame still resolves every visible stage."""
+        backend = _require_rapid_ocr_service(self)
+        capture = _capture(
+            _image("campaign_chapter_6_path_return.png").resize(
+                (540, 960), Image.Resampling.LANCZOS
+            )
+        )
+        for publisher in ("builder", "navigation"):
+            with self.subTest(publisher=publisher):
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if publisher == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
                 )
-                self.assertIn(expected_ocr_region, backend.regions)
+                self.assertEqual(
+                    {1, 2, 3, 4, 5},
+                    {
+                        row.campaign_node.stage_number
+                        for row in observation.entries(ListEntryKind.CAMPAIGN_STAGE)
+                        if row.row_status is RowRecognitionStatus.COMPLETE
+                    },
+                )
 
     def test_campaign_chapter_is_in_the_narrow_and_full_runtime_ocr_scopes(self) -> None:
         follow_up = ObservationRequest.campaign_map_follow_up()
@@ -502,8 +782,8 @@ class CampaignVisualProfileTests(unittest.TestCase):
             (
                 "campaign_map.png",
                 (
-                    OcrLine("10", Bounds(205, 473, 22, 14), 1.0),
-                    OcrLine("Grandia Ruins", Bounds(236, 472, 106, 17), 1.0),
+                    OcrLine("10", Bounds(205, 468, 20, 16), 1.0),
+                    OcrLine("Grandia Ruins", Bounds(235, 470, 107, 20), 1.0),
                 ),
                 ListEntryKind.CAMPAIGN_CHAPTER,
                 ScreenType.PNC_CAMPAIGN_MAP,
@@ -511,7 +791,10 @@ class CampaignVisualProfileTests(unittest.TestCase):
             ),
             (
                 "campaign_chapter_10.png",
-                (OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),),
+                (
+                    OcrLine("Ch.10 C", Bounds(224, 50, 140, 39), 1.0),
+                    OcrLine("Grandia Ruins", Bounds(368, 50, 160, 39), 1.0),
+                ),
                 ListEntryKind.CAMPAIGN_STAGE,
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
                 "campaign_chapter_10",
@@ -523,12 +806,15 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 observation = _navigation_perception(lines).build(capture, include_content=True)
                 entries = observation.entries(kind)
                 self.assertEqual(observation.screen_type, screen)
-                self.assertEqual(len(entries), 1)
-                self.assertEqual(entries[0].source_screen, screen)
-                self.assertEqual(entries[0].source_layout_id, layout_id)
-                self.assertEqual(entries[0].frame_ref, capture.frame_ref)
-                self.assertNotIn("mode", entries[0].metadata)
+                self.assertTrue(entries)
+                for entry in entries:
+                    self.assertIsNotNone(entry.campaign_node)
+                    self.assertEqual(entry.source_screen, screen)
+                    self.assertEqual(entry.source_layout_id, layout_id)
+                    self.assertEqual(entry.frame_ref, capture.frame_ref)
+                    self.assertNotIn("mode", entry.metadata)
                 if screen is ScreenType.PNC_CAMPAIGN_CHAPTER:
+                    self.assertIsNotNone(observation.campaign_chapter)
                     self.assertTrue(observation.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
                     control = observation.visible_elements[UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE]
                     self.assertEqual(control.source_kind, VisibleElementSourceKind.TEMPLATE)
@@ -536,45 +822,23 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertEqual(control.source_layout_id, layout_id)
                     self.assertEqual(control.frame_ref, capture.frame_ref)
 
-    def test_campaign_content_abstains_without_exact_title_or_header(self) -> None:
-        missing_map_title = _builder().build(
+    def test_campaign_producer_abstains_on_missing_foreign_and_clipped_evidence(self) -> None:
+        """Unprovable content stays unresolved; foreign features never publish a row."""
+
+        empty_map = _builder().build(
             _capture(_image("campaign_map.png")),
             request=ObservationRequest.campaign_map_follow_up(),
         )
-        self.assertEqual(missing_map_title.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
-        self.assertFalse(missing_map_title.entries(ListEntryKind.CAMPAIGN_CHAPTER))
+        self.assertEqual(empty_map.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
+        chapters = empty_map.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+        self.assertEqual(len(chapters), 2)
+        for entry in chapters:
+            self.assertIs(entry.campaign_node.locked, False)
+            self.assertIsNone(entry.campaign_node.chapter_number)
+            self.assertIs(entry.row_status, RowRecognitionStatus.UNREADABLE)
+            self.assertIsNone(entry.action_point)
 
-        missing_stage_badge = _image("campaign_chapter_10.png")
-        missing_stage_badge.paste((0, 0, 0), (301, 591, 351, 644))
-        missing_chapter_stage = _builder(
-            (
-                OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
-                OcrLine("3", Bounds(318, 606, 18, 28), 1.0),
-            )
-        ).build(
-            _capture(missing_stage_badge),
-            request=ObservationRequest.campaign_map_follow_up(),
-        )
-        self.assertIn(missing_chapter_stage.screen_type, {ScreenType.UNKNOWN, ScreenType.PNC_CAMPAIGN_CHAPTER})
-        self.assertFalse(missing_chapter_stage.entries(ListEntryKind.CAMPAIGN_STAGE))
-        self.assertFalse(missing_chapter_stage.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
-
-        partial_stage_badge = _image("campaign_chapter_10.png")
-        partial_stage_badge.paste((0, 0, 0), (321, 608, 337, 628))
-        partial_chapter_stage = _builder(
-            (
-                OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
-                OcrLine("3", Bounds(318, 606, 18, 28), 1.0),
-            )
-        ).build(
-            _capture(partial_stage_badge),
-            request=ObservationRequest.campaign_map_follow_up(),
-        )
-        self.assertIn(partial_chapter_stage.screen_type, {ScreenType.UNKNOWN, ScreenType.PNC_CAMPAIGN_CHAPTER})
-        self.assertFalse(partial_chapter_stage.entries(ListEntryKind.CAMPAIGN_STAGE))
-        self.assertFalse(partial_chapter_stage.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
-
-        foreign_map_title = _builder(
+        foreign_digits = _builder(
             (
                 OcrLine("10", Bounds(10, 473, 22, 14), 1.0),
                 OcrLine("Grandia Ruins", Bounds(41, 472, 106, 17), 1.0),
@@ -583,21 +847,88 @@ class CampaignVisualProfileTests(unittest.TestCase):
             _capture(_image("campaign_map.png")),
             request=ObservationRequest.campaign_map_follow_up(),
         )
-        self.assertEqual(foreign_map_title.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
-        self.assertFalse(foreign_map_title.entries(ListEntryKind.CAMPAIGN_CHAPTER))
+        self.assertEqual(foreign_digits.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
+        self.assertFalse(
+            any(
+                entry.row_status is RowRecognitionStatus.COMPLETE
+                for entry in foreign_digits.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+            ),
+            "text outside the measured badge disc must not prove a chapter number",
+        )
 
-        foreign_stage_content = _builder(
+        map6 = _builder().build(
+            _capture(_image("campaign_map_chapter_6.png")),
+            request=ObservationRequest.campaign_map_follow_up(),
+        )
+        self.assertEqual(map6.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
+        rows = map6.entries(ListEntryKind.CAMPAIGN_CHAPTER)
+        self.assertEqual(len(rows), 6)
+        locked_rows = [entry for entry in rows if entry.campaign_node.locked is True]
+        self.assertEqual(len(locked_rows), 3)
+        for entry in locked_rows:
+            self.assertIs(entry.row_status, RowRecognitionStatus.NO_ACTION)
+            self.assertIsNone(entry.action_point)
+        unlocked_rows = [entry for entry in rows if entry.campaign_node.locked is False]
+        self.assertEqual(len(unlocked_rows), 3)
+        for entry in unlocked_rows:
+            self.assertIs(entry.row_status, RowRecognitionStatus.UNREADABLE)
+        neptune_padlock = Bounds(440, 640, 100, 120)
+        self.assertFalse(
+            any(
+                not (
+                    entry.bounds.x + entry.bounds.width <= neptune_padlock.x
+                    or neptune_padlock.x + neptune_padlock.width <= entry.bounds.x
+                    or entry.bounds.y + entry.bounds.height <= neptune_padlock.y
+                    or neptune_padlock.y + neptune_padlock.height <= entry.bounds.y
+                )
+                for entry in rows
+            ),
+            "the foreign Neptune's Laby padlock must not publish a chapter row",
+        )
+
+        stage_observation = _builder(
             (OcrLine("10 Grandia Ruins", Bounds(237, 473, 105, 15), 1.0),)
         ).build(
             _capture(_image("campaign_stage_10_3.png")),
             request=ObservationRequest.campaign_map_follow_up(),
         )
         self.assertNotIn(
-            foreign_stage_content.screen_type,
+            stage_observation.screen_type,
             {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_CHAPTER},
         )
-        self.assertFalse(foreign_stage_content.entries(ListEntryKind.CAMPAIGN_CHAPTER))
-        self.assertFalse(foreign_stage_content.entries(ListEntryKind.CAMPAIGN_STAGE))
+        self.assertFalse(stage_observation.entries(ListEntryKind.CAMPAIGN_CHAPTER))
+        self.assertFalse(stage_observation.entries(ListEntryKind.CAMPAIGN_STAGE))
+
+        unnamed_title = _builder(
+            (OcrLine("Marsh of Tear", Bounds(368, 50, 160, 39), 1.0),)
+        ).build(
+            _capture(_image("campaign_chapter_10.png")),
+            request=ObservationRequest.campaign_map_follow_up(),
+        )
+        self.assertEqual(unnamed_title.screen_type, ScreenType.PNC_CAMPAIGN_CHAPTER)
+        self.assertIsNone(unnamed_title.campaign_chapter)
+        self.assertTrue(unnamed_title.entries(ListEntryKind.CAMPAIGN_STAGE))
+
+        missing_stage_badge = _image("campaign_chapter_10.png")
+        missing_stage_badge.paste((0, 0, 0), (301, 591, 351, 644))
+        missing_chapter_stage = _builder(
+            (OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),)
+        ).build(
+            _capture(missing_stage_badge),
+            request=ObservationRequest.campaign_map_follow_up(),
+        )
+        self.assertIn(
+            missing_chapter_stage.screen_type,
+            {ScreenType.UNKNOWN, ScreenType.PNC_CAMPAIGN_CHAPTER},
+        )
+        stage_bounds = Bounds(302, 598, 49, 49)
+        self.assertFalse(
+            any(
+                entry.bounds == stage_bounds or stage_bounds.contains_bounds(entry.bounds)
+                for entry in missing_chapter_stage.entries(ListEntryKind.CAMPAIGN_STAGE)
+            ),
+            "a blacked-out badge must not publish a stage row",
+        )
 
     def test_campaign_blocking_overlay_suppresses_background_controls_and_rows(self) -> None:
         image = with_update_modal(_image("campaign_stage_10_3.png"))
@@ -761,12 +1092,51 @@ class CampaignVisualProfileTests(unittest.TestCase):
             stage_three["source_sha256"],
             by_asset["tests/data/screen_recognition/campaign_chapter_10.png"]["source_sha256"],
         )
+        chapter_six = next(
+            profile for profile in recognizer.profiles if profile.id == "campaign_chapter_6"
+        )
+        chapter_six_sample = samples[Path(chapter_six.source.fixture).name]
+        self.assertEqual(chapter_six_sample["sha256"], chapter_six.source.decoded_sha256)
+        self.assertEqual(chapter_six_sample["group"], chapter_six.source.capture_group)
+        self.assertEqual(chapter_six_sample["split"], "reference")
+        for asset in (
+            "screen_anchors/campaign_chapter_6_path_title.png",
+            "screen_anchors/campaign_chapter_6_path_terrain.png",
+        ):
+            with self.subTest(asset=asset):
+                anchor = by_asset[asset]
+                self.assertEqual(anchor["reference_size"], [540, 960])
+                self.assertEqual(anchor["capture_group"], chapter_six.source.capture_group)
+                self.assertEqual(
+                    anchor["source_sha256"],
+                    by_asset["tests/data/screen_recognition/campaign_chapter_6_path.png"][
+                        "source_sha256"
+                    ],
+                )
+        for asset in (
+            "screen_anchors/campaign_map_padlock.png",
+            "screen_anchors/campaign_map_padlock_alt.png",
+        ):
+            with self.subTest(asset=asset):
+                anchor = by_asset[asset]
+                self.assertEqual(anchor["reference_size"], [540, 960])
+                self.assertEqual(
+                    anchor["capture_group"], "2026-09-15/vision_live_tour_20260915"
+                )
+                self.assertEqual(
+                    anchor["source_sha256"],
+                    by_asset["tests/data/screen_recognition/campaign_map_chapter_6.png"][
+                        "source_sha256"
+                    ],
+                )
 
     def test_campaign_anchor_gate_fails_closed_when_identity_is_partial(self) -> None:
         recognizer = load_visual_screen_recognizer()
         mutations = (
             ("campaign_map.png", (180, 220, 350, 350)),
+            ("campaign_map_chapter_6.png", (178, 435, 363, 520)),
             ("campaign_chapter_10.png", (205, 38, 530, 98)),
+            ("campaign_chapter_6_path.png", (95, 35, 540, 200)),
             ("campaign_stage_10_3.png", (120, 201, 420, 250)),
         )
         for name, box in mutations:

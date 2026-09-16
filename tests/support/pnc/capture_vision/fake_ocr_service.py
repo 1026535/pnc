@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from PIL import Image
 
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrTextOrientation
 from pnc_automation.app.pnc.vision.selectors import Region
 
 
@@ -17,7 +17,10 @@ class _FakeOcrService:
 
     lines: tuple[OcrLine, ...]
 
-    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+    def read_result(
+        self, image: Image.Image, region: Region | None = None,
+        *, orientation: OcrTextOrientation = OcrTextOrientation.AUTO,
+    ) -> OcrResult:
         """Returns pre-seeded OCR output with line and word-level data."""
 
         lines = self.read_lines(image, region)

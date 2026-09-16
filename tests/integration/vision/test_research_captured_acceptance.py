@@ -345,7 +345,7 @@ class ResearchCapturedAcceptanceTests(unittest.TestCase):
                 self.assertEqual(740224, costs["wood"].available)
                 self.assertEqual("00:45:41", detail.original_time_text)
                 self.assertEqual("00:44:47", detail.actual_time_text)
-                self.assertEqual(6, detail.premium_gem_cost)
+                self.assertEqual(90, detail.premium_gem_cost)
                 self.assertIsNotNone(detail.premium_button_bounds)
                 self.assertEqual(ResearchQueueState.UNKNOWN, detail.queue_state)
                 self.assertIsNone(detail.queue_timer_text)

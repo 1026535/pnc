@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+
+from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity
 from typing import TypeVar
 
+from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
@@ -290,6 +293,24 @@ def bind_trial_stats_detail(
     )
 
 
+def bind_hero_recruit_result(
+    preview: HeroRecruitResult,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> HeroRecruitResult:
+    """Adds missing chest-preview provenance while rejecting contradictory proof."""
+
+    return _bind_typed_fact(
+        preview,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Hero recruit result",
+    )
+
+
 def bind_bag_preview(
     preview: BagChestPreviewFacts,
     *,
@@ -362,6 +383,7 @@ _TypedFactT = TypeVar(
     TrialChallengeSummary,
     TrialApplicableStatsDetail,
     BagChestPreviewFacts,
+    HeroRecruitResult,
     BuildingDetail,
     BuildingRequirementRow,
 )
@@ -388,4 +410,29 @@ def _bind_typed_fact(
         frame_ref=fact.frame_ref or frame_ref,
         source_screen=fact.source_screen or source_screen,
         source_layout_id=fact.source_layout_id if fact.source_layout_id is not None else source_layout_id,
+    )
+
+
+def bind_campaign_chapter_identity(
+    identity: CampaignChapterIdentity | None,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> CampaignChapterIdentity | None:
+    """Adds missing chapter-identity provenance while rejecting contradictory proof."""
+
+    if identity is None:
+        return None
+    if identity.frame_ref is not None and identity.frame_ref != frame_ref:
+        raise SelectorResolutionError("Campaign chapter proof belongs to a different capture frame.")
+    if identity.source_screen is not None and identity.source_screen != source_screen:
+        raise SelectorResolutionError("Campaign chapter proof belongs to a different source screen.")
+    if identity.source_layout_id is not None and identity.source_layout_id != source_layout_id:
+        raise SelectorResolutionError("Campaign chapter proof belongs to a different source layout.")
+    return replace(
+        identity,
+        frame_ref=identity.frame_ref or frame_ref,
+        source_screen=identity.source_screen or source_screen,
+        source_layout_id=identity.source_layout_id if identity.source_layout_id is not None else source_layout_id,
     )

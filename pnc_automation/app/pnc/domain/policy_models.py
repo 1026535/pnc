@@ -8,7 +8,6 @@ from enum import StrEnum
 from typing import Any, TypeVar
 
 from pnc_automation.core.errors import ScriptValidationError
-from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     HomeCityObjectRole,
@@ -17,6 +16,8 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_definition,
 )
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
+from pnc_automation.app.pnc.domain.campaign import CampaignMode
+from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId
 
 TEnum = TypeVar("TEnum", bound=StrEnum)
 
@@ -74,11 +75,6 @@ class ResourceType(StrEnum):
     STONE = "stone"
 
 
-class CampaignMode(StrEnum):
-    """Supported campaign execution modes."""
-
-    STANDARD = "standard"
-    ELITE = "elite"
 
 
 @dataclass(frozen=True, slots=True)

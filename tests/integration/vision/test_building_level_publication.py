@@ -165,7 +165,7 @@ class _CastleRapidOcrService:
         self.calls.clear()
 
     def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
-        """Reject full-capture reads while permitting only the RGB3X input."""
+        """Reject full-capture reads while permitting only the reference-sized input."""
 
         self.calls.append((region, image.size))
         if self.capture_size is None or self.field_bounds is None:
@@ -173,7 +173,7 @@ class _CastleRapidOcrService:
         whole = Bounds(0, 0, *self.capture_size)
         if region == whole:
             raise AssertionError("Castle OCR reached RapidOCR with a whole-capture region")
-        prepared_size = (self.field_bounds.width * 3, self.field_bounds.height * 3)
+        prepared_size = (291, 120)
         if region is None and image.size != prepared_size:
             raise AssertionError(
                 "Castle OCR allowed None only for the prepared level field: "
@@ -385,13 +385,13 @@ class BuildingLevelPublicationTests(unittest.TestCase):
                     self.assertNotIn("plan:storage_fields", [item.detail for item in context.read_diagnostics])
                     self.assertNotIn("plan:goddess_fields", [item.detail for item in context.read_diagnostics])
 
-    def test_captured_castle_profile_uses_native_rgb3x_level_field_in_both_paths(self) -> None:
-        """RapidOCR recovers Castle level from its native field at both reviewed sizes."""
+    def test_captured_castle_profile_uses_reference_sized_level_field_in_both_paths(self) -> None:
+        """RapidOCR reads the real Castle level at both supported native resolutions."""
 
         delegate = _require_rapid_ocr_service(self)
         for size in ((540, 960), (900, 1600)):
             with self.subTest(size=size):
-                capture = _capture("castle_audit.png", session_id=f"castle-rgb3x:{size}", size=size)
+                capture = _capture("castle_audit.png", session_id=f"castle-rgb-reference-3x:{size}", size=size)
                 field_bounds = Bounds(
                     round(97 * size[0] / 540),
                     round(235 * size[1] / 960),
@@ -417,7 +417,7 @@ class BuildingLevelPublicationTests(unittest.TestCase):
                 )
                 level_plan = next(plan for plan in plans if plan.purpose == OcrRegionPurpose.BUILDING_LEVEL)
                 self.assertEqual(level_plan.bounds, field_bounds)
-                self.assertEqual(level_plan.preprocessing, OcrRegionPreprocessing.RGB_3X)
+                self.assertEqual(level_plan.preprocessing, OcrRegionPreprocessing.RGB_REFERENCE_3X)
 
                 ocr = _CastleRapidOcrService(delegate)
                 ocr.bind(capture_size=size, field_bounds=field_bounds)
@@ -439,7 +439,7 @@ class BuildingLevelPublicationTests(unittest.TestCase):
                 )
                 expected_calls = (
                     (header_bounds, size),
-                    (None, (field_bounds.width * 3, field_bounds.height * 3)),
+                    (None, (291, 120)),
                 )
                 self.assertEqual(ocr.calls, list(expected_calls) + list(expected_calls))
                 for observation, context in zip(observations, contexts_by_path, strict=True):

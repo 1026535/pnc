@@ -202,7 +202,7 @@ The existing evidence subsets remain useful but bounded:
 | Evidence | Reusable fact | A02 still proves |
 | --- | --- | --- |
 | building_detail_farm, building_construction_farm, level 0/1, upgrade 7/8 | Farm detail, construction, and level shapes | Exact slot/instance, current controls, source family, and new target-correlated Start receipt |
-| Castle/Institute/Warehouse/Goddess level captures | Per-field level reads | Target identity and action/receipt correlation; preserve Castle native RGB3x behavior |
+| Castle/Institute/Warehouse/Goddess level captures | Per-field level reads | Target identity and action/receipt correlation; preserve Castle reference-sized RGB3x behavior |
 | institute_upgrade_detail unmet prerequisite Go | Distinct unmet row and Go control | Actual prerequisite identity, FAIL/QUEUE result, reviewed Go route, and receipt; a satisfied Requirement heading is not an unmet row |
 | build_queue_centered active/idle rows | Title/timer/state association and Close | New target-associated queue baseline and receipt; a replayed reference row is not a new upgrade proof |
 | 20260913T234651Z_build_queue_holdout.png | Independent idle centered Queue and measured Close | Nothing about active queue/start/level; reuse without rerunning |

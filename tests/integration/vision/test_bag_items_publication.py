@@ -608,17 +608,9 @@ class BagItemsPublicationTests(unittest.TestCase):
                     for index, (entry, (identity, owned)) in enumerate(
                         zip(entries, _MISC_CARDS, strict=True)
                     ):
-                        # At 540x960 the clipped Lord EXP Owned label is
-                        # unreadable and stays unknown, never fabricated.
-                        expected_owned = (
-                            None
-                            if reference_size is not None
-                            and identity.kind == MiscKind.LORD_EXP
-                            else owned
-                        )
                         self._assert_typed_row(
                             entry, tab=BagTab.MISC, identity=identity,
-                            expected_owned=expected_owned, capture=capture,
+                            expected_owned=owned, capture=capture,
                         )
                     military_control = observation.visible_elements.get(
                         UiElementId.PNC_BAG_SUBTAB_MILITARY
