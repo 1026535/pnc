@@ -106,6 +106,11 @@ Lua root):
 
 - `pnc_automation/app/pnc/pet_workshop_catalog.py` is the canonical owner;
   the packaged JSON under `data/pet_workshop/` is the only runtime source.
+- `pnc_automation/app/pnc/domain/pet_workshop.py` owns the canonical logical
+  models (`WorkshopState`, `WorkshopView`, `WorkshopObservation`, orders,
+  intents); `Observation.workshop` is the optional published field bound by
+  the shared provenance owner. See the
+  [canonical design](../../PET_WORKSHOP_DESIGN.md).
 - Catalog facts are game data, not policy: excluded mechanics (Omni Card,
   consumable AP/Diamond, storage) stay representable for recognition.
 - Workshop level awards do not guarantee a usable producer on the current
