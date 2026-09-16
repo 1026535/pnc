@@ -23,6 +23,8 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDeb
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_list_entry,
     bind_spatial_surface,
+    bind_research_detail,
+    bind_research_queue_row,
     bind_visible_elements,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
@@ -268,8 +270,25 @@ class NavigationPerception:
             active_bag_tab=content.active_bag_tab,
             chat_draft_empty=content.chat_draft_empty,
             chat_draft_text=content.chat_draft_text,
-            research_detail=content.research_detail,
-            research_queue_rows=content.research_queue_rows,
+            research_detail=(
+                bind_research_detail(
+                    content.research_detail,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.research_detail is not None
+                else None
+            ),
+            research_queue_rows=tuple(
+                bind_research_queue_row(
+                    row,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                for row in content.research_queue_rows
+            ),
         )
         return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
 

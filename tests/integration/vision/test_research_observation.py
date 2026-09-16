@@ -6,19 +6,30 @@ from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_r
 
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock
 
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.observation import Bounds, ListEntryKind, RowRecognitionStatus
+from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow, ResearchQueueState
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
+    ObservationAdditions,
     ObservationBuilder,
     ImageSelectorEngine,
+    _merge_observation_additions,
+)
+from pnc_automation.app.pnc.vision.observation_provenance import (
+    bind_research_detail,
+    bind_research_queue_row,
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
@@ -70,6 +81,33 @@ def _load_research_fixture() -> Image.Image:
 
     with Image.open(RESEARCH_FIXTURE_PATH) as source:
         return source.convert("RGB")
+
+
+def _load_detail_fixture() -> Image.Image:
+    """Load the reviewed idle node-detail fixture at its native size."""
+
+    with Image.open(TEST_DATA_ROOT / "screen_recognition" / "research_node_detail.png") as source:
+        return source.convert("RGB")
+
+
+def _detail_ocr_lines() -> tuple[OcrLine, ...]:
+    """Return measured detail-panel lines matching the reviewed idle fixture."""
+
+    return (
+        _ocr_line("Construction I (2/5)", x=56, y=286, width=175, height=20),
+        _ocr_line("Might +695", x=180, y=345, width=86, height=20),
+        _ocr_line("Build Speed+3%", x=181, y=378, width=120, height=17),
+        _ocr_line("Research", x=326, y=461, width=89, height=19),
+        _ocr_line("Research Now", x=115, y=468, width=122, height=17),
+        _ocr_line("6", x=150, y=460, width=12, height=16),
+        _ocr_line("Original Time", x=106, y=529, width=100, height=16),
+        _ocr_line("00:45:41", x=106, y=549, width=65, height=16),
+        _ocr_line("Actual Time", x=277, y=529, width=88, height=16),
+        _ocr_line("00:44:47", x=276, y=549, width=66, height=16),
+        _ocr_line("Institute:Lv.3", x=105, y=609, width=104, height=15),
+        _ocr_line("490,250/16,400", x=105, y=673, width=112, height=15),
+        _ocr_line("740,224/7,010", x=106, y=724, width=104, height=18),
+    )
 
 
 def _captured_research_image(image: Image.Image, *, session_id: str) -> CapturedScreenshot:
@@ -283,6 +321,84 @@ class ResearchObservationTests(unittest.TestCase):
         self.assertFalse(any(row.row_status == RowRecognitionStatus.COMPLETE for row in rows))
         self.assertTrue(all(row.action_bounds is None and row.action_point is None for row in rows))
 
+    def test_contained_tile_without_icon_frame_is_unreadable_not_clipped(self) -> None:
+        """A full tile inside the viewport with no icon-frame proof is UNREADABLE."""
+
+        image = _load_research_fixture()
+        # Erase only Construction I's icon (x220-324, y66-170); its blue label
+        # tile at y176-209 stays fully inside the scroll viewport.
+        image.paste((15, 28, 68), (220, 66, 324, 170))
+        observation = _research_perception(_development_ocr_lines()).build(
+            _captured_research_image(image, session_id="research-observation-missing-icon"),
+            include_content=True,
+        )
+
+        rows = {row.title_text: row for row in observation.entries(ListEntryKind.RESEARCH)}
+        construction = rows["Construction I"]
+        self.assertEqual(RowRecognitionStatus.UNREADABLE, construction.row_status)
+        self.assertEqual("unproved_node_icon_geometry", construction.metadata["unresolved_reason"])
+        self.assertIsNone(construction.action_bounds)
+        self.assertIsNone(construction.action_point)
+        # Unproved tiles never reach level or lock reads.
+        self.assertIsNotNone(construction.research_facts)
+        self.assertIsNone(construction.research_facts.current_level)
+        self.assertIsNone(construction.research_facts.locked)
+        for title in ("Research Speed I", "Troop Load I", "Storage I", "Infirmary Cap I"):
+            self.assertEqual(RowRecognitionStatus.COMPLETE, rows[title].row_status)
+        self.assertEqual(RowRecognitionStatus.CLIPPED, rows["Miraculous"].row_status)
+
+    def test_tree_and_detail_calls_prepare_the_matcher_frame_once(self) -> None:
+        """One normalized frame serves every glyph match inside a single call."""
+
+        matcher = Mock(wraps=OpenCvTemplateMatcher())
+        producer = ResearchContentProducer(matcher=matcher)
+        image = _load_research_fixture()
+        lines = _development_ocr_lines()
+        additions = producer.additions_for_tree(
+            image=image,
+            lines=lines,
+            ocr_context=ObservationOcrContext(
+                image,
+                _FakeOcrService(lines=lines),
+                None,
+                "research-observation-prepare-once",
+            ),
+            layout_id="research_tree_development",
+        )
+
+        self.assertEqual(1, matcher.prepare_frame.call_count)
+        # Every complete node still performed its padlock glyph match.
+        self.assertGreaterEqual(matcher.find_best_match.call_count, 5)
+        entries = additions.list_entries
+        self.assertEqual(
+            5,
+            sum(row.row_status == RowRecognitionStatus.COMPLETE for row in entries),
+        )
+
+        matcher.reset_mock()
+        detail_image = _load_detail_fixture()
+        detail_lines = _detail_ocr_lines()
+        detail_additions = producer.additions_for_tree(
+            image=detail_image,
+            lines=detail_lines,
+            ocr_context=ObservationOcrContext(
+                detail_image,
+                _FakeOcrService(lines=detail_lines),
+                None,
+                "research-observation-prepare-once-detail",
+            ),
+            layout_id="research_tree_node_detail",
+        )
+
+        self.assertEqual(1, matcher.prepare_frame.call_count)
+        # Both cost rows still resolved their typed resource icons.
+        detail = detail_additions.research_detail
+        self.assertIsNotNone(detail)
+        self.assertEqual(
+            {"food", "wood"},
+            {cost.resource_type for cost in detail.costs},
+        )
+
     def test_explicit_screen_decision_publishes_research_tree_identity(self) -> None:
         """Publishes the accepted research-tree identity without classifier OCR authority."""
 
@@ -473,3 +589,117 @@ class ResearchObservationTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
             self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+
+
+class ResearchProvenanceBindingTests(unittest.TestCase):
+    """Keep typed research facts bound to their owning capture and decision."""
+
+    def test_research_fact_binding_stamps_missing_and_preserves_agreeing_fields(self) -> None:
+        """Unbound facts acquire the current frame; agreeing evidence survives."""
+
+        frame = make_captured_frame(
+            _encode_png(Image.new("RGB", (540, 960))),
+            session_id="research-provenance-fill",
+        )
+        detail = bind_research_detail(
+            ResearchDetail(title_text="Construction I (2/5)"),
+            frame_ref=frame.frame_ref,
+            source_screen=ScreenType.PNC_RESEARCH_TREE,
+            source_layout_id="research_tree_node_detail",
+        )
+        self.assertEqual(frame.frame_ref, detail.frame_ref)
+        self.assertEqual(ScreenType.PNC_RESEARCH_TREE, detail.source_screen)
+        self.assertEqual("research_tree_node_detail", detail.source_layout_id)
+
+        agreeing = bind_research_detail(
+            detail,
+            frame_ref=frame.frame_ref,
+            source_screen=ScreenType.PNC_RESEARCH_TREE,
+            source_layout_id="research_tree_node_detail",
+        )
+        self.assertEqual(detail, agreeing)
+
+        row = bind_research_queue_row(
+            ResearchQueueRow(
+                bounds=Bounds(0, 320, 540, 64),
+                title_text="1stResearchQueue",
+                state=ResearchQueueState.IDLE,
+            ),
+            frame_ref=frame.frame_ref,
+            source_screen=ScreenType.PNC_RESEARCH_QUEUE,
+            source_layout_id="research_queue",
+        )
+        self.assertEqual(frame.frame_ref, row.frame_ref)
+        self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, row.source_screen)
+        self.assertEqual("research_queue", row.source_layout_id)
+
+    def test_research_fact_binding_rejects_contradictory_provenance(self) -> None:
+        """Foreign frame, screen, or layout evidence is rejected, not stamped over."""
+
+        frame = make_captured_frame(
+            _encode_png(Image.new("RGB", (540, 960))),
+            session_id="research-provenance-conflict",
+        )
+        foreign = replace(frame.frame_ref, capture_sequence=frame.frame_ref.capture_sequence + 1)
+        detail = ResearchDetail(
+            title_text="Construction I (2/5)",
+            frame_ref=frame.frame_ref,
+            source_screen=ScreenType.PNC_RESEARCH_TREE,
+            source_layout_id="research_tree_node_detail",
+        )
+        with self.assertRaisesRegex(SelectorResolutionError, "different capture frame"):
+            bind_research_detail(
+                detail,
+                frame_ref=foreign,
+                source_screen=ScreenType.PNC_RESEARCH_TREE,
+                source_layout_id="research_tree_node_detail",
+            )
+        with self.assertRaisesRegex(SelectorResolutionError, "different source screen"):
+            bind_research_detail(
+                detail,
+                frame_ref=frame.frame_ref,
+                source_screen=ScreenType.PNC_RESEARCH_QUEUE,
+                source_layout_id="research_tree_node_detail",
+            )
+        with self.assertRaisesRegex(SelectorResolutionError, "different source layout"):
+            bind_research_detail(
+                detail,
+                frame_ref=frame.frame_ref,
+                source_screen=ScreenType.PNC_RESEARCH_TREE,
+                source_layout_id="research_queue",
+            )
+
+        row = ResearchQueueRow(
+            bounds=Bounds(0, 320, 540, 64),
+            title_text="1stResearchQueue",
+            state=ResearchQueueState.IDLE,
+            frame_ref=frame.frame_ref,
+        )
+        with self.assertRaisesRegex(SelectorResolutionError, "different capture frame"):
+            bind_research_queue_row(
+                row,
+                frame_ref=foreign,
+                source_screen=ScreenType.PNC_RESEARCH_QUEUE,
+                source_layout_id="research_queue",
+            )
+
+    def test_same_frame_merge_preserves_research_facts_from_either_side(self) -> None:
+        """The canonical merge keeps detail and queue facts without cross-frame carry."""
+
+        detail = ResearchDetail(title_text="Construction I (2/5)")
+        rows = (
+            ResearchQueueRow(
+                bounds=Bounds(0, 320, 540, 64),
+                title_text="1stResearchQueue",
+                state=ResearchQueueState.IDLE,
+            ),
+        )
+        content = ObservationAdditions(research_detail=detail, research_queue_rows=rows)
+
+        merged = _merge_observation_additions(content, ObservationAdditions())
+        self.assertIs(detail, merged.research_detail)
+        self.assertEqual(rows, merged.research_queue_rows)
+
+        merged = _merge_observation_additions(ObservationAdditions(), content)
+        self.assertIs(detail, merged.research_detail)
+        self.assertEqual(rows, merged.research_queue_rows)

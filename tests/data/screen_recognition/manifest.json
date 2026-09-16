@@ -315,6 +315,16 @@
       ]
     },
     {
+      "image": "research_tree_scrolled.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-15/testing/vision_live_tour_20260915",
+      "sha256": "e469288ef573af079d51aa4f7cc165b0534d60a9a8a4600a323d0e3fea776ac6",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ]
+    },
+    {
       "image": "research_node_detail.png",
       "screen": "PNC_RESEARCH_TREE",
       "split": "reference",

@@ -392,7 +392,8 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertEqual(start.frame_ref, detail.frame_ref)
 
         task = ResearchTask()
-        context = Mock(params=task.parse_params({"priority": ["development"]}))
+        context = Mock(params=task.parse_params({"priority": ["development"]}), runtime_state={})
+        tree_frame = make_captured_frame(b"tree", session_id="research-tree-visual-controls")
         tree = make_observation(
             ScreenType.PNC_RESEARCH_TREE,
             list_entries=(
@@ -407,6 +408,7 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
                     ),
                 ),
             ),
+            frame_ref=tree_frame.frame_ref,
         )
         node_action = next(
             action
@@ -414,9 +416,14 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
             if isinstance(action, TapListEntryAction)
         )
         self.assertEqual(node_action.title_text, "Construction I")
+        # The verified detail must be a fresher capture than the source grid.
+        opened_detail = _observation_builder(_detail_ocr_lines()).build(
+            _capture(_load_detail_fixture())
+        )
+        self.assertTrue(task.verify(context, tree, opened_detail).status.name == "REPLAN")
         start_action = next(
             action
-            for action in task.plan(context, detail)
+            for action in task.plan(context, opened_detail)
             if isinstance(action, TapAction)
             and action.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON
         )
@@ -426,12 +433,12 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         session = FakeSession()
         result = _make_observed_action_executor(session).execute_actions(
             (start_action,),
-            detail,
+            opened_detail,
             observe=lambda label, request=None: active,
         )
 
         self.assertEqual(session.taps, [start.action_point])
-        self.assertTrue(task.verify(context, tree, result.observation).succeeded)
+        self.assertTrue(task.verify(context, opened_detail, result.observation).succeeded)
 
     def test_production_builder_blocks_start_behind_required_update(self) -> None:
         """Keeps the measured background Start unavailable when an update owns the frame."""

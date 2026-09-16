@@ -17,8 +17,10 @@ from pnc_automation.app.automation.engine.navigation_core import (
     reviewed_navigation_edges,
 )
 from pnc_automation.app.pnc.domain.action_requests import (
+    KeyEventAction,
     SelectChatChannelAction,
     SwipeAction,
+    TapListEntryAction,
     TapPointAction,
     TapSpatialObjectAction,
 )
@@ -38,6 +40,7 @@ from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject,
     ListEntryKind,
     Observation,
+    RowRecognitionStatus,
     SpatialObjectKind,
     SpatialObjectSourceKind,
     SpatialSurfaceObservation,
@@ -46,6 +49,13 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialViewportAddressingKind,
     VisibleElement,
     VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.research import (
+    ResearchDetail,
+    ResearchNodeFacts,
+    ResearchNodeId,
+    research_node_title,
 )
 from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
@@ -267,6 +277,94 @@ def home_building_frame(
         image_size=image_size,
         captured_at=captured_at or datetime.now(UTC),
         blocking_popup=blocked,
+    )
+
+
+def research_entry(
+    node_id: ResearchNodeId,
+    *,
+    status: RowRecognitionStatus = RowRecognitionStatus.COMPLETE,
+    category: ResearchCategory = ResearchCategory.DEVELOPMENT,
+) -> DetectedListEntry:
+    """Build one typed Development research row with measured tile geometry."""
+
+    action_bounds = Bounds(140, 210, 80, 80)
+    complete = status == RowRecognitionStatus.COMPLETE
+    return DetectedListEntry(
+        kind=ListEntryKind.RESEARCH,
+        bounds=Bounds(100, 200, 180, 120),
+        title_text=research_node_title(node_id),
+        action_point=action_bounds.center() if complete else None,
+        action_bounds=action_bounds if complete else None,
+        metadata={"category": category.value},
+        row_status=status,
+        research_facts=ResearchNodeFacts(category=category, node_id=node_id),
+    )
+
+
+def research_tree_frame(
+    entries: tuple[DetectedListEntry, ...] = (),
+    *,
+    proved: bool = True,
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+) -> Observation:
+    """Build one Development tree frame with reviewed visual-anchor proof."""
+
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_RESEARCH_TREE,
+            effective_screen=ScreenType.PNC_RESEARCH_TREE,
+            guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
+            evidence=(
+                (ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, "visual_anchor:research_tree_development"),)
+                if proved
+                else ()
+            ),
+        ),
+        list_entries=entries,
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+    )
+
+
+def research_detail_frame(
+    node_id: ResearchNodeId | None,
+    *,
+    category: ResearchCategory | None = None,
+    active: bool = False,
+    start: bool = True,
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+) -> Observation:
+    """Build one typed node-detail frame with its measured anchor evidence."""
+
+    anchor = (
+        "visual_anchor:research_tree_node_detail_active"
+        if active
+        else "visual_anchor:research_tree_node_detail"
+    )
+    visible_elements = {}
+    if start:
+        visible_elements[UiElementId.PNC_RESEARCH_START_BUTTON] = VisibleElement(
+            UiElementId.PNC_RESEARCH_START_BUTTON,
+            Bounds(304, 447, 135, 49),
+            1.0,
+            source_kind=VisibleElementSourceKind.TEMPLATE,
+        )
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_RESEARCH_TREE,
+            effective_screen=ScreenType.PNC_RESEARCH_TREE,
+            guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
+            evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, anchor),),
+        ),
+        visible_elements=visible_elements,
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+        research_detail=ResearchDetail(node_id=node_id, category=category),
     )
 
 
@@ -2148,3 +2246,256 @@ class GameFirstNavigationEvidenceTests(unittest.TestCase):
             with self.subTest(frame=name), Image.open(self.directory / name) as image:
                 capture = CapturedScreenshot(None, image.copy(), 'PNG', ephemeral_captured_at=datetime.now(UTC))
                 self.assertEqual(set(perception.build(capture).visible_elements), {UiElementId.PNC_BACK_BUTTON_TOP_LEFT})
+
+
+class ResearchNavigationCoreTests(unittest.TestCase):
+    """Prove research node open, scroll, and close through typed content proof."""
+
+    def make_core(self, actuator=None):
+        core = NavigationCore(
+            actuator or Actuator(),
+            lambda _: observation(ScreenType.PNC_HOME_CITY),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        return core
+
+    def test_open_research_node_taps_unique_complete_row_once_for_matching_detail(self):
+        """One qualified row tap followed by two stable matching detail frames."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((
+            research_tree_frame((research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now),
+            research_detail_frame(ResearchNodeId.CONSTRUCTION_I, captured_at=now + timedelta(seconds=1)),
+            research_detail_frame(ResearchNodeId.CONSTRUCTION_I, captured_at=now + timedelta(seconds=2)),
+        ))
+        actuator = Actuator()
+        result = self.make_core(actuator).open_research_node(
+            "Construction I",
+            ResearchCategory.DEVELOPMENT,
+            observe_content=lambda _: next(frames),
+        )
+
+        self.assertIsNotNone(result.research_detail)
+        self.assertEqual(ResearchNodeId.CONSTRUCTION_I, result.research_detail.node_id)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, TapListEntryAction)
+        self.assertEqual("Construction I", action.title_text)
+        self.assertEqual("category", action.metadata_key)
+        self.assertEqual(ResearchCategory.DEVELOPMENT.value, action.metadata_value)
+
+    def test_open_research_node_rejects_unqualified_sources_without_any_tap(self):
+        """Missing, duplicated, unproved, or unreadable rows send no action."""
+
+        node = ResearchNodeId.CONSTRUCTION_I
+        cases = (
+            ("unproved_grid", research_tree_frame((research_entry(node),), proved=False)),
+            ("missing", research_tree_frame(())),
+            (
+                "ambiguous",
+                research_tree_frame((research_entry(node), research_entry(node))),
+            ),
+            (
+                "unreadable",
+                research_tree_frame(
+                    (research_entry(node, status=RowRecognitionStatus.UNREADABLE),)
+                ),
+            ),
+            (
+                "clipped",
+                research_tree_frame(
+                    (research_entry(node, status=RowRecognitionStatus.CLIPPED),)
+                ),
+            ),
+        )
+        for name, source in cases:
+            with self.subTest(reason=name):
+                actuator = Actuator()
+                with self.assertRaises(RuntimeError):
+                    self.make_core(actuator).open_research_node(
+                        "Construction I",
+                        ResearchCategory.DEVELOPMENT,
+                        observe_content=lambda _: source,
+                    )
+                self.assertEqual(0, len(actuator.actions))
+
+    def test_open_research_node_rejects_wrong_detail_without_replaying_tap(self):
+        """A different node's detail never proves completion; no second tap."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((
+            research_tree_frame((research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now),
+            *(
+                research_detail_frame(
+                    ResearchNodeId.STORAGE_I,
+                    captured_at=now + timedelta(seconds=index),
+                )
+                for index in range(1, 5)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            self.make_core(actuator).open_research_node(
+                "Construction I",
+                ResearchCategory.DEVELOPMENT,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_research_node_rejects_stale_detail_without_replaying_tap(self):
+        """A detail frame no newer than the source is a stale capture."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((
+            research_tree_frame((research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now),
+            research_detail_frame(ResearchNodeId.CONSTRUCTION_I, captured_at=now),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "stale capture"):
+            self.make_core(actuator).open_research_node(
+                "Construction I",
+                ResearchCategory.DEVELOPMENT,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_research_node_rejects_conflicting_detail_category(self):
+        """A detail that names a different category cannot prove the selection."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((
+            research_tree_frame((research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now),
+            *(
+                research_detail_frame(
+                    ResearchNodeId.CONSTRUCTION_I,
+                    category=ResearchCategory.ECONOMY,
+                    captured_at=now + timedelta(seconds=index),
+                )
+                for index in range(1, 5)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            self.make_core(actuator).open_research_node(
+                "Construction I",
+                ResearchCategory.DEVELOPMENT,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_scroll_research_tree_sends_one_qualified_swipe(self):
+        """One reviewed gesture confirmed by two fresh proved tree frames."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((
+            research_tree_frame(
+                (research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now
+            ),
+            research_tree_frame(
+                (research_entry(ResearchNodeId.INFIRMARY_CAP_I),),
+                captured_at=now + timedelta(seconds=1),
+            ),
+            research_tree_frame(
+                (research_entry(ResearchNodeId.INFIRMARY_CAP_I),),
+                captured_at=now + timedelta(seconds=2),
+            ),
+        ))
+        actuator = Actuator()
+        result = self.make_core(actuator).scroll_research_tree(
+            observe_content=lambda _: next(frames)
+        )
+
+        self.assertEqual(ScreenType.PNC_RESEARCH_TREE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, SwipeAction)
+        self.assertEqual("replacement_scroll_research_tree", action.reason)
+
+    def test_scroll_research_tree_without_proved_grid_sends_nothing(self):
+        """A blocked or unproved source never receives the reviewed gesture."""
+
+        for source in (
+            research_tree_frame((research_entry(ResearchNodeId.CONSTRUCTION_I),), proved=False),
+            research_tree_frame((research_entry(ResearchNodeId.CONSTRUCTION_I),), blocked=True),
+            observation(ScreenType.PNC_HOME_CITY),
+        ):
+            with self.subTest(source=source.decision.effective_screen, blocked=source.blocking_popup):
+                actuator = Actuator()
+                with self.assertRaises(RuntimeError):
+                    self.make_core(actuator).scroll_research_tree(
+                        observe_content=lambda _: source
+                    )
+                self.assertEqual(0, len(actuator.actions))
+
+    def test_scroll_research_tree_failed_confirmation_never_repeats_swipe(self):
+        """Unchanged follow-up frames exhaust the budget after one gesture."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        source = research_tree_frame(
+            (research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now
+        )
+        unknowns = tuple(observation(ScreenType.UNKNOWN) for _ in range(4))
+        frames = iter((
+            source,
+            *(
+                replace(frame, captured_at=now + timedelta(seconds=index))
+                for index, frame in enumerate(unknowns, start=1)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            self.make_core(actuator).scroll_research_tree(
+                observe_content=lambda _: next(frames)
+            )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_close_research_detail_sends_one_back_for_tree_return(self):
+        """One Android Back from the proved detail confirmed by the fresh grid."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((
+            research_detail_frame(ResearchNodeId.CONSTRUCTION_I, captured_at=now),
+            research_tree_frame(
+                (research_entry(ResearchNodeId.CONSTRUCTION_I),),
+                captured_at=now + timedelta(seconds=1),
+            ),
+            research_tree_frame(
+                (research_entry(ResearchNodeId.CONSTRUCTION_I),),
+                captured_at=now + timedelta(seconds=2),
+            ),
+        ))
+        actuator = Actuator()
+        result = self.make_core(actuator).close_research_detail(
+            observe_content=lambda _: next(frames)
+        )
+
+        self.assertEqual(ScreenType.PNC_RESEARCH_TREE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, KeyEventAction)
+        self.assertEqual("KEYCODE_BACK", action.key_code)
+
+    def test_close_research_detail_rejects_non_detail_sources_without_action(self):
+        """A tree grid or blocked detail cannot trigger the Back gesture."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        for source in (
+            research_tree_frame(
+                (research_entry(ResearchNodeId.CONSTRUCTION_I),), captured_at=now
+            ),
+            research_detail_frame(
+                ResearchNodeId.CONSTRUCTION_I, captured_at=now, blocked=True
+            ),
+            observation(ScreenType.PNC_HOME_CITY),
+        ):
+            with self.subTest(screen=source.screen_type, blocked=source.blocking_popup):
+                actuator = Actuator()
+                with self.assertRaises(RuntimeError):
+                    self.make_core(actuator).close_research_detail(
+                        observe_content=lambda _: source
+                    )
+                self.assertEqual(0, len(actuator.actions))
+

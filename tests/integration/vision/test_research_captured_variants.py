@@ -10,7 +10,7 @@ from unittest.mock import Mock
 from PIL import Image
 
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -28,7 +28,6 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
-from tests.support.pnc.observations import make_entry, make_observation
 
 
 FIXTURE_ROOT = TEST_DATA_ROOT / "screen_recognition" / "research_variants"
@@ -328,18 +327,10 @@ class ResearchCapturedVariantTests(unittest.TestCase):
 
         task = ResearchTask()
         self.assertEqual(task.required_recognition_selectors, (START,))
-        context = Mock(params=task.parse_params({"priority": ["economy"]}))
-        before = make_observation(
-            ScreenType.PNC_RESEARCH_TREE,
-            list_entries=(
-                make_entry(
-                    ListEntryKind.RESEARCH,
-                    title="Food Output I",
-                    metadata={"category": "economy"},
-                ),
-            ),
-        )
-        self.assertTrue(task.verify(context, before, perceived).succeeded)
+        context = Mock(params=task.parse_params({"priority": ["economy"]}), runtime_state={})
+        # An active detail at inspection is read-only: without a verified
+        # selection the task never plans Start on it.
+        self.assertEqual(task.plan(context, perceived), [])
 
     def test_visible_busy_military_detail_abstains_without_unproved_identity(self) -> None:
         """A no-idle Military detail visibly says Research but lacks a proved profile."""

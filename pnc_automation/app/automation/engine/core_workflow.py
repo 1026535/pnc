@@ -39,7 +39,7 @@ from pnc_automation.app.pnc.domain.building_operations import (
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     RowRecognitionStatus,
@@ -293,7 +293,9 @@ class WorkflowContext:
             observation = self._runtime.navigation.open_research_node(
                 title, category, observe_content=self._observe_research_content,
             )
-            self._research_node = title
+            start = observation.get(UiElementId.PNC_RESEARCH_START_BUTTON)
+            if start is not None and start.source_kind == VisibleElementSourceKind.TEMPLATE:
+                self._research_node = title
             return observation
         finally:
             self._sync_from_runtime()

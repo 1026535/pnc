@@ -62,6 +62,8 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_list_entry,
     bind_spatial_surface,
+    bind_research_detail,
+    bind_research_queue_row,
     bind_visible_elements,
     select_content_labels,
 )
@@ -826,8 +828,25 @@ class ObservationBuilder:
             text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
-            research_detail=additions.research_detail,
-            research_queue_rows=additions.research_queue_rows,
+            research_detail=(
+                bind_research_detail(
+                    additions.research_detail,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.research_detail is not None
+                else None
+            ),
+            research_queue_rows=tuple(
+                bind_research_queue_row(
+                    row,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                for row in additions.research_queue_rows
+            ),
             frame_ref=getattr(screenshot, "frame_ref", None),
         )
         if self.debug_artifact_collector is not None and ocr_context is not None:
@@ -1264,6 +1283,8 @@ def _merge_observation_additions(
             else fallback.chat_draft_empty
         ),
         chat_draft_text=primary.chat_draft_text or fallback.chat_draft_text,
+        research_detail=primary.research_detail or fallback.research_detail,
+        research_queue_rows=primary.research_queue_rows or fallback.research_queue_rows,
     )
 
 

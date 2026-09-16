@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any
 
 from pnc_automation.app.automation.engine.task import (
@@ -15,6 +17,7 @@ from pnc_automation.app.automation.engine.task import (
 )
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.core.errors import TaskVerificationError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
 from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
@@ -23,10 +26,33 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResearchPolicy
-from pnc_automation.app.pnc.domain.research import ResearchNodeId
+from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchNodeId
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+
+
+@dataclass(frozen=True, slots=True)
+class _ResearchNodeSelection:
+    """One task-scoped node selection awaiting detail confirmation and one Start.
+
+    Stored on the per-step ``TaskContext.runtime_state`` so independent task
+    contexts never inherit a previous selection. ``confirmed`` is promoted only
+    by ``verify`` after the open tap produces a newer clear matching detail in
+    the same capture session; ``start_planned`` consumes the one Start tap so a
+    failed or uncertain start is never planned again blindly.
+    """
+
+    node_id: ResearchNodeId
+    category: ResearchCategory
+    title_text: str | None
+    selected_frame: FrameRef | None
+    selected_at: datetime
+    confirmed: bool = False
+    start_planned: bool = False
+
+
+_SELECTION_STATE_KEY = "research_task_selected_node"
 
 
 class ResearchTask(BaseAutomationTask):
@@ -36,12 +62,6 @@ class ResearchTask(BaseAutomationTask):
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     preflight = TaskPreflight.HOME_CITY
     required_recognition_selectors = (UiElementId.PNC_RESEARCH_START_BUTTON,)
-
-    def __init__(self) -> None:
-        """Track the one node this task selected so Start needs a matching detail."""
-
-        self._pending_node_id: ResearchNodeId | None = None
-        self._pending_node_title: str | None = None
 
     def parse_params(self, params: Mapping[str, Any]) -> ResearchPolicy:
         """Builds the typed research policy."""
@@ -60,13 +80,13 @@ class ResearchTask(BaseAutomationTask):
         }
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
-        """Plans one research increment; Start requires the proved selected detail."""
+        """Plans one research increment; Start requires the confirmed selected detail."""
 
         if observation.screen_type not in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
-            self._clear_pending_node()
+            _clear_selection(context)
             return context.flows.open_institute(observation)
         if observation.screen_type == ScreenType.PNC_INSTITUTE:
-            self._clear_pending_node()
+            _clear_selection(context)
             selector_id = _choose_institute_category_selector(observation, context.params.priority)
             if selector_id is not None:
                 return [
@@ -88,14 +108,21 @@ class ResearchTask(BaseAutomationTask):
 
         detail = observation.research_detail
         if detail is not None:
-            # Only the detail this task opened can authorize its Start tap; a
-            # pre-opened or mismatched panel stays read-only.
+            # Only the detail this task opened and verified can authorize its
+            # single Start tap; pre-opened, active, or mismatched panels stay
+            # read-only inspection.
+            selection = _pending_selection(context)
+            if selection is not None and not _detail_matches_selection(detail, selection):
+                _clear_selection(context)
+                return []
             if (
-                self._pending_node_id is None
-                or detail.node_id != self._pending_node_id
+                selection is None
+                or not selection.confirmed
+                or selection.start_planned
                 or not _has_template_start(observation)
             ):
                 return []
+            _store_selection(context, replace(selection, start_planned=True))
             return [
                 TapAction(
                     selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
@@ -104,7 +131,7 @@ class ResearchTask(BaseAutomationTask):
                 )
             ]
 
-        self._clear_pending_node()
+        _clear_selection(context)
         candidates = tuple(
             entry
             for entry in observation.entries(ListEntryKind.RESEARCH)
@@ -134,8 +161,16 @@ class ResearchTask(BaseAutomationTask):
                 "Research candidate is ambiguous or unidentified; no node was opened or started.",
                 candidate_count=len(selected),
             )
-        self._pending_node_id = target.research_facts.node_id
-        self._pending_node_title = target.title_text
+        _store_selection(
+            context,
+            _ResearchNodeSelection(
+                node_id=target.research_facts.node_id,
+                category=target.research_facts.category,
+                title_text=target.title_text,
+                selected_frame=observation.frame_ref,
+                selected_at=observation.captured_at,
+            ),
+        )
         return [
             _tap_entry(target, kind=ListEntryKind.RESEARCH, reason="open_research_candidate"),
         ]
@@ -143,10 +178,39 @@ class ResearchTask(BaseAutomationTask):
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies either navigation to the research tree or a started research item."""
 
-        if _is_active_research_detail(after):
-            if not after.has(UiElementId.PNC_RESEARCH_START_BUTTON):
-                self._clear_pending_node()
+        selection = _pending_selection(context)
+        if selection is not None and selection.start_planned:
+            _clear_selection(context)
+            if (
+                _is_active_research_detail(after)
+                and after.research_detail is not None
+                and _detail_matches_selection(after.research_detail, selection)
+                and _is_newer_same_session(after, selection)
+                and not after.has(UiElementId.PNC_RESEARCH_START_BUTTON)
+            ):
                 return TaskResult.success("Research started and the active detail has no start button.")
+            return TaskResult.failure(
+                "Research start did not reach a fresh matching active detail.", retryable=True,
+            )
+        if selection is not None and not selection.confirmed:
+            detail = after.research_detail
+            if (
+                detail is not None
+                and after.decision.guard == GuardVerdict.CLEAR
+                and _detail_matches_selection(detail, selection)
+                and _is_newer_same_session(after, selection)
+            ):
+                _store_selection(context, replace(selection, confirmed=True))
+                return TaskResult.replan("Opened the selected research detail.")
+            _clear_selection(context)
+            return TaskResult.failure(
+                "The opened research detail did not match the selected node.", retryable=True,
+            )
+        if selection is not None:
+            # A confirmed selection whose Start was never planned only survives
+            # while the current frame still shows its matching detail.
+            if after.research_detail is None or not _detail_matches_selection(after.research_detail, selection):
+                _clear_selection(context)
         if before.screen_type not in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
             if after.screen_type in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
                 return TaskResult.replan("Reached institute flow for research planning.")
@@ -165,11 +229,52 @@ class ResearchTask(BaseAutomationTask):
                 return TaskResult.skipped("No eligible research items were visible.")
         return TaskResult.failure("Research did not produce a verified state change.", retryable=True)
 
-    def _clear_pending_node(self) -> None:
-        """Drop the remembered selection whenever the task loses its detail proof."""
 
-        self._pending_node_id = None
-        self._pending_node_title = None
+def _pending_selection(context: TaskContext) -> _ResearchNodeSelection | None:
+    """Return the stored selection for this step context, if any."""
+
+    value = context.runtime_state.get(_SELECTION_STATE_KEY)
+    return value if isinstance(value, _ResearchNodeSelection) else None
+
+
+def _store_selection(context: TaskContext, selection: _ResearchNodeSelection) -> None:
+    """Persist the selection on the per-step runtime state."""
+
+    context.runtime_state[_SELECTION_STATE_KEY] = selection
+
+
+def _clear_selection(context: TaskContext) -> None:
+    """Drop the remembered selection whenever the task loses its detail proof."""
+
+    context.runtime_state.pop(_SELECTION_STATE_KEY, None)
+
+
+def _detail_matches_selection(detail: ResearchDetail, selection: _ResearchNodeSelection) -> bool:
+    """Match a measured detail to the verified source selection.
+
+    A hidden detail category relies on the freshly verified source category; a
+    visible conflicting category always fails.
+    """
+
+    if detail.node_id is None or detail.node_id != selection.node_id:
+        return False
+    return detail.category is None or detail.category == selection.category
+
+
+def _is_newer_same_session(observation: Observation, selection: _ResearchNodeSelection) -> bool:
+    """Require a fresher capture from the same session epoch as the selection frame."""
+
+    if observation.captured_at <= selection.selected_at:
+        return False
+    frame = observation.frame_ref
+    selected = selection.selected_frame
+    if frame is None or selected is None:
+        return True
+    return (
+        frame.session_id == selected.session_id
+        and frame.session_epoch == selected.session_epoch
+        and frame.capture_sequence > selected.capture_sequence
+    )
 
 
 def _has_template_start(observation: Observation) -> bool:

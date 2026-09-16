@@ -17,7 +17,12 @@ from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId, DailyTaskCheckpoint, MutationAcknowledgement, MutationIntentState
 from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, RowRecognitionStatus, VisibleElement
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
-from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchNodeFacts, ResearchNodeId
+from pnc_automation.app.pnc.domain.research import (
+    ResearchDetail,
+    ResearchNodeFacts,
+    ResearchNodeId,
+    ResearchQueueState,
+)
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -143,6 +148,51 @@ class CoreResearchMutationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "not executed"):
             context.start_research(self.checkpoint)
         self.assertEqual(MutationIntentState.DISPATCHED, self.load().mutation_intents[0].state)
+        with self.assertRaises(PermissionError):
+            context.start_research(self.checkpoint)
+        self.assertEqual(2, runtime.actuator.execute_action.call_count)
+
+    def test_active_matching_detail_is_read_only_and_never_primes(self):
+        active = replace(
+            research("research_tree_node_detail_active"),
+            research_detail=ResearchDetail(
+                title_text="Construction I",
+                node_id=ResearchNodeId.CONSTRUCTION_I,
+                queue_state=ResearchQueueState.ACTIVE,
+                queue_timer_text="00:44:45",
+            ),
+        )
+        runtime, context = self.context((self.grid, active, active))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+        with self.assertRaises(PermissionError):
+            context.start_research(self.checkpoint)
+        self.assertEqual(1, runtime.actuator.execute_action.call_count)
+
+    def test_detail_without_template_start_is_read_only_and_never_primes(self):
+        startless = replace(
+            research("research_tree_node_detail"),
+            research_detail=ResearchDetail(
+                title_text="Construction I",
+                node_id=ResearchNodeId.CONSTRUCTION_I,
+            ),
+        )
+        runtime, context = self.context((self.grid, startless, startless))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+        with self.assertRaises(PermissionError):
+            context.start_research(self.checkpoint)
+        self.assertEqual(1, runtime.actuator.execute_action.call_count)
+
+    def test_scroll_and_detail_close_invalidate_node_priming(self):
+        runtime, context = self.context((self.grid, self.idle, self.idle, self.grid, self.grid, self.grid))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+        context.scroll_research_tree()
+        with self.assertRaises(PermissionError):
+            context.start_research(self.checkpoint)
+        self.assertEqual(2, runtime.actuator.execute_action.call_count)
+
+        runtime, context = self.context((self.grid, self.idle, self.idle, self.idle, self.grid, self.grid))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+        context.close_research_detail()
         with self.assertRaises(PermissionError):
             context.start_research(self.checkpoint)
         self.assertEqual(2, runtime.actuator.execute_action.call_count)

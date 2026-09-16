@@ -55,7 +55,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     OcrLine,
     OcrReadPurpose,
 )
-from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher, PreparedFrame
 
 
 _RESEARCH_TREE_LAYOUT_ID = "research_tree_development"
@@ -181,9 +181,11 @@ class ResearchContentProducer:
         """Publish measured Development-tree rows from label components."""
 
         category = _header_category(lines, image=image)
+        rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
+        prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
         candidates = tuple(
             candidate
-            for component in _discover_label_components(image)
+            for component in _discover_label_components(rgb)
             if (candidate := self._node_candidate(
                 image=image,
                 component=component,
@@ -192,7 +194,14 @@ class ResearchContentProducer:
             is not None
         )
         entries = tuple(
-            self._node_entry(image=image, candidate=candidate, category=category, ocr_context=ocr_context)
+            self._node_entry(
+                image=image,
+                rgb=rgb,
+                prepared=prepared,
+                candidate=candidate,
+                category=category,
+                ocr_context=ocr_context,
+            )
             for candidate in candidates
         )
         duplicate_titles = {
@@ -253,6 +262,8 @@ class ResearchContentProducer:
         self,
         *,
         image: Image.Image,
+        rgb: np.ndarray,
+        prepared: PreparedFrame | None,
         candidate: _NodeCandidate,
         category: ResearchCategory | None,
         ocr_context: ObservationOcrContext,
@@ -261,35 +272,44 @@ class ResearchContentProducer:
 
         facts = ResearchNodeFacts(category=category, node_id=candidate.node_id)
         metadata: dict[str, object] = dict(research_entry_category_metadata(facts))
-        if candidate.clipped:
-            metadata["unresolved_reason"] = "clipped_or_partial_node_label"
+        icon_bounds = _derive_icon_bounds(candidate.label_bounds)
+        viewport = _scroll_viewport(image)
+        if (
+            candidate.clipped
+            or not viewport.contains_bounds(icon_bounds)
+            or not viewport.contains_bounds(candidate.label_bounds)
+        ):
+            metadata["unresolved_reason"] = (
+                "clipped_or_partial_node_label"
+                if candidate.clipped
+                else "incomplete_node_tile_geometry"
+            )
             return DetectedListEntry(
                 kind=ListEntryKind.RESEARCH,
-                bounds=candidate.label_bounds,
+                bounds=(
+                    candidate.label_bounds
+                    if candidate.clipped
+                    else _union_bounds(candidate.label_bounds, _clip_bounds(icon_bounds, viewport))
+                ),
                 title_text=candidate.title_text,
                 row_status=RowRecognitionStatus.CLIPPED,
                 metadata=metadata,
                 research_facts=facts,
             )
-        icon_bounds = _derive_icon_bounds(candidate.label_bounds)
-        viewport = _scroll_viewport(image)
-        actionable_geometry = (
-            viewport.contains_bounds(icon_bounds)
-            and viewport.contains_bounds(candidate.label_bounds)
-            and _icon_has_visible_frame(image=image, icon_bounds=icon_bounds)
-        )
-        if not actionable_geometry:
-            metadata["unresolved_reason"] = "incomplete_node_tile_geometry"
+        if not _icon_has_visible_frame(rgb=rgb, icon_bounds=icon_bounds):
+            # The full tile sits inside the viewport but its icon frame is
+            # unproved: that is an unreadable tile, not an edge clip.
+            metadata["unresolved_reason"] = "unproved_node_icon_geometry"
             return DetectedListEntry(
                 kind=ListEntryKind.RESEARCH,
-                bounds=_union_bounds(candidate.label_bounds, _clip_bounds(icon_bounds, viewport)),
+                bounds=_union_bounds(icon_bounds, candidate.label_bounds),
                 title_text=candidate.title_text,
-                row_status=RowRecognitionStatus.CLIPPED,
+                row_status=RowRecognitionStatus.UNREADABLE,
                 metadata=metadata,
                 research_facts=facts,
             )
         levels = self._read_node_level(image=image, icon_bounds=icon_bounds, ocr_context=ocr_context)
-        locked = self._detect_node_lock(image=image, icon_bounds=icon_bounds)
+        locked = self._detect_node_lock(image=image, prepared=prepared, icon_bounds=icon_bounds)
         facts = ResearchNodeFacts(
             category=category,
             node_id=candidate.node_id,
@@ -348,13 +368,12 @@ class ResearchContentProducer:
                 return int(match.group(1)), int(match.group(2))
         return None
 
-    def _detect_node_lock(self, *, image: Image.Image, icon_bounds: Bounds) -> bool | None:
+    def _detect_node_lock(
+        self, *, image: Image.Image, prepared: PreparedFrame | None, icon_bounds: Bounds,
+    ) -> bool | None:
         """Qualify a padlock glyph inside the icon; never infer lock from level."""
 
-        if not _PADLOCK_TEMPLATE.exists():
-            return None
-        prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
-        if prepared is None:
+        if prepared is None or not _PADLOCK_TEMPLATE.exists():
             return None
         search = _project_bounds_to_reference(
             _inset_bounds(icon_bounds, padding=-max(2, round(icon_bounds.width * 0.08)), image=image),
@@ -396,6 +415,7 @@ class ResearchContentProducer:
         elif lines:
             title_text = lines[0].text.strip() or None
         node_id = None if title_text is None else research_node_for_title(title_text)
+        prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
         effect_records = tuple(
             ResearchTextRecord(line.text.strip(), line.bounds)
             for line in lines
@@ -421,7 +441,7 @@ class ResearchContentProducer:
             and ":" not in line.text
             for cost in (
                 ResearchResourceCost(
-                    resource_type=self._match_cost_resource(image=image, line=line),
+                    resource_type=self._match_cost_resource(image=image, prepared=prepared, line=line),
                     available=int(match.group(1).replace(",", "")),
                     required=int(match.group(2).replace(",", "")),
                     text_bounds=line.bounds,
@@ -454,10 +474,11 @@ class ResearchContentProducer:
             )
         )
 
-    def _match_cost_resource(self, *, image: Image.Image, line: OcrLine) -> ResourceType | None:
+    def _match_cost_resource(
+        self, *, image: Image.Image, prepared: PreparedFrame | None, line: OcrLine,
+    ) -> ResourceType | None:
         """Match the small resource icon left of a cost row when visually supported."""
 
-        prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
         if prepared is None:
             return None
         half_height = max(1, round(line.bounds.height * 1.8))
@@ -612,16 +633,16 @@ def _header_category(lines: tuple[OcrLine, ...], *, image: Image.Image) -> Resea
     return None
 
 
-def _discover_label_components(image: Image.Image) -> tuple[Bounds, ...]:
+def _discover_label_components(array: np.ndarray) -> tuple[Bounds, ...]:
     """Measure blue node-label rectangles without consulting OCR text.
 
     Qualified on the four reviewed Development captures at both supported
     sizes: horizontal closing bridges glyph holes, opening removes thin
     branch/frame strokes, and size-qualified components keep only real label
-    tiles, including honest boundary fragments.
+    tiles, including honest boundary fragments. Accepts the caller's one
+    int16 RGB frame array.
     """
 
-    array = np.asarray(image.convert("RGB"), dtype=np.int16)
     height, width = array.shape[:2]
     mask = (
         (array[:, :, 2] >= _LABEL_BLUE_MIN_BLUE)
@@ -679,10 +700,10 @@ def _derive_icon_bounds(label_bounds: Bounds) -> Bounds:
     )
 
 
-def _icon_has_visible_frame(*, image: Image.Image, icon_bounds: Bounds) -> bool:
+def _icon_has_visible_frame(*, rgb: np.ndarray, icon_bounds: Bounds) -> bool:
     """Confirm the derived icon region shows the blue square frame/body pixels."""
 
-    array = np.asarray(image.convert("RGB"), dtype=np.int16)
+    array = rgb
     border = max(2, round(icon_bounds.width * _ICON_FRAME_BORDER_RATIO))
     x0, y0 = icon_bounds.x, icon_bounds.y
     x1, y1 = x0 + icon_bounds.width, y0 + icon_bounds.height

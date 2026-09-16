@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from typing import TypeVar
 
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
@@ -13,6 +14,7 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
@@ -207,4 +209,67 @@ def bind_camera_proof(
         frame_ref=proof.frame_ref or frame_ref,
         source_screen=proof.source_screen or source_screen,
         source_layout_id=proof.source_layout_id if proof.source_layout_id is not None else source_layout_id,
+    )
+
+
+def bind_research_detail(
+    detail: ResearchDetail,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> ResearchDetail:
+    """Adds missing research-detail provenance while rejecting contradictory proof."""
+
+    return _bind_research_fact(
+        detail,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Research detail",
+    )
+
+
+def bind_research_queue_row(
+    row: ResearchQueueRow,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> ResearchQueueRow:
+    """Adds missing research queue-row provenance while rejecting contradictory proof."""
+
+    return _bind_research_fact(
+        row,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Research queue row",
+    )
+
+
+_ResearchFactT = TypeVar("_ResearchFactT", ResearchDetail, ResearchQueueRow)
+
+
+def _bind_research_fact(
+    fact: _ResearchFactT,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+    label: str,
+) -> _ResearchFactT:
+    """Stamp one typed research fact with the current capture provenance."""
+
+    if fact.frame_ref is not None and fact.frame_ref != frame_ref:
+        raise SelectorResolutionError(f"{label} proof belongs to a different capture frame.")
+    if fact.source_screen is not None and fact.source_screen != source_screen:
+        raise SelectorResolutionError(f"{label} proof belongs to a different source screen.")
+    if fact.source_layout_id is not None and fact.source_layout_id != source_layout_id:
+        raise SelectorResolutionError(f"{label} proof belongs to a different source layout.")
+    return replace(
+        fact,
+        frame_ref=fact.frame_ref or frame_ref,
+        source_screen=fact.source_screen or source_screen,
+        source_layout_id=fact.source_layout_id if fact.source_layout_id is not None else source_layout_id,
     )
