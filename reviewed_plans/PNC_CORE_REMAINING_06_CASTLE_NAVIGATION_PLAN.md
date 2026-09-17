@@ -200,6 +200,36 @@ already-required authorized round trip; no additional spending or broad live tou
 is needed. Until those checks pass, this issue remains open even if RGB fixtures
 and other V packets pass.
 
+### September 17 follow-up: current native replay succeeds
+
+The original failure is **not reproduced** at `752cb70c5d8d0eb3aadbaa11bfa6499037b70667`
+with the current RapidOCR 3.4.5 environment. Both real production publishers
+read the **same native RGBA frame** as exact K157 / NPC on Hopium / C31 and
+detect its selected marker. The lead checked the replay code (native image
+mode retained, real `RapidOcrService`, both production publisher compositions),
+the structured results, and source/report hashes. The current OCR owner now
+uses `rapidocr` with the qualified PP-OCR recognizer instead of the older
+`rapidocr_onnxruntime` backend at the failing revision. This is a changed
+implementation/environment; the specific causal commit was not isolated.
+
+Current evidence is linked by the corrected manifest:
+`C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-live-main/.local-data/devin-live-test/runs/main-evidence-20260917/turn-002/evidence.json`.
+The replay report is at that run's `replay/replay_castle_identity_failed_frame_native.json`;
+source PNG SHA-256 is `6abfad35b1c8d18d59c5dcde8050816e1ac1b82ff03896e472ed033419848939`.
+The same pass exercised the production live preflight and verified current
+selected **K157 / Sword NPC2 / C26** (no switch), corroborated by roster frame
+`20260917T044719Z_core_20260917T044156Z_9e838404_0027_active_castle_identity.png`
+under `C:/Users/lebel/pnc/artifacts/2026-09-17/pet_workshop_evidence_20260917/`.
+
+**Still open for the package owner:** retain the mode-preserving portable
+regression and exact-identity negatives before closing this entry; do not
+implement an unnecessary second normalization path for a now-passing replay.
+The live worker substituted an in-memory role for configured `read_only`, so
+this pass does not qualify the configuration/authority boundary or the
+package's complete switching/return contract. The Workshop coordinator has
+requested a narrowly scoped temporary config-role change for future testing;
+no new live action is authorized by this evidence note.
+
 ## Decisions, target and authority
 
 Bind this proof to the current execution assignment's explicitly authorized
