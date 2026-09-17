@@ -37,6 +37,8 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 
 ## Implementation review — correction batch 1
 
+**Current disposition: accepted and merged/pushed** at `4f12095a1b10ff1c600a1dcdb1f0f7bf82c3000c`. The [combined PW03 acceptance record](PW03_EFFORT_RESERVATIONS_POLICY.md#accepted-and-merged--2026-09-17) owns final review, correction, test and integration evidence. The final candidate passed 2,741 tests with 7 unrelated environmental skips, including all 166 focused solver tests. Production/test content is unchanged from the tested `dc810c8` revision. The records below preserve earlier findings and are superseded by that acceptance.
+
 **Disposition: Fixing findings; not accepted.** Combined review/revision/test evidence and worker continuation are recorded in [PW03](PW03_EFFORT_RESERVATIONS_POLICY.md#implementation-review--correction-batch-1). Lead reviewed `a9f79ae`; the unchanged solver content is now on current main as candidate baseline `b868a5f` in its isolated branch. None of this candidate has been merged to main.
 
 **S2 — canonical validation does not cover every proposed mutation.** `planner.py` validates submissions but returns other mutations directly, contrary to its documented contract. A selected Tree 4 with unknown production mode returns Produce while `validate_intent` says UNCERTAIN. A fully observed board with unknown occupancy in every other cell also returns Produce without a confirmed empty square. `_cell_inspect` omits these missing occupancy/access facts, and the full-board activation enumerator omits the required successor check.

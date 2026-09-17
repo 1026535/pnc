@@ -50,6 +50,20 @@ Reviewed estimator/allocator/validator implementation, example ranking diagnosti
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
 
+## Accepted and merged — 2026-09-17
+
+**PW03/PW04 accepted and pushed to main at `4f12095a1b10ff1c600a1dcdb1f0f7bf82c3000c`.** The lead independently reviewed the full worker implementation, all recorded findings and correction diffs, implemented the remaining shared-allocation/reconstruction/revalidation fixes, and ran the focused scenario suites. S1–S6 and the later stale-production revalidation finding are resolved. The original defect/recovery records below are historical, not current blockers.
+
+Final validation-only worker turn 004 tested `dc810c8288e1c72e09b667111e3ed7e9aa99ebde`, with unchanged HEAD and clean tracked content, using the prescribed Python 3.13.5 / RapidOCR 3.4.5 environment. The lead independently inspected the raw runner result, environment, log summary, skip reasons and revision/fingerprint rather than accepting the worker's handoff alone:
+
+- **Passed:** `tools/run_tests.py affected --base origin/main --explain`, resolving base `8d8e15a`; required full fallback covered all 330 portable modules. **2,748 tests ran: 2,741 passed, 7 skipped, zero failures/errors**, exit 0. All 166 Workshop policy/validation/planner tests were included.
+- The seven skips are one unavailable Windows symlink privilege and six unavailable optional non-Workshop local capture fixtures. No Workshop coverage or required OCR backend was skipped.
+- Source fingerprint: `2b45e77f1bd7c12d8294d64735bfa93dfc8f0ca32c592893ce4dc09cd3c7e750`. Immutable evidence in the solver checkout: `.local-data/review/pw03-pw04/final-dc810c-results.json`, `final-dc810c-selection.json`, `final-dc810c-validation.log`; native run `.local-data/devin-implement/pw03-pw04/turn-004`.
+- Integration rebased the unpublished branch without conflicts onto fetched main `29297f7`. The lead verified **no production or test diff** between tested `dc810c8` and integrated `4f12095`; only previously accepted evidence/status documentation entered from main. `git diff --check` passed. The exact accepted SHA was pushed to main and `codex/pet-workshop-solver`, and both remote refs were verified.
+- **Live check not applicable:** this package is a pure state-to-intent library with deterministic supplied-state scenarios; no running-game entry point consumes it yet. This does not qualify screenshot recognition, actual game transitions or unattended gameplay. Their PW05/PW07/PW10 gates remain mandatory.
+
+Both solver checkouts are clean. The originating `pet-workshop-solver` branch is published; the temporary final-correction checkout retains the clean, superseded `ddd7afd` precursor and is not a separate implementation. PW02/PW06 continue independently. No new packet is dependency-ready until one of those accepted handoffs enables PW05 or PW07.
+
 ## Implementation review — correction batch 1
 
 **Disposition: Fixing findings; not accepted.** Lead reviewed the full solver production diff at `a9f79ae00592c71b8ad895a4b8709fc7a0274602` (PW03 commit `4abc8fd`, PW04 commit `a9f79ae`). The lead then rebased the clean, unpublished two-commit branch onto fetched `origin/main` at `cf171fdb4110093ccc29ce3f1f9c1491e8936d3c`, without conflicts. New candidate baseline: `b868a5f646928dc83cd146da6720ad87b105d2e8`; the solver content is unchanged by this rebase.
