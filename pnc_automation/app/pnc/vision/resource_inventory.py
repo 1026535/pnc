@@ -295,6 +295,56 @@ def detect_button_runs(
 ) -> tuple[Bounds, ...]:
     """Detect solid button rectangles from pixels in one bounded row."""
 
+    return tuple(
+        row[0]
+        for row in _detect_button_segment_rows(
+            image,
+            bounds=bounds,
+            x_start=x_start,
+            x_end=x_end,
+            predicate=predicate,
+            minimum_height=minimum_height,
+        )
+        if len(row) == 1
+    )
+
+
+def detect_button_segments(
+    image: Image.Image,
+    *,
+    bounds: Bounds,
+    x_start: int,
+    x_end: int,
+    predicate: Callable[[tuple[int, int, int]], bool],
+    minimum_height: int,
+) -> tuple[Bounds, ...]:
+    """Detect every measured button segment so a caller can select one by anchor."""
+
+    return tuple(
+        segment
+        for row in _detect_button_segment_rows(
+            image,
+            bounds=bounds,
+            x_start=x_start,
+            x_end=x_end,
+            predicate=predicate,
+            minimum_height=minimum_height,
+        )
+        for segment in row
+    )
+
+
+def _detect_button_segment_rows(
+    image: Image.Image,
+    *,
+    bounds: Bounds,
+    x_start: int,
+    x_end: int,
+    predicate: Callable[[tuple[int, int, int]], bool],
+    minimum_height: int,
+) -> tuple[tuple[Bounds, ...], ...]:
+    """Scan each qualifying vertical band into its discrete horizontal segments."""
+
     y_runs: list[tuple[int, int]] = []
     start: int | None = None
     for y in range(bounds.y, min(bounds.y + bounds.height, image.height)):
@@ -308,7 +358,7 @@ def detect_button_runs(
             start = None
     if start is not None and min(bounds.y + bounds.height, image.height) - start >= minimum_height:
         y_runs.append((start, min(bounds.y + bounds.height, image.height)))
-    result: list[Bounds] = []
+    rows: list[tuple[Bounds, ...]] = []
     for top, bottom in y_runs:
         segments: list[tuple[int, int]] = []
         segment_start: int | None = None
@@ -323,10 +373,10 @@ def detect_button_runs(
                 segment_start = None
         if segment_start is not None and x_end - segment_start >= 5:
             segments.append((segment_start, x_end))
-        if len(segments) == 1:
-            left, right = segments[0]
-            result.append(Bounds(left, top, right - left, bottom - top))
-    return tuple(result)
+        rows.append(tuple(
+            Bounds(left, top, right - left, bottom - top) for left, right in segments
+        ))
+    return tuple(rows)
 
 
 def _unresolved_inventory_entry(
