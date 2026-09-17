@@ -55,3 +55,11 @@ Turn 001 was interrupted when all three Workshop worker/monitor processes disapp
 Same session resumed as **turn 002**, supervisor 57492, with native SWE-2 Max readiness confirmed. Delta brief: `.local-data/devin-briefs/host-recovery.md`. The lead resolved two questions from the bounded saved analysis: retain the existing building enum and a narrow Workshop action enum under one supported feature-kind union/parser; normalize supported old flat counted inputs and the new tagged Workshop budget once at the input boundary into one canonical tagged representation, rejecting conflicting simultaneous declarations. Required persisted-data migration remains one-way. No duplicate internal budget path or generic registry framework is needed.
 
 Implementation, focused proof and final-candidate affected evidence remain pending. The Main release belongs to a separate live assignment; this authority/journal worker remains offline.
+
+### Windows Update recovery — 2026-09-17
+
+Turn 002 and its full affected test run were interrupted by the user-confirmed Windows Update. Last worker activity was around 06:41 UTC; the latest boot was 13:54:06 UTC. Lead verified prior local worker/test processes absent, matched native `fearless-sprite` to this exact checkout with `devin list`, preserved `turn-002/state-before-windows-update-recovery.json`, and repaired the stale execution record. All partial authority/journal edits and new invocation/action/test files were preserved.
+
+The bounded saved output reported 114 focused tests passing and an incomplete full fallback with one failure marker. This is worker self-report, not accepted final-candidate evidence. Resume instructions require inspecting the retained failure evidence, correcting relevant defects and completing the repository affected check using the specified Python environment against base `4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3`. No interrupted run counts as passing.
+
+Same session resumed as **turn 003**, supervisor 25312, native SWE-2 Max readiness confirmed. The coordinator's `.local-data/devin-briefs/pw06-windows-update-recovery.md` preserves the settled type/budget scope and offline-only ownership. Final review and acceptance remain pending. The existing continuation timer was explicitly acknowledged active and the monitor restarted with the same task and automation IDs.
