@@ -669,8 +669,69 @@ class BlueStacksSessionTests(unittest.TestCase):
         )
         self.assertEqual(len(sleeps), 3)
         for delay in sleeps:
-            self.assertGreaterEqual(delay, 0.04)
-            self.assertLessEqual(delay, 0.14)
+            self.assertGreaterEqual(delay, 0.03)
+            self.assertLessEqual(delay, 0.18)
+
+    def test_input_text_pauses_longer_at_word_boundaries(self) -> None:
+        """Pauses around a space exceed every within-word keystroke delay."""
+
+        sleeps: list[float] = []
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260917),
+            input_jitter_px=4.0,
+        ))
+
+        session.input_text("a b")
+
+        self.assertEqual(len(sleeps), 2)
+        for delay in sleeps:
+            self.assertGreaterEqual(delay, 0.12)
+            self.assertLessEqual(delay, 0.22)
+
+    def test_input_text_pauses_longer_between_distant_keys(self) -> None:
+        """Scales within-word pauses with the QWERTY distance between consecutive keys."""
+
+        sleeps: list[float] = []
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260917),
+            input_jitter_px=4.0,
+        ))
+
+        session.input_text("as")
+        session.input_text("zp")
+
+        self.assertEqual(len(sleeps), 2)
+        self.assertLessEqual(sleeps[0], 0.10)
+        self.assertGreaterEqual(sleeps[1], 0.13)
+        self.assertGreater(sleeps[1], sleeps[0])
 
     def test_swipe_uses_explicit_touchscreen_source(self) -> None:
         """Uses the touchscreen-qualified input command so drag gestures are unambiguous to ADB-backed emulators."""

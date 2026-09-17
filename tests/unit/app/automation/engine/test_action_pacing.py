@@ -102,8 +102,8 @@ class ActionPacingTests(unittest.TestCase):
 
         self.assertEqual(len(sleeps), 28)
         for delay in sleeps[1:26]:
-            self.assertGreaterEqual(delay, 0.03)
-            self.assertLessEqual(delay, 0.09)
+            self.assertGreaterEqual(delay, 0.025)
+            self.assertLessEqual(delay, 0.07)
         for index in (0, 26, 27):
             self.assertGreaterEqual(sleeps[index], 0.27)
             self.assertLessEqual(sleeps[index], 0.33)

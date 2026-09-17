@@ -49,7 +49,7 @@ from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 
 
 _HUMAN_DELAY_JITTER_RANGE = (0.9, 1.1)
-_HUMAN_KEY_DELAY_MS_RANGE = (30, 90)
+_HUMAN_KEY_DELAY_MS_RANGE = (25, 70)
 
 
 @dataclass(slots=True)

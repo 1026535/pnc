@@ -50,7 +50,9 @@ def _input_dispatch(function: Callable[..., object]) -> Callable[..., object]:
 DEFAULT_BLUESTACKS_SHUTDOWN_GRACE_SECONDS = 120.0
 _app_foreground_attempts = 30
 _app_foreground_retry_delay_seconds = 2.0
-_input_type_delay_seconds_range = (0.04, 0.14)
+_input_letter_delay_seconds_range = (0.03, 0.08)
+_input_letter_delay_distance_seconds = 0.10
+_input_word_delay_seconds_range = (0.12, 0.22)
 
 
 class BlueStacksSessionCleanupMode(StrEnum):
@@ -339,7 +341,7 @@ class BlueStacksSession:
                     stderr=result.stderr_text,
                 )
             if index < len(chunks) - 1:
-                self.sleep(self.rng.uniform(*_input_type_delay_seconds_range))
+                self.sleep(_type_delay_seconds(chunk, chunks[index + 1], rng=self.rng))
 
     @_input_dispatch
     def press_key(self, key_code: str) -> None:
@@ -739,6 +741,50 @@ def _encode_adb_text(text: str) -> str:
     if "\n" in text or "\r" in text:
         raise DeviceConnectionError("ADB text input does not support multiline values.")
     return shlex.quote(text.replace(" ", "%s"))
+
+
+_QWERTY_KEY_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
+_QWERTY_ROW_OFFSETS = (0.0, 0.4, 0.8)
+_QWERTY_KEY_POSITIONS = {
+    key: (row_index, column_index + _QWERTY_ROW_OFFSETS[row_index])
+    for row_index, row in enumerate(_QWERTY_KEY_ROWS)
+    for column_index, key in enumerate(row)
+}
+_QWERTY_MAX_KEY_DISTANCE = max(
+    math.hypot(first_row - second_row, first_column - second_column)
+    for first_row, first_column in _QWERTY_KEY_POSITIONS.values()
+    for second_row, second_column in _QWERTY_KEY_POSITIONS.values()
+)
+
+
+def _qwerty_key_distance(first: str, second: str) -> float | None:
+    """Returns the unit-key distance between two letters on a staggered QWERTY layout."""
+
+    first_position = _QWERTY_KEY_POSITIONS.get(first.lower())
+    second_position = _QWERTY_KEY_POSITIONS.get(second.lower())
+    if first_position is None or second_position is None:
+        return None
+    return math.hypot(
+        first_position[0] - second_position[0],
+        first_position[1] - second_position[1],
+    )
+
+
+def _type_delay_seconds(previous: str, current: str, *, rng: random.Random) -> float:
+    """Returns one human-like pause before the next keystroke.
+
+    Word boundaries pause longest; within a word the pause grows with the
+    QWERTY distance a finger travels between the two keys, and falls back
+    to a mid-range pause for keys outside the letter layout.
+    """
+
+    if previous == " " or current == " ":
+        return rng.uniform(*_input_word_delay_seconds_range)
+    low, high = _input_letter_delay_seconds_range
+    distance = _qwerty_key_distance(previous, current)
+    scale = 0.5 if distance is None else min(distance / _QWERTY_MAX_KEY_DISTANCE, 1.0)
+    shift = _input_letter_delay_distance_seconds * scale
+    return rng.uniform(low + shift, high + shift)
 
 
 def _input_command_prefix(*, input_source: str, device_id: str) -> list[str]:
