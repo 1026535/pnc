@@ -53,7 +53,7 @@ _app_foreground_retry_delay_seconds = 2.0
 _input_letter_delay_seconds_range = (0.03, 0.08)
 _input_letter_delay_distance_seconds = 0.10
 _input_letter_same_finger_seconds = 0.05
-_input_word_delay_seconds_range = (0.12, 0.22)
+_input_word_delay_seconds_range = (0.20, 0.28)
 
 
 class BlueStacksSessionCleanupMode(StrEnum):
@@ -815,7 +815,7 @@ def _type_delay_seconds(previous: str, current: str, *, rng: random.Random) -> f
         return _skewed_delay_seconds(*_input_word_delay_seconds_range, rng=rng)
     low, high = _input_letter_delay_seconds_range
     distance = _qwerty_key_distance(previous, current)
-    scale = 0.5 if distance is None else min(distance / _QWERTY_MAX_KEY_DISTANCE, 1.0)
+    scale = 0.5 if distance is None else distance / _QWERTY_MAX_KEY_DISTANCE
     shift = _input_letter_delay_distance_seconds * scale
     if _same_qwerty_finger(previous, current):
         shift += _input_letter_same_finger_seconds

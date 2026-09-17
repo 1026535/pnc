@@ -699,8 +699,8 @@ class BlueStacksSessionTests(unittest.TestCase):
 
         self.assertEqual(len(sleeps), 2)
         for delay in sleeps:
-            self.assertGreaterEqual(delay, 0.12)
-            self.assertLessEqual(delay, 0.22)
+            self.assertGreaterEqual(delay, 0.20)
+            self.assertLessEqual(delay, 0.28)
 
     def test_input_text_pauses_longer_between_distant_keys(self) -> None:
         """Scales within-word pauses with the QWERTY distance between consecutive keys."""
@@ -759,13 +759,16 @@ class BlueStacksSessionTests(unittest.TestCase):
         session.input_text("as")
         session.input_text("ec")
         session.input_text("ll")
+        session.input_text("45")
 
-        self.assertEqual(len(sleeps), 3)
+        self.assertEqual(len(sleeps), 4)
         self.assertLessEqual(sleeps[0], 0.10)
         self.assertGreaterEqual(sleeps[1], 0.10)
         self.assertGreater(sleeps[1], sleeps[0])
         self.assertLessEqual(sleeps[2], 0.08)
         self.assertGreater(sleeps[1], sleeps[2])
+        self.assertGreaterEqual(sleeps[3], 0.09)
+        self.assertGreater(sleeps[3], sleeps[2])
 
     def test_input_text_uses_mid_pause_for_keys_outside_the_layout(self) -> None:
         """Falls back to a mid-range pause for characters without a QWERTY position."""
