@@ -38,6 +38,8 @@ from pnc_automation.app.pnc.domain.building_operations import (
     observable_building_instance_key,
     observable_construction_slot_key,
 )
+from pnc_automation.app.pnc.domain.feature_actions import FeatureActionKind
+from pnc_automation.app.pnc.domain.pet_workshop import WorkshopMutationKind
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.bag_items import TreasureIdentity
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
@@ -116,7 +118,7 @@ class WorkflowSpec:
     exit_screen: ScreenType
     effect: WorkflowEffect
     mutation_capability: DailyQuestId | None = None
-    mutation_action_kind: BuildingMutationKind | None = None
+    mutation_action_kind: FeatureActionKind | None = None
     reconciliation_operation_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -136,10 +138,10 @@ class WorkflowSpec:
             if self.effect != WorkflowEffect.RESOURCE_CHANGING and self.reconciliation_operation_id is None:
                 raise ValueError("A mutation capability requires the RESOURCE_CHANGING effect.")
         if self.mutation_action_kind is not None:
-            if not isinstance(self.mutation_action_kind, BuildingMutationKind):
-                raise TypeError("WorkflowSpec.mutation_action_kind must be a BuildingMutationKind.")
+            if not isinstance(self.mutation_action_kind, (BuildingMutationKind, WorkshopMutationKind)):
+                raise TypeError("WorkflowSpec.mutation_action_kind must be a typed feature action kind.")
             if self.effect != WorkflowEffect.RESOURCE_CHANGING:
-                raise ValueError("A building mutation action requires the RESOURCE_CHANGING effect.")
+                raise ValueError("A feature mutation action requires the RESOURCE_CHANGING effect.")
         if self.reconciliation_operation_id is not None and (
             not isinstance(self.reconciliation_operation_id, str)
             or not self.reconciliation_operation_id.strip()

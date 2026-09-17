@@ -67,7 +67,7 @@ def prepare_building_construction_workflow(
 
     if not isinstance(mutation_boundary, CoreMutationBoundary):
         raise PermissionError("Building construction requires an explicit CoreMutationBoundary.")
-    if mutation_boundary.building_action_kind != BuildingMutationKind.CONSTRUCT:
+    if mutation_boundary.feature_action_kind != BuildingMutationKind.CONSTRUCT:
         raise PermissionError("Mutation scope does not authorize building construction.")
     return BuildingConstructionWorkflow(policy=policy, checkpoint=checkpoint)
 
@@ -84,7 +84,7 @@ def prepare_building_upgrade_workflow(
 
     if not isinstance(mutation_boundary, CoreMutationBoundary):
         raise PermissionError("Building upgrade requires an explicit CoreMutationBoundary.")
-    if mutation_boundary.building_action_kind != BuildingMutationKind.UPGRADE:
+    if mutation_boundary.feature_action_kind != BuildingMutationKind.UPGRADE:
         raise PermissionError("Mutation scope does not authorize building upgrade.")
     if daily_quest_id not in {None, DailyQuestId.UPGRADE_BUILDING}:
         raise ValueError("Building upgrade can carry only the existing Upgrade Building Daily context.")

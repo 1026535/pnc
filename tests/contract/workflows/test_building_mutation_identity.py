@@ -173,7 +173,7 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             action_kind=BuildingMutationKind.UPGRADE.value,
         )
 
-        authorized = DailyMutationAuthorizer((acknowledgement,)).require_building(
+        authorized = DailyMutationAuthorizer((acknowledgement,)).require_feature(
             account_id="account",
             castle_ref="K1:Main",
             action_kind=BuildingMutationKind.UPGRADE.value,
@@ -204,9 +204,9 @@ class BuildingMutationIdentityTests(unittest.TestCase):
                 boundary=DailyRunBoundary(date(2026, 9, 14), "reset-1"),
                 authorizer=DailyMutationAuthorizer(()),
                 journal_store=DailyRunJournalStore(Path(temporary)),
-                building_action_kind=BuildingMutationKind.UPGRADE,
-                building_max_mutations=2,
-                building_max_diamond_spend=9,
+                feature_action_kind=BuildingMutationKind.UPGRADE,
+                feature_max_mutations=2,
+                feature_max_diamond_spend=9,
             )
             self.assertEqual((2, 9), boundary._building_mutation_limits(BuildingMutationKind.UPGRADE))
             self.assertEqual(

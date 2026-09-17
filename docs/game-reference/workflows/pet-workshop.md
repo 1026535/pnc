@@ -111,6 +111,11 @@ Lua root):
   intents); `Observation.workshop` is the optional published field bound by
   the shared provenance owner. See the
   [canonical design](../../PET_WORKSHOP_DESIGN.md).
+- `pnc_automation/app/automation/pet_workshop/` is the pure offline solver:
+  `plan_next` returns one proposed `WorkshopDecision` (typed intent +
+  diagnostics) and `validate_intent` checks it; neither performs I/O or
+  mutates game state. Executed actions are a later packet's concern —
+  execution re-validates the proposal against a fresh observation first.
 - Catalog facts are game data, not policy: excluded mechanics (Omni Card,
   consumable AP/Diamond, storage) stay representable for recognition.
 - Workshop level awards do not guarantee a usable producer on the current
@@ -119,6 +124,32 @@ Lua root):
 - A recoverable generator state (feedable, mergeable, transformable) is not
   an immediate stop; a visibly present order is not malformed because
   inferred level eligibility disagrees.
+
+## September 17 native capture on another Workshop level
+
+**Artifact-observed / live preflight observed:** the Main pass on selected
+K157 / Sword NPC2 / C26 captured Workshop **Lv.6, EXP79/80, energy200/200**,
+with a 7×9 board, printed cell gates 7–11 and no empty usable square visible.
+Two visible order cards show different chest images and a pomegranate-like
+fruit, with displayed Feed rewards 968 and 1634; the first also shows one
+green EXP. These visual labels are not a decoded `WorkshopState` or confirmed
+catalog item IDs. The current game build was not captured in this pass.
+
+Provenance: corrected manifest
+`C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-live-main/.local-data/devin-live-test/runs/main-evidence-20260917/turn-002/evidence.json`;
+native board `20260917T045029Z_core_20260917T044156Z_9e838404_0039_tap_pet_workshop.png`
+under `C:/Users/lebel/pnc/artifacts/2026-09-17/pet_workshop_evidence_20260917/`.
+The lead visually checked this board and the selected-character frame.
+Use this capture alongside the earlier level as recognition evidence.
+
+Manor/Workshop routes remain unqualified: the baseline classified their
+screens as UNKNOWN and the worker used coordinates from fresh captures.
+Grass texture and an Inactive banner do not by themselves establish cell
+status. Cooldown, feed-locked producer and exhaustion transitions remain
+unproven. The book/badge-24 probe was outside its no-inventory-claims brief
+and returned No slots available; its operation is unconfirmed and must not
+be treated as a safe inspection control. No successful resource change was
+observed. The capped energy reading alone is not proof of zero spending.
 
 ## Remaining uncertainty
 

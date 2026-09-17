@@ -1099,6 +1099,16 @@
       ]
     },
     {
+      "image": "alliance_variants/alliance_invitation_post_home.png",
+      "screen": "PNC_POPUP",
+      "split": "validation",
+      "group": "2026-09-16/3xx_spies",
+      "sha256": "652702109a143dae2bc1af96d43279710d81e8818657ec941f31c4cbfbc032fa",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
       "image": "alliance_variants/alliance_join_landing.png",
       "screen": "PNC_ALLIANCE_JOIN",
       "split": "reference",

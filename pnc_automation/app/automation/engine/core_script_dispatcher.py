@@ -81,10 +81,10 @@ class CoreScriptDispatcher:
     _workflow_runner: CoreWorkflowRunner[Any] | None = field(default=None, init=False, repr=False)
 
     @property
-    def supports_building_core(self) -> bool:
-        """Expose the explicit building mutation binding to the mixed runner."""
+    def supports_feature_core(self) -> bool:
+        """Expose the explicit typed-feature mutation binding to the mixed runner."""
 
-        return self.mutation_boundary is not None and self.mutation_boundary.building_action_kind is not None
+        return self.mutation_boundary is not None and self.mutation_boundary.feature_action_kind is not None
 
     def execute(
         self,
@@ -304,7 +304,7 @@ def validate_core_script_step(
             if step.task == TaskId.BUILDING_CONSTRUCT
             else BuildingMutationKind.UPGRADE
         )
-        if mutation_boundary.building_action_kind != expected_kind:
+        if mutation_boundary.feature_action_kind != expected_kind:
             raise PermissionError("Mutation scope does not authorize this building action kind.")
         mutation_boundary.require_caller(account_id=account_id or "", castle=step.castle)
         return

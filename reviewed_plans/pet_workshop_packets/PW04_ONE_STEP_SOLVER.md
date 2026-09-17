@@ -37,6 +37,8 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 
 ## Implementation review — correction batch 1
 
+**Current disposition: accepted and merged/pushed** at `4f12095a1b10ff1c600a1dcdb1f0f7bf82c3000c`. The [combined PW03 acceptance record](PW03_EFFORT_RESERVATIONS_POLICY.md#accepted-and-merged--2026-09-17) owns final review, correction, test and integration evidence. The final candidate passed 2,741 tests with 7 unrelated environmental skips, including all 166 focused solver tests. Production/test content is unchanged from the tested `dc810c8` revision. The records below preserve earlier findings and are superseded by that acceptance.
+
 **Disposition: Fixing findings; not accepted.** Combined review/revision/test evidence and worker continuation are recorded in [PW03](PW03_EFFORT_RESERVATIONS_POLICY.md#implementation-review--correction-batch-1). Lead reviewed `a9f79ae`; the unchanged solver content is now on current main as candidate baseline `b868a5f` in its isolated branch. None of this candidate has been merged to main.
 
 **S2 — canonical validation does not cover every proposed mutation.** `planner.py` validates submissions but returns other mutations directly, contrary to its documented contract. A selected Tree 4 with unknown production mode returns Produce while `validate_intent` says UNCERTAIN. A fully observed board with unknown occupancy in every other cell also returns Produce without a confirmed empty square. `_cell_inspect` omits these missing occupancy/access facts, and the full-board activation enumerator omits the required successor check.
@@ -55,3 +57,9 @@ The existing 129 focused tests passed under independent lead execution but miss 
 - Briefs: worker `.local-data/devin-briefs/pw03-pw04-solver.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
 - The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
 - Reviewed/tested result revision and acceptance evidence: pending handoff.
+
+### Turn 003 review — 2026-09-17
+
+Worker turn 003 completed at `761837e`, with a clean checkout and released writers. Lead passed all 146 focused tests, reviewed the correction diff, then closed the remaining ready-secondary ranking gap and made every mutation candidate pass the canonical validator in lead commit `efac6de`. The same commit proves a free Normal-partner merge followed by inactive activation and submission through the validating test-only outcome driver. The final focused suite has **150 passing tests**; `git diff --check` passed.
+
+Detailed finding dispositions and evidence are in [PW03's current review record](PW03_EFFORT_RESERVATIONS_POLICY.md#turn-003-independent-review-and-lead-corrections--2026-09-17). S3/S4 still block combined acceptance and final affected/full testing. No solver changes were merged or pushed. The released worker slot is available for the already-authorized timed Main evidence assignment; that separate live checkout cannot qualify unfinished solver/execution code.

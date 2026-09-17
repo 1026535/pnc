@@ -12,8 +12,9 @@ requirements and sequencing.
 | Shared state/view/intent models, policy + interface contracts | `pnc_automation/app/pnc/domain/pet_workshop.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Observation integration (`ObservationAdditions.workshop`, both publishers) | `Observation`, `observation_builder.py`, `navigation_perception.py`, `observation_provenance.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Feature parser + measured controls | `pnc_automation/app/pnc/vision/` (planned) | Pending PW02 |
-| Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` (planned) | Pending Plan 02 |
-| Execution, mutation receipts, entry points, Daily Maintenance | existing task/engine owners | Pending Plan 03 |
+| Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` | Implemented (PW03/PW04 solver slice, 2026-09-16) |
+| Mutation authority, durable invocation journal, shared run-boundary/authority factories | `pnc_automation/app/pnc/domain/feature_actions.py`, `pnc_automation/app/automation/engine/core_daily_mutation.py` (Workshop scope), `pnc_automation/app/pnc/persistence/daily_run_journal_store.py` (schema v2), `pnc_automation/app/automation/daily_maintenance/invocation_factory.py`, `pnc_automation/app/automation/pet_workshop/authority.py` | Implemented (PW06 authority slice) |
+| Execution gestures, UI action execution, entry points, Daily Maintenance enablement | existing task/engine owners | Pending Plan 03 (PW07–PW09) |
 
 Do not copy catalog knowledge, recipe logic, or recognition rules into a
 second owner. Later packets extend this document in place.
@@ -233,8 +234,179 @@ Owned by PW02: one feature parser under `app/pnc/vision/` producing
 `observation_provenance`, publication through `ObservationBuilder`
 and `NavigationPerception`.
 
-## Solver and execution — pending
+## Solver and policy
 
-Owned by Plan 02 (the `plan_next`/`validate_intent` implementations,
-`WorkshopPolicy` defaults and evaluation, `WorkshopDecision` diagnostics) and
-Plan 03 (gestures, mutation authority, entry points, Daily Maintenance).
+Owned by Plan 02 (PW03/PW04): `pnc_automation/app/automation/pet_workshop/`
+implements the pure offline solver. No module in this package performs
+emulator, image, filesystem, clock or network I/O; authored state
+transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
+
+- `board.py` — `BoardFacts` partitions observed cells (normal, inactive,
+  feed-locked and bubble pieces, usable-empty cells, unread pieces) and
+  derives `board_full` as a tri-state; `MergeChains` indexes the catalog
+  successor graph (successor, ancestors, closure, binary unit values).
+- `policy.py` — `default_policy()` and `assess_order`: the two-total-piece
+  admission rule, reward-category ranking from `policy.reward_priority`,
+  ranking-blocked marking for unread reward quantities, and the restricted
+  recycling allowlist.
+- `effort.py` — `allocate_goal` owns multiset reservations and advisory effort
+  together (exact stock, feed-unlockable pieces, lower-tier intermediates,
+  activation pairs; higher tiers are never split backwards).
+  `useful_units_per_draw` provides the catalog-weighted production proxy.
+  The allocation flags `conservative` when one producer serves two demands
+  and reports unknown finite capacity as uncertainty only.
+  Exact requirements are reserved together before recipes consume stock.
+  The free recipe traversal can build a Normal partner before activating an
+  inactive piece; it records original consumed quantities and restores an
+  unsuccessful branch without borrowing the same piece twice.
+  Feed ingredients and producer construction consume the same remaining
+  pool as order demands. The selected recipe supplies production and
+  auxiliary targets to `rules.py`; no caller independently rediscovers them
+  from raw board counts. Thus an order's reserved Food 3 cannot double as
+  the Trap's feed, and a lower ready order cannot take the allocated feed.
+  Reachable construction expands through catalog producer chains with a
+  dependency-cycle guard. New finite copies receive their catalog capacity;
+  replacements require fresh stock or separately priced upstream production.
+  Existing finite copies retain unknown remaining capacity. If only the
+  first construction is reachable, useful progress remains available but
+  the total effort is unknown. Expected draws are an additive advisory
+  approximation; no stochastic simulator or future inventory is created.
+- `goals.py` — `GoalSelection`/`select_goals`: survey gating,
+  category-first then zero-cost-before-positive-cost ranking with
+  policy-ordered secondary rewards, known estimates ahead of absent or
+  uncertain ones (which tie-break on primary reward quantity), and
+  `inspect_order_ref` for any contender whose unread facts — a clipped
+  card, an UNKNOWN reward category, a missing primary or an undecidable
+  secondary count — could still change the applicable ranking.
+  When an unfinished primary permits a ready secondary submission, that
+  secondary selection uses the same reward inspection and surplus-stock
+  predicates rather than treating unread quantities as zero.
+- `rules.py` — `goal_context` plus the reservation verdicts for merge,
+  activate, feed, finite production and submit: protected exact/intermediate
+  pieces may only be consumed when the action advances the serving demand.
+  A finite generator reserved as an exact order ingredient cannot produce
+  if its exhaustion could remove the required quantity; a reserved unlimited
+  generator remains usable.
+- `validation.py` — the canonical `validate_intent`, used by the planner
+  and reused verbatim for pre-execution revalidation; `UNCERTAIN` whenever a
+  required fact was never observed.
+  Production also requires a current eligible goal and positive contribution
+  to its remaining recipe, using the same calculation as the planner. A
+  removed order, completed demand or changed chain invalidates an old
+  production intent even when its generator remains selected and available.
+- `planner.py` — `plan_next` returns exactly one `WorkshopDecision`:
+  terminal evidence first (zero energy, excluded surface, auto-fusion
+  production mode), then survey/inspection needs, ready order submissions,
+  free progress (merges, activations, feeds), full-board recovery ending in
+  one allowlisted recycle, production (select/produce with bounded cooldown
+  waits), and finally bounded inspection or a typed stop. Every returned
+  intent is canonically legal on the state that produced it — missing
+  relevant facts (production mode, cell access/occupancy) yield a targeted
+  inspection, not a mutation `validate_intent` would reject.
+
+Every `WorkshopDecision` is a proposal: intents carry logical targets only,
+the planner never touches game state, and execution is a separate Plan 03
+step that re-validates the intent on a fresh observation through the same
+`validate_intent` before any gesture.
+
+## Mutation authority and durable journal — implemented (PW06)
+
+Every Workshop mutation flows through the existing Daily mutation owners;
+there is no Workshop-specific journal, locking service, or identity
+resolver.
+
+### Owners
+
+- `pnc_automation/app/pnc/domain/pet_workshop.py` — `WorkshopMutationKind`
+  (`RUN = "pet_workshop.run"`) is the feature action identity; the journaled
+  mutation subset is declared by `WORKSHOP_MUTATION_INTENT_KINDS` in
+  `feature_actions.py`. `SELECT`, `INSPECT`, `WAIT`, and `STOP` are not
+  journaled mutations.
+- `pnc_automation/app/pnc/domain/feature_actions.py` — the canonical
+  `FeatureActionKind`/`JournaledActionKind` unions, `normalize_*` validators,
+  and `is_workshop_journaled_action`. Input and persisted JSON strings are
+  decoded through these normalizers; the mutation boundary restricts
+  Workshop dispatch to the declared mutation subset.
+- `pnc_automation/app/pnc/domain/daily_maintenance.py` —
+  `MutationBudgetKind` (`COUNTED` / `OBSERVED_WORKSHOP_BAR`),
+  `MutationIntent.invocation_id`, `WorkshopInvocationRecord`, and
+  `DailyTaskCheckpoint.workshop_invocations`. Workshop acknowledgements and
+  operations carry zero diamond budget unconditionally.
+- `pnc_automation/app/authoring/config/mutation_acknowledgement.py` — the
+  exact two-form parser: flat counted (`max_mutations` + `max_diamond_spend`)
+  or nested `{"budget": {"kind": "observed_workshop_bar", "max_diamond_spend": 0}}`.
+  Mixed identity or mixed budget forms fail closed.
+- `pnc_automation/app/automation/daily_maintenance/authorization.py` —
+  `DailyMutationAuthorizer.require_feature` requires exactly one
+  acknowledgement matching account, castle ref, action kind, budget form,
+  and maintenance date.
+- `pnc_automation/app/automation/engine/core_daily_mutation.py` —
+  `CoreMutationBoundary` holds the `feature_*` scope fields and owns
+  `authorize`, `prepare_workshop_invocation`,
+  `allocate_workshop_operation_id`, `update_workshop_invocation`,
+  `dispatch_workshop_operation`, `resume_pending_workshop_operation`, and
+  `find_pending_workshop_operations`.
+- `pnc_automation/app/automation/daily_maintenance/invocation_factory.py` —
+  shared `build_daily_run_boundary` (local maintenance date + midnight-UTC
+  reset id) and `generate_workshop_invocation_id`.
+- `pnc_automation/app/automation/pet_workshop/authority.py` —
+  `WorkshopRunAuthority` (frozen `WorkshopPolicy` + authorized
+  `CoreMutationBoundary`) and `build_workshop_run_authority`, the single
+  composition consumed by the PW07–PW09 direct and Daily adapters. The
+  factory validates the exact scope through the boundary/authorizer and
+  registers nothing.
+- `pnc_automation/app/pnc/persistence/daily_run_journal_store.py` — schema
+  v2 serialization/migration, invocation register/update/allocate
+  primitives, and cross-reset `find_pending_workshop_operations`.
+
+### Invocation and budget lifecycle
+
+1. `build_workshop_run_authority` composes policy + scope; `authorize`
+   proves the exact `pet_workshop.run` acknowledgement (zero diamonds,
+   matching budget form).
+2. `find_pending_workshop_operations` scans every reset partition for this
+   account/castle key; any unresolved Workshop intent must be reconciled
+   through `resume_pending_workshop_operation` — dispatched operations
+   resume by reconciliation only, never replay.
+3. `prepare_workshop_invocation` registers a fresh
+   `WorkshopInvocationRecord` (id from `generate_workshop_invocation_id`,
+   action kind, the scope's budget form and cap) only after the pending
+   gate. Registration is durable before the first mutation.
+4. `allocate_workshop_operation_id` mints `<invocation>-op-<n>` by advancing
+   the record's monotonic `operation_sequence`; both it and
+   `update_workshop_invocation` re-validate the caller checkpoint against
+   the durable journal, keep the registered identity/budget immutable, and
+   refuse sequence regression — a stale snapshot cannot erase unresolved
+   operations.
+5. `dispatch_workshop_operation` journals one typed sub-action intent under
+   its invocation and executes through the existing journaled dispatcher
+   (prepare → dispatch → reconcile → commit).
+
+Budget forms: `COUNTED` enforces `max_mutations` per registered invocation
+(counting only that invocation's journaled intents), so later healthy
+invocations the same day get their own cap. `OBSERVED_WORKSHOP_BAR` carries
+no synthetic cap (`max_mutations` is `None`); the observed bar is the stop
+signal. A registered invocation's budget is immutable — a broader scope
+cannot widen it, and a different authorization requires a fresh invocation
+behind the pending gate.
+
+### Journal schema and identity
+
+Schema v2 adds `workshop_invocations` and `MutationIntent.invocation_id`;
+v1 payloads load with empty invocations and migrate forward on save.
+Persisted account/castle identity uses `castle_identity_key`
+(kingdom/name): castle level is volatile metadata — a level change does not
+invalidate historical receipts, pending lookup, or scope reconciliation —
+while wrong kingdom/name/account and wrong reset partition stay rejected.
+Journal writes hold the store lock and replace files atomically.
+
+### Limitations
+
+- No UI execution yet: dispatch/reconcile callables, Workshop gestures,
+  recognition, and `TaskId`/CLI wiring belong to PW07/PW08; Daily
+  Maintenance enablement belongs to PW09.
+- `build_workshop_run_authority` does not load Daily quest policies,
+  resolve configured account roles, choose solver defaults, connect, or
+  navigate; those stay with the existing outer config/runtime owners.
+- Pending reconciliation proves an operation through receipts only; an
+  operation that can never be proven remains a hard gate by design.

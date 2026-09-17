@@ -11,6 +11,11 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntent,
     MutationIntentState,
 )
+from pnc_automation.app.pnc.domain.feature_actions import (
+    JournaledActionKind,
+    normalize_journaled_action_kind,
+)
+from pnc_automation.app.pnc.domain.pet_workshop import WorkshopIntentKind
 from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 
@@ -25,8 +30,9 @@ class MutationOperation:
     expected_postcondition: str
     diamond_budget: int = 0
     metadata: dict[str, object] = field(default_factory=dict)
-    action_kind: BuildingMutationKind | None = None
+    action_kind: JournaledActionKind | None = None
     target: dict[str, object] | None = None
+    invocation_id: str | None = None
 
     def __post_init__(self) -> None:
         """Validate optional feature action identity fields without changing Daily callers."""
@@ -35,10 +41,14 @@ class MutationOperation:
             raise ValueError("MutationOperation.operation_id cannot be empty.")
         if self.quest_id is not None and not isinstance(self.quest_id, DailyQuestId):
             raise TypeError("MutationOperation.quest_id must be a DailyQuestId or None.")
-        if self.action_kind is not None and not isinstance(self.action_kind, BuildingMutationKind):
-            raise TypeError("MutationOperation.action_kind must be a BuildingMutationKind or None.")
+        if self.action_kind is not None and not isinstance(
+            self.action_kind, (BuildingMutationKind, WorkshopIntentKind)
+        ):
+            raise TypeError("MutationOperation.action_kind must be a typed journaled action kind or None.")
         if self.action_kind is not None and self.target is None:
-            raise ValueError("Building MutationOperation requires an exact target.")
+            raise ValueError("Feature MutationOperation requires an exact target.")
+        if self.invocation_id is not None and not self.invocation_id.strip():
+            raise ValueError("MutationOperation.invocation_id cannot be blank.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +133,7 @@ class JournaledMutationDispatcher:
             metadata=dict(operation.metadata),
             action_kind=None if operation.action_kind is None else operation.action_kind.value,
             target=None if operation.target is None else dict(operation.target),
+            invocation_id=operation.invocation_id,
         )
         checkpoint = self.journal_store.prepare_intent(checkpoint, intent)
         checkpoint = self.journal_store.transition_intent(
@@ -164,7 +175,7 @@ class JournaledMutationDispatcher:
         dispatch()
         return self._reconcile(
             checkpoint=checkpoint,
-            operation=_operation_from_intent(intent),
+            operation=mutation_operation_from_intent(intent),
             reconcile=reconcile,
         )
 
@@ -232,7 +243,7 @@ class JournaledMutationDispatcher:
                 f"Only prepared or dispatched operations can resume; '{operation_id}' is "
                 f"'{intent.state.value}'."
             )
-        operation = _operation_from_intent(intent)
+        operation = mutation_operation_from_intent(intent)
         return self._reconcile(checkpoint=checkpoint, operation=operation, reconcile=reconcile)
 
     def _reconcile(
@@ -298,21 +309,22 @@ def _intent_matches_operation(intent: MutationIntent, operation: MutationOperati
     # action identity.  A direct retry must therefore reconcile the same
     # receipt instead of being treated as a different operation (and the
     # stored budget remains authoritative for that retry).
-    same_building_identity = (
+    same_feature_identity = (
         operation.action_kind is not None
         and intent.action_kind == operation.action_kind.value
     )
     return (
-        (same_building_identity or intent.quest_id == operation.quest_id)
+        (same_feature_identity or intent.quest_id == operation.quest_id)
         and intent.expected_precondition == operation.expected_precondition
         and intent.expected_postcondition == operation.expected_postcondition
-        and (same_building_identity or intent.diamond_budget == operation.diamond_budget)
+        and (same_feature_identity or intent.diamond_budget == operation.diamond_budget)
         and intent.action_kind == (None if operation.action_kind is None else operation.action_kind.value)
         and intent.target == operation.target
+        and intent.invocation_id == operation.invocation_id
     )
 
 
-def _operation_from_intent(intent: MutationIntent) -> MutationOperation:
+def mutation_operation_from_intent(intent: MutationIntent) -> MutationOperation:
     """Rehydrate an exact operation from its durable journal record."""
 
     return MutationOperation(
@@ -323,9 +335,10 @@ def _operation_from_intent(intent: MutationIntent) -> MutationOperation:
         diamond_budget=intent.diamond_budget,
         metadata=dict(intent.metadata),
         action_kind=(
-            None if intent.action_kind is None else BuildingMutationKind(intent.action_kind)
+            None if intent.action_kind is None else normalize_journaled_action_kind(intent.action_kind)
         ),
         target=None if intent.target is None else dict(intent.target),
+        invocation_id=intent.invocation_id,
     )
 
 

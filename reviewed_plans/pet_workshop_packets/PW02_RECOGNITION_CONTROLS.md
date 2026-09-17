@@ -50,3 +50,17 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 - Briefs: worker `.local-data/devin-briefs/pw02-recognition.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
 - The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
 - Reviewed/tested result revision and acceptance evidence: pending handoff.
+
+### Recovery and timed Main release
+
+At the user's status refresh, the recorded worker/monitor processes were absent and all three worker heartbeats had stopped around 2026-09-17 01:34 UTC. The cause is unestablished. Lead verified no Workshop writer/test processes remained, checked `cedar-stealer` against native readiness and `devin list` in this checkout, preserved `turn-007/state-before-host-recovery.json`, and repaired the stale running record. No tracked PW02 source implementation had been saved; ignored measurements/crops and untracked generated `pnc_automation.egg-info/` were preserved.
+
+The checkout was fast-forwarded to accepted main `4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3`, including the current shared observation-enricher change. Same session resumed as **turn 008**, supervisor 52372, native SWE-2 Max readiness confirmed. Delta brief: `.local-data/devin-briefs/host-recovery.md`. Scope remains offline implementation and candidate/evidence-gap handoff; no new test result or acceptance is claimed.
+
+The user released Main at the absolute time in the [roadmap authority record](../PNC_PET_WORKSHOP_ROADMAP.md#current-execution-authority-and-acceptance-gate), excluding Hopeful NPC. A separate Devin live-test assignment will acquire its lease and verify the applicable stable candidate; this implementation worker must not independently access Main. The timed release supersedes the earlier account-availability hold.
+
+### Windows Update recovery — 2026-09-17
+
+At the user's status request, the turn-008 supervisor/bootstrap and monitor were absent; last worker activity was around 06:41 UTC. The user confirmed Windows Update, and Windows reported its latest boot at 13:54:06 UTC. Lead reconciled local processes, verified `cedar-stealer` and its exact checkout through `devin list`, preserved `turn-008/state-before-windows-update-recovery.json`, and repaired the stale execution record. Measurements and untracked fixture candidates were preserved; no source change or test result was accepted.
+
+Same session resumed as **turn 009** on unchanged base `4f1e119`, supervisor 21696; native SWE-2 Max readiness was confirmed. The coordinator's `.local-data/devin-briefs/pw02-windows-update-recovery.md` directs the worker to reuse saved measurements, keep conflicting labels unknown, and return a bounded evidence question if interpretation blocks implementation. This worker remains offline. The prior Main capture pass is complete; further Main input awaits the configured-role decision. The existing continuation timer was explicitly acknowledged active and the monitor restarted with the same task and automation IDs.

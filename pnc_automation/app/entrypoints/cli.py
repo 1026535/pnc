@@ -14,9 +14,11 @@ from zoneinfo import ZoneInfo
 from pnc_automation.app.automation.engine.runner import StepRunResult
 from pnc_automation.app.automation.daily_maintenance.application_service import (
     DailyMaintenanceApplicationService,
-    DailyRunBoundary,
 )
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
+from pnc_automation.app.automation.daily_maintenance.invocation_factory import (
+    build_daily_run_boundary,
+)
 from pnc_automation.app.entrypoints.daily_maintenance import (
     ConnectedClaimOnlyRunnerFactory,
 )
@@ -274,12 +276,9 @@ def _run_daily_maintenance(parsed: argparse.Namespace) -> int:
     )
     if not daily_config.automatic_runs_enabled:
         raise PermissionError("Automatic Daily runs are disabled pending canary evaluation.")
-    now = datetime.now(ZoneInfo(daily_config.maintenance_timezone))
-    maintenance_date = now.date()
-    reset_date = now.astimezone(ZoneInfo("UTC")).date()
-    boundary = DailyRunBoundary(
-        maintenance_date=maintenance_date,
-        game_reset_id=f"pnc-reset-{reset_date.isoformat()}-{daily_config.game_reset_hour_utc:02d}",
+    boundary = build_daily_run_boundary(
+        daily_config,
+        now=datetime.now(ZoneInfo(daily_config.maintenance_timezone)),
     )
     acknowledgements = tuple(parse_mutation_acknowledgement(value) for value in parsed.acknowledgement)
     authorizer = DailyMutationAuthorizer(acknowledgements)
@@ -295,7 +294,7 @@ def _run_daily_maintenance(parsed: argparse.Namespace) -> int:
         authorizer.require_claims(
             account_id=target.account_id,
             castle_ref=target.castle_ref,
-            maintenance_date=maintenance_date,
+            maintenance_date=boundary.maintenance_date,
             max_claims=target.max_claims,
         )
     service = DailyMaintenanceApplicationService(

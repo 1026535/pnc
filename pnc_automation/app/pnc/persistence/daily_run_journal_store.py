@@ -10,13 +10,18 @@ from threading import Lock
 from time import sleep
 from typing import Any
 
-from pnc_automation.app.pnc.domain.castles import CastleIdentity
-from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyTaskCheckpoint,
+    MutationBudgetKind,
     MutationIntent,
     MutationIntentState,
+    WorkshopInvocationRecord,
+)
+from pnc_automation.app.pnc.domain.feature_actions import (
+    is_workshop_journaled_action,
+    normalize_journaled_action_kind,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import ConfigurationError
@@ -38,6 +43,30 @@ def _replace_checkpoint_file(source: Path, destination: Path) -> None:
     persistent denials and other I/O errors must still stop mutation dispatch.
     """
     replace_flushed_file(source, destination, replace=os.replace, sleep_function=sleep)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingWorkshopOperation:
+    """One unresolved journaled Workshop operation and its original references."""
+
+    journal_path: Path
+    game_reset_id: str
+    account_id: str
+    castle: CastleIdentity
+    checkpoint: DailyTaskCheckpoint
+    intent: MutationIntent
+
+    @property
+    def operation_id(self) -> str:
+        """The durable operation id assigned by its original invocation."""
+
+        return self.intent.operation_id
+
+    @property
+    def invocation_id(self) -> str | None:
+        """The invocation that journaled this operation, when recorded."""
+
+        return self.intent.invocation_id
 
 
 @dataclass(slots=True)
@@ -96,7 +125,7 @@ class DailyRunJournalStore:
         if (
             checkpoint.game_reset_id != game_reset_id
             or checkpoint.account_id != account_id
-            or checkpoint.castle != castle
+            or castle_identity_key(checkpoint.castle) != castle_identity_key(castle)
         ):
             raise ConfigurationError("Daily-maintenance journal identity does not match its path.", path=str(path))
         return checkpoint
@@ -195,12 +224,114 @@ class DailyRunJournalStore:
         self.save(updated)
         return updated
 
+    def find_pending_workshop_operations(
+        self,
+        *,
+        account_id: str,
+        castle: CastleIdentity,
+    ) -> tuple[PendingWorkshopOperation, ...]:
+        """Finds unresolved Workshop intents for one castle across every reset partition."""
+
+        if not self.root.is_dir():
+            return ()
+        account_segment = sanitize_artifact_segment(account_id)
+        castle_segment = sanitize_artifact_segment(f"{castle.kingdom}_{castle.castle_name}")
+        pending: list[PendingWorkshopOperation] = []
+        for reset_dir in sorted(self.root.iterdir()):
+            if not reset_dir.is_dir():
+                continue
+            path = reset_dir / account_segment / castle_segment / "daily-maintenance" / "journal.json"
+            if not path.is_file():
+                continue
+            try:
+                checkpoint = _deserialize_checkpoint(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
+                raise ConfigurationError("Daily-maintenance journal is malformed.", path=str(path)) from error
+            if (
+                sanitize_artifact_segment(checkpoint.game_reset_id) != reset_dir.name
+                or checkpoint.account_id != account_id
+                or castle_identity_key(checkpoint.castle) != castle_identity_key(castle)
+            ):
+                raise ConfigurationError(
+                    "Daily-maintenance journal identity does not match its path.",
+                    path=str(path),
+                )
+            pending.extend(
+                PendingWorkshopOperation(
+                    journal_path=path,
+                    game_reset_id=checkpoint.game_reset_id,
+                    account_id=account_id,
+                    castle=checkpoint.castle,
+                    checkpoint=checkpoint,
+                    intent=intent,
+                )
+                for intent in checkpoint.mutation_intents
+                if is_workshop_journaled_action(intent.action_kind)
+                and intent.state is not MutationIntentState.COMMITTED
+            )
+        return tuple(pending)
+
+    def register_workshop_invocation(
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        record: WorkshopInvocationRecord,
+    ) -> DailyTaskCheckpoint:
+        """Persists one new Workshop invocation identity before its first mutation."""
+
+        if not isinstance(record, WorkshopInvocationRecord):
+            raise TypeError("Workshop invocations must be WorkshopInvocationRecord values.")
+        if any(existing.invocation_id == record.invocation_id for existing in checkpoint.workshop_invocations):
+            raise ValueError(f"Workshop invocation '{record.invocation_id}' already exists.")
+        updated = replace(
+            checkpoint,
+            workshop_invocations=(*checkpoint.workshop_invocations, record),
+        )
+        self.save(updated)
+        return updated
+
+    def update_workshop_invocation(
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        record: WorkshopInvocationRecord,
+    ) -> DailyTaskCheckpoint:
+        """Persists the latest state of one registered Workshop invocation."""
+
+        records = list(checkpoint.workshop_invocations)
+        for index, existing in enumerate(records):
+            if existing.invocation_id != record.invocation_id:
+                continue
+            records[index] = record
+            updated = replace(checkpoint, workshop_invocations=tuple(records))
+            self.save(updated)
+            return updated
+        raise KeyError(f"Workshop invocation '{record.invocation_id}' does not exist.")
+
+    def allocate_workshop_operation_id(
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        invocation_id: str,
+    ) -> tuple[DailyTaskCheckpoint, str]:
+        """Assigns the next durable operation id inside one registered invocation."""
+
+        record = next(
+            (item for item in checkpoint.workshop_invocations if item.invocation_id == invocation_id),
+            None,
+        )
+        if record is None:
+            raise KeyError(f"Workshop invocation '{invocation_id}' does not exist.")
+        sequence = record.operation_sequence + 1
+        checkpoint = self.update_workshop_invocation(
+            checkpoint,
+            replace(record, operation_sequence=sequence),
+        )
+        return checkpoint, f"{invocation_id}-op-{sequence}"
+
 
 def _serialize_checkpoint(checkpoint: DailyTaskCheckpoint) -> dict[str, Any]:
-    """Converts one checkpoint to the versioned JSON storage schema."""
+    """Converts one checkpoint to the canonical version-two JSON storage schema."""
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "maintenance_date": checkpoint.maintenance_date,
         "game_reset_id": checkpoint.game_reset_id,
         "account_id": checkpoint.account_id,
@@ -223,19 +354,34 @@ def _serialize_checkpoint(checkpoint: DailyTaskCheckpoint) -> dict[str, Any]:
                 "metadata": intent.metadata,
                 "action_kind": intent.action_kind,
                 "target": intent.target,
+                "invocation_id": intent.invocation_id,
             }
             for intent in checkpoint.mutation_intents
         ],
         "consumed_recovery_stages": list(checkpoint.consumed_recovery_stages),
         "last_typed_screen": None if checkpoint.last_typed_screen is None else checkpoint.last_typed_screen.value,
+        "workshop_invocations": [
+            {
+                "invocation_id": record.invocation_id,
+                "action_kind": record.action_kind,
+                "budget_kind": record.budget_kind.value,
+                "max_mutations": record.max_mutations,
+                "operation_sequence": record.operation_sequence,
+                "pending_operation_id": record.pending_operation_id,
+                "stop_reason": record.stop_reason,
+                "metadata": record.metadata,
+            }
+            for record in checkpoint.workshop_invocations
+        ],
     }
 
 
 def _deserialize_checkpoint(payload: Any) -> DailyTaskCheckpoint:
-    """Builds one typed checkpoint from the exact version-one JSON schema."""
+    """Builds one typed checkpoint from a supported versioned JSON schema."""
 
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+    if not isinstance(payload, dict) or payload.get("schema_version") not in (1, 2):
         raise ValueError("Unsupported daily-maintenance journal schema.")
+    schema_version = payload["schema_version"]
     castle_raw = payload["castle"]
     if not isinstance(castle_raw, dict):
         raise TypeError("Journal castle must be a mapping.")
@@ -268,9 +414,10 @@ def _deserialize_checkpoint(payload: Any) -> DailyTaskCheckpoint:
                 action_kind=(
                     None
                     if item.get("action_kind") is None
-                    else BuildingMutationKind(item["action_kind"]).value
+                    else normalize_journaled_action_kind(item["action_kind"]).value
                 ),
                 target=(None if item.get("target") is None else dict(item["target"])),
+                invocation_id=(None if schema_version == 1 else item.get("invocation_id")),
             )
             for item in intents_raw
         ),
@@ -278,4 +425,28 @@ def _deserialize_checkpoint(payload: Any) -> DailyTaskCheckpoint:
         last_typed_screen=(
             None if payload.get("last_typed_screen") is None else ScreenType(payload["last_typed_screen"])
         ),
+        workshop_invocations=(
+            () if schema_version == 1 else _deserialize_workshop_invocations(payload)
+        ),
+    )
+
+
+def _deserialize_workshop_invocations(payload: dict[str, Any]) -> tuple[WorkshopInvocationRecord, ...]:
+    """Builds the version-two Workshop invocation records for one checkpoint."""
+
+    records_raw = payload["workshop_invocations"]
+    if not isinstance(records_raw, list):
+        raise TypeError("Journal workshop_invocations must be a list.")
+    return tuple(
+        WorkshopInvocationRecord(
+            invocation_id=str(item["invocation_id"]),
+            action_kind=str(item["action_kind"]),
+            budget_kind=MutationBudgetKind(item["budget_kind"]),
+            max_mutations=(None if item.get("max_mutations") is None else int(item["max_mutations"])),
+            operation_sequence=int(item["operation_sequence"]),
+            pending_operation_id=item.get("pending_operation_id"),
+            stop_reason=item.get("stop_reason"),
+            metadata=dict(item.get("metadata") or {}),
+        )
+        for item in records_raw
     )

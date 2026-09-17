@@ -7,7 +7,11 @@ from datetime import date
 
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.authoring.config.daily_maintenance import DailyCapabilityPolicy
-from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId, MutationAcknowledgement
+from pnc_automation.app.pnc.domain.daily_maintenance import (
+    DailyQuestId,
+    MutationAcknowledgement,
+    MutationBudgetKind,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,20 +78,23 @@ class DailyMutationAuthorizer:
             maintenance_date=maintenance_date,
         )
 
-    def require_building(
+    def require_feature(
         self,
         *,
         account_id: str,
         castle_ref: str,
         action_kind: str,
         maintenance_date: date,
-        max_mutations: int = 1,
-        max_diamond_spend: int = 0,
+        budget_kind: MutationBudgetKind = MutationBudgetKind.COUNTED,
+        max_mutations: int | None = 1,
+        max_diamond_spend: int | None = 0,
     ) -> MutationAcknowledgement:
-        """Require an exact building acknowledgement without inventing a Daily quest row."""
+        """Require an exact feature acknowledgement without inventing a Daily quest row."""
 
         if not action_kind.strip():
-            raise ValueError("Building action kind cannot be blank.")
+            raise ValueError("Feature action kind cannot be blank.")
+        if not isinstance(budget_kind, MutationBudgetKind):
+            raise TypeError("Feature budget kind must be a MutationBudgetKind.")
         candidates = tuple(
             item
             for item in self.acknowledgements
@@ -99,7 +106,7 @@ class DailyMutationAuthorizer:
         )
         if len(candidates) != 1:
             raise PermissionError(
-                "Building mutation requires exactly one matching acknowledgement for "
+                "Feature mutation requires exactly one matching acknowledgement for "
                 f"{account_id}/{castle_ref}/{action_kind}/{maintenance_date.isoformat()}."
             )
         acknowledgement = candidates[0]
@@ -112,6 +119,7 @@ class DailyMutationAuthorizer:
                 max_diamond_spend=max_diamond_spend,
                 maintenance_date=maintenance_date,
                 action_kind=action_kind,
+                budget_kind=budget_kind,
             )
         except ValueError as error:
             raise PermissionError(str(error)) from error

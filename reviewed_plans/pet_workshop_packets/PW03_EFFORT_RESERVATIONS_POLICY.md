@@ -26,6 +26,18 @@ Test the allocation and score with small authored graphs and representative real
 
 A reviewer can explain why an order or action was chosen using its requirements, reward and remaining effort; no piece is double-counted, no larger piece is assumed splittable, and a lower-priority order cannot consume reserved progress.
 
+### Lead correction checkpoint — 2026-09-17
+
+Candidate **`0fbc61dcca8314762dec551904301305bbea0fdf`** contains the lead's S3/S4 corrections, rebased without conflicts onto `6d128f3` (the intervening base changes are packet status documents). `allocate_goal` now owns the shared pool for requirements, feed ingredients, producer acquisition, effort and planning targets. The obsolete independently reconstructed estimate was removed. Repeated fresh finite producers consume new ingredients and upstream energy; an observed finite producer retains unknown capacity. A reachable first construction remains useful when the total further acquisition cost is unknown. Exact finite generator requirements are protected against exhaustion, while unlimited required generators remain usable.
+
+**Passed:** 162 focused policy/validation/planner tests on the same source before the documentation-only rebase; `git diff --check`. New regressions include lower-ready-order theft of feed, a separately required extra feed, Pot-to-Bowl reconstruction after absence/exhaustion, shared fresh finite capacity, repeated rebuild costs, free merge-built feed, reachable producer upgrades and finite versus unlimited exact generator stock. The final `tools/run_tests.py affected --base origin/main --explain` selected all 330 portable modules because this branch adds production modules; it is running with the correct Python 3.13/RapidOCR 3.4.5 environment. Log: solver `.local-data/review/pw03-pw04/final-affected.log`.
+
+**Remaining acceptance finding:** a previously proposed Tree Produce still validates after a fresh complete survey contains no eligible order. The planner correctly stops, but executor revalidation must also reject that now-useless spend and inspect unresolved goal facts. Reproduction is solver `.local-data/review/pw03-pw04/production-revalidation-finding.txt`. Keep the candidate frozen during the active suite; apply the scoped validator/shared-rule correction afterward and test the final revision. This is a pure offline boundary, not a live-account blocker. PW03/PW04 are not accepted or merged at this checkpoint.
+
+**Later resolution / final validation pending:** the lead fixed that last finding in an isolated `pet-workshop-solver-final` checkout while the earlier full run stayed frozen. `ddd7afd` adds one shared production-contribution calculation and makes revalidation reject vanished goals, changed chains and stock-satisfied demands, while unresolved surveys return UNCERTAIN. All **166 focused tests passed**. The original full run at `0fbc61d` then passed **2,744 tests: 2,737 passed, 7 environmental skips, zero errors/failures**, with source fingerprint `8dcd42e37885f9579ab787e9959577ea7da2bbc2d3219b5c3d1846ae33afe206`. Its immutable evidence is solver `.local-data/review/pw03-pw04/full-0fbc61d-results.json` and `full-0fbc61d-selection.json`.
+
+The original solver checkout was fast-forwarded to the correction and rebased onto documentation-only `origin/main` at `d202dc3`; final code candidate **`dc810c8288e1c72e09b667111e3ed7e9aa99ebde`** has exactly the same production/test/design tree as focused-tested `ddd7afd`. The runner selects a full fallback for the final shared public-rule addition, so the earlier broad result is not final acceptance. Validation-only brief `.local-data/devin-briefs/pw03-pw04-final-validation.md` is ready for `absorbing-vicuna` once the Main evidence-correction worker finishes. No further code edits are assigned; return actual command results, final revision/fingerprint and concise failure evidence. The lead retains acceptance and integration. Both solver checkouts are clean; all code remains unpublished.
+
 ## Focused validation
 
 Cover multiset allocation at different tiers, un-splittable high tiers, protected progress, zero-cost goals, uncertain finite capacity, and the documented mixed-output estimate. Exercise the shared validator against permitted and forbidden actions; PW04 owns complete decision-sequence replay.
@@ -37,6 +49,20 @@ Follow the [common validation and acceptance gates](../PNC_PET_WORKSHOP_ROADMAP.
 Reviewed estimator/allocator/validator implementation, example ranking diagnostics, uncertainty limits and focused test results. PW04 consumes this exact implementation; the executor later calls the same validator.
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
+
+## Accepted and merged — 2026-09-17
+
+**PW03/PW04 accepted and pushed to main at `4f12095a1b10ff1c600a1dcdb1f0f7bf82c3000c`.** The lead independently reviewed the full worker implementation, all recorded findings and correction diffs, implemented the remaining shared-allocation/reconstruction/revalidation fixes, and ran the focused scenario suites. S1–S6 and the later stale-production revalidation finding are resolved. The original defect/recovery records below are historical, not current blockers.
+
+Final validation-only worker turn 004 tested `dc810c8288e1c72e09b667111e3ed7e9aa99ebde`, with unchanged HEAD and clean tracked content, using the prescribed Python 3.13.5 / RapidOCR 3.4.5 environment. The lead independently inspected the raw runner result, environment, log summary, skip reasons and revision/fingerprint rather than accepting the worker's handoff alone:
+
+- **Passed:** `tools/run_tests.py affected --base origin/main --explain`, resolving base `8d8e15a`; required full fallback covered all 330 portable modules. **2,748 tests ran: 2,741 passed, 7 skipped, zero failures/errors**, exit 0. All 166 Workshop policy/validation/planner tests were included.
+- The seven skips are one unavailable Windows symlink privilege and six unavailable optional non-Workshop local capture fixtures. No Workshop coverage or required OCR backend was skipped.
+- Source fingerprint: `2b45e77f1bd7c12d8294d64735bfa93dfc8f0ca32c592893ce4dc09cd3c7e750`. Immutable evidence in the solver checkout: `.local-data/review/pw03-pw04/final-dc810c-results.json`, `final-dc810c-selection.json`, `final-dc810c-validation.log`; native run `.local-data/devin-implement/pw03-pw04/turn-004`.
+- Integration rebased the unpublished branch without conflicts onto fetched main `29297f7`. The lead verified **no production or test diff** between tested `dc810c8` and integrated `4f12095`; only previously accepted evidence/status documentation entered from main. `git diff --check` passed. The exact accepted SHA was pushed to main and `codex/pet-workshop-solver`, and both remote refs were verified.
+- **Live check not applicable:** this package is a pure state-to-intent library with deterministic supplied-state scenarios; no running-game entry point consumes it yet. This does not qualify screenshot recognition, actual game transitions or unattended gameplay. Their PW05/PW07/PW10 gates remain mandatory.
+
+Both solver checkouts are clean. The originating `pet-workshop-solver` branch is published; the temporary final-correction checkout retains the clean, superseded `ddd7afd` precursor and is not a separate implementation. PW02/PW06 continue independently. No new packet is dependency-ready until one of those accepted handoffs enables PW05 or PW07.
 
 ## Implementation review — correction batch 1
 
@@ -62,6 +88,24 @@ PW04 owns [S2 and planner sequence proof](PW04_ONE_STEP_SOLVER.md#implementation
 - Correction owner: `absorbing-vicuna`, run `.local-data/devin-implement/pw03-pw04`, turn 002. Delta brief: `.local-data/devin-briefs/pw03-pw04-review-fixes.md`. Expected return: `.local-data/review/pw03-pw04/fix-handoff.md`.
 - Tests must run from the assigned checkout using `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-castle-identity-plan/.local-data/pw-validation-venv/Scripts/python.exe` (RapidOCR 3.4.5), followed by `tools/run_tests.py affected --base cf171fdb4110093ccc29ce3f1f9c1491e8936d3c --explain` on the final committed candidate. Preserve final revision/fingerprint and compact results; let a justified full fallback finish.
 - No live validation is needed for these pure rules. Main remains unavailable for the later game-facing packets until the user releases it. PW02 and PW06 can continue independently.
+
+### Recovery and revised correction ownership
+
+Turn 002 was interrupted when all three Workshop worker/monitor processes disappeared around 2026-09-17 01:34 UTC; cause unestablished. No correction source edits had been saved. Lead verified absent local writers/tests and the existing native session ID, preserved `turn-002/state-before-host-recovery.json`, and repaired the stale running record. The original solver commits were rebased without conflicts onto accepted main `4f1e119`, producing candidate baseline `32197aae13b4bc754acc28bf617e8a25fee3c9bb` with unchanged solver content.
+
+Same session `absorbing-vicuna` resumed as **turn 003**, supervisor 51088, with native SWE-2 Max readiness confirmed. The bounded output still showed unresolved joint-allocation design, so the lead now owns S3/S4/S6 instead of dispatching another broad recipe-design iteration. The worker owns concrete routine S1/S2/S5 corrections and focused regressions, then returns a committed delta at `.local-data/review/pw03-pw04/routine-fix-handoff.md`. Delta brief: `.local-data/devin-briefs/host-recovery.md`. Broad final-candidate validation is deferred until the lead's recipe changes are integrated; prior 129 passing tests do not resolve these findings. No packet is accepted.
+
+Main's later availability is now supplied by the timed release in the roadmap. It does not change this pure package's offline scope or authorize a worker to connect to the game.
+
+### Turn 003 independent review and lead corrections — 2026-09-17
+
+Handled native result: `.local-data/devin-implement/pw03-pw04/turn-003`, `exited`, exit 0, `writers_stopped: true`, with a recognized final response. Worker candidate `761837e6817b818f5227bf0ba02dc3d8ade11777` scoped itself to S1/S2/S5; the lead inspected its actual production/test diff and independently passed its **146 focused tests** with the required interpreter. The worker did not claim S3/S4/S6 completion.
+
+The lead reproduced a remaining S1 defect: an unfinished lasso primary with two surplus-ready chest competitors still submitted the known-quantity card while the other's quantity was unread. The lead corrected this using the same ranking comparison and one canonical surplus-quantity check. For S2, the lead added actual `validate_intent` gating to every mutation candidate, beyond the worker's repaired individual preconditions. S5's absent/uncertain estimate ordering passed review.
+
+Lead commit **`efac6de`** additionally resolves S6: reserve exact requirements together, then traverse free merge/activation recipes from actual Normal and inactive stock, allowing a Normal partner to be built first. Failed recipe branches restore the per-goal pool. New regressions prove free-goal preference followed by merge→activation→submit, protect an exact lower-tier demand, and inspect the unread ready-secondary reward. **150 focused policy/validation/planner tests passed**, and `git diff --check` passed. Evidence summary: solver `.local-data/review/pw03-pw04/lead-review-efac6de.json`.
+
+**Still fixing, not accepted:** S3 joint producer/feed ingredient allocation and S4 reachable producer reconstruction/finite acquisition pricing. Broad final-candidate testing waits for that cohesive lead-owned batch. Worker `absorbing-vicuna` is idle; no solver commit has been pushed or merged to main. This pure solver work used no live target.
 
 
 ### Execution record — 2026-09-16

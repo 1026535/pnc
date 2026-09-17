@@ -91,6 +91,7 @@ from pnc_automation.app.pnc.vision.bag_layout import (
 )
 from pnc_automation.app.pnc.vision.resource_inventory import (
     detect_button_runs,
+    detect_button_segments,
     is_blue_button_pixel,
     parse_resource_inventory,
 )
@@ -6292,25 +6293,32 @@ def _qualify_modal_action_geometry(
         half_width = round(width * .28)
         half_height = round(height * .065)
         left, right = max(0, point[0] - half_width), min(width, point[0] + half_width)
-        if selector == UiElementId.PNC_POPUP_CLOSE_BUTTON:
-            # A paired footer owns separate left/right buttons. Exclude its
-            # affirmative neighbour before measuring the negative action.
-            if point[0] > width * .6:
-                left = max(left, width // 2)
-            elif point[0] < width * .4:
-                right = min(right, width // 2)
         top, bottom = max(0, point[1] - half_height), min(height, point[1] + half_height)
-        buttons = () if not panel_present else detect_button_runs(
-            rgb, bounds=Bounds(left, top, right - left, bottom - top),
-            x_start=left, x_end=right,
-            predicate=(
-                (lambda pixel: is_blue_button_pixel(pixel) or is_gold_button_pixel(pixel))
-                if selector == UiElementId.PNC_POPUP_CLOSE_BUTTON
-                else is_blue_button_pixel if selector == UiElementId.PNC_UPDATE_CONFIRM_BUTTON
-                else is_gold_button_pixel
-            ),
-            minimum_height=max(6, round(height * .02)),
+        predicate = (
+            (lambda pixel: is_blue_button_pixel(pixel) or is_gold_button_pixel(pixel))
+            if selector == UiElementId.PNC_POPUP_CLOSE_BUTTON
+            else is_blue_button_pixel if selector == UiElementId.PNC_UPDATE_CONFIRM_BUTTON
+            else is_gold_button_pixel
         )
+        if not panel_present:
+            buttons: tuple[Bounds, ...] = ()
+        elif selector == UiElementId.PNC_POPUP_CLOSE_BUTTON:
+            # A paired footer owns separate negative/affirmative segments. The
+            # accepted OCR anchor selects exactly the segment containing its
+            # point; the affirmative neighbour is never eligible.
+            buttons = detect_button_segments(
+                rgb, bounds=Bounds(left, top, right - left, bottom - top),
+                x_start=left, x_end=right,
+                predicate=predicate,
+                minimum_height=max(6, round(height * .02)),
+            )
+        else:
+            buttons = detect_button_runs(
+                rgb, bounds=Bounds(left, top, right - left, bottom - top),
+                x_start=left, x_end=right,
+                predicate=predicate,
+                minimum_height=max(6, round(height * .02)),
+            )
         owned = tuple(button for button in buttons if button.contains_point(point))
         if len(owned) == 1:
             measured[selector] = replace(

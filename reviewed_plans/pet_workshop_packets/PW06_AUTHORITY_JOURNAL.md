@@ -47,3 +47,44 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 - Briefs: worker `.local-data/devin-briefs/pw06-authority.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
 - The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
 - Reviewed/tested result revision and acceptance evidence: pending handoff.
+
+### Recovery and resolved type/budget choices
+
+Turn 001 was interrupted when all three Workshop worker/monitor processes disappeared around 2026-09-17 01:34 UTC; cause unestablished. No tracked PW06 implementation had been saved. Lead verified absent local writers/tests, matched native `fearless-sprite` identity with `devin list` in the exact checkout, preserved `turn-001/state-before-host-recovery.json`, and repaired the stale record. The checkout was fast-forwarded to accepted main `4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3`.
+
+Same session resumed as **turn 002**, supervisor 57492, with native SWE-2 Max readiness confirmed. Delta brief: `.local-data/devin-briefs/host-recovery.md`. The lead resolved two questions from the bounded saved analysis: retain the existing building enum and a narrow Workshop action enum under one supported feature-kind union/parser; normalize supported old flat counted inputs and the new tagged Workshop budget once at the input boundary into one canonical tagged representation, rejecting conflicting simultaneous declarations. Required persisted-data migration remains one-way. No duplicate internal budget path or generic registry framework is needed.
+
+Implementation, focused proof and final-candidate affected evidence remain pending. The Main release belongs to a separate live assignment; this authority/journal worker remains offline.
+
+### Windows Update recovery — 2026-09-17
+
+Turn 002 and its full affected test run were interrupted by the user-confirmed Windows Update. Last worker activity was around 06:41 UTC; the latest boot was 13:54:06 UTC. Lead verified prior local worker/test processes absent, matched native `fearless-sprite` to this exact checkout with `devin list`, preserved `turn-002/state-before-windows-update-recovery.json`, and repaired the stale execution record. All partial authority/journal edits and new invocation/action/test files were preserved.
+
+The bounded saved output reported 114 focused tests passing and an incomplete full fallback with one failure marker. This is worker self-report, not accepted final-candidate evidence. Resume instructions require inspecting the retained failure evidence, correcting relevant defects and completing the repository affected check using the specified Python environment against base `4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3`. No interrupted run counts as passing.
+
+Same session resumed as **turn 003**, supervisor 25312, native SWE-2 Max readiness confirmed. The coordinator's `.local-data/devin-briefs/pw06-windows-update-recovery.md` preserves the settled type/budget scope and offline-only ownership. Final review and acceptance remain pending. The existing continuation timer was explicitly acknowledged active and the monitor restarted with the same task and automation IDs.
+
+### Independent review — correction batch 1, 2026-09-17
+
+Turn 003 returned `284f2c6ec698bec87001af225c3f3aab748e8a5d`, clean with writers stopped. Lead verified actual full-suite records: **2,597 passed, 7 environmental skips**, no failures, Python 3.13.5 / RapidOCR 3.4.5, source fingerprint `ebd5e72724515c9d0c0283b0cb74f5a34b20c3744a318a514645f8f6e575f036`. Evidence is preserved in the authority checkout under `.local-data/review/pw06/worker-284f2c6-{results,selection}.json`. Lead rebased the candidate cleanly onto accepted main `730195d`, producing **ef76ccb47251711892006fa5241c6031061b7898**, and independently ran `tools/run_tests.py group contract.workflows`: **116 passed**. A module-name group attempt was unsupported by the runner; no tests ran for that attempt.
+
+The complete review found acceptance blockers below. The lead's offline reproduction `.local-data/review/pw06/reproduce_authority_findings.py` and its retained case journals are in the authority checkout. No live action or acceptance occurred.
+
+| Finding | Evidence and correction |
+| --- | --- |
+| **R1 / P1 — stale progress writes erase pending intent** | Invocation update and operation allocation from a pre-dispatch checkpoint both reduced pending count from 1 to 0. Apply the canonical persisted-checkpoint guard, reject unpersisted invocation history, and preserve invocation identity/budget and monotonic sequence. |
+| **R2 / P1 — counted budget crosses invocation boundaries** | After one successful cap-1 run, a fresh cap-1 invocation is rejected on its first action. Count and enforce the registered invocation's own budget; reject widening its budget through another scope. Observed-bar scopes need no synthetic counted cap. |
+| **R3 / P1 — level change breaks historical identity** | A committed K1/Main C10 journal causes the same castle's C11 cross-reset lookup to raise ConfigurationError. Reuse the existing stable kingdom/name identity key for persisted identity and pending reconciliation; retain foreign-target rejection. |
+| **R4 / P2 — shared scope factory and canonical docs absent** | The candidate has date/UUID helpers but no explicit WorkshopPolicy/scope composition. Add the agreed small `WorkshopRunAuthority` value and factory using existing authority owners; update the authority/persistence section of the canonical design document. |
+
+Status: **Fixing findings**. The delta assignment is the coordinator's `.local-data/devin-briefs/pw06-review-batch-1.md`, for the same native `fearless-sprite` session. It owns the coherent fixes, regressions and final integrated affected/full evidence, with no live access, push or plan edits. Lead will review the correction diff and final proof before acceptance. PW02 continues independently; PW07 still awaits its required accepted dependencies.
+
+### Acceptance — 2026-09-17
+
+**Accepted and merged/pushed at `4d39be41c107d4ae92e438e0ad889b4ae590bd65`.** Native `fearless-sprite` turn 004 is handled. Its final candidate `6c835f1649bea268a814000793f1d6588b9aacba` was clean with writers/tests stopped. Lead reviewed the complete R1–R4 correction diff, the added regression cases and the new composition/documentation. All four findings are resolved: stale progress writes retain pending history; budgets are immutable and counted per invocation; persisted identity uses stable kingdom/name keys; one explicit policy/scope factory serves later adapters.
+
+- **Final full proof passed:** `tools/run_tests.py affected --base origin/main --explain`, using the required Python 3.13.5 / RapidOCR 3.4.5 environment, selected the full portable suite on shared authority/schema changes. **2,783 ran: 2,776 passed, 7 skipped, no failures/errors.** Base was `c77ce19`. Lead verified actual result metadata, individual outcomes and skips, then independently recomputed the complete tracked-file fingerprint and matched the tested candidate: `80cb0b4b1ca3400f6ede4946b8dcbb4513203dd2de27633c7574577a6e412a2e`. Saved proof: authority checkout `.local-data/review/pw06/worker-6c835f1-results.json` and `worker-6c835f1-selection.json`.
+- **Independent integrated check passed:** after a conflict-free rebase onto current main, `tools/run_tests.py group contract.workflows` passed all **129 tests**. Results/selection are `.local-data/review/pw06/lead-final-contract-{results,selection}.json`. Lead corrected documentation to name the canonical mutation subset and distinguish stored strings from decoded typed values. `git diff --check` passed.
+- **Integration preserved tested behavior:** final production/test content is identical to `6c835f1` (`git diff 6c835f1..HEAD -- pnc_automation tests` empty). The rebase incorporated only accepted plan records; the final additional commit corrected documentation. Exact accepted SHA was pushed to `main` and `codex/pet-workshop-authority`, then verified with remote refs. No source/test changes were left uncommitted in this checkout.
+- **Skips:** one Windows symlink-privilege case and six optional non-Workshop local screenshot fixtures. No required Workshop or authority check was skipped.
+- **Live gate:** not applicable to this isolated authority/persistence packet. Its behavior is proven through the actual journal and supplied dispatch/reconciliation callbacks below the emulator boundary; it adds no connected Workshop UI path. This does not accept gameplay, recognition, gestures, entry-point integration or PW10 live qualification. PW02 remains the next dependency for PW05/PW07.

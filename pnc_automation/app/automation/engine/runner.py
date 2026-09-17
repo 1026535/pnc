@@ -264,14 +264,14 @@ class AutomationRunner:
                 or getattr(step.parsed_params, "daily_quest_id", None) is not None
             )
         )
-        if building_core_requested and getattr(self.core_step_executor, "supports_building_core", False) is not True:
+        if building_core_requested and getattr(self.core_step_executor, "supports_feature_core", False) is not True:
             raise PermissionError(
                 "Typed building operation identity requires an explicit CoreMutationBoundary; "
                 "the legacy building task was not used."
             )
         if isinstance(task, CoreWorkflowTaskDefinition) or (
             step.task in {TaskId.BUILDING_CONSTRUCT, TaskId.BUILDING_UPGRADE}
-            and getattr(self.core_step_executor, "supports_building_core", False) is True
+            and getattr(self.core_step_executor, "supports_feature_core", False) is True
         ):
             return self._run_core_step(
                 step=step,

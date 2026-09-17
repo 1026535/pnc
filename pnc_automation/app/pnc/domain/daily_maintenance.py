@@ -9,6 +9,7 @@ from typing import Any
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
+from pnc_automation.app.pnc.domain.pet_workshop import WorkshopMutationKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
@@ -223,6 +224,21 @@ class ResourceBoostPolicy:
             raise ValueError("ResourceBoostPolicy.max_diamond_spend must be between 0 and 200.")
 
 
+class MutationBudgetKind(StrEnum):
+    """The budget form one mutation acknowledgement authorizes.
+
+    ``COUNTED`` is the existing exact-operation-count budget shared by Daily
+    capabilities, building actions and bounded Workshop canaries.
+    ``OBSERVED_WORKSHOP_BAR`` is the closed Workshop run budget: only the
+    observed energy bar, observed natural gains and restricted observed
+    recycling results may fund actions; it stops at observed zero, never
+    refills from inventory or energy pieces, and carries no counted cap.
+    """
+
+    COUNTED = "counted"
+    OBSERVED_WORKSHOP_BAR = "observed_workshop_bar"
+
+
 @dataclass(frozen=True, slots=True)
 class MutationAcknowledgement:
     """Authorizes one exact live capability budget for one castle and local date."""
@@ -231,27 +247,42 @@ class MutationAcknowledgement:
     castle_ref: str
     quest_id: DailyQuestId | None
     maintenance_date: date
-    max_mutations: int
+    max_mutations: int | None
     max_diamond_spend: int | None
     action_kind: str | None = None
+    budget_kind: MutationBudgetKind = MutationBudgetKind.COUNTED
 
     def __post_init__(self) -> None:
         """Rejects broad or unbounded live acknowledgements."""
 
         if not self.account_id.strip() or not self.castle_ref.strip():
             raise ValueError("Mutation acknowledgement account and castle cannot be empty.")
-        if isinstance(self.max_mutations, bool) or self.max_mutations <= 0:
-            raise ValueError("Mutation acknowledgement max_mutations must be positive.")
+        if not isinstance(self.budget_kind, MutationBudgetKind):
+            raise TypeError("Mutation acknowledgement budget_kind must be a MutationBudgetKind.")
         if (self.quest_id is None) == (self.action_kind is None):
             raise ValueError(
-                "Mutation acknowledgement requires exactly one Daily capability or building action kind."
+                "Mutation acknowledgement requires exactly one Daily capability or feature action kind."
             )
+        if self.action_kind is not None and not self.action_kind.strip():
+            raise ValueError("Mutation acknowledgement action_kind cannot be blank.")
+        workshop = self.action_kind == WorkshopMutationKind.RUN.value
+        if self.budget_kind is MutationBudgetKind.COUNTED:
+            if (
+                isinstance(self.max_mutations, bool)
+                or not isinstance(self.max_mutations, int)
+                or self.max_mutations <= 0
+            ):
+                raise ValueError("Mutation acknowledgement max_mutations must be positive.")
+        elif self.max_mutations is not None:
+            raise ValueError("The observed Workshop bar budget cannot carry a counted mutation cap.")
+        if self.budget_kind is MutationBudgetKind.OBSERVED_WORKSHOP_BAR and not workshop:
+            raise ValueError("The observed Workshop bar budget requires the pet_workshop.run scope.")
+        if workshop and self.max_diamond_spend != 0:
+            raise ValueError("Workshop acknowledgements cannot spend diamonds.")
         if self.quest_id is not None:
             validate_daily_diamond_limit(self.max_diamond_spend, quest_id=self.quest_id)
         elif self.max_diamond_spend is None or self.max_diamond_spend < 0:
-            raise ValueError("Building mutation acknowledgement requires a finite premium budget.")
-        if self.action_kind is not None and not self.action_kind.strip():
-            raise ValueError("Mutation acknowledgement action_kind cannot be blank.")
+            raise ValueError("Feature mutation acknowledgement requires a finite premium budget.")
 
     def authorize(
         self,
@@ -259,10 +290,11 @@ class MutationAcknowledgement:
         account_id: str,
         castle_ref: str,
         quest_id: DailyQuestId | None,
-        max_mutations: int,
+        max_mutations: int | None,
         max_diamond_spend: int | None,
         maintenance_date: date,
         action_kind: str | None = None,
+        budget_kind: MutationBudgetKind = MutationBudgetKind.COUNTED,
     ) -> None:
         """Fails unless this acknowledgement exactly matches the requested live slice."""
 
@@ -270,6 +302,8 @@ class MutationAcknowledgement:
         actual = (self.account_id, self.castle_ref, self.quest_id, self.maintenance_date)
         if actual != expected:
             raise ValueError("Mutation acknowledgement does not match the requested live target and date.")
+        if self.budget_kind is not budget_kind:
+            raise ValueError("Mutation acknowledgement must match the exact budget form.")
         if self.max_mutations != max_mutations:
             raise ValueError("Mutation acknowledgement must match the capability mutation limit exactly.")
         if self.max_diamond_spend != max_diamond_spend:
@@ -343,6 +377,7 @@ class MutationIntent:
     metadata: dict[str, Any] = field(default_factory=dict)
     action_kind: str | None = None
     target: dict[str, Any] | None = None
+    invocation_id: str | None = None
 
     def __post_init__(self) -> None:
         """Rejects malformed identifiers and overspent premium budgets."""
@@ -361,6 +396,58 @@ class MutationIntent:
             raise ValueError("MutationIntent.action_kind cannot be blank.")
         if self.target is not None and not isinstance(self.target, dict):
             raise TypeError("MutationIntent.target must be a mapping or None.")
+        if self.invocation_id is not None and not self.invocation_id.strip():
+            raise ValueError("MutationIntent.invocation_id cannot be blank.")
+
+
+@dataclass(frozen=True, slots=True)
+class WorkshopInvocationRecord:
+    """Durable identity and progress for one authorized Workshop run.
+
+    ``invocation_id`` is generated once after scope validation and persisted
+    before the first mutation. ``operation_sequence`` assigns each planned
+    operation id independently of frame fingerprints, so a resumed operation
+    retains its id while a new invocation gets a fresh one even on the same
+    day. ``pending_operation_id`` references the latest unresolved journaled
+    operation and ``stop_reason`` the latest observed stop/result; ``metadata``
+    retains energy and reward evidence.
+    """
+
+    invocation_id: str
+    action_kind: str
+    budget_kind: MutationBudgetKind
+    max_mutations: int | None = None
+    operation_sequence: int = 0
+    pending_operation_id: str | None = None
+    stop_reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Rejects malformed invocation identity, budgets, and sequence state."""
+
+        if not isinstance(self.invocation_id, str) or not self.invocation_id.strip():
+            raise ValueError("WorkshopInvocationRecord.invocation_id cannot be empty.")
+        if self.action_kind != WorkshopMutationKind.RUN.value:
+            raise ValueError("WorkshopInvocationRecord requires the pet_workshop.run action kind.")
+        if not isinstance(self.budget_kind, MutationBudgetKind):
+            raise TypeError("WorkshopInvocationRecord.budget_kind must be a MutationBudgetKind.")
+        if self.budget_kind is MutationBudgetKind.COUNTED:
+            if (
+                isinstance(self.max_mutations, bool)
+                or not isinstance(self.max_mutations, int)
+                or self.max_mutations <= 0
+            ):
+                raise ValueError("A counted Workshop invocation requires a positive mutation cap.")
+        elif self.max_mutations is not None:
+            raise ValueError("The observed Workshop bar budget cannot carry a counted mutation cap.")
+        if type(self.operation_sequence) is not int or self.operation_sequence < 0:
+            raise ValueError("WorkshopInvocationRecord.operation_sequence cannot be negative.")
+        if self.pending_operation_id is not None and not self.pending_operation_id.strip():
+            raise ValueError("WorkshopInvocationRecord.pending_operation_id cannot be blank.")
+        if self.stop_reason is not None and not self.stop_reason.strip():
+            raise ValueError("WorkshopInvocationRecord.stop_reason cannot be blank.")
+        if not isinstance(self.metadata, dict):
+            raise TypeError("WorkshopInvocationRecord.metadata must be a mapping.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,6 +463,7 @@ class DailyTaskCheckpoint:
     mutation_intents: tuple[MutationIntent, ...] = ()
     consumed_recovery_stages: tuple[str, ...] = ()
     last_typed_screen: ScreenType | None = None
+    workshop_invocations: tuple[WorkshopInvocationRecord, ...] = ()
 
     def __post_init__(self) -> None:
         """Rejects incomplete checkpoint identity and duplicate operation ids."""
@@ -385,3 +473,6 @@ class DailyTaskCheckpoint:
         operation_ids = [intent.operation_id for intent in self.mutation_intents]
         if len(operation_ids) != len(set(operation_ids)):
             raise ValueError("DailyTaskCheckpoint mutation operation ids must be unique.")
+        invocation_ids = [record.invocation_id for record in self.workshop_invocations]
+        if len(invocation_ids) != len(set(invocation_ids)):
+            raise ValueError("DailyTaskCheckpoint Workshop invocation ids must be unique.")
