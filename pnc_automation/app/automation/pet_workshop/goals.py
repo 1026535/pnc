@@ -4,9 +4,11 @@ One pass classifies the survey into assessments, evaluates every policy
 goal against the observed board (allocation + advisory effort), and ranks
 them inside their reward category. Zero-cost goals — ready, satisfied by
 usable stock, or achievable through free merges/feeds alone — rank ahead of
-every positive-cost goal. Uncertain goals (finite producers with unobserved
-remaining uses) rank below certain ones, never above; inspection resolves
-unread reward facts before a guess is allowed to rank them.
+every positive-cost goal. Goals with a known usable estimate rank ahead of
+every goal whose estimate is absent or uncertain; inside each estimate
+class the documented key order applies. Inspection resolves unresolved
+contenders — clipped cards, UNKNOWN reward categories, and unread
+quantities — before a guess is allowed to rank them.
 """
 
 from __future__ import annotations
@@ -104,46 +106,121 @@ def _ratio(evaluation: GoalEvaluation) -> Fraction:
     return Fraction(evaluation.assessment.primary_quantity or 0) / energy
 
 
+def _estimate_known(evaluation: GoalEvaluation) -> bool:
+    """Returns whether the goal carries a known usable numerical estimate.
+
+    ``energy=None`` (no supported path) and ``uncertain=True`` (a finite
+    producer's unobserved remaining uses) both count as unknown — only a
+    real, certain estimate ranks in the known class.
+    """
+
+    return evaluation.effort.energy is not None and not evaluation.effort.uncertain
+
+
+def _secondary_key(assessment: OrderAssessment) -> tuple[int, ...]:
+    """Provisional sort key for the policy-ordered secondary rewards.
+
+    Unread counts sort as 0 here; the selection pass inspects any contender
+    whose unread entries could still change the applicable ranking.
+    """
+
+    return tuple(q if q is not None else 0 for q in assessment.secondary_quantities)
+
+
 def _compare_positive(a: GoalEvaluation, b: GoalEvaluation) -> int:
     """Orders two goals inside one reward category (Plan 02 ordering).
 
-    Certain estimates always rank above uncertain ones. Inside each
-    certainty class the comparison is reward-per-unit-energy ratio, then
-    less remaining estimated effort, then more secondary reward, then a
+    Known usable estimates always rank above absent or uncertain ones.
+    Inside the known class the comparison is reward-per-unit-energy ratio,
+    then less remaining estimated effort. Inside the unknown class no
+    made-up ratio or sentinel applies: the primary reward quantity decides.
+    Both classes then take the policy-ordered secondary rewards and the
     stable survey index.
     """
 
-    if a.effort.uncertain != b.effort.uncertain:
-        return 1 if a.effort.uncertain else -1
-    ratio_a, ratio_b = _ratio(a), _ratio(b)
-    if ratio_a != ratio_b:
-        return -1 if ratio_a > ratio_b else 1
-    effort_a = a.effort.energy if a.effort.energy is not None else Fraction(10**9)
-    effort_b = b.effort.energy if b.effort.energy is not None else Fraction(10**9)
-    if effort_a != effort_b:
-        return -1 if effort_a < effort_b else 1
-    secondary_a = a.assessment.secondary_quantity or 0
-    secondary_b = b.assessment.secondary_quantity or 0
+    known_a, known_b = _estimate_known(a), _estimate_known(b)
+    if known_a != known_b:
+        return -1 if known_a else 1
+    if known_a:
+        ratio_a, ratio_b = _ratio(a), _ratio(b)
+        if ratio_a != ratio_b:
+            return -1 if ratio_a > ratio_b else 1
+        energy_a, energy_b = a.effort.energy, b.effort.energy
+        if energy_a != energy_b:
+            return -1 if energy_a < energy_b else 1
+    else:
+        primary_a = a.assessment.primary_quantity or 0
+        primary_b = b.assessment.primary_quantity or 0
+        if primary_a != primary_b:
+            return -1 if primary_a > primary_b else 1
+    secondary_a = _secondary_key(a.assessment)
+    secondary_b = _secondary_key(b.assessment)
     if secondary_a != secondary_b:
         return -1 if secondary_a > secondary_b else 1
     return a.assessment.survey_index - b.assessment.survey_index
 
 
-def _zero_key(evaluation: GoalEvaluation) -> tuple[int, int, int, int, int]:
+def _zero_key(evaluation: GoalEvaluation) -> tuple:
     """Orders zero-cost goals: primary reward, fewer free actions, secondary.
 
-    An observed ready control breaks the remaining tie; the survey index
-    keeps the ordering total.
+    The secondary comparison follows the policy category order, not a sum
+    of unrelated reward counts. An observed ready control breaks the
+    remaining tie; the survey index keeps the ordering total.
     """
 
     ready_penalty = 0 if evaluation.ready is True else 1
     return (
         -(evaluation.assessment.primary_quantity or 0),
         evaluation.allocation.free_actions,
-        -(evaluation.assessment.secondary_quantity or 0),
+        tuple(-q for q in _secondary_key(evaluation.assessment)),
         ready_penalty,
         evaluation.assessment.survey_index,
     )
+
+
+def _ties_before_secondary(a: GoalEvaluation, b: GoalEvaluation) -> bool:
+    """Returns whether two ranked goals tie on every key before secondary.
+
+    Only then can an unread secondary count still reorder them — a decided
+    earlier key makes the unread fact irrelevant to the applicable ranking.
+    """
+
+    if a.zero_cost != b.zero_cost:
+        return False
+    primary_a = a.assessment.primary_quantity or 0
+    primary_b = b.assessment.primary_quantity or 0
+    if a.zero_cost:
+        return (
+            primary_a == primary_b
+            and a.allocation.free_actions == b.allocation.free_actions
+        )
+    known_a, known_b = _estimate_known(a), _estimate_known(b)
+    if known_a != known_b:
+        return False
+    if known_a:
+        return _ratio(a) == _ratio(b) and a.effort.energy == b.effort.energy
+    return primary_a == primary_b
+
+
+def _secondary_inspect_ref(
+    contender: GoalEvaluation, rival: GoalEvaluation
+) -> int | None:
+    """Returns the order to inspect when an unread secondary could reorder.
+
+    Walks the policy-ordered secondary positions; the first position that is
+    unread on either side — before any decisive known difference — names the
+    card whose contents must be read.
+    """
+
+    for own, other in zip(
+        contender.assessment.secondary_quantities,
+        rival.assessment.secondary_quantities,
+    ):
+        if own is None or other is None:
+            return contender.order_ref if own is None else rival.order_ref
+        if own != other:
+            return None
+    return None
 
 
 def rank_goals(evaluations: list[GoalEvaluation]) -> list[GoalEvaluation]:
@@ -198,27 +275,41 @@ def select_goals(
             inspect_order_ref=None,
             reason="order survey is not complete and current",
         )
+    # Unresolved contenders — clipped or otherwise unread cards, and
+    # eligible cards carrying an UNKNOWN reward category — could change the
+    # applicable ranking, so their contents are read before it is trusted.
+    # Known ineligible cards (proven totals, unknown item ids, resolved
+    # non-order rows) never reach this list.
+    inspect_order_ref = next(
+        (
+            assessment.order.order_ref
+            for assessment in assessments
+            if assessment.unresolved or assessment.unknown_reward
+        ),
+        None,
+    )
     if not goals:
         return GoalSelection(
             primary=None,
             ranked=(),
             assessments=assessments,
             survey_ok=True,
-            inspect_order_ref=None,
+            inspect_order_ref=inspect_order_ref,
             reason="no eligible two-piece order in the complete survey",
         )
     best_rank = min(assessment.category_rank for assessment in goals if assessment.category_rank is not None)
     candidates = [
         assessment for assessment in goals if assessment.category_rank == best_rank
     ]
-    inspect_order_ref = next(
-        (
-            assessment.order.order_ref
-            for assessment in candidates
-            if assessment.primary_quantity is None
-        ),
-        None,
-    )
+    if inspect_order_ref is None:
+        inspect_order_ref = next(
+            (
+                assessment.order.order_ref
+                for assessment in candidates
+                if assessment.primary_quantity is None
+            ),
+            None,
+        )
     board = BoardFacts(state)
     chains = MergeChains(catalog)
     evaluated: dict[int, GoalEvaluation] = {}
@@ -244,33 +335,17 @@ def select_goals(
         ranked.extend(rank_goals(by_rank[rank]))
     primary = ranked[0] if ranked else None
     if inspect_order_ref is None and len(ranked_best) >= 2:
-        # An unread secondary count blocks ranking when the top two are
-        # otherwise indistinguishable by every earlier key.
-        first, second = ranked_best[0], ranked_best[1]
-        tied_zero = (
-            first.zero_cost
-            and second.zero_cost
-            and (first.assessment.primary_quantity or 0)
-            == (second.assessment.primary_quantity or 0)
-            and first.allocation.free_actions == second.allocation.free_actions
-        )
-        tied_positive = (
-            not first.zero_cost
-            and not second.zero_cost
-            and first.effort.uncertain == second.effort.uncertain
-            and _ratio(first) == _ratio(second)
-            and (first.effort.energy or Fraction(10**9))
-            == (second.effort.energy or Fraction(10**9))
-        )
-        if (tied_zero or tied_positive) and (
-            first.assessment.secondary_quantity is None
-            or second.assessment.secondary_quantity is None
-        ):
-            inspect_order_ref = (
-                first.order_ref
-                if first.assessment.secondary_quantity is None
-                else second.order_ref
-            )
+        # An unread secondary count matters only where it could still
+        # reorder a contender against the provisional leader — every earlier
+        # key must tie, and the first undecided policy position must be
+        # unread on a side.
+        leader = ranked_best[0]
+        for contender in ranked_best[1:]:
+            if not _ties_before_secondary(contender, leader):
+                continue
+            inspect_order_ref = _secondary_inspect_ref(contender, leader)
+            if inspect_order_ref is not None:
+                break
     return GoalSelection(
         primary=primary,
         ranked=tuple(ranked),

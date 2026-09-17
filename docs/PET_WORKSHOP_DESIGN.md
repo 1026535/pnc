@@ -254,8 +254,12 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
   `estimate_goal`, which flags `conservative` when one producer serves two
   demands and reports unknown finite capacity as uncertainty only.
 - `goals.py` — `GoalSelection`/`select_goals`: survey gating,
-  category-first then zero-cost-before-positive-cost ranking, and
-  `inspect_order_ref` when the ranking depends on an unread reward quantity.
+  category-first then zero-cost-before-positive-cost ranking with
+  policy-ordered secondary rewards, known estimates ahead of absent or
+  uncertain ones (which tie-break on primary reward quantity), and
+  `inspect_order_ref` for any contender whose unread facts — a clipped
+  card, an UNKNOWN reward category, a missing primary or an undecidable
+  secondary count — could still change the applicable ranking.
 - `rules.py` — `goal_context` plus the reservation verdicts for merge,
   activate, feed and submit: protected exact/intermediate pieces may only be
   consumed when the action provably advances the serving demand.
@@ -267,7 +271,10 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
   production mode), then survey/inspection needs, ready order submissions,
   free progress (merges, activations, feeds), full-board recovery ending in
   one allowlisted recycle, production (select/produce with bounded cooldown
-  waits), and finally bounded inspection or a typed stop.
+  waits), and finally bounded inspection or a typed stop. Every returned
+  intent is canonically legal on the state that produced it — missing
+  relevant facts (production mode, cell access/occupancy) yield a targeted
+  inspection, not a mutation `validate_intent` would reject.
 
 Every `WorkshopDecision` is a proposal: intents carry logical targets only,
 the planner never touches game state, and execution is a separate Plan 03

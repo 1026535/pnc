@@ -32,6 +32,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopSubmitOrderIntent,
     WorkshopSurveyCoverage,
     WorkshopSurveyFreshness,
+    WorkshopValidationVerdict,
 )
 from pnc_automation.app.pnc.pet_workshop_catalog import PetWorkshopCatalog
 from tests.support.pnc import pet_workshop as fx
@@ -234,12 +235,21 @@ def run_scenario(
     """
 
     from pnc_automation.app.automation.pet_workshop import plan_next
+    from pnc_automation.app.automation.pet_workshop.validation import validate_intent
 
     decisions: list[WorkshopDecision] = []
     state = initial
     for _ in range(max_steps):
         decision = plan_next(state, catalog, policy)
         decisions.append(decision)
+        # Every proposed intent must pass the canonical validator on the
+        # state that produced it — the same contract the executor reuses.
+        verdict = validate_intent(state, decision.intent, catalog, policy)
+        if verdict.verdict != WorkshopValidationVerdict.LEGAL:
+            raise AssertionError(
+                f"step {len(decisions)}: {decision.intent!r} failed canonical "
+                f"validation as {verdict.verdict.value} ({verdict.reason})"
+            )
         if isinstance(decision.intent, WorkshopStopIntent):
             return decisions
         next_state = transition(state, decision)

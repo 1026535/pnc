@@ -56,6 +56,7 @@ BOWL_5 = 30105
 FOOD_3 = fx.FOOD_3
 FISHING_TOOL_9 = fx.FISHING_TOOL_9
 SEA_CREATURE_1 = 41101
+SEA_CREATURE_4 = 41104
 TRAP = fx.TRAP_FEED_LOCKED
 ANIMAL_1 = 50101
 ITEM_CHEST = 60001
@@ -602,6 +603,309 @@ class TestSelectGoals(unittest.TestCase):
             ),
         )
         self.assertEqual(selection.inspect_order_ref, 1)
+
+
+class TestUnresolvedContenders(unittest.TestCase):
+    """Unread or unreadable cards that could still matter must be inspected."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.catalog = load_pet_workshop_catalog()
+        cls.policy = default_policy()
+
+    def select(self, *cells, orders=(), survey=None):
+        state = solver_fx.observed_state(*cells, orders=orders, survey=survey)
+        return select_goals(state, self.catalog, self.policy)
+
+    def lasso(self, qty):
+        return reward(WorkshopOrderRewardCategory.BEAST_LASSO, qty)
+
+    def test_clipped_card_requests_contents_not_no_eligible(self) -> None:
+        # The only surveyed card is clipped — its hidden requirements could
+        # still make it a goal, so its contents are read before any stop.
+        selection = self.select(
+            orders=(
+                fx.make_order(
+                    1, {FRUIT_1: 1}, completeness=RowRecognitionStatus.CLIPPED
+                ),
+            ),
+        )
+        self.assertEqual(selection.inspect_order_ref, 1)
+        self.assertIsNone(selection.primary)
+
+    def test_clipped_card_blocks_ranking_of_known_goal(self) -> None:
+        # A ready known goal exists, but the clipped card could still
+        # outrank it — ranking waits on the read.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1, {FRUIT_1: 2}, rewards=(self.lasso(1),), ready=True
+                ),
+                fx.make_order(
+                    2, {FRUIT_1: 1}, completeness=RowRecognitionStatus.CLIPPED
+                ),
+            ),
+        )
+        self.assertEqual(selection.inspect_order_ref, 2)
+
+    def test_proven_ineligible_card_needs_no_inspection(self) -> None:
+        # A complete card with a proven three-piece total is known
+        # ineligible — it neither blocks ranking nor triggers a read.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(1, {FRUIT_1: 1, WOOD_1: 1, STATUE_5: 1}),
+                fx.make_order(
+                    2, {FRUIT_1: 2}, rewards=(self.lasso(1),), ready=True
+                ),
+            ),
+        )
+        self.assertIsNone(selection.inspect_order_ref)
+        self.assertEqual(selection.primary.order_ref, 2)
+
+    def test_clipped_card_past_piece_total_needs_no_inspection(self) -> None:
+        # A clipped card already showing more than the piece total can
+        # never become a goal — its unread tail is irrelevant.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1, {FRUIT_1: 3}, completeness=RowRecognitionStatus.CLIPPED
+                ),
+                fx.make_order(
+                    2, {FRUIT_1: 2}, rewards=(self.lasso(1),), ready=True
+                ),
+            ),
+        )
+        self.assertIsNone(selection.inspect_order_ref)
+        self.assertEqual(selection.primary.order_ref, 2)
+
+    def test_unknown_reward_category_requests_contents(self) -> None:
+        # Card 2's unread reward could be a lasso and change the primary —
+        # the known Feed card is not trusted before the read.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1,
+                    {FRUIT_1: 2},
+                    rewards=(reward(WorkshopOrderRewardCategory.FEED, 1),),
+                    ready=True,
+                ),
+                fx.make_order(
+                    2,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        reward(WorkshopOrderRewardCategory.UNKNOWN, 1),
+                        reward(WorkshopOrderRewardCategory.CHEST, 1),
+                    ),
+                    ready=True,
+                ),
+            ),
+        )
+        self.assertEqual(selection.inspect_order_ref, 2)
+
+    def test_other_reward_is_observed_not_unread(self) -> None:
+        # OTHER is a read category, not an unknown one — the card ranks as
+        # a chest goal and requests no contents inspection.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        reward(WorkshopOrderRewardCategory.OTHER, 3),
+                        reward(WorkshopOrderRewardCategory.CHEST, 1),
+                    ),
+                    ready=True,
+                ),
+            ),
+        )
+        self.assertIsNone(selection.inspect_order_ref)
+        self.assertEqual(
+            selection.primary.assessment.category,
+            WorkshopOrderRewardCategory.CHEST,
+        )
+
+    def test_third_tied_contender_unread_secondary_requests_contents(
+        self,
+    ) -> None:
+        # Three ready lasso cards tie through every earlier key; the third
+        # card's unread Feed count could outrank the leader's Feed x2 — the
+        # leader is not submitted without reading it.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.FEED, 2),
+                    ),
+                    ready=True,
+                ),
+                fx.make_order(
+                    2,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.FEED, 1),
+                    ),
+                    ready=True,
+                ),
+                fx.make_order(
+                    3,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.FEED, None),
+                    ),
+                    ready=True,
+                ),
+            ),
+        )
+        self.assertEqual(selection.inspect_order_ref, 3)
+
+    def test_policy_ordered_secondary_beats_summed_count(self) -> None:
+        # One Feed outranks three Chests when every earlier key ties — the
+        # comparison follows the policy category order, not the total.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.CHEST, 3),
+                    ),
+                    ready=True,
+                ),
+                fx.make_order(
+                    2,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.FEED, 1),
+                    ),
+                    ready=True,
+                ),
+            ),
+        )
+        self.assertEqual(selection.primary.order_ref, 2)
+
+    def test_unread_secondary_behind_decided_key_is_ignored(self) -> None:
+        # The contender's unread chest count sits behind a Feed position it
+        # already lost — it can never reorder, so nothing is inspected.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.FEED, 2),
+                    ),
+                    ready=True,
+                ),
+                fx.make_order(
+                    2,
+                    {FRUIT_1: 2},
+                    rewards=(
+                        self.lasso(1),
+                        reward(WorkshopOrderRewardCategory.FEED, 1),
+                        reward(WorkshopOrderRewardCategory.CHEST, None),
+                    ),
+                    ready=True,
+                ),
+            ),
+        )
+        self.assertIsNone(selection.inspect_order_ref)
+        self.assertEqual(selection.primary.order_ref, 1)
+
+
+class TestEstimateClasses(unittest.TestCase):
+    """Known estimates outrank unknown ones; unknowns use reward order."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.catalog = load_pet_workshop_catalog()
+        cls.policy = default_policy()
+
+    def select(self, *cells, orders=(), survey=None):
+        state = solver_fx.observed_state(*cells, orders=orders, survey=survey)
+        return select_goals(state, self.catalog, self.policy)
+
+    def lasso(self, qty):
+        return reward(WorkshopOrderRewardCategory.BEAST_LASSO, qty)
+
+    def test_infeasible_goal_never_outranks_supported_uncertain(self) -> None:
+        # No Animal producer exists: order 1's estimate is absent. The
+        # finite-producer Sea Creature order is uncertain but supported —
+        # an absent estimate is unknown, not "certain at zero".
+        selection = self.select(
+            fx.make_cell(
+                1, 1, item_id=FISHING_TOOL_9, cooldown=WorkshopCooldown.CLEAR
+            ),
+            orders=(
+                fx.make_order(1, {ANIMAL_1: 2}, rewards=(self.lasso(1),)),
+                fx.make_order(
+                    2, {SEA_CREATURE_1: 2}, rewards=(self.lasso(2),)
+                ),
+            ),
+        )
+        self.assertEqual(selection.primary.order_ref, 2)
+
+    def test_unknown_estimates_use_primary_quantity_not_ratio(self) -> None:
+        # Both goals draw on the same finite producer — neither estimate is
+        # known, so no ratio applies: the larger lasso reward wins.
+        selection = self.select(
+            fx.make_cell(
+                1, 1, item_id=FISHING_TOOL_9, cooldown=WorkshopCooldown.CLEAR
+            ),
+            orders=(
+                fx.make_order(
+                    1, {SEA_CREATURE_1: 2}, rewards=(self.lasso(1),)
+                ),
+                fx.make_order(
+                    2, {SEA_CREATURE_4: 2}, rewards=(self.lasso(2),)
+                ),
+            ),
+        )
+        self.assertEqual(selection.primary.order_ref, 2)
+
+    def test_known_estimate_ranks_above_unknown(self) -> None:
+        # The Tree-served Wood order carries a certain estimate; the
+        # finite-producer Sea Creature order is uncertain. The known
+        # estimate ranks first even against the larger lasso reward.
+        selection = self.select(
+            fx.make_cell(1, 1, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+            fx.make_cell(
+                1, 2, item_id=FISHING_TOOL_9, cooldown=WorkshopCooldown.CLEAR
+            ),
+            fx.make_cell(1, 3, item_id=FRUIT_1),
+            orders=(
+                fx.make_order(
+                    1, {WOOD_10: 1, FRUIT_1: 1}, rewards=(self.lasso(1),)
+                ),
+                fx.make_order(
+                    2, {SEA_CREATURE_1: 2}, rewards=(self.lasso(2),)
+                ),
+            ),
+        )
+        self.assertEqual(selection.primary.order_ref, 1)
 
 
 class TestGoalContext(unittest.TestCase):

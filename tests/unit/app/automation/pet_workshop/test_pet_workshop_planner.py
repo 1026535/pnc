@@ -22,6 +22,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopInspectKind,
     WorkshopItemStatus,
     WorkshopMergeIntent,
+    WorkshopOccupancy,
     WorkshopOrderReward,
     WorkshopOrderRewardCategory,
     WorkshopOrderSurvey,
@@ -41,6 +42,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopValidationVerdict,
     WorkshopWaitIntent,
 )
+from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.pet_workshop_catalog import load_pet_workshop_catalog
 from tests.support.pnc import pet_workshop as fx
 from tests.support.pnc import pet_workshop_solver as solver_fx
@@ -182,6 +184,28 @@ class TestSurveyAndInspection(PlannerCase):
         self.assertIsInstance(decision.intent, WorkshopInspectIntent)
         self.assertEqual(decision.intent.need, WorkshopInspectKind.ORDER_CONTENTS)
         self.assertEqual(decision.intent.order_ref, 1)
+
+    def test_clipped_card_inspects_contents_not_stop(self) -> None:
+        # The surveyed strip's only card is clipped — the planner requests
+        # ORDER_CONTENTS rather than stopping on no eligible goal.
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+            orders=(
+                fx.make_order(
+                    1,
+                    {FRUIT_1: 1},
+                    completeness=RowRecognitionStatus.CLIPPED,
+                ),
+            ),
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopInspectIntent)
+        self.assertEqual(decision.intent.need, WorkshopInspectKind.ORDER_CONTENTS)
+        self.assertEqual(decision.intent.order_ref, 1)
+        verdict = validate_intent(
+            state, decision.intent, self.catalog, self.policy
+        )
+        self.assertEqual(verdict.verdict, WorkshopValidationVerdict.LEGAL)
 
     def test_satisfied_unready_order_re_reads_card(self) -> None:
         # Stock satisfies the order but the ready control was never read.
@@ -407,6 +431,58 @@ class TestProduction(PlannerCase):
         decision = self.plan(state)
         self.assertIsInstance(decision.intent, WorkshopInspectIntent)
 
+    def test_unknown_production_mode_inspects_not_produces(self) -> None:
+        # A selected clear producer with energy and free cells still cannot
+        # produce while the production mode is unread — the canonical
+        # validator would return UNCERTAIN, so the planner requests the read.
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+            orders=(lasso_order(1, {FRUIT_1: 2}),),
+            selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+            production_mode=WorkshopProductionMode.UNKNOWN,
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopInspectIntent)
+        self.assertEqual(decision.intent.need, WorkshopInspectKind.BOARD)
+        verdict = validate_intent(
+            state, decision.intent, self.catalog, self.policy
+        )
+        self.assertEqual(verdict.verdict, WorkshopValidationVerdict.LEGAL)
+
+    def test_unread_occupancy_inspects_not_produces(self) -> None:
+        # Every cell outside the producer has unobserved occupancy — free
+        # production space is unconfirmed, so the planner reads a cell
+        # instead of returning a Produce the validator cannot confirm.
+        cells = [
+            fx.make_cell(1, 1, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR)
+        ]
+        board = fx.board_layout()
+        for row in range(1, board.rows + 1):
+            for column in range(1, board.columns + 1):
+                if board.cell_id(row, column) == 1:
+                    continue
+                cells.append(
+                    fx.make_cell(
+                        row,
+                        column,
+                        occupancy=WorkshopOccupancy.UNKNOWN,
+                        item_id=None,
+                        item_status=None,
+                    )
+                )
+        state = solver_fx.observed_state(
+            *cells,
+            orders=(lasso_order(1, {FRUIT_1: 2}),),
+            selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopInspectIntent)
+        self.assertEqual(decision.intent.need, WorkshopInspectKind.CELL_STATE)
+        verdict = validate_intent(
+            state, decision.intent, self.catalog, self.policy
+        )
+        self.assertEqual(verdict.verdict, WorkshopValidationVerdict.LEGAL)
+
     def test_finite_remaining_uses_still_produce(self) -> None:
         # Fishing Tool 9 is a finite-use producer: the unknown remaining-use
         # count affects the estimate's confidence, never the legality.
@@ -421,6 +497,32 @@ class TestProduction(PlannerCase):
         decision = self.plan(state)
         self.assertIsInstance(decision.intent, WorkshopProduceIntent)
         self.assertEqual(decision.intent.producer_item_id, FISHING_TOOL_9)
+
+    def test_infeasible_goal_never_outranks_finite_producer(self) -> None:
+        # Order 1 wants Animals — nothing produces them, so its estimate is
+        # absent, not "certain at zero". The supported finite-producer Sea
+        # Creature order ranks first and the tool is selected for work.
+        state = solver_fx.observed_state(
+            fx.make_cell(
+                1, 1, item_id=FISHING_TOOL_9, cooldown=WorkshopCooldown.CLEAR
+            ),
+            orders=(
+                lasso_order(1, {ANIMAL_1: 2}),
+                fx.make_order(
+                    2,
+                    {SEA_CREATURE_1: 2},
+                    rewards=(
+                        WorkshopOrderReward(
+                            WorkshopOrderRewardCategory.BEAST_LASSO, 2
+                        ),
+                    ),
+                ),
+            ),
+        )
+        decision = self.plan(state)
+        self.assertEqual(decision.goal_order_ref, 2)
+        self.assertIsInstance(decision.intent, WorkshopSelectIntent)
+        self.assertEqual(decision.intent.cell_id, 1)
 
 
 class TestFullBoardAndStop(PlannerCase):
@@ -446,6 +548,39 @@ class TestFullBoardAndStop(PlannerCase):
         decision = self.plan(state)
         self.assertIsInstance(decision.intent, WorkshopMergeIntent)
         self.assertEqual(decision.intent.item_id, FRUIT_1)
+
+    def test_full_board_skips_activation_with_no_successor(self) -> None:
+        # An inactive copy of a terminal item can never activate — recovery
+        # must not propose the dead merge and the validator must not count
+        # it as space-freeing work that blocks recycling.
+        board = fx.board_layout()
+        filler = [
+            item.item_id
+            for item in self.catalog.items
+            if item.item_id != FRUIT_5
+        ]
+        cells = [
+            fx.make_cell(1, 1, item_id=FRUIT_5),
+            fx.make_cell(
+                1, 2, item_id=FRUIT_5, item_status=WorkshopItemStatus.INACTIVE
+            ),
+        ]
+        for index in range(board.rows * board.columns - 2):
+            row = 1 + (index + 2) // board.columns
+            column = 1 + (index + 2) % board.columns
+            cells.append(fx.make_cell(row, column, item_id=filler[index]))
+        state = solver_fx.observed_state(
+            *cells, orders=(lasso_order(1, {FRUIT_1: 2}),)
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopRecycleIntent)
+        self.assertIn(
+            decision.intent.item_id, self.policy.recyclable_item_ids
+        )
+        verdict = validate_intent(
+            state, decision.intent, self.catalog, self.policy
+        )
+        self.assertEqual(verdict.verdict, WorkshopValidationVerdict.LEGAL)
 
     def test_full_board_with_no_recovery_stops(self) -> None:
         # Unique non-mergeable pieces; both allowlisted terminals are

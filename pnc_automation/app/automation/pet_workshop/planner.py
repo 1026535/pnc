@@ -252,11 +252,20 @@ def _decision(ctx: GoalContext, intent: WorkshopIntent, summary: str) -> Worksho
 
 
 def _cell_inspect(board: BoardFacts) -> WorkshopInspectIntent | None:
-    """Returns the most relevant board-level inspection, if any is needed."""
+    """Returns the most relevant board-level inspection, if any is needed.
+
+    Covers every cell-level unknown the board view tracks: unread piece
+    identity, unread access/occupancy (the cells that leave ``board_full``
+    undetermined), and positions with no observation at all.
+    """
 
     if board.unread_piece_cells:
         return WorkshopInspectIntent(
             WorkshopInspectKind.CELL_STATE, cell_id=min(board.unread_piece_cells)
+        )
+    if board.unknown_state_cells:
+        return WorkshopInspectIntent(
+            WorkshopInspectKind.CELL_STATE, cell_id=min(board.unknown_state_cells)
         )
     if board.unobserved_cell_ids:
         return WorkshopInspectIntent(WorkshopInspectKind.BOARD)
@@ -408,7 +417,7 @@ def _space_recovery(
         )
     for item_id in board.inactive_items:
         normal = board.normal_cells(item_id)
-        if not normal:
+        if not normal or chains.successor(item_id) is None:
             continue
         if activate_reservation_verdict(ctx, board, chains, item_id) is not None:
             continue
@@ -534,6 +543,12 @@ def _production_step(
         inspect = _cell_inspect(board)
         if inspect is not None:
             return inspect, "usable free space for production is unconfirmed", False
+    if state.production_mode == WorkshopProductionMode.UNKNOWN:
+        return (
+            WorkshopInspectIntent(WorkshopInspectKind.BOARD),
+            f"production mode is unread; {label} cannot be produced from yet",
+            False,
+        )
     if state.selection.kind == WorkshopSelectionKind.UNKNOWN:
         return (
             WorkshopInspectIntent(WorkshopInspectKind.BOARD),

@@ -53,8 +53,17 @@ class OrderAssessment:
     ``policy.order_piece_total``. ``category`` is the best policy-ranked
     reward category present; ``primary_quantity`` is that reward's observed
     count, or ``None`` when the card read left it unknown — ranking must not
-    fabricate it. ``secondary_quantity`` sums the observed counts of the
-    lower-priority categories on the same card.
+    fabricate it. ``secondary_quantities`` carries the lower-priority
+    categories' observed counts in policy order (absent categories read as
+    0, unread counts as ``None``); ``secondary_quantity`` keeps their summed
+    total for diagnostics.
+
+    ``unresolved`` marks cards whose contents are not provably read — an
+    incomplete recognition status with no proven disqualifier — and
+    ``unknown_reward`` marks eligible cards carrying an UNKNOWN reward
+    category. Both need an ORDER_CONTENTS read before the ranking is
+    trusted; known ineligible cards (proven totals, unknown item ids) never
+    trigger it.
     """
 
     order: WorkshopOrder
@@ -65,6 +74,9 @@ class OrderAssessment:
     category_rank: int | None
     primary_quantity: int | None
     secondary_quantity: int | None
+    secondary_quantities: tuple[int | None, ...] = ()
+    unresolved: bool = False
+    unknown_reward: bool = False
 
     @property
     def is_goal(self) -> bool:
@@ -74,11 +86,36 @@ class OrderAssessment:
 
     @property
     def ranking_blocked(self) -> bool:
-        """Returns whether ranking needs facts the card did not provide."""
+        """Returns whether ranking needs facts the card did not provide.
 
-        return self.is_goal and (
-            self.primary_quantity is None or self.secondary_quantity is None
+        Whether the unread facts actually block selection is decided against
+        the other contenders — an unread count matters only where it could
+        change the applicable ranking.
+        """
+
+        return (
+            self.unresolved
+            or self.unknown_reward
+            or (
+                self.is_goal
+                and (
+                    self.primary_quantity is None
+                    or any(q is None for q in self.secondary_quantities)
+                )
+            )
         )
+
+
+#: Recognition statuses whose card contents are not provably read.
+#: ``NO_ACTION`` is a resolved non-order row, not an unresolved contender.
+_UNRESOLVED_COMPLETENESS = frozenset(
+    {
+        RowRecognitionStatus.NOT_EVALUATED,
+        RowRecognitionStatus.CLIPPED,
+        RowRecognitionStatus.UNREADABLE,
+        RowRecognitionStatus.AMBIGUOUS,
+    }
+)
 
 
 def assess_order(
@@ -89,25 +126,40 @@ def assess_order(
 ) -> OrderAssessment:
     """Classifies one surveyed order under the policy.
 
-    Incomplete cards, unknown item ids and totals other than the configured
-    piece total are ineligible — they are excluded from goals, never
-    submitted, and do not trigger speculative inspection.
+    Complete cards with unknown item ids or a proven non-configured piece
+    total are known ineligible — excluded from goals, never submitted, and
+    never inspected. Incomplete cards that could still be a policy goal are
+    ``unresolved``: the selection owner requests their contents before
+    trusting any ranking they could change.
     """
 
     reason = ""
+    unknown_items = any(
+        catalog.item(item_id) is None for item_id in order.requirements
+    )
     if order.completeness != RowRecognitionStatus.COMPLETE:
         reason = f"card completeness is {order.completeness.value}"
-    elif any(catalog.item(item_id) is None for item_id in order.requirements):
+    elif unknown_items:
         reason = "requirement uses an unknown catalog item"
     elif order.total_pieces != policy.order_piece_total:
         reason = f"piece total {order.total_pieces} != {policy.order_piece_total}"
     eligible = not reason
+    unresolved = (
+        order.completeness in _UNRESOLVED_COMPLETENESS
+        and order.total_pieces <= policy.order_piece_total
+        and not unknown_items
+    )
     category: WorkshopOrderRewardCategory | None = None
     category_rank: int | None = None
     primary_quantity: int | None = None
     secondary_quantity: int | None = None
+    secondary_quantities: tuple[int | None, ...] = ()
+    unknown_reward = False
     if eligible:
         by_category = {reward.category: reward for reward in order.rewards}
+        unknown_reward = (
+            WorkshopOrderRewardCategory.UNKNOWN in by_category
+        )
         for rank, candidate in enumerate(policy.reward_priority):
             if candidate in by_category:
                 category = candidate
@@ -115,14 +167,16 @@ def assess_order(
                 primary_quantity = by_category[candidate].quantity
                 break
         if category is not None:
-            secondary = [
-                reward.quantity
-                for reward in order.rewards
-                if reward.category in policy.reward_priority
-                and policy.reward_priority.index(reward.category) > category_rank
-            ]
+            secondary_quantities = tuple(
+                by_category[candidate].quantity
+                if candidate in by_category
+                else 0
+                for candidate in policy.reward_priority[category_rank + 1 :]
+            )
             secondary_quantity = (
-                None if any(qty is None for qty in secondary) else sum(secondary)
+                None
+                if any(qty is None for qty in secondary_quantities)
+                else sum(secondary_quantities)
             )
     return OrderAssessment(
         order=order,
@@ -133,4 +187,7 @@ def assess_order(
         category_rank=category_rank,
         primary_quantity=primary_quantity,
         secondary_quantity=secondary_quantity,
+        secondary_quantities=secondary_quantities,
+        unresolved=unresolved,
+        unknown_reward=unknown_reward,
     )

@@ -198,6 +198,24 @@ class BoardFacts:
         return self._unread_pieces
 
     @property
+    def unknown_state_cells(self) -> tuple[int, ...]:
+        """Returns observed cells whose access or occupancy was never read.
+
+        These are the cells that leave ``board_full`` undetermined — a cell
+        with unread access cannot be confirmed usable, and a usable cell
+        with unread occupancy is neither confirmed empty nor occupied.
+        """
+
+        return tuple(
+            sorted(
+                cell.cell_id
+                for cell in self.state.cells
+                if cell.access == WorkshopCellAccess.UNKNOWN
+                or cell.occupancy == WorkshopOccupancy.UNKNOWN
+            )
+        )
+
+    @property
     def unobserved_cell_ids(self) -> frozenset[int]:
         """Returns board positions with no observation this frame."""
 

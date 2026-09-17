@@ -277,6 +277,8 @@ def recycle_is_blocked(
     for item_id in board.inactive_items:
         if board.normal_count(item_id) <= 0:
             continue
+        if chains.successor(item_id) is None:
+            continue
         if activate_reservation_verdict(ctx, board, chains, item_id) is None:
             return f"legal activation on item {item_id} still frees space"
     for item_id in board.feed_locked_items:
