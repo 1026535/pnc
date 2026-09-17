@@ -484,8 +484,12 @@ def run(args):
             state["initially_dirty"] = bool(before["status"])
             if state["status"] == "failed" and not state.get("error"):
                 record = turn_dir / "acp-error.json"
-                if record.is_file():
-                    state["error"] = "Devin ACP failure: " + str(read_json(record).get("error", ""))[:600]
+                try:
+                    detail = read_json(record) if record.is_file() else None
+                except (OSError, ValueError):
+                    detail = None  # A damaged record must not hide the exit diagnosis.
+                if detail:
+                    state["error"] = "Devin ACP failure: " + str(detail.get("error", ""))[:600]
                 else:
                     state["error"] = f"Worker exited {state.get('exit_code')} without a recorded diagnosis."
                 stderr_tail = tail(turn_dir / "stderr.log", 2048)

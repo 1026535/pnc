@@ -100,7 +100,7 @@ def record_failure(turn_dir, failure):
         record["acp_error"] = detail
     try:
         write_json(Path(turn_dir) / "acp-error.json", record)
-    except OSError:
+    except Exception:
         pass  # Diagnosis must never mask the original failure.
 
 
