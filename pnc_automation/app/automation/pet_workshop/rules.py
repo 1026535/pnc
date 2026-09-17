@@ -11,9 +11,11 @@ place and illegal in the other.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Mapping
 
 from pnc_automation.app.automation.pet_workshop.board import BoardFacts, MergeChains
+from pnc_automation.app.automation.pet_workshop.effort import useful_units_per_draw
 from pnc_automation.app.automation.pet_workshop.goals import GoalSelection, select_goals
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopPolicy,
@@ -21,7 +23,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopSurveyCoverage,
     WorkshopSurveyFreshness,
 )
-from pnc_automation.app.pnc.pet_workshop_catalog import PetWorkshopCatalog
+from pnc_automation.app.pnc.pet_workshop_catalog import PetWorkshopCatalog, PetWorkshopProducer
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +155,23 @@ def produce_reservation_verdict(
         if board.normal_count(item_id) - 1 < ctx.protected_exact.get(item_id, 0):
             return f"finite production could consume required {item_id} pieces"
     return None
+
+
+def production_progress(
+    ctx: GoalContext, producer: PetWorkshopProducer, chains: MergeChains,
+    catalog: PetWorkshopCatalog,
+) -> Fraction:
+    """Returns expected useful units for this producer against the current recipe.
+
+    Planning and pre-gesture revalidation share this calculation. A changed
+    survey or completed demand cannot leave an old production action useful
+    merely because its selected generator is still mechanically available.
+    """
+
+    return sum(
+        (useful_units_per_draw(producer, target, chains, catalog)
+         for target in ctx.produce_targets), Fraction(0),
+    )
 
 
 def merge_reservation_verdict(

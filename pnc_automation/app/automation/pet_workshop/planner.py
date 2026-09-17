@@ -22,8 +22,8 @@ from pnc_automation.app.automation.pet_workshop.rules import (
     goal_context,
     merge_reservation_verdict,
     produce_reservation_verdict,
+    production_progress,
 )
-from pnc_automation.app.automation.pet_workshop.effort import useful_units_per_draw
 from pnc_automation.app.automation.pet_workshop.validation import validate_intent
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopActivateIntent,
@@ -494,15 +494,11 @@ def _production_step(
     """
 
     cost = catalog.activity.production_energy_cost
-    targets = ctx.produce_targets
     scored: list[tuple[Fraction, int, int, WorkshopCooldown]] = []
     for producer in catalog.producers:
         if produce_reservation_verdict(ctx, board, catalog, producer.item_id) is not None:
             continue
-        useful = sum(
-            useful_units_per_draw(producer, target, chains, catalog)
-            for target in targets
-        )
+        useful = production_progress(ctx, producer, chains, catalog)
         if useful <= 0:
             continue
         for cell_id in board.normal_cells(producer.item_id):

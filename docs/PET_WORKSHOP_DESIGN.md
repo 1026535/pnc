@@ -289,6 +289,10 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
 - `validation.py` — the canonical `validate_intent`, used by the planner
   and reused verbatim for pre-execution revalidation; `UNCERTAIN` whenever a
   required fact was never observed.
+  Production also requires a current eligible goal and positive contribution
+  to its remaining recipe, using the same calculation as the planner. A
+  removed order, completed demand or changed chain invalidates an old
+  production intent even when its generator remains selected and available.
 - `planner.py` — `plan_next` returns exactly one `WorkshopDecision`:
   terminal evidence first (zero energy, excluded surface, auto-fusion
   production mode), then survey/inspection needs, ready order submissions,

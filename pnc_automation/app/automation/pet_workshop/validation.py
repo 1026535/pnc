@@ -19,6 +19,7 @@ from pnc_automation.app.automation.pet_workshop.rules import (
     goal_context,
     merge_reservation_verdict,
     produce_reservation_verdict,
+    production_progress,
     recycle_is_blocked,
     submit_reservation_verdict,
 )
@@ -140,6 +141,7 @@ def _validate_produce(
     board: BoardFacts,
     catalog: PetWorkshopCatalog,
     ctx: GoalContext,
+    chains: MergeChains,
     intent: WorkshopProduceIntent,
 ) -> WorkshopIntentValidation:
     verdict = _mutation_verdict(state)
@@ -179,6 +181,12 @@ def _validate_produce(
         return _uncertain("energy reading is unknown")
     if state.energy.current < catalog.activity.production_energy_cost:
         return _illegal("insufficient observed energy for one production")
+    if not ctx.known:
+        return _uncertain("current goal and production recipe are unresolved")
+    if ctx.selection is None or ctx.selection.primary is None:
+        return _illegal("production requires a current eligible goal")
+    if production_progress(ctx, producer, chains, catalog) <= 0:
+        return _illegal("producer does not serve the current remaining recipe")
     if board.usable_empty_cells:
         return _OK
     if board.board_full is True:
@@ -432,7 +440,7 @@ def validate_intent(
     if isinstance(intent, WorkshopSelectIntent):
         return _validate_select(state, board, intent)
     if isinstance(intent, WorkshopProduceIntent):
-        return _validate_produce(state, board, catalog, ctx, intent)
+        return _validate_produce(state, board, catalog, ctx, chains, intent)
     if isinstance(intent, WorkshopMergeIntent):
         return _validate_merge(state, board, chains, ctx, intent)
     if isinstance(intent, WorkshopActivateIntent):

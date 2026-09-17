@@ -115,6 +115,7 @@ class TestProduceValidation(ValidationCase):
         return solver_fx.observed_state(
             fx.make_cell(1, 1, item_id=TREE_4, **cell_kw),
             selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, cell_id=1),
+            orders=(chest_order(1, {FRUIT_1: 2}, ready=False),),
         )
 
     def test_selected_clear_producer_with_space(self) -> None:
@@ -122,6 +123,46 @@ class TestProduceValidation(ValidationCase):
         self.assertEqual(
             self.verdict(state, WorkshopProduceIntent(1, TREE_4)), LEGAL
         )
+
+    def test_old_production_is_rejected_after_the_goal_disappears(self) -> None:
+        """A fresh empty survey invalidates an otherwise unchanged production intent."""
+
+        state = self.selected_state(cooldown=WorkshopCooldown.CLEAR)
+        state = solver_fx.update_state(state, order_survey=WorkshopOrderSurvey(
+            coverage=WorkshopSurveyCoverage.COMPLETE,
+            freshness=WorkshopSurveyFreshness.CURRENT,
+        ))
+        self.assertEqual(self.verdict(state, WorkshopProduceIntent(1, TREE_4)), ILLEGAL)
+
+    def test_old_production_is_rejected_after_the_required_chain_changes(self) -> None:
+        """A Tree cannot keep producing when the current goal requires only animals."""
+
+        state = self.selected_state(cooldown=WorkshopCooldown.CLEAR)
+        state = solver_fx.update_state(state, order_survey=WorkshopOrderSurvey(
+            orders=(chest_order(2, {ANIMAL_1: 2}, ready=False),),
+            coverage=WorkshopSurveyCoverage.COMPLETE,
+            freshness=WorkshopSurveyFreshness.CURRENT,
+        ))
+        self.assertEqual(self.verdict(state, WorkshopProduceIntent(1, TREE_4)), ILLEGAL)
+
+    def test_production_needs_a_complete_current_goal_survey(self) -> None:
+        """A mechanically available generator does not resolve missing policy facts."""
+
+        state = self.selected_state(cooldown=WorkshopCooldown.CLEAR)
+        state = solver_fx.update_state(state, order_survey=WorkshopOrderSurvey(
+            orders=state.order_survey.orders,
+            coverage=WorkshopSurveyCoverage.PARTIAL,
+            freshness=WorkshopSurveyFreshness.CURRENT,
+        ))
+        self.assertEqual(self.verdict(state, WorkshopProduceIntent(1, TREE_4)), UNCERTAIN)
+
+    def test_stock_satisfied_goal_no_longer_allows_production(self) -> None:
+        """Observed completion removes the energy-spending need before submission."""
+
+        state = self.selected_state(cooldown=WorkshopCooldown.CLEAR)
+        state = solver_fx.place_item(state, 2, FRUIT_1)
+        state = solver_fx.place_item(state, 3, FRUIT_1)
+        self.assertEqual(self.verdict(state, WorkshopProduceIntent(1, TREE_4)), ILLEGAL)
 
     def test_produce_unselected_producer(self) -> None:
         state = solver_fx.observed_state(
