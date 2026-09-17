@@ -364,6 +364,9 @@ selectors:
   - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   - PNC_CASTLE_SELECTION
+  - PNC_ILLUSORY_BEAST_MANOR
+  - PNC_PET_WORKSHOP
+  - PNC_PET_WORKSHOP_STORAGE
   status: screenshot_seeded
   detection_kind: guarded_geometry
   relative_bounds:
@@ -2556,6 +2559,9 @@ selectors:
   - PNC_POPUP
   - PNC_BUILD_QUEUE
   - PNC_ALLIANCE_MEMBER_MANAGE_POPUP
+  - PNC_PET_WORKSHOP_ITEM_DETAIL
+  - PNC_PET_WORKSHOP_ORDER_DETAIL
+  - PNC_PET_WORKSHOP_HELP
   status: planned
   detection_kind: semantic
   materialize_relative_bounds: false
@@ -3888,6 +3894,110 @@ selectors:
   detection_kind: semantic
   interaction_kind: action
   materialize_relative_bounds: false
+- id: PNC_HOME_ILLUSORY_BEAST_MANOR_BUTTON
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: semantic
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_ILLUSORY_BEAST_MANOR
+      verification_selectors:
+      - PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON
+      notes:
+      - 'Reviewed capture pair: home city frame 006 to manor hub frame 007 in .local-data/pw02 evidence.'
+  materialize_relative_bounds: false
+  notes:
+  - 'Camera-relative home-city building; measured bounds are owned by the home-city surface evidence, not this selector.'
+- id: PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON
+  screens:
+  - PNC_ILLUSORY_BEAST_MANOR
+  status: planned
+  detection_kind: semantic
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PET_WORKSHOP
+      verification_selectors:
+      - PNC_PET_WORKSHOP_HELP_BUTTON
+      - PNC_PET_WORKSHOP_STORAGE_BUTTON
+      notes:
+      - 'Reviewed capture pair: manor frame 008 to workshop board frame 009 in .local-data/pw02 evidence.'
+  materialize_relative_bounds: false
+  notes:
+  - Published only when the reviewed Pet Workshop building anchor is visually matched on the Manor hub.
+- id: PNC_PET_WORKSHOP_HELP_BUTTON
+  screens:
+  - PNC_PET_WORKSHOP
+  status: planned
+  detection_kind: semantic
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PET_WORKSHOP_HELP
+      verification_selectors:
+      - PNC_POPUP_CLOSE_BUTTON
+      notes:
+      - 'Reviewed capture pair: workshop info button tap to the Tip rules dialog fixture pet_workshop_help.png.'
+  materialize_relative_bounds: false
+  notes:
+  - Published only when the reviewed board help glyph is visually matched in the top-right header.
+- id: PNC_PET_WORKSHOP_STORAGE_BUTTON
+  screens:
+  - PNC_PET_WORKSHOP
+  status: planned
+  detection_kind: semantic
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PET_WORKSHOP_STORAGE
+      verification_selectors:
+      - PNC_BACK_BUTTON_TOP_LEFT
+      notes:
+      - 'Reviewed capture pair: workshop layers icon tap to the storage drawer fixture pet_workshop_storage.png.'
+  materialize_relative_bounds: false
+  notes:
+  - Published only when the reviewed warehouse box anchor is visually matched in the bottom-left board bar.
+- id: PNC_PET_WORKSHOP_NEXT_BOARD_BUTTON
+  screens:
+  - PNC_PET_WORKSHOP
+  status: planned
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Published only when the reviewed next-board glyph is visually matched; locked in all captured boards so no navigation outcome is claimed.
+- id: PNC_PET_WORKSHOP_INSPECT_BUTTON
+  screens:
+  - PNC_PET_WORKSHOP
+  status: planned
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Published only while a board cell is selected and the reviewed info badge is visually matched.
+- id: PNC_PET_WORKSHOP_RECYCLE_BUTTON
+  screens:
+  - PNC_PET_WORKSHOP
+  status: planned
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Published only while a board cell is selected and the reviewed recycle control is visually matched; recycling is irreversible and never auto-clicked.
 surfaces:
 - id: PNC_WORLD_MAP_SURFACE
   surface_type: world_map

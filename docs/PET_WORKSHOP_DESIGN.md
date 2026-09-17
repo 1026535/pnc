@@ -11,7 +11,7 @@ requirements and sequencing.
 | Catalog data + typed loader | `pnc_automation/app/pnc/pet_workshop_catalog.py` + `pnc_automation/app/pnc/data/pet_workshop/catalog.json` | Implemented (PW01 catalog slice, 2026-09-16) |
 | Shared state/view/intent models, policy + interface contracts | `pnc_automation/app/pnc/domain/pet_workshop.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Observation integration (`ObservationAdditions.workshop`, both publishers) | `Observation`, `observation_builder.py`, `navigation_perception.py`, `observation_provenance.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
-| Feature parser + measured controls | `pnc_automation/app/pnc/vision/` (planned) | Pending PW02 |
+| Feature parser + measured controls | `pnc_automation/app/pnc/vision/pet_workshop.py` | Candidate under PW02 review (2026-09-17) |
 | Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` | Implemented (PW03/PW04 solver slice, 2026-09-16) |
 | Offline logical transition simulation | `pnc_automation/app/automation/pet_workshop/simulate.py` | Development/testing adapter; no live input |
 | Mutation authority, durable invocation journal, shared run-boundary/authority factories | `pnc_automation/app/pnc/domain/feature_actions.py`, `pnc_automation/app/automation/engine/core_daily_mutation.py` (Workshop scope), `pnc_automation/app/pnc/persistence/daily_run_journal_store.py` (schema v2), `pnc_automation/app/automation/daily_maintenance/invocation_factory.py`, `pnc_automation/app/automation/pet_workshop/authority.py` | Implemented (PW06 authority slice) |
@@ -228,12 +228,87 @@ deadlines, or remaining-use counts to the shared contract; never duplicate
 catalog knowledge (successor graphs, drop weights, feed ingredients) inside
 the state model — read it through `PetWorkshopCatalog`.
 
-## Recognition — pending
+## Recognition
 
-Owned by PW02: one feature parser under `app/pnc/vision/` producing
-`ObservationAdditions.workshop`, measured controls bound to
-`observation_provenance`, publication through `ObservationBuilder`
-and `NavigationPerception`.
+Implemented by PW02: `vision/pet_workshop.py`
+(`WorkshopContentProducer.additions_for_screen`) is the single feature
+parser. `PncObservationEnricher` dispatches to it by `(screen_type,
+layout_id)` and `ObservationBuilder` / `NavigationPerception` publish the
+result identically through `bind_workshop_observation`.
+
+### Surfaces and profiles
+
+| Screen | Layout | `WorkshopSurfaceKind` | Evidence |
+|---|---|---|---|
+| `PNC_PET_WORKSHOP` | `pet_workshop_board` | `BOARD` | At-rest LV8 + LV6 + two selected-cell fixtures |
+| `PNC_PET_WORKSHOP_ITEM_DETAIL` | `pet_workshop_item_detail` | `ITEM_DETAIL` | Reviewed "Fruit 4" chain dialog |
+| `PNC_PET_WORKSHOP_ORDER_DETAIL` | `pet_workshop_order_detail` | `ORDER_DETAIL` | Reviewed LV6 card-1 dialog |
+| `PNC_PET_WORKSHOP_HELP` | `pet_workshop_help` | `HELP` | Reviewed Tip rules dialog |
+| `PNC_PET_WORKSHOP_STORAGE` | `pet_workshop_storage` | `EXCLUDED_MODAL` | Reviewed Get-Slots bottom sheet |
+| `PNC_ILLUSORY_BEAST_MANOR` | `pet_workshop_manor` | (none) | Manor is a navigation surface, not a Workshop surface; the producer returns `None` so no `workshop` content publishes |
+
+Screen identity comes only from independent visual-anchor profile matching;
+a screen request is never treated as proof.
+
+### Board reading
+
+The 540x960 reference frame carries a measured 7x9 cell grid. Each cell
+classifies as `USABLE`/`LOCKED` x `EMPTY`/`OCCUPIED`/`UNKNOWN`:
+
+- Badge medallion cells match the catalog's `unlock_level > 0` gates and read
+  `LOCKED`/`EMPTY`.
+- Grass-cover cells match the catalog's seeded `unlockType=2` covers and read
+  `LOCKED`/`UNKNOWN` (contents hidden).
+- Recognized pieces map to catalog item ids; unmodeled pieces (bread, feed
+  bags, bolt producers) read `OCCUPIED` with `item_id=None` and
+  `item_status=UNKNOWN` rather than guessing.
+- `cooldown` is not observed on any fixture and stays `UNKNOWN`.
+
+Header OCR reads `workshop_level` (`Lv.N`), `workshop_exp` (`N/M` gauge,
+current value) and `energy` (`N/M` pill, current/capacity); an absent OCR
+backend leaves all three unknown.
+
+### Orders
+
+Three fixed card slots sit at the top of the board. Each card reads its
+requirement icons and per-icon counts (nearest numeric token inside the card
+band), reward icons plus counts, the centered portrait bounds, and the green
+Complete submit control. `ready=True` only when that control is visually
+measured; a card clipped by the frame edge reads `CLIPPED` with the visible
+facts it retains and `ready=None`; a fully clipped card keeps empty
+requirements/rewards. The order-detail modal reads the same requirement pair
+and reward icons with `source="order_detail"` and no submit control
+(`ready=False`). Unexposed server orders are never synthesized.
+
+### Measured controls
+
+Profile control anchors publish `visible_elements` only on a visual match:
+back chevron (board/manor/storage), board help glyph, storage warehouse,
+locked next-board `>>`, and the selection-bar inspect `!` plus recycle trash
+pair. `WorkshopView` carries the measured bounds: `cell_bounds`,
+`order_views` (portrait + submit), `detail_control_bounds`,
+`close_control_bounds`, `recycle_control_bounds`, all `None` when unmeasured.
+Recycle is item-dependent (Treasure shows it; an inactive Bowl does not) and
+is never inferred. Storage has no close control — the sheet dismisses on an
+outside tap.
+
+### Route evidence (2026-09-16 exploration frames)
+
+| Route | Source profile -> destination | Measured control | Artifact pair | Confidence |
+|---|---|---|---|---|
+| Home -> Manor | home city -> `pet_workshop_manor` | `PNC_HOME_ILLUSORY_BEAST_MANOR_BUTTON` (semantic, camera-relative building) | frame 006 -> 007 | High |
+| Manor -> Workshop | `pet_workshop_manor` -> `pet_workshop_board` | `PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON` (measured building anchor) | frame 008 -> 009 | High |
+| Workshop -> Manor | `pet_workshop_board` -> `pet_workshop_manor` | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 002 -> 003 | High |
+| Manor -> Home | `pet_workshop_manor` -> home city | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 004 -> 005 | High |
+
+### Evidence gaps
+
+No captured frames cover feeding a generator, activation, producer
+depletion, recycle confirmation, level-up result, or order submission
+receipt; those transitions stay unimplemented and their states read unknown
+rather than inferred. Order quantities depend on OCR; board geometry is
+540x960-measured and native RGBA frames are normalized by the matcher, not
+resampled by the parser.
 
 ## Solver and policy
 

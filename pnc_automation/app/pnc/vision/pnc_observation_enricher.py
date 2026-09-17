@@ -67,6 +67,7 @@ from pnc_automation.app.pnc.vision.research import ResearchContentProducer
 from pnc_automation.app.pnc.vision.hero_recruit_result import HeroRecruitResultProducer
 from pnc_automation.app.pnc.vision.trial_challenge import TrialContentProducer
 from pnc_automation.app.pnc.vision.bag_items import BagItemContentProducer
+from pnc_automation.app.pnc.vision.pet_workshop import WorkshopContentProducer
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionFailurePolicy,
     OcrRegionRead,
@@ -1725,6 +1726,7 @@ class PncObservationEnricher:
     trial_producer: TrialContentProducer = field(default_factory=TrialContentProducer)
     bag_item_producer: BagItemContentProducer = field(default_factory=BagItemContentProducer)
     building_producer: BuildingContentProducer = field(default_factory=BuildingContentProducer)
+    workshop_producer: WorkshopContentProducer = field(default_factory=WorkshopContentProducer)
     template_matcher: OpenCvTemplateMatcher | None = None
 
     def content_labels(
@@ -2109,6 +2111,14 @@ class PncObservationEnricher:
         )
         if trial_additions is not None:
             return trial_additions
+        workshop_additions = self.workshop_producer.additions_for_screen(
+            image=image,
+            screen_type=screen_type,
+            ocr_context=ocr_context,
+            layout_id=layout_id,
+        )
+        if workshop_additions is not None:
+            return workshop_additions
         content_plans = compile_screen_content_ocr_region_plans(
             resolved_screen=screen_type, request=request, image_size=image.size,
             layout_id=layout_id,

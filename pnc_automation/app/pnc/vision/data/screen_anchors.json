@@ -5129,8 +5129,8 @@
           }
         }
       ]
-},
-{
+    },
+    {
       "id": "trial_gear_applicable_stats",
       "layout_id": "trial_applicable_stats",
       "screen": "PNC_TRIAL_APPLICABLE_STATS",
@@ -5458,6 +5458,453 @@
             "threshold": 0.95
           }
         }
+      ]
+    },
+    {
+      "id": "pet_workshop_manor",
+      "layout_id": "pet_workshop_manor",
+      "screen": "PNC_ILLUSORY_BEAST_MANOR",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/illusory_beast_manor.png",
+        "decoded_sha256": "b4ca065034330434c7dfd414f5ccc45116b9b76ebfd564643ac5bc012ef5c4c3",
+        "capture_group": "2026-09-16/pet_workshop_exploration"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Illusory Beast Manor hub from the manor title banner and the Pet Workshop building label; the measured building control carries the proven Manor-to-Workshop route.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/pet_workshop_manor_title.png",
+          "search_region": [
+            40,
+            4,
+            350,
+            45
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/pet_workshop_manor_workshop_label.png",
+          "search_region": [
+            0,
+            525,
+            200,
+            75
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_back.png",
+            "search_region": [
+              8,
+              2,
+              70,
+              60
+            ],
+            "threshold": 0.85
+          }
+        },
+        {
+          "selector": "PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_manor_building.png",
+            "search_region": [
+              0,
+              425,
+              200,
+              140
+            ],
+            "threshold": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "pet_workshop_board",
+      "layout_id": "pet_workshop_board",
+      "screen": "PNC_PET_WORKSHOP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/pet_workshop.png",
+        "decoded_sha256": "cfdd15584afab4a4a0ea78cbcc5452d382af26cd0ee5fd862f6c870a3322d139",
+        "capture_group": "2026-09-16/pet_workshop_exploration"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Pet Workshop merge board from the energy pill and bottom-bar warehouse anchors; measured controls cover back, help, storage, locked next-board, and the selection-bar inspect/recycle pair.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/pet_workshop_board_energy.png",
+          "search_region": [
+            370,
+            12,
+            60,
+            60
+          ],
+          "threshold": 0.85
+        },
+        {
+          "image": "screen_anchors/pet_workshop_board_warehouse.png",
+          "search_region": [
+            8,
+            885,
+            65,
+            72
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_back.png",
+            "search_region": [
+              8,
+              2,
+              70,
+              60
+            ],
+            "threshold": 0.9
+          }
+        },
+        {
+          "selector": "PNC_PET_WORKSHOP_HELP_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_board_help.png",
+            "search_region": [
+              488,
+              40,
+              50,
+              55
+            ],
+            "threshold": 0.78
+          }
+        },
+        {
+          "selector": "PNC_PET_WORKSHOP_STORAGE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_board_warehouse.png",
+            "search_region": [
+              8,
+              885,
+              65,
+              72
+            ],
+            "threshold": 0.9
+          }
+        },
+        {
+          "selector": "PNC_PET_WORKSHOP_NEXT_BOARD_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_next_board.png",
+            "search_region": [
+              470,
+              890,
+              60,
+              65
+            ],
+            "threshold": 0.9
+          }
+        },
+        {
+          "selector": "PNC_PET_WORKSHOP_INSPECT_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_sel_inspect.png",
+            "search_region": [
+              50,
+              870,
+              62,
+              75
+            ],
+            "threshold": 0.85
+          }
+        },
+        {
+          "selector": "PNC_PET_WORKSHOP_RECYCLE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_sel_recycle.png",
+            "search_region": [
+              375,
+              875,
+              80,
+              75
+            ],
+            "threshold": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "pet_workshop_item_detail",
+      "layout_id": "pet_workshop_item_detail",
+      "screen": "PNC_PET_WORKSHOP_ITEM_DETAIL",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/pet_workshop_item_detail.png",
+        "decoded_sha256": "74abb27e46bbbd0e037e9217cf21f74e595b9b76a3a18f0cae2651c33b5da09d",
+        "capture_group": "2026-09-17/pet_workshop_measure"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Workshop item detail dialog from the constant Source label and Lv.1 merge-chain label; the variable item title text is intentionally not an anchor.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/pet_workshop_detail_source.png",
+          "search_region": [
+            16,
+            530,
+            80,
+            45
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/pet_workshop_detail_lv1.png",
+          "search_region": [
+            48,
+            375,
+            75,
+            45
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_close_x.png",
+            "search_region": [
+              448,
+              205,
+              65,
+              65
+            ],
+            "threshold": 0.9
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "occludes": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "modal_bounds": [
+        18,
+        225,
+        487,
+        565
+      ]
+    },
+    {
+      "id": "pet_workshop_order_detail",
+      "layout_id": "pet_workshop_order_detail",
+      "screen": "PNC_PET_WORKSHOP_ORDER_DETAIL",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/pet_workshop_order_detail.png",
+        "decoded_sha256": "4fda8e6bec12ad4ed5205c3845b04b42f83ccfb2d158aa386c00460122a34c72",
+        "capture_group": "2026-09-17/pet_workshop_measure"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Workshop order detail dialog from the constant Order Detail title and Reward label; order contents stay frame-owned.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/pet_workshop_odetail_title.png",
+          "search_region": [
+            170,
+            212,
+            200,
+            45
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/pet_workshop_odetail_reward.png",
+          "search_region": [
+            220,
+            390,
+            100,
+            42
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_close_x.png",
+            "search_region": [
+              448,
+              185,
+              65,
+              65
+            ],
+            "threshold": 0.9
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "occludes": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "modal_bounds": [
+        18,
+        215,
+        487,
+        565
+      ]
+    },
+    {
+      "id": "pet_workshop_help",
+      "layout_id": "pet_workshop_help",
+      "screen": "PNC_PET_WORKSHOP_HELP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/pet_workshop_help.png",
+        "decoded_sha256": "fdde28385d0b8c65716bba55ab8ab43c46e062f1331f3b046580811c71001dfd",
+        "capture_group": "2026-09-17/pet_workshop_measure"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Workshop Tip rules dialog from the title and the horizontal rule; the rules text is not anchored.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/pet_workshop_help_title.png",
+          "search_region": [
+            220,
+            120,
+            100,
+            50
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/pet_workshop_help_rule.png",
+          "search_region": [
+            15,
+            205,
+            275,
+            40
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_close_x.png",
+            "search_region": [
+              440,
+              105,
+              65,
+              65
+            ],
+            "threshold": 0.9
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "occludes": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "modal_bounds": [
+        18,
+        110,
+        487,
+        675
+      ]
+    },
+    {
+      "id": "pet_workshop_storage",
+      "layout_id": "pet_workshop_storage",
+      "screen": "PNC_PET_WORKSHOP_STORAGE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/pet_workshop_storage.png",
+        "decoded_sha256": "abc05a878c87e9a83217bcc4cae1990e318662498232fb959527e53ac6c4fcfc",
+        "capture_group": "2026-09-17/pet_workshop_measure"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Workshop storage drawer from the Get Slots control and the slot price row; stored item counts stay frame-owned.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/pet_workshop_storage_getslots.png",
+          "search_region": [
+            12,
+            778,
+            110,
+            45
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/pet_workshop_storage_price.png",
+          "search_region": [
+            12,
+            820,
+            85,
+            55
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/pet_workshop_ctl_back.png",
+            "search_region": [
+              8,
+              2,
+              70,
+              60
+            ],
+            "threshold": 0.78
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "modal_bounds": [
+        5,
+        656,
+        530,
+        304
       ]
     }
   ]

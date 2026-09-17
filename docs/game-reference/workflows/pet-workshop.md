@@ -249,6 +249,33 @@ in `.local-data/devin-live-test/runs/sim-transitions-20260918/turn-004/`.
 - **Locked cells:** "10"/"11" overlay cells are level-gated areas; they
   did not unlock on submit (`newAreaMap` requires the matching level).
 
+## Observed recognition surfaces (PW02, 2026-09-17)
+
+**Artifact-observed** on the reviewed 2026-09-16 exploration frames and the
+authored `tests/data/screen_recognition/pet_workshop*` fixtures; the runtime
+parser is `pnc_automation/app/pnc/vision/pet_workshop.py`:
+
+- The board is a fixed 7x9 grid on the 540x960 reference frame. Level-locked
+  cells show a numbered badge medallion on a bare tile (catalog
+  `unlock_level`); seeded covered cells show grass tufts (`unlockType=2`)
+  with contents hidden. Flat beige tiles are usable-empty.
+- A tapped piece selects its cell (corner brackets) and opens a bottom
+  selection bar with an inspect `!` medallion; a blue recycle trash button
+  appears only for recyclable pieces (Treasure shows it, an inactive Bowl
+  does not). Control presence is item-dependent and must be measured, not
+  assumed.
+- Order cards sit in a three-slot top strip; the right edge can clip the
+  third card to a sliver. A card's green Complete button appears only when
+  all requirements are satisfiable from the board. The order-detail modal
+  (tap a card) shows target items with satisfied checks plus a reward row;
+  it has a close X but no submit control.
+- The storage bottom sheet (layers icon) is a premium Get-Slots drawer with
+  no close control — it dismisses on an outside tap.
+- The Illusory Beast Manor hub is a navigation surface, not a Workshop
+  surface; its Pet Workshop building and back chevron are measured controls.
+- Header reads: `Lv.N` workshop level, `N/M` EXP gauge, `N/M` energy pill
+  (verified: LV8 = `8/100`, `166/200`; LV6 = `79/80`, `200/200`).
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings
@@ -259,3 +286,7 @@ in `.local-data/devin-live-test/runs/sim-transitions-20260918/turn-004/`.
   ledger. True server-side drop weights are not observable without many
   controlled samples; the simulator samples authored group weights and
   replays captured `ProduceOutcome`s for determined tests.
+- The PW02 parser's qualified fixture coverage remains narrower than the
+  simulator exploration record above. Those raw transition captures alone
+  do not qualify cooldown, feeding, depletion, recycle confirmation or
+  level-result recognition for unattended execution.

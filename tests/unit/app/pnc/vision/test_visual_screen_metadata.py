@@ -35,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(80, len(catalog["profiles"]))
+        self.assertEqual(86, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -116,7 +116,9 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 return object()
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
-        self.assertEqual(52, len({item.screen_type for item in recognition.evidence}))
+        # PNC_PET_WORKSHOP is occluded by its four modal surfaces in this
+        # all-match degeneration, so six added screens surface as five.
+        self.assertEqual(57, len({item.screen_type for item in recognition.evidence}))
         # Alternate appearances can share a layout and retain separate source
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}
