@@ -304,6 +304,29 @@ class TestAllocateGoal(unittest.TestCase):
         self.assertTrue(allocation.covered_by_stock)
         self.assertEqual(allocation.free_actions, 1)
 
+    def test_activation_partner_can_be_built_from_lower_stock(self) -> None:
+        allocation = self.allocate(
+            {20103: 1, WOOD_1: 1},
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            fx.make_cell(1, 3, item_id=FRUIT_2, item_status=WorkshopItemStatus.INACTIVE),
+            fx.make_cell(1, 4, item_id=WOOD_1),
+        )
+        self.assertTrue(allocation.covered_by_stock)
+        self.assertEqual(allocation.free_actions, 2)
+        self.assertEqual(allocation.protected_quantities[FRUIT_1], 2)
+        self.assertEqual(allocation.protected_quantities[WOOD_1], 1)
+
+    def test_exact_partner_demand_cannot_fund_an_activation(self) -> None:
+        allocation = self.allocate(
+            {FRUIT_1: 1, 20103: 1},
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            fx.make_cell(1, 3, item_id=FRUIT_2, item_status=WorkshopItemStatus.INACTIVE),
+        )
+        self.assertFalse(allocation.covered_by_stock)
+        self.assertEqual(allocation.protected_exact[FRUIT_1], 1)
+
 
 class TestUsefulUnits(unittest.TestCase):
     @classmethod

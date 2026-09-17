@@ -242,6 +242,22 @@ def rank_goals(evaluations: list[GoalEvaluation]) -> list[GoalEvaluation]:
     return [*zero, *positive]
 
 
+def _ranking_inspect_ref(ranked: list[GoalEvaluation]) -> int | None:
+    """Finds unread rewards that can change a same-category selection."""
+
+    for goal in ranked:
+        if goal.assessment.primary_quantity is None:
+            return goal.order_ref
+    if ranked:
+        leader = ranked[0]
+        for contender in ranked[1:]:
+            if _ties_before_secondary(contender, leader):
+                pending = _secondary_inspect_ref(contender, leader)
+                if pending is not None:
+                    return pending
+    return None
+
+
 def select_goals(
     state: WorkshopState,
     catalog: PetWorkshopCatalog,
@@ -301,15 +317,6 @@ def select_goals(
     candidates = [
         assessment for assessment in goals if assessment.category_rank == best_rank
     ]
-    if inspect_order_ref is None:
-        inspect_order_ref = next(
-            (
-                assessment.order.order_ref
-                for assessment in candidates
-                if assessment.primary_quantity is None
-            ),
-            None,
-        )
     board = BoardFacts(state)
     chains = MergeChains(catalog)
     evaluated: dict[int, GoalEvaluation] = {}
@@ -334,18 +341,27 @@ def select_goals(
     for rank in sorted(by_rank):
         ranked.extend(rank_goals(by_rank[rank]))
     primary = ranked[0] if ranked else None
-    if inspect_order_ref is None and len(ranked_best) >= 2:
-        # An unread secondary count matters only where it could still
-        # reorder a contender against the provisional leader — every earlier
-        # key must tie, and the first undecided policy position must be
-        # unread on a side.
-        leader = ranked_best[0]
-        for contender in ranked_best[1:]:
-            if not _ties_before_secondary(contender, leader):
-                continue
-            inspect_order_ref = _secondary_inspect_ref(contender, leader)
-            if inspect_order_ref is not None:
-                break
+    if inspect_order_ref is None:
+        inspect_order_ref = _ranking_inspect_ref(ranked_best)
+    if inspect_order_ref is None and primary is not None:
+        if primary.satisfied and primary.ready is None:
+            inspect_order_ref = primary.order_ref
+        elif not (primary.satisfied and primary.ready is True):
+            # The primary remains the goal, but a safe ready secondary is
+            # the next action. Its own competing rewards must also be known.
+            ready = [
+                goal for goal in ranked
+                if goal is not primary and goal.ready is not False and goal.satisfied
+                and primary.allocation.surplus_shortfall(
+                    goal.assessment.order.requirements, board
+                ) is None
+            ]
+            if ready:
+                category = ready[0].assessment.category_rank
+                contenders = [goal for goal in ready if goal.assessment.category_rank == category]
+                inspect_order_ref = _ranking_inspect_ref(contenders)
+                if inspect_order_ref is None and contenders[0].ready is None:
+                    inspect_order_ref = contenders[0].order_ref
     return GoalSelection(
         primary=primary,
         ranked=tuple(ranked),

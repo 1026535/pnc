@@ -253,6 +253,10 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
   split backwards), `useful_units_per_draw`, and the advisory
   `estimate_goal`, which flags `conservative` when one producer serves two
   demands and reports unknown finite capacity as uncertainty only.
+  Exact requirements are reserved together before recipes consume stock.
+  The free recipe traversal can build a Normal partner before activating an
+  inactive piece; it records original consumed quantities and restores an
+  unsuccessful branch without borrowing the same piece twice.
 - `goals.py` — `GoalSelection`/`select_goals`: survey gating,
   category-first then zero-cost-before-positive-cost ranking with
   policy-ordered secondary rewards, known estimates ahead of absent or
@@ -260,6 +264,9 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
   `inspect_order_ref` for any contender whose unread facts — a clipped
   card, an UNKNOWN reward category, a missing primary or an undecidable
   secondary count — could still change the applicable ranking.
+  When an unfinished primary permits a ready secondary submission, that
+  secondary selection uses the same reward inspection and surplus-stock
+  predicates rather than treating unread quantities as zero.
 - `rules.py` — `goal_context` plus the reservation verdicts for merge,
   activate, feed and submit: protected exact/intermediate pieces may only be
   consumed when the action provably advances the serving demand.

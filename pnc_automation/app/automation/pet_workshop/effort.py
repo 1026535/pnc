@@ -121,6 +121,16 @@ class GoalAllocation:
 
         return all(demand.normal_exact >= demand.required for demand in self.demands)
 
+    def surplus_shortfall(self, requirements: Mapping[int, int], board: BoardFacts) -> int | None:
+        """Returns the first item another order cannot take from unreserved stock."""
+
+        protected = self.protected_quantities
+        return next(
+            (item for item, count in requirements.items()
+             if board.normal_count(item) - count < protected.get(item, 0)),
+            None,
+        )
+
 
 def _simulate_merge_build(
     normal: dict[int, int],
@@ -162,6 +172,42 @@ def _simulate_merge_build(
     return formed, actions
 
 
+def _take_free_piece(
+    target: int,
+    pool: dict[int, int],
+    inactive: dict[int, int],
+    chains: MergeChains,
+    used: dict[int, int],
+    activated: dict[int, int],
+) -> int | None:
+    """Allocates one attainable piece and returns its free merge action count.
+
+    A Normal activation partner may itself be built through earlier merges.
+    Failed recipe branches restore the small observed-stock pool; successful
+    branches record original pieces, never hypothetical surviving squares.
+    """
+
+    if pool.get(target, 0):
+        pool[target] -= 1
+        used[target] = used.get(target, 0) + 1
+        return 0
+    for predecessor in chains.predecessors(target):
+        snapshots = tuple(dict(source) for source in (pool, inactive, used, activated))
+        first = _take_free_piece(predecessor, pool, inactive, chains, used, activated)
+        if first is not None:
+            if inactive.get(predecessor, 0):
+                inactive[predecessor] -= 1
+                activated[predecessor] = activated.get(predecessor, 0) + 1
+                return first + 1
+            second = _take_free_piece(predecessor, pool, inactive, chains, used, activated)
+            if second is not None:
+                return first + second + 1
+        for destination, saved in zip((pool, inactive, used, activated), snapshots):
+            destination.clear()
+            destination.update(saved)
+    return None
+
+
 def _allocate_demand(
     item_id: int,
     required: int,
@@ -170,6 +216,8 @@ def _allocate_demand(
     board: BoardFacts,
     chains: MergeChains,
     catalog: PetWorkshopCatalog,
+    *,
+    exact_reserved: int | None = None,
 ) -> DemandAllocation:
     """Reserves stock for one requirement, mutating the shared pools.
 
@@ -183,8 +231,11 @@ def _allocate_demand(
     uncovered become the residual that production must supply.
     """
 
-    normal_exact = min(required, pool.get(item_id, 0))
-    pool[item_id] = pool.get(item_id, 0) - normal_exact
+    if exact_reserved is None:
+        normal_exact = min(required, pool.get(item_id, 0))
+        pool[item_id] = pool.get(item_id, 0) - normal_exact
+    else:
+        normal_exact = exact_reserved
     feedable_exact = 0
     intermediates: dict[int, int] = {}
     producer = catalog.producer_for(item_id)
@@ -205,51 +256,18 @@ def _allocate_demand(
     if missing > 0:
         needed_units = missing * chains.unit_value(item_id)
         residual_units = needed_units
-        taken: dict[int, int] = {}
-        taken_units = 0
-        ancestors = chains.ancestors(item_id)
-        while taken_units < needed_units:
-            candidate = next(
-                (
-                    ancestor
-                    for ancestor in ancestors
-                    if taken.get(ancestor, 0)
-                    < pool.get(ancestor, 0)
-                    + min(inactive_pool.get(ancestor, 0), pool.get(ancestor, 0))
-                ),
-                None,
-            )
-            if candidate is None:
-                break
-            taken[candidate] = taken.get(candidate, 0) + 1
-            taken_units += chains.unit_value(candidate)
-        if taken:
-            build_normal: dict[int, int] = {}
-            build_inactive: dict[int, int] = {}
-            for piece, count in taken.items():
-                normals = min(count, pool.get(piece, 0))
-                inactives = min(
-                    count - normals, inactive_pool.get(piece, 0), normals
+        # Exact attainable results come first, then largest useful partial
+        # results. Both use the same free recipe traversal and stock pool.
+        for target in (item_id, *chains.ancestors(item_id)):
+            units = chains.unit_value(target)
+            while residual_units >= units:
+                actions = _take_free_piece(
+                    target, pool, inactive_pool, chains, intermediates, activatables
                 )
-                build_normal[piece] = normals
-                if inactives:
-                    build_inactive[piece] = inactives
-                    activatables[piece] = inactives
-            formed, merges = _simulate_merge_build(
-                build_normal, build_inactive, item_id, chains
-            )
-            if formed >= missing:
-                residual_units = 0
-            else:
-                residual_units = max(0, needed_units - taken_units)
-            for piece, count in taken.items():
-                normals = min(count, pool.get(piece, 0))
-                pool[piece] = pool.get(piece, 0) - normals
-                inactive_pool[piece] = inactive_pool.get(piece, 0) - min(
-                    count - normals, inactive_pool.get(piece, 0), normals
-                )
-                if normals:
-                    intermediates[piece] = intermediates.get(piece, 0) + normals
+                if actions is None:
+                    break
+                residual_units -= units
+                merges += actions
     return DemandAllocation(
         item_id=item_id,
         required=required,
@@ -271,12 +289,15 @@ def allocate_goal(
 ) -> GoalAllocation:
     """Computes one order's reservations against the observed usable stock.
 
-    Demands are processed lowest demanded tier first so a required low-tier
-    piece is protected before a higher-tier demand may sweep the same item
-    family as intermediate stock.
+    Every exact requirement is reserved before any recipe can consume its
+    ingredients. Remaining demands allocate largest useful attainable
+    intermediates without reusing Normal or inactive pieces.
     """
 
     pool: dict[int, int] = board.normal_counts()
+    exact = {item: min(required, pool.get(item, 0)) for item, required in requirements.items()}
+    for item, count in exact.items():
+        pool[item] = pool.get(item, 0) - count
     inactive_pool: dict[int, int] = {
         item_id: len(board.inactive_cells(item_id)) for item_id in board.inactive_items
     }
@@ -284,7 +305,10 @@ def allocate_goal(
     allocated: list[DemandAllocation] = []
     for item_id, required in demands:
         allocated.append(
-            _allocate_demand(item_id, required, pool, inactive_pool, board, chains, catalog)
+            _allocate_demand(
+                item_id, required, pool, inactive_pool, board, chains, catalog,
+                exact_reserved=exact[item_id],
+            )
         )
     protected_exact: dict[int, int] = {}
     protected_intermediate: dict[int, int] = {}

@@ -159,7 +159,7 @@ def plan_next(
             )
 
     # 4. Free progress toward the primary goal: merges, activations, feeds.
-    progress = _best_progress(ctx, board, chains, catalog)
+    progress = _best_progress(ctx, board, chains, catalog, policy)
     if progress is not None:
         intent, summary = progress
         return _decision(ctx, intent, summary)
@@ -306,6 +306,7 @@ def _best_progress(
     board: BoardFacts,
     chains: MergeChains,
     catalog: PetWorkshopCatalog,
+    policy: WorkshopPolicy,
 ) -> tuple[WorkshopIntent, str] | None:
     """Chooses the free action nearest a missing primary-goal target.
 
@@ -381,10 +382,10 @@ def _best_progress(
         locked_cell = board.feed_locked_cells(item_id)[0]
         intent = WorkshopFeedIntent(food_cells[0], locked_cell, food)
         candidates.append(((*gap, food_cells[0], locked_cell), intent, why))
-    if not candidates:
-        return None
-    _, intent, summary = min(candidates, key=lambda entry: entry[0])
-    return intent, summary
+    for _, intent, summary in sorted(candidates, key=lambda entry: entry[0]):
+        if validate_intent(board.state, intent, catalog, policy).verdict == WorkshopValidationVerdict.LEGAL:
+            return intent, summary
+    return None
 
 
 def _space_recovery(
@@ -448,9 +449,9 @@ def _space_recovery(
                 f"feed producer {item_id} to free a cell",
             )
         )
-    if candidates:
-        _, intent, summary = min(candidates, key=lambda entry: entry[0])
-        return intent, summary
+    for _, intent, summary in sorted(candidates, key=lambda entry: entry[0]):
+        if validate_intent(board.state, intent, catalog, policy).verdict == WorkshopValidationVerdict.LEGAL:
+            return intent, summary
     recyclable: list[tuple[tuple[int, int, int], int]] = []
     ranked = ctx.selection.ranked if ctx.selection is not None else ()
     for item_id in policy.recyclable_item_ids:
@@ -465,14 +466,12 @@ def _space_recovery(
         )
         for cell_id in cells:
             recyclable.append(((usefulness, item_id, cell_id), cell_id))
-    if not recyclable:
-        return None
-    _, cell_id = min(recyclable, key=lambda entry: entry[0])
-    piece = board.cell(cell_id)
-    return (
-        WorkshopRecycleIntent(cell_id, piece.item_id),
-        f"recycle unreserved allowlisted piece {piece.item_id} on cell {cell_id}",
-    )
+    for _, cell_id in sorted(recyclable, key=lambda entry: entry[0]):
+        piece = board.cell(cell_id)
+        intent = WorkshopRecycleIntent(cell_id, piece.item_id)
+        if validate_intent(board.state, intent, catalog, policy).verdict == WorkshopValidationVerdict.LEGAL:
+            return intent, f"recycle unreserved allowlisted piece {piece.item_id} on cell {cell_id}"
+    return None
 
 
 def _production_step(
@@ -558,13 +557,14 @@ def _production_step(
     if state.selection.kind != WorkshopSelectionKind.SELECTED or (
         state.selection.cell_id != cell_id
     ):
-        return (
-            WorkshopSelectIntent(cell_id),
-            f"select {label} before producing",
-            False,
-        )
-    return (
-        WorkshopProduceIntent(cell_id, item_id),
-        f"produce once from {label}",
-        False,
-    )
+        intent = WorkshopSelectIntent(cell_id)
+        summary = f"select {label} before producing"
+    else:
+        intent = WorkshopProduceIntent(cell_id, item_id)
+        summary = f"produce once from {label}"
+    verdict = validate_intent(state, intent, catalog, policy)
+    if verdict.verdict == WorkshopValidationVerdict.LEGAL:
+        return intent, summary, False
+    if verdict.verdict == WorkshopValidationVerdict.UNCERTAIN:
+        return WorkshopInspectIntent(WorkshopInspectKind.BOARD), verdict.reason, False
+    return None

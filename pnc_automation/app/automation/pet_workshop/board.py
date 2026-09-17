@@ -83,6 +83,11 @@ class MergeChains:
 
         return self._ancestors.get(item_id, ())
 
+    def predecessors(self, item_id: int) -> tuple[int, ...]:
+        """Returns the items whose matching pair directly builds this item."""
+
+        return self._predecessors.get(item_id, ())
+
     def closure(self, item_id: int) -> frozenset[int]:
         """Returns the item plus all lower-tier members of its chain."""
 

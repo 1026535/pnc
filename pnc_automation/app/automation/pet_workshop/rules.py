@@ -322,11 +322,12 @@ def submit_reservation_verdict(
     order = ctx.selection.evaluation_for(order_ref)
     if order is None:
         return f"order {order_ref} is not an eligible goal"
-    for item_id, quantity in order.assessment.order.requirements.items():
-        protected = ctx.protected.get(item_id, 0)
-        if board.normal_count(item_id) - quantity < protected:
-            return (
-                f"submitting order {order_ref} would consume {item_id} "
-                f"reserved for the primary goal"
-            )
+    item_id = ctx.selection.primary.allocation.surplus_shortfall(
+        order.assessment.order.requirements, board
+    )
+    if item_id is not None:
+        return (
+            f"submitting order {order_ref} would consume {item_id} "
+            f"reserved for the primary goal"
+        )
     return None

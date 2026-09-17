@@ -7,6 +7,7 @@ observe → plan → apply-outcome → replan loop through the test-only driver.
 
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from pnc_automation.app.automation.pet_workshop import plan_next
@@ -221,6 +222,24 @@ class TestSurveyAndInspection(PlannerCase):
 
 
 class TestSubmission(PlannerCase):
+    def test_ready_secondary_competitor_requires_its_reward_quantity(self) -> None:
+        primary = lasso_order(1, {WOOD_10: 1, FRUIT_5: 1}, ready=False)
+        known = chest_order(2, {FRUIT_1: 2})
+        unread = replace(known, order_ref=3, rewards=(
+            WorkshopOrderReward(WorkshopOrderRewardCategory.CHEST, None),
+        ))
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=FRUIT_5),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            fx.make_cell(1, 3, item_id=FRUIT_1),
+            fx.make_cell(1, 4, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+            orders=(primary, known, unread),
+        )
+        self.assertEqual(
+            self.plan(state).intent,
+            WorkshopInspectIntent(WorkshopInspectKind.ORDER_CONTENTS, order_ref=3),
+        )
+
     def test_ready_primary_submits(self) -> None:
         state = solver_fx.observed_state(
             fx.make_cell(1, 1, item_id=FRUIT_1),
@@ -624,6 +643,39 @@ class TestFullBoardAndStop(PlannerCase):
 
 
 class TestReplanning(PlannerCase):
+    def test_free_partner_merge_then_activation_beats_positive_goal(self) -> None:
+        goal = lasso_order(1, {FRUIT_3: 1, WOOD_1: 1}, ready=False)
+        larger = replace(lasso_order(2, {WOOD_10: 2}, ready=False), rewards=(
+            WorkshopOrderReward(WorkshopOrderRewardCategory.BEAST_LASSO, 5),
+        ))
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=FRUIT_1),
+            fx.make_cell(1, 3, item_id=FRUIT_2, item_status=WorkshopItemStatus.INACTIVE),
+            fx.make_cell(1, 4, item_id=WOOD_1),
+            fx.make_cell(1, 5, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+            orders=(goal, larger),
+        )
+
+        def transition(current, decision):
+            """Supplies the actual free outcomes and newly observed ready control."""
+            self.assertEqual(decision.goal_order_ref, 1)
+            if isinstance(decision.intent, WorkshopMergeIntent):
+                return solver_fx.apply_merge(current, decision.intent, self.catalog)
+            if isinstance(decision.intent, WorkshopActivateIntent):
+                after = solver_fx.apply_activate(current, decision.intent, self.catalog)
+                return replace(after, order_survey=replace(
+                    after.order_survey, orders=(replace(goal, ready=True), larger)
+                ))
+            self.assertEqual(decision.intent, WorkshopSubmitOrderIntent(1))
+            return None
+
+        decisions = solver_fx.run_scenario(state, self.catalog, self.policy, transition)
+        self.assertEqual(
+            [type(decision.intent) for decision in decisions],
+            [WorkshopMergeIntent, WorkshopActivateIntent, WorkshopSubmitOrderIntent],
+        )
+
     def test_replan_after_merge_outcome_then_submit(self) -> None:
         # F2 pair merges to F3, then the satisfied order submits — every
         # decision comes from the current state, never a queued plan.
