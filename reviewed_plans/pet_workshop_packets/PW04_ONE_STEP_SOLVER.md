@@ -55,3 +55,9 @@ The existing 129 focused tests passed under independent lead execution but miss 
 - Briefs: worker `.local-data/devin-briefs/pw03-pw04-solver.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
 - The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
 - Reviewed/tested result revision and acceptance evidence: pending handoff.
+
+### Turn 003 review — 2026-09-17
+
+Worker turn 003 completed at `761837e`, with a clean checkout and released writers. Lead passed all 146 focused tests, reviewed the correction diff, then closed the remaining ready-secondary ranking gap and made every mutation candidate pass the canonical validator in lead commit `efac6de`. The same commit proves a free Normal-partner merge followed by inactive activation and submission through the validating test-only outcome driver. The final focused suite has **150 passing tests**; `git diff --check` passed.
+
+Detailed finding dispositions and evidence are in [PW03's current review record](PW03_EFFORT_RESERVATIONS_POLICY.md#turn-003-independent-review-and-lead-corrections--2026-09-17). S3/S4 still block combined acceptance and final affected/full testing. No solver changes were merged or pushed. The released worker slot is available for the already-authorized timed Main evidence assignment; that separate live checkout cannot qualify unfinished solver/execution code.

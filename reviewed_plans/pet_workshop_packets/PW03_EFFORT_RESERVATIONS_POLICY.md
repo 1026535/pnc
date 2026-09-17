@@ -71,6 +71,16 @@ Same session `absorbing-vicuna` resumed as **turn 003**, supervisor 51088, with 
 
 Main's later availability is now supplied by the timed release in the roadmap. It does not change this pure package's offline scope or authorize a worker to connect to the game.
 
+### Turn 003 independent review and lead corrections — 2026-09-17
+
+Handled native result: `.local-data/devin-implement/pw03-pw04/turn-003`, `exited`, exit 0, `writers_stopped: true`, with a recognized final response. Worker candidate `761837e6817b818f5227bf0ba02dc3d8ade11777` scoped itself to S1/S2/S5; the lead inspected its actual production/test diff and independently passed its **146 focused tests** with the required interpreter. The worker did not claim S3/S4/S6 completion.
+
+The lead reproduced a remaining S1 defect: an unfinished lasso primary with two surplus-ready chest competitors still submitted the known-quantity card while the other's quantity was unread. The lead corrected this using the same ranking comparison and one canonical surplus-quantity check. For S2, the lead added actual `validate_intent` gating to every mutation candidate, beyond the worker's repaired individual preconditions. S5's absent/uncertain estimate ordering passed review.
+
+Lead commit **`efac6de`** additionally resolves S6: reserve exact requirements together, then traverse free merge/activation recipes from actual Normal and inactive stock, allowing a Normal partner to be built first. Failed recipe branches restore the per-goal pool. New regressions prove free-goal preference followed by merge→activation→submit, protect an exact lower-tier demand, and inspect the unread ready-secondary reward. **150 focused policy/validation/planner tests passed**, and `git diff --check` passed. Evidence summary: solver `.local-data/review/pw03-pw04/lead-review-efac6de.json`.
+
+**Still fixing, not accepted:** S3 joint producer/feed ingredient allocation and S4 reachable producer reconstruction/finite acquisition pricing. Broad final-candidate testing waits for that cohesive lead-owned batch. Worker `absorbing-vicuna` is idle; no solver commit has been pushed or merged to main. This pure solver work used no live target.
+
 
 ### Execution record — 2026-09-16
 
