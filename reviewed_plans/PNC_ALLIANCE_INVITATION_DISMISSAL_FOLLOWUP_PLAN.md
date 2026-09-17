@@ -1,8 +1,58 @@
-# Deferred: Join Alliance invitation dismissal
+# Standalone plan: Join Alliance invitation dismissal verification
 
-Date: 2026-09-16. Status: planned for later; not implemented or live-qualified.
-The user manually dismissed this popup and explicitly kept it outside V22's
-implementation scope. This follow-up is outside the 43 vision-packet count.
+Created: 2026-09-16. Updated: 2026-09-17.
+Status: fix implemented and merged in `4f1e119`; live verification deferred.
+
+This is the sole follow-up plan for the Join Alliance popup bug, outside the
+entire 43-plan vision epic. On September 17 the user explicitly removed its
+verification from the epic's worker assignments and acceptance gates. Resume
+the original epic without waiting for this popup. This plan is retained for
+later scheduling; its extraction does not claim the pending check passed.
+
+The original failure target is configured account `3xx_spies`, instance
+`bs-3xx-spies`, kingdom `K303`, castle **`K3033849ba8778`** (historical level 5).
+Resolve current configuration, role, lease and identity before any future
+test. Naming the historical castle does not authorize switching to it.
+
+## Current implementation and remaining work
+
+`4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3` (already on main) fixes
+the canonical OCR geometry path by selecting the unique detected button
+segment containing the Cancel anchor. It adds the post-Home captured fixture
+and both-publisher regression in
+`tests/integration/vision/test_alliance_invitation_captured.py`.
+Do not reimplement that fix or broaden popup eligibility without new evidence.
+
+Devin live turn 005 in
+`.local-data/worktrees/vision-v01-foundation/.local-data/devin-live-test/runs/home-atlas-route-refresh/`
+tested candidate `e3edc7d` containing the fix on the original target. The
+invitation did not naturally appear after Home, so this regression was
+`not_run`, not passed. The user's earlier manual dismissal and a startup-only
+dismissal do not prove automated post-Home recovery.
+
+When this standalone plan is scheduled:
+
+1. Confirm the candidate contains the existing fix; reuse valid captured
+   regression evidence. Investigate and change code only if actual evidence
+   reveals a remaining defect. Review any corrections independently and run
+   the relevant offline checks before live validation.
+2. Delegate one bounded non-spending check through `devin-live-test` on the
+   original target when the invitation naturally appears after Home. Require
+   both publishers to expose a measured Cancel excluding Join/Apply, then one
+   canonical Cancel action and a newer clear-Home observation. Preserve the
+   exact revision, screenshot/observation/action evidence and lease cleanup.
+3. If absent, retain pending status without relogin or reproduction loops.
+   If failed, retain expected/actual behavior and the recognition gap, fix the
+   proven defect, and review/retest that boundary before accepting it.
+
+No joining, spending, account/castle switching or forced invitation is
+authorized. Preserve pre-existing instances and release the canonical lease.
+
+V20, V22 and V30 acceptance no longer includes this dedicated regression.
+Their own feature routes, content and return checks remain required. A popup
+that actually obstructs one of those routes is still recorded as an external
+obstruction; do not bypass guards or call an unexecuted route passed. Continue
+independent packets. V08/V37 Alliance feature work remains in the vision epic.
 
 ## Observed failure and provenance
 
@@ -38,7 +88,11 @@ rescue in `observation_builder.py` consequently had no candidate in this session
 Devin observed recovery in a fresh session; matching the earlier exact frame
 with that visual profile has not been independently established.
 
-## Smallest implementation
+## Original implementation scope (historical)
+
+Steps 1–3 describe the original design now implemented by `4f1e119`; step 4
+is the outstanding standalone live proof. The diagnosis above refers to the
+pre-fix baseline and is retained for provenance.
 
 1. Fix measured negative-action selection in the canonical geometry path. Use
    the recognized Cancel anchor to select exactly one real button segment,
