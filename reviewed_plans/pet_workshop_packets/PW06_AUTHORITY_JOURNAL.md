@@ -47,3 +47,11 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 - Briefs: worker `.local-data/devin-briefs/pw06-authority.md` and `pw-wave-common.md`. Use the explicit dependency-correct Python environment named there; global py/shared .venv lack current rapidocr. APK/extracted Lua remain offline references only.
 - The existing lead monitor registered this run and the native completion callback targets this coordinating task. Lead owns independent review, fixes, applicable final-candidate live proof, integration and acceptance.
 - Reviewed/tested result revision and acceptance evidence: pending handoff.
+
+### Recovery and resolved type/budget choices
+
+Turn 001 was interrupted when all three Workshop worker/monitor processes disappeared around 2026-09-17 01:34 UTC; cause unestablished. No tracked PW06 implementation had been saved. Lead verified absent local writers/tests, matched native `fearless-sprite` identity with `devin list` in the exact checkout, preserved `turn-001/state-before-host-recovery.json`, and repaired the stale record. The checkout was fast-forwarded to accepted main `4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3`.
+
+Same session resumed as **turn 002**, supervisor 57492, with native SWE-2 Max readiness confirmed. Delta brief: `.local-data/devin-briefs/host-recovery.md`. The lead resolved two questions from the bounded saved analysis: retain the existing building enum and a narrow Workshop action enum under one supported feature-kind union/parser; normalize supported old flat counted inputs and the new tagged Workshop budget once at the input boundary into one canonical tagged representation, rejecting conflicting simultaneous declarations. Required persisted-data migration remains one-way. No duplicate internal budget path or generic registry framework is needed.
+
+Implementation, focused proof and final-candidate affected evidence remain pending. The Main release belongs to a separate live assignment; this authority/journal worker remains offline.

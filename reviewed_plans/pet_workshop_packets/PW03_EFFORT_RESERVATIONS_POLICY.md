@@ -63,6 +63,14 @@ PW04 owns [S2 and planner sequence proof](PW04_ONE_STEP_SOLVER.md#implementation
 - Tests must run from the assigned checkout using `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-castle-identity-plan/.local-data/pw-validation-venv/Scripts/python.exe` (RapidOCR 3.4.5), followed by `tools/run_tests.py affected --base cf171fdb4110093ccc29ce3f1f9c1491e8936d3c --explain` on the final committed candidate. Preserve final revision/fingerprint and compact results; let a justified full fallback finish.
 - No live validation is needed for these pure rules. Main remains unavailable for the later game-facing packets until the user releases it. PW02 and PW06 can continue independently.
 
+### Recovery and revised correction ownership
+
+Turn 002 was interrupted when all three Workshop worker/monitor processes disappeared around 2026-09-17 01:34 UTC; cause unestablished. No correction source edits had been saved. Lead verified absent local writers/tests and the existing native session ID, preserved `turn-002/state-before-host-recovery.json`, and repaired the stale running record. The original solver commits were rebased without conflicts onto accepted main `4f1e119`, producing candidate baseline `32197aae13b4bc754acc28bf617e8a25fee3c9bb` with unchanged solver content.
+
+Same session `absorbing-vicuna` resumed as **turn 003**, supervisor 51088, with native SWE-2 Max readiness confirmed. The bounded output still showed unresolved joint-allocation design, so the lead now owns S3/S4/S6 instead of dispatching another broad recipe-design iteration. The worker owns concrete routine S1/S2/S5 corrections and focused regressions, then returns a committed delta at `.local-data/review/pw03-pw04/routine-fix-handoff.md`. Delta brief: `.local-data/devin-briefs/host-recovery.md`. Broad final-candidate validation is deferred until the lead's recipe changes are integrated; prior 129 passing tests do not resolve these findings. No packet is accepted.
+
+Main's later availability is now supplied by the timed release in the roadmap. It does not change this pure package's offline scope or authorize a worker to connect to the game.
+
 
 ### Execution record — 2026-09-16
 
