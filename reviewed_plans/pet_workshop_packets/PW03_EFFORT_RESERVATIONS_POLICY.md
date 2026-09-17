@@ -26,6 +26,14 @@ Test the allocation and score with small authored graphs and representative real
 
 A reviewer can explain why an order or action was chosen using its requirements, reward and remaining effort; no piece is double-counted, no larger piece is assumed splittable, and a lower-priority order cannot consume reserved progress.
 
+### Lead correction checkpoint — 2026-09-17
+
+Candidate **`0fbc61dcca8314762dec551904301305bbea0fdf`** contains the lead's S3/S4 corrections, rebased without conflicts onto `6d128f3` (the intervening base changes are packet status documents). `allocate_goal` now owns the shared pool for requirements, feed ingredients, producer acquisition, effort and planning targets. The obsolete independently reconstructed estimate was removed. Repeated fresh finite producers consume new ingredients and upstream energy; an observed finite producer retains unknown capacity. A reachable first construction remains useful when the total further acquisition cost is unknown. Exact finite generator requirements are protected against exhaustion, while unlimited required generators remain usable.
+
+**Passed:** 162 focused policy/validation/planner tests on the same source before the documentation-only rebase; `git diff --check`. New regressions include lower-ready-order theft of feed, a separately required extra feed, Pot-to-Bowl reconstruction after absence/exhaustion, shared fresh finite capacity, repeated rebuild costs, free merge-built feed, reachable producer upgrades and finite versus unlimited exact generator stock. The final `tools/run_tests.py affected --base origin/main --explain` selected all 330 portable modules because this branch adds production modules; it is running with the correct Python 3.13/RapidOCR 3.4.5 environment. Log: solver `.local-data/review/pw03-pw04/final-affected.log`.
+
+**Remaining acceptance finding:** a previously proposed Tree Produce still validates after a fresh complete survey contains no eligible order. The planner correctly stops, but executor revalidation must also reject that now-useless spend and inspect unresolved goal facts. Reproduction is solver `.local-data/review/pw03-pw04/production-revalidation-finding.txt`. Keep the candidate frozen during the active suite; apply the scoped validator/shared-rule correction afterward and test the final revision. This is a pure offline boundary, not a live-account blocker. PW03/PW04 are not accepted or merged at this checkpoint.
+
 ## Focused validation
 
 Cover multiset allocation at different tiers, un-splittable high tiers, protected progress, zero-cost goals, uncertain finite capacity, and the documented mixed-output estimate. Exercise the shared validator against permitted and forbidden actions; PW04 owns complete decision-sequence replay.
