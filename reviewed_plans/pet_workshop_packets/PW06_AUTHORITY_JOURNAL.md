@@ -63,3 +63,18 @@ Turn 002 and its full affected test run were interrupted by the user-confirmed W
 The bounded saved output reported 114 focused tests passing and an incomplete full fallback with one failure marker. This is worker self-report, not accepted final-candidate evidence. Resume instructions require inspecting the retained failure evidence, correcting relevant defects and completing the repository affected check using the specified Python environment against base `4f1e119ae3f7a6d9e5e8891c81347a3656fbf4d3`. No interrupted run counts as passing.
 
 Same session resumed as **turn 003**, supervisor 25312, native SWE-2 Max readiness confirmed. The coordinator's `.local-data/devin-briefs/pw06-windows-update-recovery.md` preserves the settled type/budget scope and offline-only ownership. Final review and acceptance remain pending. The existing continuation timer was explicitly acknowledged active and the monitor restarted with the same task and automation IDs.
+
+### Independent review — correction batch 1, 2026-09-17
+
+Turn 003 returned `284f2c6ec698bec87001af225c3f3aab748e8a5d`, clean with writers stopped. Lead verified actual full-suite records: **2,597 passed, 7 environmental skips**, no failures, Python 3.13.5 / RapidOCR 3.4.5, source fingerprint `ebd5e72724515c9d0c0283b0cb74f5a34b20c3744a318a514645f8f6e575f036`. Evidence is preserved in the authority checkout under `.local-data/review/pw06/worker-284f2c6-{results,selection}.json`. Lead rebased the candidate cleanly onto accepted main `730195d`, producing **ef76ccb47251711892006fa5241c6031061b7898**, and independently ran `tools/run_tests.py group contract.workflows`: **116 passed**. A module-name group attempt was unsupported by the runner; no tests ran for that attempt.
+
+The complete review found acceptance blockers below. The lead's offline reproduction `.local-data/review/pw06/reproduce_authority_findings.py` and its retained case journals are in the authority checkout. No live action or acceptance occurred.
+
+| Finding | Evidence and correction |
+| --- | --- |
+| **R1 / P1 — stale progress writes erase pending intent** | Invocation update and operation allocation from a pre-dispatch checkpoint both reduced pending count from 1 to 0. Apply the canonical persisted-checkpoint guard, reject unpersisted invocation history, and preserve invocation identity/budget and monotonic sequence. |
+| **R2 / P1 — counted budget crosses invocation boundaries** | After one successful cap-1 run, a fresh cap-1 invocation is rejected on its first action. Count and enforce the registered invocation's own budget; reject widening its budget through another scope. Observed-bar scopes need no synthetic counted cap. |
+| **R3 / P1 — level change breaks historical identity** | A committed K1/Main C10 journal causes the same castle's C11 cross-reset lookup to raise ConfigurationError. Reuse the existing stable kingdom/name identity key for persisted identity and pending reconciliation; retain foreign-target rejection. |
+| **R4 / P2 — shared scope factory and canonical docs absent** | The candidate has date/UUID helpers but no explicit WorkshopPolicy/scope composition. Add the agreed small `WorkshopRunAuthority` value and factory using existing authority owners; update the authority/persistence section of the canonical design document. |
+
+Status: **Fixing findings**. The delta assignment is the coordinator's `.local-data/devin-briefs/pw06-review-batch-1.md`, for the same native `fearless-sprite` session. It owns the coherent fixes, regressions and final integrated affected/full evidence, with no live access, push or plan edits. Lead will review the correction diff and final proof before acceptance. PW02 continues independently; PW07 still awaits its required accepted dependencies.
