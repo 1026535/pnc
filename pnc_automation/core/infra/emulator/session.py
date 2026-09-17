@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 import shlex
 import time
@@ -145,6 +146,8 @@ class BlueStacksSession:
     instance_closer: BlueStacksInstanceCloser | None = field(default=None, repr=False)
     instance_lease: ProcessInstanceLease | None = field(default=None, repr=False)
     provenance_max_age_seconds: float = 30.0
+    rng: random.Random = field(default_factory=random.Random, repr=False)
+    input_jitter_px: float = 4.0
     _instance_lease: ProcessInstanceLease | None = field(default=None, init=False, repr=False)
     _cleanup_intent_registered: bool = field(default=False, init=False, repr=False)
     _cleanup_intent_id: str | None = field(default=None, init=False, repr=False)
@@ -279,11 +282,30 @@ class BlueStacksSession:
                 stderr=result.stderr_text,
             )
 
+    def _jitter_point(self, x: int, y: int) -> tuple[int, int]:
+        """Offsets one point within `input_jitter_px`, mimicking finger contact-area spread."""
+
+        if self.input_jitter_px <= 0:
+            return x, y
+        magnitude = self.input_jitter_px
+        return (
+            max(0, round(x + self.rng.triangular(-magnitude, magnitude))),
+            max(0, round(y + self.rng.triangular(-magnitude, magnitude))),
+        )
+
+    def _jitter_duration_ms(self, duration_ms: int) -> int:
+        """Varies one gesture duration by up to 15 percent when jitter is enabled."""
+
+        if self.input_jitter_px <= 0:
+            return duration_ms
+        return max(0, round(duration_ms * self.rng.uniform(0.85, 1.15)))
+
     @_input_dispatch
     def tap_point(self, x: int, y: int) -> None:
         """Sends one screen tap to the device."""
 
         self._require_input()
+        x, y = self._jitter_point(x, y)
         result = self.adb_client.shell(self.instance.device_id, "input", "tap", str(x), str(y))
         if not result.succeeded:
             raise DeviceConnectionError(
@@ -337,6 +359,9 @@ class BlueStacksSession:
         """Sends one swipe-like drag through the requested Android input primitive."""
 
         self._require_input()
+        start_x, start_y = self._jitter_point(start_x, start_y)
+        end_x, end_y = self._jitter_point(end_x, end_y)
+        duration_ms = self._jitter_duration_ms(duration_ms)
         if gesture_primitive == "swipe":
             command = [
                 *_input_command_prefix(input_source=input_source, device_id=self.instance.device_id),
@@ -372,6 +397,8 @@ class BlueStacksSession:
             end_x=end_x,
             end_y=end_y,
             duration_ms=duration_ms,
+            rng=self.rng,
+            jitter_px=self.input_jitter_px,
         )
         for index, (event_name, x, y, delay_seconds) in enumerate(timeline):
             result = self.adb_client.shell(
@@ -724,23 +751,54 @@ def _motion_event_drag_timeline(
     end_x: int,
     end_y: int,
     duration_ms: int,
+    rng: random.Random,
+    jitter_px: float,
 ) -> tuple[tuple[str, int, int, float], ...]:
-    """Builds one linear press-move-release event timeline with bounded intermediate move samples."""
+    """Builds one press-move-release event timeline.
+
+    With `jitter_px <= 0` the timeline is the original linear path with uniform
+    delays; otherwise the move samples follow an eased progress curve with a
+    small perpendicular drift and non-uniform delays, which better matches a
+    real finger drag than a perfectly straight constant-velocity line.
+    """
 
     move_event_count = 4
-    points = [(start_x, start_y)]
-    for step_index in range(1, move_event_count + 1):
-        progress = step_index / move_event_count
-        points.append(
-            (
-                round(start_x + ((end_x - start_x) * progress)),
-                round(start_y + ((end_y - start_y) * progress)),
-            )
-        )
     transition_count = move_event_count + 1
-    segment_delay_seconds = max(duration_ms, 0) / 1000.0 / transition_count
-    timeline: list[tuple[str, int, int, float]] = [("DOWN", start_x, start_y, segment_delay_seconds)]
-    for x, y in points[1:]:
-        timeline.append(("MOVE", x, y, segment_delay_seconds))
+    if jitter_px <= 0:
+        points = [(start_x, start_y)]
+        for step_index in range(1, move_event_count + 1):
+            progress = step_index / move_event_count
+            points.append(
+                (
+                    round(start_x + ((end_x - start_x) * progress)),
+                    round(start_y + ((end_y - start_y) * progress)),
+                )
+            )
+        segment_delay_seconds = max(duration_ms, 0) / 1000.0 / transition_count
+        delays = [segment_delay_seconds] * transition_count
+    else:
+        delta_x = end_x - start_x
+        delta_y = end_y - start_y
+        length = math.hypot(delta_x, delta_y)
+        normal_x, normal_y = (-delta_y / length, delta_x / length) if length else (0.0, 0.0)
+        drift_amplitude = min(jitter_px * 2.0, length * 0.05)
+        points = [(start_x, start_y)]
+        for step_index in range(1, move_event_count + 1):
+            progress = step_index / move_event_count
+            eased = progress * progress * (3.0 - 2.0 * progress)
+            drift = rng.triangular(-drift_amplitude, drift_amplitude) * math.sin(math.pi * progress)
+            points.append(
+                (
+                    round(start_x + delta_x * eased + normal_x * drift),
+                    round(start_y + delta_y * eased + normal_y * drift),
+                )
+            )
+        weights = [rng.uniform(0.6, 1.4) for _ in range(transition_count)]
+        total_seconds = max(duration_ms, 0) / 1000.0
+        weight_sum = sum(weights)
+        delays = [total_seconds * weight / weight_sum for weight in weights]
+    timeline: list[tuple[str, int, int, float]] = [("DOWN", start_x, start_y, delays[0])]
+    for index, (x, y) in enumerate(points[1:]):
+        timeline.append(("MOVE", x, y, delays[index + 1]))
     timeline.append(("UP", end_x, end_y, 0.0))
     return tuple(timeline)

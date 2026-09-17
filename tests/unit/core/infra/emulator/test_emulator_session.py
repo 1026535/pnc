@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import random
 import shlex
 import tempfile
 import unittest
@@ -638,6 +640,7 @@ class BlueStacksSessionTests(unittest.TestCase):
                 app_package="com.global.tmslg",
             ),
             lease_registry=self._lease_registry,
+            input_jitter_px=0,
         ))
 
         session.swipe(100, 200, 300, 400, duration_ms=750)
@@ -664,6 +667,7 @@ class BlueStacksSessionTests(unittest.TestCase):
                 app_package="com.global.tmslg",
             ),
             lease_registry=self._lease_registry,
+            input_jitter_px=0,
         ))
 
         session.swipe(100, 200, 300, 400, duration_ms=750, input_source="default")
@@ -691,6 +695,7 @@ class BlueStacksSessionTests(unittest.TestCase):
             ),
             sleep=lambda _: None,
             lease_registry=self._lease_registry,
+            input_jitter_px=0,
         ))
 
         session.swipe(100, 200, 300, 400, duration_ms=750, gesture_primitive="press_move_release")
@@ -706,6 +711,77 @@ class BlueStacksSessionTests(unittest.TestCase):
                 ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "UP", "300", "400")),
             ],
         )
+
+    def test_tap_point_applies_bounded_coordinate_jitter(self) -> None:
+        """Humanizes tap coordinates within the configured radius instead of repeating one exact point."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260912),
+            input_jitter_px=4.0,
+        ))
+
+        for _ in range(40):
+            session.tap_point(100, 200)
+
+        tapped = {(int(arguments[2]), int(arguments[3])) for _, arguments in adb_client.shell_calls}
+        self.assertGreater(len(tapped), 1)
+        for x, y in tapped:
+            self.assertLessEqual(abs(x - 100), 4)
+            self.assertLessEqual(abs(y - 200), 4)
+
+    def test_press_move_release_jitter_curves_path_and_varies_delays(self) -> None:
+        """Humanized drags stay endpoint-bounded but leave the straight constant-velocity line."""
+
+        sleeps: list[float] = []
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260912),
+            input_jitter_px=4.0,
+        ))
+
+        session.swipe(100, 200, 300, 400, duration_ms=750, gesture_primitive="press_move_release")
+
+        events = [arguments for _, arguments in adb_client.shell_calls]
+        self.assertEqual(events[0][:3], ("input", "touchscreen", "motionevent"))
+        self.assertEqual(events[0][3], "DOWN")
+        self.assertEqual(events[-1][3], "UP")
+        move_points = [(int(e[4]), int(e[5])) for e in events if e[3] == "MOVE"]
+        self.assertEqual(len(move_points), 4)
+        down = (int(events[0][4]), int(events[0][5]))
+        up = (int(events[-1][4]), int(events[-1][5]))
+        delta_x, delta_y = up[0] - down[0], up[1] - down[1]
+        length = math.hypot(delta_x, delta_y)
+        for x, y in move_points:
+            distance_to_line = abs(delta_y * (x - down[0]) - delta_x * (y - down[1])) / length
+            self.assertLessEqual(distance_to_line, 12)
+        positive_sleeps = [value for value in sleeps if value > 0]
+        self.assertGreater(len(set(positive_sleeps)), 1)
 
     def test_read_only_observation_is_allowed_but_app_launch_and_input_are_rejected(self) -> None:
         """Allows observation of an already-running app while rejecting every control primitive."""
