@@ -594,7 +594,17 @@ class BlueStacksSessionTests(unittest.TestCase):
             state_result=_command_result(returncode=0),
             shell_result=_command_result(returncode=0),
         )
-        session = self._make_session(adb_client=adb_client)
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            lease_registry=self._lease_registry,
+            input_jitter_px=0,
+        ))
         for value in ("$HOME", "`id`", "$(id)", r"path\name", "*?[ab]", "hello\tworld"):
             with self.subTest(value=value):
                 session.input_text(value)
@@ -622,6 +632,45 @@ class BlueStacksSessionTests(unittest.TestCase):
 
         self.assertNotIn("synthetic-sensitive-value", str(raised.exception.details))
         self.assertEqual(adb_client.shell_calls, [])
+
+    def test_input_text_types_each_character_with_small_varied_delays(self) -> None:
+        """Humanized typing sends per-character payloads separated by short non-uniform delays."""
+
+        sleeps: list[float] = []
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260917),
+            input_jitter_px=4.0,
+        ))
+
+        session.input_text("abcd")
+
+        self.assertEqual(
+            adb_client.shell_calls,
+            [
+                ("127.0.0.1:5555", ("input", "text", "a")),
+                ("127.0.0.1:5555", ("input", "text", "b")),
+                ("127.0.0.1:5555", ("input", "text", "c")),
+                ("127.0.0.1:5555", ("input", "text", "d")),
+            ],
+        )
+        self.assertEqual(len(sleeps), 3)
+        for delay in sleeps:
+            self.assertGreaterEqual(delay, 0.04)
+            self.assertLessEqual(delay, 0.14)
 
     def test_swipe_uses_explicit_touchscreen_source(self) -> None:
         """Uses the touchscreen-qualified input command so drag gestures are unambiguous to ADB-backed emulators."""

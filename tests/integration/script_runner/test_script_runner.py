@@ -432,6 +432,7 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertEqual(action_executor.chat_post_action_observe_delay_ms, 444)
             self.assertEqual(action_executor.world_map_movement_stable_click_delay_ms, 555)
             self.assertEqual(action_executor.world_map_movement_post_action_observe_delay_ms, 666)
+            self.assertTrue(action_executor.human_mode)
             self.assertIs(runtime.world_map_search_service.action_executor, runtime.observed_action_executor)
             self.assertIs(runtime.world_map_movement_calibration_service.action_executor, runtime.observed_action_executor)
             self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")

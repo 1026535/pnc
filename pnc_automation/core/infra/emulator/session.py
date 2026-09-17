@@ -50,6 +50,7 @@ def _input_dispatch(function: Callable[..., object]) -> Callable[..., object]:
 DEFAULT_BLUESTACKS_SHUTDOWN_GRACE_SECONDS = 120.0
 _app_foreground_attempts = 30
 _app_foreground_retry_delay_seconds = 2.0
+_input_type_delay_seconds_range = (0.04, 0.14)
 
 
 class BlueStacksSessionCleanupMode(StrEnum):
@@ -318,17 +319,27 @@ class BlueStacksSession:
 
     @_input_dispatch
     def input_text(self, text: str) -> None:
-        """Inputs one text payload using Android's input subsystem."""
+        """Inputs one text payload using Android's input subsystem.
+
+        With input jitter enabled the payload is typed one character at a
+        time with a small varied inter-key delay instead of one burst.
+        """
 
         self._require_input()
-        encoded = _encode_adb_text(text)
-        result = self.adb_client.shell(self.instance.device_id, "input", "text", encoded)
-        if not result.succeeded:
-            raise DeviceConnectionError(
-                "Failed to input text through ADB.",
-                device_id=self.instance.device_id,
-                stderr=result.stderr_text,
-            )
+        _encode_adb_text(text)  # Validates the whole payload before any character is sent.
+        chunks = tuple(text) if self.input_jitter_px > 0 and len(text) > 1 else (text,)
+        for index, chunk in enumerate(chunks):
+            encoded = _encode_adb_text(chunk)
+            result = self.adb_client.shell(self.instance.device_id, "input", "text", encoded)
+            if not result.succeeded:
+                raise DeviceConnectionError(
+                    "Failed to input text through ADB.",
+                    device_id=self.instance.device_id,
+                    chunk_index=index,
+                    stderr=result.stderr_text,
+                )
+            if index < len(chunks) - 1:
+                self.sleep(self.rng.uniform(*_input_type_delay_seconds_range))
 
     @_input_dispatch
     def press_key(self, key_code: str) -> None:

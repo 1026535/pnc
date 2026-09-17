@@ -774,6 +774,7 @@ class ScriptRunner:
                 chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
                 world_map_movement_stable_click_delay_ms=self.config.defaults.world_map_movement_stable_click_delay_ms,
                 world_map_movement_post_action_observe_delay_ms=self.config.defaults.world_map_movement_post_action_observe_delay_ms,
+                human_mode=session.input_jitter_px > 0,
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
             ),
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),

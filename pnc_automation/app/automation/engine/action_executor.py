@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
@@ -47,6 +48,10 @@ from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInte
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 
 
+_HUMAN_DELAY_JITTER_RANGE = (0.9, 1.1)
+_HUMAN_KEY_DELAY_MS_RANGE = (30, 90)
+
+
 @dataclass(slots=True)
 class ActionExecutor:
     """Executes action requests against one emulator session."""
@@ -65,6 +70,8 @@ class ActionExecutor:
     max_input_attempts: int | None = None
     input_attempts: int = 0
     input_attempt_deadline: float | None = None
+    human_mode: bool = False
+    rng: random.Random = field(default_factory=random.Random, repr=False)
 
     def execute_actions(
         self,
@@ -519,13 +526,28 @@ class ActionExecutor:
         self.sleep(milliseconds / 1000.0)
 
     def _stable_delay_ms_for(self, action: ActionRequest) -> int:
-        """Returns the pacing delay applied after one concrete UI action."""
+        """Returns the pacing delay applied after one concrete UI action.
+
+        In human mode the delay is jittered within a tight band around the
+        configured value; observation pacing and authored wait durations are
+        never jittered.
+        """
 
         if action.timing_profile == ActionTimingProfile.CHAT:
-            return self.chat_stable_click_delay_ms
-        if action.timing_profile == ActionTimingProfile.WORLD_MAP_MOVEMENT:
-            return self.world_map_movement_stable_click_delay_ms
-        return self.stable_click_delay_ms
+            delay_ms = self.chat_stable_click_delay_ms
+        elif action.timing_profile == ActionTimingProfile.WORLD_MAP_MOVEMENT:
+            delay_ms = self.world_map_movement_stable_click_delay_ms
+        else:
+            delay_ms = self.stable_click_delay_ms
+        if not self.human_mode:
+            return delay_ms
+        return max(0, round(delay_ms * self.rng.uniform(*_HUMAN_DELAY_JITTER_RANGE)))
+
+    def _human_key_pause(self) -> None:
+        """Pauses briefly between machine-timed key events while human mode is enabled."""
+
+        if self.human_mode:
+            self._sleep_ms(round(self.rng.uniform(*_HUMAN_KEY_DELAY_MS_RANGE)))
 
     def _observe_delay_ms_for(self, action: ActionRequest) -> int:
         """Returns the delay applied before one observe-after capture."""
@@ -551,9 +573,11 @@ class ActionExecutor:
                 delete_budget = _delete_budget(observation.chat_draft_text)
                 self._record_input_attempt(action, observation)
                 self.session.press_key("KEYCODE_MOVE_END")
+                self._human_key_pause()
                 for _ in range(delete_budget):
                     self._record_input_attempt(action, observation)
                     self.session.press_key("KEYCODE_DEL")
+                    self._human_key_pause()
                 self._sleep_ms(self._stable_delay_ms_for(action))
                 return
             raise SelectorResolutionError(
@@ -565,9 +589,11 @@ class ActionExecutor:
             return
         self._record_input_attempt(action, observation)
         self.session.press_key("KEYCODE_MOVE_END")
+        self._human_key_pause()
         for _ in range(_delete_budget(field_state.text)):
             self._record_input_attempt(action, observation)
             self.session.press_key("KEYCODE_DEL")
+            self._human_key_pause()
         self._sleep_ms(self._stable_delay_ms_for(action))
 
     def _input_text(self, action: InputTextAction, observation: Observation) -> None:
@@ -593,6 +619,7 @@ class ActionExecutor:
                 continue
             self._record_input_attempt(action, observation)
             self.session.press_key("KEYCODE_ENTER")
+            self._human_key_pause()
 
     def _matches_follow_up_request(
         self,
