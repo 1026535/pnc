@@ -35,6 +35,16 @@ Public plan_next implementation, typed scenario results and lead-reviewed decisi
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
 
+## Implementation review — correction batch 1
+
+**Disposition: Fixing findings; not accepted.** Combined review/revision/test evidence and worker continuation are recorded in [PW03](PW03_EFFORT_RESERVATIONS_POLICY.md#implementation-review--correction-batch-1). Lead reviewed `a9f79ae`; the unchanged solver content is now on current main as candidate baseline `b868a5f` in its isolated branch. None of this candidate has been merged to main.
+
+**S2 — canonical validation does not cover every proposed mutation.** `planner.py` validates submissions but returns other mutations directly, contrary to its documented contract. A selected Tree 4 with unknown production mode returns Produce while `validate_intent` says UNCERTAIN. A fully observed board with unknown occupancy in every other cell also returns Produce without a confirmed empty square. `_cell_inspect` omits these missing occupancy/access facts, and the full-board activation enumerator omits the required successor check.
+
+The same solver worker must make every proposed mutation pass canonical validation, request relevant safe inspection where facts are missing, and retain other valid work when a candidate is prohibited. Do not duplicate legality in a second planner or turn nonparticipating unknowns into a blanket stop. Add regression scenarios for these cases and validate each proposed mutation in the test-only outcome driver. PW03's recipe/reservation fixes must also prove useful recovery and free activation through complete supplied-outcome sequences.
+
+The existing 129 focused tests passed under independent lead execution but miss these cases. Final corrected revision, regression results, broader runner evidence and lead re-review remain required before PW05 or PW07 consumes the planner. This pure package has no live gate; later recognition and execution do.
+
 
 ### Execution record — 2026-09-16
 

@@ -38,6 +38,31 @@ Reviewed estimator/allocator/validator implementation, example ranking diagnosti
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
 
+## Implementation review — correction batch 1
+
+**Disposition: Fixing findings; not accepted.** Lead reviewed the full solver production diff at `a9f79ae00592c71b8ad895a4b8709fc7a0274602` (PW03 commit `4abc8fd`, PW04 commit `a9f79ae`). The lead then rebased the clean, unpublished two-commit branch onto fetched `origin/main` at `cf171fdb4110093ccc29ce3f1f9c1491e8936d3c`, without conflicts. New candidate baseline: `b868a5f646928dc83cd146da6720ad87b105d2e8`; the solver content is unchanged by this rebase.
+
+The lead independently passed all **129 focused policy/validation/planner tests** using the isolated Python 3.13 validation environment. Those tests do not cover the counterexamples below. The worker's broader run reported 2,710 tests with 14 errors from missing current RapidOCR because it used global Python; it is **failed evidence**, not an environmental waiver. Its selection/results remain in the solver worktree's `.test-impact/`. A corrected final-candidate affected run is required after fixes, using the explicitly supplied interpreter.
+
+| Finding | Reviewed owner and concrete failure | Required correction / proof |
+| --- | --- | --- |
+| S1 | `policy.py` / `goals.py`: a clipped order is silently discarded; an unknown reward category can change which ready card should win; an unread secondary quantity on a third tied contender never triggers inspection. | Distinguish known ineligibility from relevant missing knowledge; inspect every contender whose unread facts can change the decision, using the canonical category-ordered reward comparison. |
+| S3 | `effort.py` / `rules.py`: a lower chest order consumes Food 3 needed to feed the primary goal's Trap. When Food 3 is itself an exact requirement, it is also credited as feed and no additional food-production target is created. | Allocate exact requirements and selected recipe ingredients from one multiset; share that result between estimates, reservations and action targets. Prove protection and the extra-feed production sequence. |
+| S4 | `effort.py` / `rules.py` / `planner.py`: Pot 4 cannot start the reachable missing-Bowl-5 path toward food. Repeated finite Bowl construction reuses the same on-board parts without charging additional acquisition energy. | Trace supported producer prerequisites and finite reconstruction from remaining stock, including acquisition energy or honest uncertainty. Replan after outcomes; retain the additive advisory estimator. |
+| S5 | `goals.py`: `energy=None` is treated as certain and outranks a visibly available finite producer. Two uncertain finite paths use speculative reward/energy ratios instead of the approved reward-quantity tie-break. | Separate known estimates from absent/uncertain estimates. Cover unavailable Animal production versus available Fishing Tool, and lasso quantities 1 versus 2 with unknown remaining capacity. |
+| S6 | `effort.py`: Normal Fruit 1 x2 plus inactive Fruit 2 can build Fruit 3 through a merge then activation, but the goal is priced as positive production energy. | Recognize the attainable free sequence without double-counting stock or consuming exact lower-tier demands; prove ranking against a positive-cost competitor. |
+
+PW04 owns [S2 and planner sequence proof](PW04_ONE_STEP_SOLVER.md#implementation-review--correction-batch-1). This is one coherent correction batch in the same worker, not separate parallel diagnoses. No runtime APK/Lua access was found in the reviewed solver package; it consumes the accepted packaged catalog.
+
+### Reproduction and continuation
+
+- Assigned worktree: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-solver`, branch `codex/pet-workshop-solver`.
+- Synthetic lead reproductions and captured outcomes: `.local-data/review/pw03-pw04/lead_repros.py`, `lead-repros-a9f79ae.jsonl`, `lead-extra-a9f79ae.txt`. The extra file supplies the corrected failing uncertain-effort example (Sea Creature 4, item 41104) and competing unknown-category example. These are offline typed-state evidence, not game observations.
+- Turn 001 ended `incomplete`, exit 0, with committed code and `writers_stopped: true`; its transport status does not establish implementation acceptance or a specific model failure. The lead inspected the saved diff and bounded evidence before resuming.
+- Correction owner: `absorbing-vicuna`, run `.local-data/devin-implement/pw03-pw04`, turn 002. Delta brief: `.local-data/devin-briefs/pw03-pw04-review-fixes.md`. Expected return: `.local-data/review/pw03-pw04/fix-handoff.md`.
+- Tests must run from the assigned checkout using `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-castle-identity-plan/.local-data/pw-validation-venv/Scripts/python.exe` (RapidOCR 3.4.5), followed by `tools/run_tests.py affected --base cf171fdb4110093ccc29ce3f1f9c1491e8936d3c --explain` on the final committed candidate. Preserve final revision/fingerprint and compact results; let a justified full fallback finish.
+- No live validation is needed for these pure rules. Main remains unavailable for the later game-facing packets until the user releases it. PW02 and PW06 can continue independently.
+
 
 ### Execution record — 2026-09-16
 
