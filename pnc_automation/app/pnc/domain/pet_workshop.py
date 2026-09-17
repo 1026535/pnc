@@ -150,6 +150,16 @@ class WorkshopIntentKind(StrEnum):
     STOP = "stop"
 
 
+class WorkshopMutationKind(StrEnum):
+    """The feature-level Workshop scope carried by authority and workflow specs.
+
+    Journaled operations instead carry one ``WorkshopIntentKind`` sub-action;
+    this scope authorizes the whole run, never an arbitrary feature string.
+    """
+
+    RUN = "pet_workshop.run"
+
+
 class WorkshopOrderRewardCategory(StrEnum):
     """Reward families the recognizer can name; unknown/other stay representable."""
 
@@ -1043,6 +1053,7 @@ __all__ = [
     "WorkshopIntentValidation",
     "WorkshopItemStatus",
     "WorkshopMergeIntent",
+    "WorkshopMutationKind",
     "WorkshopObservation",
     "WorkshopOccupancy",
     "WorkshopOrder",
