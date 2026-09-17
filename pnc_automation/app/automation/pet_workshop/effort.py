@@ -1,31 +1,26 @@
 """Missing-ingredient allocation and advisory effort estimates (Plan 02 PW03).
 
-Allocation answers "which observed pieces would fill this order's demands":
-exact required pieces are reserved first, then the largest useful lower-tier
-intermediates, then a residual base-unit gap that only production can cover.
-Effort estimation answers "how much gross production energy would the residual
-cost through the best supported producer path" — a deliberately small,
-conservative proxy used for ranking, never for authorization. Both operate on
-observed Normal usable stock only; no hypothetical regeneration, refunds,
-level-up rewards or unclaimed inventory is credited.
+``allocate_goal`` owns both reservations and advisory effort. Exact order
+pieces are reserved together before a shared stock pool allocates intermediates,
+feed ingredients and producer construction. The selected recipe supplies the
+planner's targets, so effort and legality cannot borrow the same piece twice.
+Expected useful draws form a small conservative proxy, never authorization or
+a predicted drop. Only observed stock and catalog recipes contribute; no
+hypothetical regeneration, refunds or unclaimed inventory is credited.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from types import MappingProxyType
 from typing import Mapping
 
 from pnc_automation.app.automation.pet_workshop.board import BoardFacts, MergeChains
-from pnc_automation.app.pnc.domain.pet_workshop import WorkshopCooldown
 from pnc_automation.app.pnc.pet_workshop_catalog import (
     PetWorkshopCatalog,
     PetWorkshopProducer,
 )
-
-_MAX_FEED_DEPTH = 2
-
 
 @dataclass(frozen=True, slots=True)
 class DemandAllocation:
@@ -77,13 +72,19 @@ class GoalAllocation:
 
     ``protected_quantities`` is the union of exact required pieces, feed
     ingredients consumed to unlock demanded pieces, and allocated lower-tier
-    intermediates — the multiset other goals/actions must not consume.
+    intermediates and producer stock — the multiset other goals/actions must
+    not consume. ``effort`` and the production/auxiliary targets come from
+    this same allocation, never a second estimate against the original board.
     """
 
     demands: tuple[DemandAllocation, ...]
     protected_exact: Mapping[int, int]
     protected_intermediate: Mapping[int, int]
     free_actions: int
+    effort: GoalEffort
+    production_targets: frozenset[int]
+    auxiliary_targets: frozenset[int]
+    needed_producers: frozenset[int]
 
     @property
     def missing_quantities(self) -> Mapping[int, int]:
@@ -113,7 +114,7 @@ class GoalAllocation:
     def covered_by_stock(self) -> bool:
         """Returns whether the whole order is achievable without production."""
 
-        return all(demand.covered_by_stock for demand in self.demands)
+        return self.effort.energy == 0
 
     @property
     def satisfied(self) -> bool:
@@ -130,46 +131,6 @@ class GoalAllocation:
              if board.normal_count(item) - count < protected.get(item, 0)),
             None,
         )
-
-
-def _simulate_merge_build(
-    normal: dict[int, int],
-    inactive: dict[int, int],
-    target: int,
-    chains: MergeChains,
-) -> tuple[int, int]:
-    """Greedy merging toward ``target``; returns (formed pieces, actions used).
-
-    An activation is an ordinary 2:1 merge whose second operand is inactive:
-    it consumes one Normal piece and one Inactive piece of the same item and
-    produces the catalog successor. Only pieces strictly below the target
-    tier participate, so a higher-tier piece can never masquerade as progress
-    it cannot be split back into.
-    """
-
-    formed = 0
-    actions = 0
-    changed = True
-    while changed:
-        changed = False
-        for item_id in chains.ancestors(target):
-            successor = chains.successor(item_id)
-            if successor is None:
-                continue
-            usable = normal.get(item_id, 0)
-            pairable = min(inactive.get(item_id, 0), usable)
-            pairs = pairable + (usable - pairable) // 2
-            if pairs <= 0:
-                continue
-            normal[item_id] = usable - pairable - 2 * (pairs - pairable)
-            inactive[item_id] = inactive.get(item_id, 0) - pairable
-            actions += pairs
-            changed = True
-            if successor == target:
-                formed += pairs
-            else:
-                normal[successor] = normal.get(successor, 0) + pairs
-    return formed, actions
 
 
 def _take_free_piece(
@@ -213,22 +174,21 @@ def _allocate_demand(
     required: int,
     pool: dict[int, int],
     inactive_pool: dict[int, int],
-    board: BoardFacts,
     chains: MergeChains,
     catalog: PetWorkshopCatalog,
     *,
     exact_reserved: int | None = None,
+    feed_pool: dict[int, int],
 ) -> DemandAllocation:
     """Reserves stock for one requirement, mutating the shared pools.
 
     Exact usable pieces are taken first. Feed-locked copies of the demanded
     item then count when their authored ingredient is on board — each claims
     one food piece, which lands in ``intermediates`` as protected stock.
-    Finally the largest lower-tier intermediates are allocated toward the
-    remaining deficit; an inactive piece counts as usable material only while
-    a normal partner survives to merge it, and a merge simulation reports how
-    many pieces the sweep can actually form. Whatever base units are left
-    uncovered become the residual that production must supply.
+    Finally the largest attainable lower-tier intermediates are allocated
+    toward the deficit. Inactive material counts only with a Normal partner,
+    including one built by the same free traversal. Remaining base units are
+    completed by the shared recipe evaluator.
     """
 
     if exact_reserved is None:
@@ -242,13 +202,14 @@ def _allocate_demand(
     if normal_exact < required and producer is not None and producer.feed_item_id is not None:
         take = min(
             required - normal_exact,
-            len(board.feed_locked_cells(item_id)),
+            feed_pool.get(item_id, 0),
             pool.get(producer.feed_item_id, 0),
         )
         if take > 0:
             pool[producer.feed_item_id] = pool.get(producer.feed_item_id, 0) - take
             intermediates[producer.feed_item_id] = take
             feedable_exact = take
+            feed_pool[item_id] -= take
     missing = required - normal_exact - feedable_exact
     residual_units = 0
     merges = 0
@@ -291,7 +252,9 @@ def allocate_goal(
 
     Every exact requirement is reserved before any recipe can consume its
     ingredients. Remaining demands allocate largest useful attainable
-    intermediates without reusing Normal or inactive pieces.
+    intermediates without reusing Normal or inactive pieces. Feed and producer
+    recipes then consume that same remaining pool; the result carries both
+    reservations and effort for every caller.
     """
 
     pool: dict[int, int] = board.normal_counts()
@@ -301,13 +264,15 @@ def allocate_goal(
     inactive_pool: dict[int, int] = {
         item_id: len(board.inactive_cells(item_id)) for item_id in board.inactive_items
     }
+    feed_pool = {item: len(board.feed_locked_cells(item)) for item in board.feed_locked_items}
     demands = sorted(requirements.items(), key=lambda kv: (chains.tier(kv[0]), kv[0]))
     allocated: list[DemandAllocation] = []
     for item_id, required in demands:
         allocated.append(
             _allocate_demand(
-                item_id, required, pool, inactive_pool, board, chains, catalog,
+                item_id, required, pool, inactive_pool, chains, catalog,
                 exact_reserved=exact[item_id],
+                feed_pool=feed_pool,
             )
         )
     protected_exact: dict[int, int] = {}
@@ -323,11 +288,43 @@ def allocate_goal(
         for piece, count in demand.intermediates.items():
             protected_intermediate[piece] = protected_intermediate.get(piece, 0) + count
         free_actions += demand.merges_to_build + demand.feed_actions
+    recipe = _RecipePool(pool, inactive_pool, feed_pool)
+    for item, count in protected_exact.items():
+        producer = catalog.producer_for(item)
+        if count and producer is not None and producer.max_num == 0:
+            recipe.supplies[item] = _Supply(None, "available")
+    evaluator = _RecipePlanner(chains, catalog)
+    efforts: list[DemandEffort] = []
+    feasible = True
+    for demand in allocated:
+        before = recipe.energy
+        result = evaluator.complete(demand.item_id, demand.residual_units, recipe, frozenset())
+        if result is None:
+            feasible = False
+            efforts.append(DemandEffort(demand.item_id, demand.residual_units, None, None, None, False,
+                                       (f"no supported producer path for item {demand.item_id}",)))
+            continue
+        recipe, producer_item, mode = result
+        efforts.append(DemandEffort(demand.item_id, demand.residual_units,
+                                   recipe.energy - before if recipe.complete else None,
+                                   producer_item, mode, recipe.uncertain))
+    for piece, count in recipe.protected.items():
+        protected_intermediate[piece] = protected_intermediate.get(piece, 0) + count
+    effort = GoalEffort(
+        demand_efforts=tuple(efforts), energy=recipe.energy if feasible and recipe.complete else None,
+        free_actions=free_actions + recipe.actions, uncertain=recipe.uncertain,
+        uncertainty=tuple(sorted(recipe.notes)),
+        conservative=any(len(targets) > 1 for targets in recipe.served.values()),
+    )
     return GoalAllocation(
         demands=tuple(allocated),
         protected_exact=MappingProxyType(protected_exact),
         protected_intermediate=MappingProxyType(protected_intermediate),
-        free_actions=free_actions,
+        free_actions=free_actions + recipe.actions,
+        effort=effort,
+        production_targets=frozenset(recipe.production_targets),
+        auxiliary_targets=frozenset(recipe.auxiliary_targets),
+        needed_producers=frozenset(recipe.served),
     )
 
 
@@ -353,188 +350,6 @@ def useful_units_per_draw(
             continue
         useful += Fraction(entry.weight * chains.unit_value(entry.item_id))
     return useful / total
-
-
-@dataclass(frozen=True, slots=True)
-class ProducerPath:
-    """One supported way to put a needed producer into production."""
-
-    producer_item_id: int
-    mode: str  # "available" | "feed" | "build"
-    acquire_energy: Fraction
-    acquire_actions: int
-    uncertain: bool
-    feed_item_id: int | None
-    note: str
-
-
-def _estimate_item_energy(
-    item_id: int,
-    quantity: int,
-    board: BoardFacts,
-    chains: MergeChains,
-    catalog: PetWorkshopCatalog,
-    depth: int,
-) -> tuple[Fraction | None, int, bool]:
-    """Returns (energy, actions, uncertain) to obtain ``quantity`` of an item.
-
-    Used recursively for feed ingredients so a missing Food 3 is never
-    treated as free; bounded by ``_MAX_FEED_DEPTH``.
-    """
-
-    pool = board.normal_counts()
-    inactive_pool = {
-        item: len(board.inactive_cells(item)) for item in board.inactive_items
-    }
-    demand = _allocate_demand(
-        item_id, quantity, pool, inactive_pool, board, chains, catalog
-    )
-    if demand.residual_units == 0:
-        return Fraction(0), demand.merges_to_build + demand.feed_actions, False
-    if depth >= _MAX_FEED_DEPTH:
-        return None, 0, False
-    estimate = _best_producer_estimate(
-        demand.residual_units, item_id, board, chains, catalog, depth + 1
-    )
-    if estimate is None:
-        return None, 0, False
-    energy, actions, uncertain, _producer_item, _mode = estimate
-    return energy, demand.merges_to_build + demand.feed_actions + actions, uncertain
-
-
-def _producer_paths(
-    producer: PetWorkshopProducer,
-    board: BoardFacts,
-    chains: MergeChains,
-    catalog: PetWorkshopCatalog,
-    depth: int,
-) -> list[ProducerPath]:
-    """Enumerates supported ways one producer could serve production.
-
-    An existing finite producer carries an uncertain remaining-use count —
-    that lowers estimate confidence, never the legality of one visible
-    production. A newly built producer gets its full configured capacity.
-    """
-
-    item_id = producer.item_id
-    finite = producer.max_num > 0
-    paths: list[ProducerPath] = []
-    for cell_id in board.normal_cells(item_id):
-        cell = board.cell(cell_id)
-        cooldown_note = (
-            "clear"
-            if cell is not None and cell.cooldown == WorkshopCooldown.CLEAR
-            else "not clear"
-        )
-        paths.append(
-            ProducerPath(
-                producer_item_id=item_id,
-                mode="available",
-                acquire_energy=Fraction(0),
-                acquire_actions=0,
-                uncertain=finite,
-                feed_item_id=None,
-                note=(
-                    f"producer on cell {cell_id}, cooldown {cooldown_note}"
-                    + ("; finite uses unobserved" if finite else "")
-                ),
-            )
-        )
-    for cell_id in board.feed_locked_cells(item_id):
-        if producer.feed_item_id is None:
-            continue
-        if board.normal_count(producer.feed_item_id) > 0:
-            paths.append(
-                ProducerPath(
-                    producer_item_id=item_id,
-                    mode="feed",
-                    acquire_energy=Fraction(0),
-                    acquire_actions=1,
-                    uncertain=finite,
-                    feed_item_id=producer.feed_item_id,
-                    note=f"feed-locked producer on cell {cell_id}, food on board",
-                )
-            )
-        else:
-            food = _estimate_item_energy(
-                producer.feed_item_id, 1, board, chains, catalog, depth + 1
-            )
-            if food[0] is not None:
-                paths.append(
-                    ProducerPath(
-                        producer_item_id=item_id,
-                        mode="feed",
-                        acquire_energy=food[0],
-                        acquire_actions=1 + food[1],
-                        uncertain=finite or food[2],
-                        feed_item_id=producer.feed_item_id,
-                        note=f"feed-locked producer on cell {cell_id}, food must be produced",
-                    )
-                )
-    # Building the producer from on-board chain pieces is a free path; an
-    # inactive piece contributes when a normal partner can merge it.
-    build_normal: dict[int, int] = {}
-    build_inactive: dict[int, int] = {}
-    for ancestor in chains.ancestors(item_id):
-        count = board.normal_count(ancestor)
-        if count:
-            build_normal[ancestor] = count
-        inactive_count = len(board.inactive_cells(ancestor))
-        if inactive_count:
-            build_inactive[ancestor] = inactive_count
-    if build_normal or build_inactive:
-        formed, merges = _simulate_merge_build(
-            build_normal, build_inactive, item_id, chains
-        )
-        if formed > 0:
-            paths.append(
-                ProducerPath(
-                    producer_item_id=item_id,
-                    mode="build",
-                    acquire_energy=Fraction(0),
-                    acquire_actions=merges,
-                    uncertain=False,
-                    feed_item_id=None,
-                    note=f"buildable from on-board chain pieces in {merges} merges",
-                )
-            )
-    return paths
-
-
-def _best_producer_estimate(
-    residual_units: int,
-    target: int,
-    board: BoardFacts,
-    chains: MergeChains,
-    catalog: PetWorkshopCatalog,
-    depth: int,
-) -> tuple[Fraction, int, bool, int, str] | None:
-    """Returns (energy, actions, uncertain, producer_item, mode) for the best path.
-
-    Energy is expected gross production energy plus any feed-ingredient
-    production energy; merges, activations and feeds themselves are free.
-    For a newly built finite producer the build actions repeat per full
-    configured capacity, so its estimate reflects amortized rebuilds.
-    """
-
-    cost = Fraction(catalog.activity.production_energy_cost)
-    best: tuple[Fraction, int, bool, int, str] | None = None
-    for producer in catalog.producers:
-        useful = useful_units_per_draw(producer, target, chains, catalog)
-        if useful <= 0:
-            continue
-        draws = Fraction(residual_units) / useful
-        for path in _producer_paths(producer, board, chains, catalog, depth):
-            builds = 1
-            if path.mode == "build" and producer.max_num > 0 and draws > producer.max_num:
-                # Amortized rebuilds: each fresh copy supplies max_num draws.
-                builds = -(-draws.numerator // (draws.denominator * producer.max_num))
-            energy = draws * cost + path.acquire_energy
-            total_actions = path.acquire_actions * builds
-            key = (energy, total_actions, path.uncertain, producer.item_id)
-            if best is None or key < (best[0], best[1], best[2], best[3]):
-                best = (energy, total_actions, path.uncertain, producer.item_id, path.mode)
-    return best
 
 
 @dataclass(frozen=True, slots=True)
@@ -569,72 +384,203 @@ class GoalEffort:
     conservative: bool
 
 
-def estimate_goal(
-    allocation: GoalAllocation,
-    board: BoardFacts,
-    chains: MergeChains,
-    catalog: PetWorkshopCatalog,
-) -> GoalEffort:
-    """Computes the advisory energy estimate for one allocated goal."""
+@dataclass(frozen=True, slots=True)
+class _Supply:
+    """One allocated producer: only a newly built copy has known finite capacity."""
 
-    demand_efforts: list[DemandEffort] = []
-    uncertainty: list[str] = []
-    producers_used: dict[int, int] = {}
-    total_energy = Fraction(0)
-    feasible = True
-    for demand in allocation.demands:
+    remaining: Fraction | None
+    mode: str
+    uncertain: bool = False
+
+
+@dataclass(slots=True)
+class _RecipePool:
+    """One goal's remaining observed stock and selected advisory recipe.
+
+    Alternative paths copy this small multiset; only the chosen path survives.
+    Produced drops are priced, never inserted into the observed stock pool.
+    Supplies retain acquisition cost and fresh finite capacity across demands.
+    """
+
+    normal: dict[int, int]
+    inactive: dict[int, int]
+    locked: dict[int, int]
+    protected: dict[int, int] = field(default_factory=dict)
+    supplies: dict[int, _Supply] = field(default_factory=dict)
+    production_targets: set[int] = field(default_factory=set)
+    auxiliary_targets: set[int] = field(default_factory=set)
+    served: dict[int, frozenset[int]] = field(default_factory=dict)
+    energy: Fraction = Fraction(0)
+    actions: int = 0
+    uncertain: bool = False
+    notes: set[str] = field(default_factory=set)
+    complete: bool = True
+
+    def copy(self) -> _RecipePool:
+        """Copies mutable allocation state before trying a recipe alternative."""
+
+        return replace(
+            self, normal=dict(self.normal), inactive=dict(self.inactive), locked=dict(self.locked),
+            protected=dict(self.protected), supplies=dict(self.supplies),
+            production_targets=set(self.production_targets), auxiliary_targets=set(self.auxiliary_targets),
+            served=dict(self.served), notes=set(self.notes),
+        )
+
+    def reserve(self, used: Mapping[int, int]) -> None:
+        """Adds original Normal pieces consumed or retained by this recipe."""
+
+        for item, count in used.items():
+            if count:
+                self.protected[item] = self.protected.get(item, 0) + count
+
+
+@dataclass(frozen=True, slots=True)
+class _RecipePlanner:
+    """Expands catalog recipes against one shared goal pool without simulating drops."""
+
+    chains: MergeChains
+    catalog: PetWorkshopCatalog
+
+    def obtain(self, target: int, pool: _RecipePool, trail: frozenset[int]) -> _RecipePool | None:
+        """Allocates one ingredient, pricing its uncovered units through reachable producers."""
+
+        if target in trail:
+            return None
+        candidate = pool.copy()
+        demand = _allocate_demand(
+            target, 1, candidate.normal, candidate.inactive, self.chains, self.catalog,
+            feed_pool=candidate.locked,
+        )
+        candidate.reserve(demand.intermediates)
+        candidate.reserve({target: demand.normal_exact})
+        candidate.actions += demand.merges_to_build + demand.feed_actions
+        if demand.normal_exact < 1:
+            candidate.auxiliary_targets.add(target)
         if demand.residual_units == 0:
-            demand_efforts.append(
-                DemandEffort(
-                    item_id=demand.item_id,
-                    residual_units=0,
-                    energy=Fraction(0),
-                    producer_item_id=None,
-                    path_mode=None,
-                    uncertain=False,
+            return candidate
+        result = self.complete(target, demand.residual_units, candidate, trail)
+        return result[0] if result is not None and result[0].complete else None
+
+    def complete(
+        self, target: int, units: int, pool: _RecipePool, trail: frozenset[int],
+    ) -> tuple[_RecipePool, int | None, str | None] | None:
+        """Chooses production or an observed feed-locked copy for an uncovered demand."""
+
+        if units == 0:
+            return pool, None, None
+        if target in trail:
+            return None
+        trail = trail | {target}
+        candidates: list[tuple[_RecipePool, int | None, str | None]] = []
+        production = self.produce(target, units, pool, trail)
+        if production is not None:
+            candidates.append(production)
+        producer = self.catalog.producer_for(target)
+        quantity = (units + self.chains.unit_value(target) - 1) // self.chains.unit_value(target)
+        if producer is not None and producer.feed_item_id is not None and pool.locked.get(target, 0) >= quantity:
+            fed: _RecipePool | None = pool.copy()
+            for _ in range(quantity):
+                fed = self.feed(producer, fed, trail)
+                if fed is None:
+                    break
+            if fed is not None:
+                candidates.append((fed, target, "feed"))
+        return min(candidates, key=lambda result: (not result[0].complete, result[0].energy, result[0].actions,
+                   result[0].uncertain, result[1] or 0)) if candidates else None
+
+    def feed(
+        self, producer: PetWorkshopProducer, pool: _RecipePool, trail: frozenset[int],
+    ) -> _RecipePool | None:
+        """Claims one feed-locked piece and its exact separately allocated ingredient."""
+
+        if producer.feed_item_id is None or pool.locked.get(producer.item_id, 0) <= 0:
+            return None
+        candidate = self.obtain(producer.feed_item_id, pool, trail)
+        if candidate is None:
+            return None
+        candidate.locked[producer.item_id] -= 1
+        candidate.actions += 1
+        candidate.auxiliary_targets.add(producer.item_id)
+        return candidate
+
+    def acquire(
+        self, producer: PetWorkshopProducer, pool: _RecipePool, trail: frozenset[int],
+    ) -> _RecipePool | None:
+        """Chooses one existing, fed or freshly constructed producer without borrowing stock twice."""
+
+        item = producer.item_id
+        candidates: list[_RecipePool] = []
+        if pool.normal.get(item, 0):
+            available = pool.copy()
+            available.normal[item] -= 1
+            available.reserve({item: 1})
+            available.supplies[item] = _Supply(None, "available", producer.max_num > 0)
+            candidates.append(available)
+        fed = self.feed(producer, pool, trail | {item})
+        if fed is not None:
+            # Feeding an observed copy does not reveal its remaining counter.
+            fed.supplies[item] = _Supply(None, "feed", producer.max_num > 0)
+            candidates.append(fed)
+        if not pool.normal.get(item, 0):
+            built = self.obtain(item, pool, trail)
+            if built is not None:
+                # Only an ordinary construction receives a fresh maximum.
+                # A fed existing copy retains explicitly unknown capacity.
+                fed_existing = built.locked.get(item, 0) < pool.locked.get(item, 0)
+                built.supplies[item] = _Supply(
+                    Fraction(producer.max_num) if producer.max_num and not fed_existing else None,
+                    "feed" if fed_existing else "build", bool(producer.max_num and fed_existing),
                 )
-            )
-            continue
-        estimate = _best_producer_estimate(
-            demand.residual_units, demand.item_id, board, chains, catalog, 0
-        )
-        if estimate is None:
-            feasible = False
-            demand_efforts.append(
-                DemandEffort(
-                    item_id=demand.item_id,
-                    residual_units=demand.residual_units,
-                    energy=None,
-                    producer_item_id=None,
-                    path_mode=None,
-                    uncertain=False,
-                    notes=(f"no supported producer path for item {demand.item_id}",),
-                )
-            )
-            continue
-        energy, actions, uncertain, producer_item, mode = estimate
-        total_energy += energy
-        producers_used[producer_item] = producers_used.get(producer_item, 0) + 1
-        if uncertain:
-            uncertainty.append(
-                f"producer {producer_item} ({mode}) has unobserved finite uses"
-            )
-        demand_efforts.append(
-            DemandEffort(
-                item_id=demand.item_id,
-                residual_units=demand.residual_units,
-                energy=energy,
-                producer_item_id=producer_item,
-                path_mode=mode,
-                uncertain=uncertain,
-            )
-        )
-    conservative = any(count > 1 for count in producers_used.values())
-    return GoalEffort(
-        demand_efforts=tuple(demand_efforts),
-        energy=total_energy if feasible else None,
-        free_actions=allocation.free_actions,
-        uncertain=bool(uncertainty),
-        uncertainty=tuple(uncertainty),
-        conservative=conservative,
-    )
+                built.auxiliary_targets.add(item)
+                candidates.append(built)
+        return min(candidates, key=lambda candidate: (candidate.energy, candidate.actions,
+                   candidate.supplies[item].uncertain)) if candidates else None
+
+    def produce(
+        self, target: int, units: int, pool: _RecipePool, trail: frozenset[int],
+    ) -> tuple[_RecipePool, int, str] | None:
+        """Prices useful expected draws and every required fresh finite replacement.
+
+        An observed finite supply has unknown remaining uses: its numerical
+        proxy stays uncertain and is never granted a fresh maximum. For a
+        constructed supply, additional copies consume new ingredients from
+        the same pool, including their upstream production energy.
+        """
+
+        candidates: list[tuple[_RecipePool, int, str]] = []
+        for producer in self.catalog.producers:
+            useful = useful_units_per_draw(producer, target, self.chains, self.catalog)
+            if useful <= 0:
+                continue
+            item = producer.item_id
+            candidate: _RecipePool | None = pool.copy()
+            draws = Fraction(units) / useful
+            mode: str | None = None
+            while draws > 0:
+                supply = candidate.supplies.get(item)
+                if supply is None or supply.remaining == 0:
+                    acquired = self.acquire(producer, candidate, trail)
+                    if acquired is None:
+                        if mode is None:
+                            candidate = None
+                        else:
+                            candidate.complete = False
+                            candidate.notes.add(f"additional producer {item} has no supported acquisition path")
+                        break
+                    candidate = acquired
+                    supply = candidate.supplies[item]
+                mode = mode or supply.mode
+                used = draws if supply.remaining is None else min(draws, supply.remaining)
+                candidate.energy += used * self.catalog.activity.production_energy_cost
+                candidate.uncertain |= supply.uncertain
+                if supply.uncertain:
+                    candidate.notes.add(f"producer {item} ({supply.mode}) has unobserved finite uses")
+                if supply.remaining is not None:
+                    candidate.supplies[item] = replace(supply, remaining=supply.remaining - used)
+                draws -= used
+            if candidate is not None and mode is not None:
+                candidate.production_targets.add(target)
+                candidate.served[item] = candidate.served.get(item, frozenset()) | {target}
+                candidates.append((candidate, item, mode))
+        return min(candidates, key=lambda result: (not result[0].complete, result[0].energy, result[0].actions,
+                   result[0].uncertain, result[1])) if candidates else None

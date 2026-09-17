@@ -22,7 +22,6 @@ from pnc_automation.app.automation.pet_workshop.effort import (
     GoalAllocation,
     GoalEffort,
     allocate_goal,
-    estimate_goal,
 )
 from pnc_automation.app.automation.pet_workshop.policy import (
     OrderAssessment,
@@ -324,7 +323,7 @@ def select_goals(
         allocation = allocate_goal(
             assessment.order.requirements, board, chains, catalog
         )
-        effort = estimate_goal(allocation, board, chains, catalog)
+        effort = allocation.effort
         evaluated[assessment.order.order_ref] = GoalEvaluation(
             assessment=assessment, allocation=allocation, effort=effort
         )

@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from pnc_automation.app.automation.pet_workshop.board import BoardFacts, MergeChains
-from pnc_automation.app.automation.pet_workshop.effort import useful_units_per_draw
 from pnc_automation.app.automation.pet_workshop.goals import GoalSelection, select_goals
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopPolicy,
@@ -46,22 +45,6 @@ class GoalContext:
     needed_producers: frozenset[int]
     aux_targets: frozenset[int]
     all_targets: frozenset[int]
-
-
-def _useful_producer_items(
-    target_items: frozenset[int],
-    chains: MergeChains,
-    catalog: PetWorkshopCatalog,
-) -> frozenset[int]:
-    """Returns producer item ids whose drop group can serve any target chain."""
-
-    needed: set[int] = set()
-    for producer in catalog.producers:
-        for target in target_items:
-            if useful_units_per_draw(producer, target, chains, catalog) > 0:
-                needed.add(producer.item_id)
-                break
-    return frozenset(needed)
 
 
 def goal_context(
@@ -125,27 +108,10 @@ def goal_context(
         for demand in primary.allocation.demands
         if demand.missing > 0
     )
-    produce_targets = frozenset(
-        demand.item_id
-        for demand in primary.allocation.demands
-        if demand.residual_units > 0
-    )
-    needed_producers = _useful_producer_items(produce_targets, chains, catalog)
-    aux_targets: set[int] = set()
-    for item_id in needed_producers | demand_targets:
-        if not board.feed_locked_cells(item_id):
-            continue
-        producer = catalog.producer_for(item_id)
-        if (
-            producer is not None
-            and producer.feed_item_id is not None
-            and board.normal_count(producer.feed_item_id) == 0
-        ):
-            aux_targets.add(producer.feed_item_id)
-    needed_producers |= _useful_producer_items(frozenset(aux_targets), chains, catalog)
-    all_targets = frozenset(
-        demand_targets | needed_producers | frozenset(aux_targets)
-    )
+    produce_targets = primary.allocation.production_targets
+    needed_producers = primary.allocation.needed_producers
+    aux_targets = primary.allocation.auxiliary_targets
+    all_targets = demand_targets | aux_targets
     return GoalContext(
         known=True,
         selection=selection,
@@ -170,6 +136,23 @@ def merge_advances(
     return any(
         successor in chains.closure(target) for target in ctx.all_targets
     )
+
+
+def produce_reservation_verdict(
+    ctx: GoalContext, board: BoardFacts, catalog: PetWorkshopCatalog, item_id: int,
+) -> str | None:
+    """Protects exact order stock from a finite producer's possible exhaustion.
+
+    Unlimited producers remain usable while reserved. With duplicate finite
+    pieces, one may produce only while a full required quantity can survive
+    that copy's disappearance or transformation.
+    """
+
+    producer = catalog.producer_for(item_id)
+    if producer is not None and producer.max_num > 0:
+        if board.normal_count(item_id) - 1 < ctx.protected_exact.get(item_id, 0):
+            return f"finite production could consume required {item_id} pieces"
+    return None
 
 
 def merge_reservation_verdict(

@@ -21,6 +21,7 @@ from pnc_automation.app.automation.pet_workshop.rules import (
     feed_reservation_verdict,
     goal_context,
     merge_reservation_verdict,
+    produce_reservation_verdict,
 )
 from pnc_automation.app.automation.pet_workshop.effort import useful_units_per_draw
 from pnc_automation.app.automation.pet_workshop.validation import validate_intent
@@ -293,7 +294,7 @@ def _progress_gap(
         return (0, min(gaps))
     gaps = [
         chains.tier(target) - chains.tier(successor)
-        for target in ctx.needed_producers | ctx.aux_targets
+        for target in ctx.aux_targets
         if successor in chains.closure(target)
     ]
     if gaps:
@@ -372,7 +373,7 @@ def _best_progress(
         if item_id in feedable:
             gap = (0, 0)
             why = f"feed {food} to demanded piece {item_id}"
-        elif item_id in ctx.needed_producers:
+        elif item_id in ctx.aux_targets:
             gap = (1, 0)
             why = f"feed {food} to producer {item_id} serving the goal"
         else:
@@ -493,9 +494,11 @@ def _production_step(
     """
 
     cost = catalog.activity.production_energy_cost
-    targets = ctx.produce_targets | ctx.aux_targets
+    targets = ctx.produce_targets
     scored: list[tuple[Fraction, int, int, WorkshopCooldown]] = []
     for producer in catalog.producers:
+        if produce_reservation_verdict(ctx, board, catalog, producer.item_id) is not None:
+            continue
         useful = sum(
             useful_units_per_draw(producer, target, chains, catalog)
             for target in targets

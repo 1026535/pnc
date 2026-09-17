@@ -18,6 +18,7 @@ from pnc_automation.app.automation.pet_workshop.rules import (
     feed_reservation_verdict,
     goal_context,
     merge_reservation_verdict,
+    produce_reservation_verdict,
     recycle_is_blocked,
     submit_reservation_verdict,
 )
@@ -138,6 +139,7 @@ def _validate_produce(
     state: WorkshopState,
     board: BoardFacts,
     catalog: PetWorkshopCatalog,
+    ctx: GoalContext,
     intent: WorkshopProduceIntent,
 ) -> WorkshopIntentValidation:
     verdict = _mutation_verdict(state)
@@ -155,6 +157,11 @@ def _validate_produce(
     producer = catalog.producer_for(intent.producer_item_id)
     if producer is None:
         return _illegal(f"item {intent.producer_item_id} is not a producer")
+    if producer.max_num > 0 and not ctx.known:
+        return _uncertain("goal reservations are unresolved for a finite producer")
+    reason = produce_reservation_verdict(ctx, board, catalog, intent.producer_item_id)
+    if reason is not None:
+        return _illegal(reason)
     if state.production_mode == WorkshopProductionMode.UNKNOWN:
         return _uncertain("production mode is unread")
     if state.production_mode == WorkshopProductionMode.AUTO_FUSION:
@@ -425,7 +432,7 @@ def validate_intent(
     if isinstance(intent, WorkshopSelectIntent):
         return _validate_select(state, board, intent)
     if isinstance(intent, WorkshopProduceIntent):
-        return _validate_produce(state, board, catalog, intent)
+        return _validate_produce(state, board, catalog, ctx, intent)
     if isinstance(intent, WorkshopMergeIntent):
         return _validate_merge(state, board, chains, ctx, intent)
     if isinstance(intent, WorkshopActivateIntent):

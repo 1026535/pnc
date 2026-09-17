@@ -12,7 +12,6 @@ from fractions import Fraction
 from pnc_automation.app.automation.pet_workshop.board import BoardFacts, MergeChains
 from pnc_automation.app.automation.pet_workshop.effort import (
     allocate_goal,
-    estimate_goal,
     useful_units_per_draw,
 )
 from pnc_automation.app.automation.pet_workshop.goals import select_goals
@@ -364,7 +363,7 @@ class TestEstimateGoal(unittest.TestCase):
     def estimate(self, requirements, *cells):
         board = BoardFacts(solver_fx.observed_state(*cells))
         allocation = allocate_goal(requirements, board, self.chains, self.catalog)
-        return estimate_goal(allocation, board, self.chains, self.catalog)
+        return allocation.effort
 
     def test_stocked_goal_costs_zero(self) -> None:
         effort = self.estimate(
@@ -474,7 +473,7 @@ class TestEstimateGoal(unittest.TestCase):
             solver_fx.observed_state(fx.make_cell(1, 1, item_id=900001))
         )
         allocation = allocate_goal({900002: 1, 900003: 1}, board, chains, catalog)
-        effort = estimate_goal(allocation, board, chains, catalog)
+        effort = allocation.effort
         self.assertTrue(effort.conservative)
         self.assertEqual(effort.energy, Fraction(4))
 
@@ -522,6 +521,64 @@ class TestEstimateGoal(unittest.TestCase):
         )
         self.assertEqual(sea.producer_item_id, FISHING_TOOL_9)
         self.assertEqual(sea.path_mode, "build")
+
+    def test_feed_cannot_borrow_food_reserved_for_the_same_order(self) -> None:
+        """The order's Food 3 and the Trap's feed are separate pieces."""
+
+        effort = self.estimate(
+            {FOOD_3: 1, ANIMAL_1: 1},
+            fx.make_cell(1, 1, item_id=FOOD_3),
+            fx.make_cell(1, 2, item_id=TRAP, item_status=WorkshopItemStatus.FEED_LOCKED),
+            fx.make_cell(1, 3, item_id=BOWL_5),
+        )
+        self.assertEqual(effort.energy, Fraction(8, 3) + Fraction(20, 13))
+        self.assertTrue(effort.uncertain)
+
+    def test_finite_rebuilds_price_new_ingredients_from_the_remaining_pool(self) -> None:
+        """Two Food 5 need three Bowls; only the first Bowl is already buildable."""
+
+        effort = self.estimate(
+            {31105: 2},
+            fx.make_cell(1, 1, item_id=30104),
+            fx.make_cell(1, 2, item_id=30104),
+            fx.make_cell(1, 3, item_id=30004),
+        )
+        self.assertEqual(effort.energy, Fraction(64, 3) + 2 * Fraction(32, 3))
+        self.assertFalse(effort.uncertain)
+
+    def test_fresh_finite_capacity_is_shared_across_demands(self) -> None:
+        """Different food tiers cannot each borrow the same fresh ten draws."""
+
+        effort = self.estimate(
+            {31104: 1, 31105: 1},
+            fx.make_cell(1, 1, item_id=30104),
+            fx.make_cell(1, 2, item_id=30104),
+            fx.make_cell(1, 3, item_id=30004),
+        )
+        self.assertEqual(effort.energy, Fraction(16) + Fraction(32, 3))
+
+    def test_missing_later_rebuild_leaves_total_unknown(self) -> None:
+        """One buildable Bowl allows progress, but cannot price an entire large order."""
+
+        board = BoardFacts(solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=30104), fx.make_cell(1, 2, item_id=30104),
+        ))
+        allocation = allocate_goal({31105: 2}, board, self.chains, self.catalog)
+        self.assertIsNone(allocation.effort.energy)
+        self.assertIn(BOWL_5, allocation.auxiliary_targets)
+        self.assertEqual(allocation.protected_quantities[30104], 2)
+
+    def test_feed_with_merge_built_food_is_a_zero_energy_goal(self) -> None:
+        """Free construction of an exact feed ingredient participates in zero-cost ranking."""
+
+        board = BoardFacts(solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=TRAP, item_status=WorkshopItemStatus.FEED_LOCKED),
+            fx.make_cell(1, 2, item_id=31102), fx.make_cell(1, 3, item_id=31102),
+        ))
+        allocation = allocate_goal({TRAP: 1}, board, self.chains, self.catalog)
+        self.assertTrue(allocation.covered_by_stock)
+        self.assertEqual(allocation.free_actions, 2)
+        self.assertEqual(allocation.protected_quantities[31102], 2)
 
 
 class TestSelectGoals(unittest.TestCase):
@@ -947,6 +1004,7 @@ class TestGoalContext(unittest.TestCase):
     def test_produce_targets_cover_only_missing_demands(self) -> None:
         ctx = self.context(
             fx.make_cell(1, 1, item_id=FRUIT_1),
+            fx.make_cell(1, 2, item_id=TREE_4),
             orders=(
                 fx.make_order(
                     1,
@@ -963,6 +1021,7 @@ class TestGoalContext(unittest.TestCase):
             fx.make_cell(
                 1, 1, item_id=TRAP, item_status=WorkshopItemStatus.FEED_LOCKED
             ),
+            fx.make_cell(1, 2, item_id=BOWL_5),
             orders=(
                 fx.make_order(
                     1,

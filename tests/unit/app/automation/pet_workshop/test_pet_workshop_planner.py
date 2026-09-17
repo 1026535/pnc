@@ -107,6 +107,94 @@ class PlannerCase(unittest.TestCase):
         return solver_fx.observed_state(*cells, orders=orders)
 
 
+class TestSharedRecipeProgress(PlannerCase):
+    def test_reachable_producer_upgrade_serves_the_missing_chain(self) -> None:
+        """Two Tree 1s can become the Tree 2 required for wood production."""
+
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=20001), fx.make_cell(1, 2, item_id=20001),
+            orders=(lasso_order(1, {WOOD_1: 2}, ready=False),),
+        )
+        decision = self.plan(state)
+        self.assertEqual(decision.intent, WorkshopMergeIntent(1, 2, 20001))
+        upgraded = solver_fx.apply_merge(state, decision.intent, self.catalog)
+        self.assertEqual(self.plan(upgraded).intent, WorkshopSelectIntent(2))
+
+    def test_reserved_finite_producer_cannot_be_spent_when_an_alternative_cools(self) -> None:
+        """The last required Bowl must survive production; use the Pot after cooldown."""
+
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=30105, cooldown=WorkshopCooldown.CLEAR),
+            fx.make_cell(1, 2, item_id=30004, cooldown=WorkshopCooldown.ACTIVE),
+            selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+            orders=(lasso_order(1, {30105: 1, FOOD_3: 1}, ready=False),),
+        )
+        self.assertIsInstance(self.plan(state).intent, WorkshopWaitIntent)
+        verdict = validate_intent(state, WorkshopProduceIntent(1, 30105), self.catalog, self.policy)
+        self.assertEqual(verdict.verdict, WorkshopValidationVerdict.ILLEGAL)
+
+    def test_reserved_unlimited_producer_remains_available(self) -> None:
+        """Using a required Tree does not consume the order's exact stock."""
+
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+            selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+            orders=(lasso_order(1, {TREE_4: 1, WOOD_1: 1}, ready=False),),
+        )
+        self.assertEqual(self.plan(state).intent, WorkshopProduceIntent(1, TREE_4))
+
+    def test_lower_ready_order_cannot_take_the_primary_feed_ingredient(self) -> None:
+        """The primary recipe reserves Food 3 even though the order demands Animal 1."""
+
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=TRAP, item_status=WorkshopItemStatus.FEED_LOCKED),
+            fx.make_cell(1, 2, item_id=FOOD_3),
+            fx.make_cell(1, 3, item_id=FRUIT_1),
+            fx.make_cell(1, 4, item_id=STATUE_5),
+            orders=(lasso_order(1, {ANIMAL_1: 1, FRUIT_1: 1}, ready=False),
+                    chest_order(2, {FOOD_3: 1, STATUE_5: 1})),
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopFeedIntent)
+        self.assertEqual(decision.protected_quantities[FOOD_3], 1)
+        verdict = validate_intent(state, WorkshopSubmitOrderIntent(2), self.catalog, self.policy)
+        self.assertEqual(verdict.verdict, WorkshopValidationVerdict.ILLEGAL)
+
+    def test_reserved_food_requires_an_additional_produced_feed(self) -> None:
+        """A Normal food already allocated to the order cannot suppress auxiliary production."""
+
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=FOOD_3),
+            fx.make_cell(1, 2, item_id=TRAP, item_status=WorkshopItemStatus.FEED_LOCKED),
+            fx.make_cell(1, 3, item_id=30105, cooldown=WorkshopCooldown.CLEAR),
+            orders=(lasso_order(1, {ANIMAL_1: 1, FOOD_3: 1}, ready=False),),
+        )
+        self.assertEqual(self.plan(state).intent, WorkshopSelectIntent(3))
+
+    def test_missing_and_expired_bowl_replans_to_pot(self) -> None:
+        """The same observed missing producer is reconstructed initially and after exhaustion."""
+
+        initial = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=30004, cooldown=WorkshopCooldown.CLEAR),
+            orders=(lasso_order(1, {FOOD_3: 2}, ready=False),),
+        )
+        self.assertEqual(self.plan(initial).intent, WorkshopSelectIntent(1))
+        with_bowl = solver_fx.place_item(initial, 2, 30105)
+        selected = solver_fx.set_selection(with_bowl, 2)
+        self.assertEqual(self.plan(selected).intent, WorkshopProduceIntent(2, 30105))
+        expired = solver_fx.clear_cells(selected, 2)
+        self.assertEqual(self.plan(expired).intent, WorkshopSelectIntent(1))
+
+    def test_first_finite_copy_can_be_built_when_later_cost_is_unknown(self) -> None:
+        """An incomplete total estimate does not discard currently useful free progress."""
+
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=30104), fx.make_cell(1, 2, item_id=30104),
+            orders=(lasso_order(1, {31105: 2}, ready=False),),
+        )
+        self.assertEqual(self.plan(state).intent, WorkshopMergeIntent(1, 2, 30104))
+
+
 class TestTerminalEvidence(PlannerCase):
     def test_zero_energy_stops_even_with_ready_order(self) -> None:
         state = solver_fx.observed_state(

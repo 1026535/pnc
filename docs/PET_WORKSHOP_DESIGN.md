@@ -248,15 +248,28 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
   admission rule, reward-category ranking from `policy.reward_priority`,
   ranking-blocked marking for unread reward quantities, and the restricted
   recycling allowlist.
-- `effort.py` — multiset `allocate_goal` (exact stock, feed-unlockable
-  pieces, lower-tier intermediates, activation pairs; higher tiers are never
-  split backwards), `useful_units_per_draw`, and the advisory
-  `estimate_goal`, which flags `conservative` when one producer serves two
-  demands and reports unknown finite capacity as uncertainty only.
+- `effort.py` — `allocate_goal` owns multiset reservations and advisory effort
+  together (exact stock, feed-unlockable pieces, lower-tier intermediates,
+  activation pairs; higher tiers are never split backwards).
+  `useful_units_per_draw` provides the catalog-weighted production proxy.
+  The allocation flags `conservative` when one producer serves two demands
+  and reports unknown finite capacity as uncertainty only.
   Exact requirements are reserved together before recipes consume stock.
   The free recipe traversal can build a Normal partner before activating an
   inactive piece; it records original consumed quantities and restores an
   unsuccessful branch without borrowing the same piece twice.
+  Feed ingredients and producer construction consume the same remaining
+  pool as order demands. The selected recipe supplies production and
+  auxiliary targets to `rules.py`; no caller independently rediscovers them
+  from raw board counts. Thus an order's reserved Food 3 cannot double as
+  the Trap's feed, and a lower ready order cannot take the allocated feed.
+  Reachable construction expands through catalog producer chains with a
+  dependency-cycle guard. New finite copies receive their catalog capacity;
+  replacements require fresh stock or separately priced upstream production.
+  Existing finite copies retain unknown remaining capacity. If only the
+  first construction is reachable, useful progress remains available but
+  the total effort is unknown. Expected draws are an additive advisory
+  approximation; no stochastic simulator or future inventory is created.
 - `goals.py` — `GoalSelection`/`select_goals`: survey gating,
   category-first then zero-cost-before-positive-cost ranking with
   policy-ordered secondary rewards, known estimates ahead of absent or
@@ -268,8 +281,11 @@ transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
   secondary selection uses the same reward inspection and surplus-stock
   predicates rather than treating unread quantities as zero.
 - `rules.py` — `goal_context` plus the reservation verdicts for merge,
-  activate, feed and submit: protected exact/intermediate pieces may only be
-  consumed when the action provably advances the serving demand.
+  activate, feed, finite production and submit: protected exact/intermediate
+  pieces may only be consumed when the action advances the serving demand.
+  A finite generator reserved as an exact order ingredient cannot produce
+  if its exhaustion could remove the required quantity; a reserved unlimited
+  generator remains usable.
 - `validation.py` — the canonical `validate_intent`, used by the planner
   and reused verbatim for pre-execution revalidation; `UNCERTAIN` whenever a
   required fact was never observed.
