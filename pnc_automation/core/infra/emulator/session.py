@@ -52,6 +52,7 @@ _app_foreground_attempts = 30
 _app_foreground_retry_delay_seconds = 2.0
 _input_letter_delay_seconds_range = (0.03, 0.08)
 _input_letter_delay_distance_seconds = 0.10
+_input_letter_same_finger_seconds = 0.05
 _input_word_delay_seconds_range = (0.12, 0.22)
 
 
@@ -324,7 +325,8 @@ class BlueStacksSession:
         """Inputs one text payload using Android's input subsystem.
 
         With input jitter enabled the payload is typed one character at a
-        time with a small varied inter-key delay instead of one burst.
+        time, with a keystroke cadence shaped by word boundaries, QWERTY
+        key distance, and same-finger transitions instead of one burst.
         """
 
         self._require_input()
@@ -743,12 +745,26 @@ def _encode_adb_text(text: str) -> str:
     return shlex.quote(text.replace(" ", "%s"))
 
 
-_QWERTY_KEY_ROWS = ("qwertyuiop", "asdfghjkl", "zxcvbnm")
-_QWERTY_ROW_OFFSETS = (0.0, 0.4, 0.8)
+_QWERTY_KEY_ROWS = (
+    ("1234567890", -1.0, 0.0),
+    ("qwertyuiop", 0.0, 0.0),
+    ("asdfghjkl", 1.0, 0.4),
+    ("zxcvbnm", 2.0, 0.8),
+)
 _QWERTY_KEY_POSITIONS = {
-    key: (row_index, column_index + _QWERTY_ROW_OFFSETS[row_index])
-    for row_index, row in enumerate(_QWERTY_KEY_ROWS)
+    key: (row_index, column_index + row_offset)
+    for row, row_index, row_offset in _QWERTY_KEY_ROWS
     for column_index, key in enumerate(row)
+}
+_QWERTY_FINGERS = {
+    "1": 0, "q": 0, "a": 0, "z": 0,
+    "2": 1, "w": 1, "s": 1, "x": 1,
+    "3": 2, "e": 2, "d": 2, "c": 2,
+    "4": 3, "5": 3, "r": 3, "f": 3, "v": 3, "t": 3, "g": 3, "b": 3,
+    "6": 4, "7": 4, "y": 4, "h": 4, "n": 4, "u": 4, "j": 4, "m": 4,
+    "8": 5, "i": 5, "k": 5,
+    "9": 6, "o": 6, "l": 6,
+    "0": 7, "p": 7,
 }
 _QWERTY_MAX_KEY_DISTANCE = max(
     math.hypot(first_row - second_row, first_column - second_column)
@@ -758,7 +774,7 @@ _QWERTY_MAX_KEY_DISTANCE = max(
 
 
 def _qwerty_key_distance(first: str, second: str) -> float | None:
-    """Returns the unit-key distance between two letters on a staggered QWERTY layout."""
+    """Returns the unit-key distance between two keys on a staggered QWERTY layout."""
 
     first_position = _QWERTY_KEY_POSITIONS.get(first.lower())
     second_position = _QWERTY_KEY_POSITIONS.get(second.lower())
@@ -770,21 +786,40 @@ def _qwerty_key_distance(first: str, second: str) -> float | None:
     )
 
 
+def _same_qwerty_finger(first: str, second: str) -> bool:
+    """Returns whether two different keys share one touch-typing finger on QWERTY."""
+
+    first_key, second_key = first.lower(), second.lower()
+    if first_key == second_key:
+        return False
+    first_finger = _QWERTY_FINGERS.get(first_key)
+    return first_finger is not None and first_finger == _QWERTY_FINGERS.get(second_key)
+
+
+def _skewed_delay_seconds(low: float, high: float, *, rng: random.Random) -> float:
+    """Draws one right-skewed pause: most keystrokes are quick, long pauses happen."""
+
+    return rng.triangular(low, high, low + (high - low) * 0.2)
+
+
 def _type_delay_seconds(previous: str, current: str, *, rng: random.Random) -> float:
     """Returns one human-like pause before the next keystroke.
 
     Word boundaries pause longest; within a word the pause grows with the
-    QWERTY distance a finger travels between the two keys, and falls back
-    to a mid-range pause for keys outside the letter layout.
+    QWERTY distance a finger travels between the two keys plus a penalty
+    for same-finger transitions, with a mid-range pause for keys outside
+    the layout. Draws are right-skewed like measured keystroke intervals.
     """
 
     if previous == " " or current == " ":
-        return rng.uniform(*_input_word_delay_seconds_range)
+        return _skewed_delay_seconds(*_input_word_delay_seconds_range, rng=rng)
     low, high = _input_letter_delay_seconds_range
     distance = _qwerty_key_distance(previous, current)
     scale = 0.5 if distance is None else min(distance / _QWERTY_MAX_KEY_DISTANCE, 1.0)
     shift = _input_letter_delay_distance_seconds * scale
-    return rng.uniform(low + shift, high + shift)
+    if _same_qwerty_finger(previous, current):
+        shift += _input_letter_same_finger_seconds
+    return _skewed_delay_seconds(low + shift, high + shift, rng=rng)
 
 
 def _input_command_prefix(*, input_source: str, device_id: str) -> list[str]:

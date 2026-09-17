@@ -730,8 +730,71 @@ class BlueStacksSessionTests(unittest.TestCase):
 
         self.assertEqual(len(sleeps), 2)
         self.assertLessEqual(sleeps[0], 0.10)
-        self.assertGreaterEqual(sleeps[1], 0.13)
+        self.assertGreaterEqual(sleeps[1], 0.12)
         self.assertGreater(sleeps[1], sleeps[0])
+
+    def test_input_text_penalizes_same_finger_but_not_key_repeats(self) -> None:
+        """Same-finger transitions pause longest while repeated keys stay quick."""
+
+        sleeps: list[float] = []
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260917),
+            input_jitter_px=4.0,
+        ))
+
+        session.input_text("as")
+        session.input_text("ec")
+        session.input_text("ll")
+
+        self.assertEqual(len(sleeps), 3)
+        self.assertLessEqual(sleeps[0], 0.10)
+        self.assertGreaterEqual(sleeps[1], 0.10)
+        self.assertGreater(sleeps[1], sleeps[0])
+        self.assertLessEqual(sleeps[2], 0.08)
+        self.assertGreater(sleeps[1], sleeps[2])
+
+    def test_input_text_uses_mid_pause_for_keys_outside_the_layout(self) -> None:
+        """Falls back to a mid-range pause for characters without a QWERTY position."""
+
+        sleeps: list[float] = []
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+            rng=random.Random(20260917),
+            input_jitter_px=4.0,
+        ))
+
+        session.input_text("a'")
+
+        self.assertEqual(len(sleeps), 1)
+        self.assertGreaterEqual(sleeps[0], 0.08)
+        self.assertLessEqual(sleeps[0], 0.13)
 
     def test_swipe_uses_explicit_touchscreen_source(self) -> None:
         """Uses the touchscreen-qualified input command so drag gestures are unambiguous to ADB-backed emulators."""
