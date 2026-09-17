@@ -269,6 +269,8 @@ class WorkshopSimulator:
                 self._cycle_uses[intent.cell_id] = 0
                 self._cooling_until_ms[intent.cell_id] = self._clock_ms + producer.cooldown_ms
                 updates[intent.cell_id] = replace(cell, cooldown=WorkshopCooldown.ACTIVE)
+            elif cell.cooldown != WorkshopCooldown.CLEAR:
+                updates[intent.cell_id] = replace(cell, cooldown=WorkshopCooldown.CLEAR)
         self._set_state(
             cells=self._cells_with(updates),
             energy=self._spend_energy(self._catalog.activity.production_energy_cost),
@@ -367,6 +369,10 @@ class WorkshopSimulator:
         if cell.item_id != intent.item_id:
             raise WorkshopSimulationError(
                 f"Cell {intent.cell_id} holds {cell.item_id}, not expected {intent.item_id}."
+            )
+        if cell.item_status != WorkshopItemStatus.NORMAL:
+            raise WorkshopSimulationError(
+                f"Cell {intent.cell_id} piece is {cell.item_status}, not recyclable Normal."
             )
         item = self._catalog.require_item(intent.item_id)
         if not item.recoverable:

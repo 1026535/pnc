@@ -67,9 +67,8 @@ def _producing_state(item_id: int = MAP_1, **state_kwargs):
     return fx.make_state(
         cells=(
             fx.make_cell(1, 1, item_id=item_id, cooldown=WorkshopCooldown.CLEAR),
-            *fx.make_empty_cells(rows=range(1, 10)),
-        )[0:1]
-        + tuple(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+            *(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+        ),
         **state_kwargs,
     )
 
@@ -215,9 +214,8 @@ class WorkshopSimulatorTests(unittest.TestCase):
                 fx.make_state(
                     cells=(
                         fx.make_cell(1, 1, item_id=MAP_1, cooldown=WorkshopCooldown.ACTIVE),
-                        *fx.make_empty_cells(),
-                    )[0:1]
-                    + tuple(cell for cell in fx.make_empty_cells() if cell.cell_id != 1)
+                        *(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+                    )
                 )
             ).apply(WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1))
         board = fx.board_layout()
