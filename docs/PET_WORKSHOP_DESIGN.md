@@ -319,12 +319,14 @@ resolver.
 
 - `pnc_automation/app/pnc/domain/pet_workshop.py` — `WorkshopMutationKind`
   (`RUN = "pet_workshop.run"`) is the feature action identity; the journaled
-  sub-action kinds are `WorkshopIntentKind` members except `SELECT`,
-  `INSPECT`, and `STOP` (observation/wait/stop are not journaled mutations).
+  mutation subset is declared by `WORKSHOP_MUTATION_INTENT_KINDS` in
+  `feature_actions.py`. `SELECT`, `INSPECT`, `WAIT`, and `STOP` are not
+  journaled mutations.
 - `pnc_automation/app/pnc/domain/feature_actions.py` — the canonical
   `FeatureActionKind`/`JournaledActionKind` unions, `normalize_*` validators,
-  and `is_workshop_journaled_action`. Raw strings never reach authority or
-  the journal.
+  and `is_workshop_journaled_action`. Input and persisted JSON strings are
+  decoded through these normalizers; the mutation boundary restricts
+  Workshop dispatch to the declared mutation subset.
 - `pnc_automation/app/pnc/domain/daily_maintenance.py` —
   `MutationBudgetKind` (`COUNTED` / `OBSERVED_WORKSHOP_BAR`),
   `MutationIntent.invocation_id`, `WorkshopInvocationRecord`, and
