@@ -111,6 +111,11 @@ Lua root):
   intents); `Observation.workshop` is the optional published field bound by
   the shared provenance owner. See the
   [canonical design](../../PET_WORKSHOP_DESIGN.md).
+- `pnc_automation/app/automation/pet_workshop/` is the pure offline solver:
+  `plan_next` returns one proposed `WorkshopDecision` (typed intent +
+  diagnostics) and `validate_intent` checks it; neither performs I/O or
+  mutates game state. Executed actions are a later packet's concern —
+  execution re-validates the proposal against a fresh observation first.
 - Catalog facts are game data, not policy: excluded mechanics (Omni Card,
   consumable AP/Diamond, storage) stay representable for recognition.
 - Workshop level awards do not guarantee a usable producer on the current

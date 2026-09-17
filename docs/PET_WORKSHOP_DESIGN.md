@@ -12,7 +12,7 @@ requirements and sequencing.
 | Shared state/view/intent models, policy + interface contracts | `pnc_automation/app/pnc/domain/pet_workshop.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Observation integration (`ObservationAdditions.workshop`, both publishers) | `Observation`, `observation_builder.py`, `navigation_perception.py`, `observation_provenance.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Feature parser + measured controls | `pnc_automation/app/pnc/vision/` (planned) | Pending PW02 |
-| Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` (planned) | Pending Plan 02 |
+| Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` | Implemented (PW03/PW04 solver slice, 2026-09-16) |
 | Execution, mutation receipts, entry points, Daily Maintenance | existing task/engine owners | Pending Plan 03 |
 
 Do not copy catalog knowledge, recipe logic, or recognition rules into a
@@ -233,8 +233,48 @@ Owned by PW02: one feature parser under `app/pnc/vision/` producing
 `observation_provenance`, publication through `ObservationBuilder`
 and `NavigationPerception`.
 
-## Solver and execution — pending
+## Solver and policy
 
-Owned by Plan 02 (the `plan_next`/`validate_intent` implementations,
-`WorkshopPolicy` defaults and evaluation, `WorkshopDecision` diagnostics) and
-Plan 03 (gestures, mutation authority, entry points, Daily Maintenance).
+Owned by Plan 02 (PW03/PW04): `pnc_automation/app/automation/pet_workshop/`
+implements the pure offline solver. No module in this package performs
+emulator, image, filesystem, clock or network I/O; authored state
+transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
+
+- `board.py` — `BoardFacts` partitions observed cells (normal, inactive,
+  feed-locked and bubble pieces, usable-empty cells, unread pieces) and
+  derives `board_full` as a tri-state; `MergeChains` indexes the catalog
+  successor graph (successor, ancestors, closure, binary unit values).
+- `policy.py` — `default_policy()` and `assess_order`: the two-total-piece
+  admission rule, reward-category ranking from `policy.reward_priority`,
+  ranking-blocked marking for unread reward quantities, and the restricted
+  recycling allowlist.
+- `effort.py` — multiset `allocate_goal` (exact stock, feed-unlockable
+  pieces, lower-tier intermediates, activation pairs; higher tiers are never
+  split backwards), `useful_units_per_draw`, and the advisory
+  `estimate_goal`, which flags `conservative` when one producer serves two
+  demands and reports unknown finite capacity as uncertainty only.
+- `goals.py` — `GoalSelection`/`select_goals`: survey gating,
+  category-first then zero-cost-before-positive-cost ranking, and
+  `inspect_order_ref` when the ranking depends on an unread reward quantity.
+- `rules.py` — `goal_context` plus the reservation verdicts for merge,
+  activate, feed and submit: protected exact/intermediate pieces may only be
+  consumed when the action provably advances the serving demand.
+- `validation.py` — the canonical `validate_intent`, used by the planner
+  and reused verbatim for pre-execution revalidation; `UNCERTAIN` whenever a
+  required fact was never observed.
+- `planner.py` — `plan_next` returns exactly one `WorkshopDecision`:
+  terminal evidence first (zero energy, excluded surface, auto-fusion
+  production mode), then survey/inspection needs, ready order submissions,
+  free progress (merges, activations, feeds), full-board recovery ending in
+  one allowlisted recycle, production (select/produce with bounded cooldown
+  waits), and finally bounded inspection or a typed stop.
+
+Every `WorkshopDecision` is a proposal: intents carry logical targets only,
+the planner never touches game state, and execution is a separate Plan 03
+step that re-validates the intent on a fresh observation through the same
+`validate_intent` before any gesture.
+
+## Execution — pending
+
+Owned by Plan 03: gestures, mutation authority, entry points and Daily
+Maintenance integration.
