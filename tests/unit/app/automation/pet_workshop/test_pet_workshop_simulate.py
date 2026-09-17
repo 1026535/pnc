@@ -15,7 +15,6 @@ from pnc_automation.app.automation.pet_workshop.simulate import (
     WorkshopSimulationError,
     WorkshopSimulator,
 )
-from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopActivateIntent,
     WorkshopCell,
@@ -271,8 +270,8 @@ class WorkshopSimulatorTests(unittest.TestCase):
         self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
         self.assertEqual(state.energy.current, 51)
 
-    def test_submit_consumes_requirements_removes_order_and_levels_up(self) -> None:
-        """Submitting consumes stock, drops the card, and EXP crosses into level 2."""
+    def test_submit_consumes_requirements_and_removes_order(self) -> None:
+        """Submitting consumes stock and drops the card; level and EXP stay fixed."""
 
         order = fx.make_order(
             7,
@@ -292,8 +291,6 @@ class WorkshopSimulatorTests(unittest.TestCase):
                     fx.make_cell(1, 3, occupancy=WorkshopOccupancy.EMPTY, item_status=None),
                     fx.make_cell(4, 6, access=WorkshopCellAccess.LOCKED,
                                  occupancy=WorkshopOccupancy.EMPTY, item_status=None),
-                    fx.make_cell(5, 6, access=WorkshopCellAccess.LOCKED,
-                                 occupancy=WorkshopOccupancy.EMPTY, item_status=None),
                 ),
                 workshop_level=1,
                 workshop_exp=20,
@@ -308,13 +305,12 @@ class WorkshopSimulatorTests(unittest.TestCase):
         state = sim.apply(WorkshopSubmitOrderIntent(order_ref=7))
 
         self.assertIsNone(state.order_survey.order(7))
-        self.assertEqual(state.workshop_exp, 45)
-        self.assertEqual(state.workshop_level, 2)
-        self.assertEqual(_cell(state, 27).access, WorkshopCellAccess.USABLE)
-        self.assertEqual(_cell(state, 34).access, WorkshopCellAccess.USABLE)
-        self.assertEqual(_cell(state, 1).item_id, MAP_1)
+        self.assertEqual(_cell(state, 1).occupancy, WorkshopOccupancy.EMPTY)
         self.assertEqual(_cell(state, 2).occupancy, WorkshopOccupancy.EMPTY)
         self.assertEqual(_cell(state, 3).occupancy, WorkshopOccupancy.EMPTY)
+        self.assertEqual(state.workshop_level, 1)
+        self.assertEqual(state.workshop_exp, 20)
+        self.assertEqual(_cell(state, 27).access, WorkshopCellAccess.LOCKED)
 
     def test_submit_rejects_insufficient_stock(self) -> None:
         """An order demanding more than the board holds cannot be submitted."""

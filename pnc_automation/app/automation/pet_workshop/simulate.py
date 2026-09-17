@@ -4,15 +4,20 @@
 ``WorkshopIntent``s, replicating the client-verified mechanics of the packaged
 catalog: merges and activations produce the catalog successor, feeds unlock
 feed-locked producers, production draws sample the authored drop groups,
-energy spends per production and regenerates on the authored interval,
-producer cooldowns follow ``num`` uses per ``cooldown_ms`` window, exhaustion
-applies ``max_num``/``change_item_id``, and merge EXP accumulates toward
-authored level thresholds that open level-gated cells.
+energy spends per production and regenerates on the authored interval, and
+producer cooldowns follow ``num`` uses per ``cooldown_ms`` window while
+exhaustion applies ``max_num``/``change_item_id``.
 
 The simulator holds the unobservable bookkeeping the observation model omits:
 sim time, per-producer cycle and lifetime use counts, cooldown deadlines and
 energy-regen progress. ``WorkshopState`` itself stays an observation model —
 ``apply`` returns the next *observable* state.
+
+Workshop level and EXP are fixed inputs: the replica starts at the authored
+level and never advances it — order EXP rewards and item ``exp`` fields are
+ignored, so level-gated cells and level rewards are the caller's input
+responsibility. Bubble generation is a premium/random mechanic outside the
+solver's scope and is never synthesized.
 
 Rules marked ASSUMPTION are not yet verified against captured transitions;
 live-captured (state, intent, state') triples are the correction path. The
@@ -37,7 +42,6 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopItemStatus,
     WorkshopMergeIntent,
     WorkshopOccupancy,
-    WorkshopOrderRewardCategory,
     WorkshopProduceIntent,
     WorkshopRecycleIntent,
     WorkshopSelectIntent,
@@ -49,7 +53,6 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopWaitIntent,
 )
 from pnc_automation.app.pnc.pet_workshop_catalog import (
-    LevelReward,
     PetWorkshopCatalog,
     load_pet_workshop_catalog,
 )
@@ -288,7 +291,6 @@ class WorkshopSimulator:
                 }
             )
         )
-        self._grant_exp_amount(self._catalog.require_item(successor).exp)
 
     def _activate(self, intent: WorkshopActivateIntent) -> None:
         """Merges a Normal fuel piece into a matching Inactive piece."""
@@ -322,7 +324,6 @@ class WorkshopSimulator:
                 }
             )
         )
-        self._grant_exp_amount(self._catalog.require_item(successor).exp)
 
     def _feed(self, intent: WorkshopFeedIntent) -> None:
         """Consumes the food piece and unlocks the feed-locked producer."""
@@ -381,12 +382,12 @@ class WorkshopSimulator:
         self._set_state(cells=self._cells_with({intent.cell_id: self._emptied(cell)}), energy=energy)
 
     def _submit(self, intent: WorkshopSubmitOrderIntent) -> None:
-        """Consumes the order's required pieces and grants authored EXP rewards.
+        """Consumes the order's required pieces and removes the surveyed card.
 
         Required pieces come off the lowest-id Normal cells first — the game
-        does not expose which copies a submission consumed.
-        ASSUMPTION (unverified): only WORKSHOP_EXP rewards move observable
-        state; item-family rewards land outside the board model.
+        does not expose which copies a submission consumed. Order rewards are
+        not applied: Workshop level/EXP are fixed inputs, and item-family
+        rewards land outside the board model.
         """
 
         order = self._state.order_survey.order(intent.order_ref)
@@ -419,9 +420,6 @@ class WorkshopSimulator:
                 survey, orders=tuple(o for o in survey.orders if o.order_ref != intent.order_ref)
             ),
         )
-        for reward in order.rewards:
-            if reward.category == WorkshopOrderRewardCategory.WORKSHOP_EXP and reward.quantity:
-                self._grant_exp_amount(reward.quantity)
 
     def _wait(self, intent: WorkshopWaitIntent) -> None:
         """Advances sim time, clearing elapsed cooldowns and regenning energy."""
@@ -564,77 +562,3 @@ class WorkshopSimulator:
         if not empty:
             raise WorkshopSimulationError("No usable empty cell for the produced piece.")
         return self._rng.choice(empty)
-
-    def _grant_exp_amount(self, amount: int) -> None:
-        """Grants raw Workshop EXP and applies crossed level thresholds.
-
-        ASSUMPTION (unverified): merge/activate creation grants the created
-        piece's authored ``exp``; level thresholds are cumulative and reaching
-        one opens ``unlock_type=1`` cells gated at or below the new level and
-        places reward items on the lowest-id usable empty cells.
-        """
-
-        if amount <= 0 or self._state.workshop_exp is None or self._state.workshop_level is None:
-            return
-        new_exp = self._state.workshop_exp + amount
-        level = self._state.workshop_level
-        updates: dict[int, WorkshopCell] = {}
-        while True:
-            nxt = self._catalog.level(level + 1)
-            if nxt is None or new_exp < nxt.exp:
-                break
-            level = nxt.level
-            updates.update(self._unlock_cells(level))
-            updates.update(self._place_level_rewards(nxt.rewards, updates))
-        changes = {"workshop_exp": new_exp, "workshop_level": level}
-        if updates:
-            changes["cells"] = self._cells_with(updates)
-        self._set_state(**changes)
-
-    def _unlock_cells(self, level: int) -> dict[int, WorkshopCell]:
-        """Opens level-gated cells whose authored unlock level is reached."""
-
-        gated = {
-            cell.cell_id
-            for cell in self._catalog.cells
-            if cell.unlock_type == 1 and cell.unlock_level <= level
-        }
-        updates: dict[int, WorkshopCell] = {}
-        for cell in self._state.cells:
-            if cell.cell_id in gated and cell.access == WorkshopCellAccess.LOCKED:
-                updates[cell.cell_id] = replace(
-                    cell, access=WorkshopCellAccess.USABLE, occupancy=WorkshopOccupancy.EMPTY
-                )
-        return updates
-
-    def _place_level_rewards(
-        self,
-        rewards: tuple[LevelReward, ...],
-        pending: Mapping[int, WorkshopCell],
-    ) -> dict[int, WorkshopCell]:
-        """Places level-reward items on free cells; a full board drops them."""
-
-        updates: dict[int, WorkshopCell] = {}
-        for reward in rewards:
-            for _ in range(reward.count):
-                free = next(
-                    (
-                        cell
-                        for cell in sorted(self._state.cells, key=lambda cell: cell.cell_id)
-                        if (effective := updates.get(cell.cell_id, pending.get(cell.cell_id, cell)))
-                        .access
-                        == WorkshopCellAccess.USABLE
-                        and effective.occupancy == WorkshopOccupancy.EMPTY
-                    ),
-                    None,
-                )
-                if free is None:
-                    return updates
-                updates[free.cell_id] = replace(
-                    pending.get(free.cell_id, free),
-                    occupancy=WorkshopOccupancy.OCCUPIED,
-                    item_id=reward.item_id,
-                    item_status=WorkshopItemStatus.NORMAL,
-                    cooldown=WorkshopCooldown.CLEAR,
-                )
-        return updates
