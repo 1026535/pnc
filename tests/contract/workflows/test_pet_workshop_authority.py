@@ -25,10 +25,15 @@ from pnc_automation.app.automation.daily_maintenance.invocation_factory import (
     generate_workshop_invocation_id,
 )
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
+    JournaledMutationResult,
     MutationOperation,
     MutationReconciliation,
 )
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.pet_workshop.authority import (
+    WorkshopRunAuthority,
+    build_workshop_run_authority,
+)
 from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import (
@@ -48,6 +53,8 @@ from pnc_automation.app.pnc.domain.feature_actions import (
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopIntentKind,
     WorkshopMutationKind,
+    WorkshopOrderRewardCategory,
+    WorkshopPolicy,
     WorkshopStopReason,
 )
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
@@ -100,7 +107,9 @@ def _workshop_scope(
         journal_store=store,
         feature_action_kind=WorkshopMutationKind.RUN,
         feature_budget_kind=budget_kind,
-        feature_max_mutations=max_mutations,
+        feature_max_mutations=(
+            max_mutations if budget_kind is MutationBudgetKind.COUNTED else None
+        ),
     )
 
 
@@ -279,6 +288,25 @@ class WorkshopAcknowledgementTests(unittest.TestCase):
                     feature_action_kind=WorkshopMutationKind.RUN,
                     feature_max_mutations=0,
                 )
+            with self.assertRaisesRegex(ValueError, "must be positive"):
+                CoreMutationBoundary(
+                    target=DailyMaintenanceTargetConfig("account", "K1:Main", _CASTLE, ()),
+                    boundary=DailyRunBoundary(_MAINTENANCE_DATE, "reset-1"),
+                    authorizer=DailyMutationAuthorizer(()),
+                    journal_store=DailyRunJournalStore(Path(temporary)),
+                    feature_action_kind=WorkshopMutationKind.RUN,
+                    feature_max_mutations=None,
+                )
+            with self.assertRaisesRegex(ValueError, "cannot carry a counted mutation cap"):
+                CoreMutationBoundary(
+                    target=DailyMaintenanceTargetConfig("account", "K1:Main", _CASTLE, ()),
+                    boundary=DailyRunBoundary(_MAINTENANCE_DATE, "reset-1"),
+                    authorizer=DailyMutationAuthorizer(()),
+                    journal_store=DailyRunJournalStore(Path(temporary)),
+                    feature_action_kind=WorkshopMutationKind.RUN,
+                    feature_budget_kind=MutationBudgetKind.OBSERVED_WORKSHOP_BAR,
+                    feature_max_mutations=1,
+                )
 
 
 class WorkshopInvocationLifecycleTests(unittest.TestCase):
@@ -416,6 +444,7 @@ class WorkshopInvocationLifecycleTests(unittest.TestCase):
             journal_store=self.store,
             feature_action_kind=WorkshopMutationKind.RUN,
             feature_budget_kind=MutationBudgetKind.OBSERVED_WORKSHOP_BAR,
+            feature_max_mutations=None,
         )
         self.assertEqual((), other_account_scope.find_pending_workshop_operations())
 
@@ -550,6 +579,272 @@ class WorkshopInvocationLifecycleTests(unittest.TestCase):
                 dispatch=lambda: None,
                 reconcile=lambda: MutationReconciliation(True, False),
             )
+
+    def _dispatched_uncommitted(
+        self,
+        scope: CoreMutationBoundary,
+    ) -> tuple[DailyTaskCheckpoint, WorkshopInvocationRecord, JournaledMutationResult]:
+        """Journal one operation whose reconciliation stays unresolved."""
+
+        checkpoint, record = scope.prepare_workshop_invocation(checkpoint=self.checkpoint)
+        checkpoint, operation_id = scope.allocate_workshop_operation_id(
+            checkpoint, record.invocation_id,
+        )
+        result = scope.dispatch_workshop_operation(
+            checkpoint=checkpoint,
+            operation=_workshop_operation(operation_id, invocation_id=record.invocation_id),
+            dispatch=lambda: None,
+            reconcile=lambda: MutationReconciliation(False, False),
+        )
+        return checkpoint, record, result
+
+    def test_stale_progress_writes_cannot_erase_pending_operations(self) -> None:
+        stale, record, result = self._dispatched_uncommitted(self.scope)
+        persisted_record = result.checkpoint.workshop_invocations[0]
+
+        self.assertFalse(result.committed)
+        self.assertEqual(1, len(self.scope.find_pending_workshop_operations()))
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            self.scope.update_workshop_invocation(
+                stale,
+                replace(
+                    persisted_record,
+                    stop_reason=WorkshopStopReason.UNRESOLVED_STATE.value,
+                ),
+            )
+        self.assertEqual(1, len(self.scope.find_pending_workshop_operations()))
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            self.scope.allocate_workshop_operation_id(stale, record.invocation_id)
+        self.assertEqual(1, len(self.scope.find_pending_workshop_operations()))
+
+        updated = self.scope.update_workshop_invocation(
+            result.checkpoint,
+            replace(
+                persisted_record,
+                pending_operation_id=f"{persisted_record.invocation_id}-op-1",
+                stop_reason=WorkshopStopReason.UNRESOLVED_STATE.value,
+            ),
+        )
+        self.assertEqual(
+            WorkshopStopReason.UNRESOLVED_STATE.value,
+            updated.workshop_invocations[0].stop_reason,
+        )
+        self.assertEqual(1, len(self.scope.find_pending_workshop_operations()))
+
+    def test_invocation_update_preserves_identity_budget_and_sequence(self) -> None:
+        _, _, result = self._dispatched_uncommitted(self.scope)
+        persisted_record = result.checkpoint.workshop_invocations[0]
+
+        with self.assertRaisesRegex(PermissionError, "cannot regress"):
+            self.scope.update_workshop_invocation(
+                result.checkpoint,
+                replace(persisted_record, operation_sequence=0),
+            )
+        with self.assertRaisesRegex(PermissionError, "immutable"):
+            self.scope.update_workshop_invocation(
+                result.checkpoint,
+                replace(
+                    persisted_record,
+                    budget_kind=MutationBudgetKind.COUNTED,
+                    max_mutations=5,
+                ),
+            )
+        persisted = self.store.load(
+            game_reset_id="reset-1",
+            account_id="account",
+            castle=_CASTLE,
+        )
+        self.assertEqual(persisted_record, persisted.workshop_invocations[0])
+
+    def test_unjournaled_invocations_fail_persisted_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            scope = _workshop_scope(DailyRunJournalStore(Path(temporary)))
+            ghost = replace(
+                _checkpoint(),
+                workshop_invocations=(
+                    WorkshopInvocationRecord(
+                        invocation_id="ghost-inv",
+                        action_kind=WorkshopMutationKind.RUN.value,
+                        budget_kind=MutationBudgetKind.OBSERVED_WORKSHOP_BAR,
+                    ),
+                ),
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "missing from the durable journal"):
+                scope.prepare_workshop_invocation(checkpoint=ghost)
+            with self.assertRaisesRegex(RuntimeError, "missing from the durable journal"):
+                scope.update_workshop_invocation(ghost, ghost.workshop_invocations[0])
+
+    def test_counted_budget_is_bound_per_invocation(self) -> None:
+        scope = _workshop_scope(
+            self.store,
+            budget_kind=MutationBudgetKind.COUNTED,
+            max_mutations=1,
+        )
+        checkpoint = self.checkpoint
+        for _ in range(2):
+            checkpoint, record = scope.prepare_workshop_invocation(checkpoint=checkpoint)
+            checkpoint, operation_id = scope.allocate_workshop_operation_id(
+                checkpoint, record.invocation_id,
+            )
+            result = scope.dispatch_workshop_operation(
+                checkpoint=checkpoint,
+                operation=_workshop_operation(operation_id, invocation_id=record.invocation_id),
+                dispatch=lambda: None,
+                reconcile=lambda: MutationReconciliation(True, False),
+            )
+            self.assertTrue(result.committed)
+            checkpoint = result.checkpoint
+
+    def test_counted_cap_exhausts_within_one_invocation(self) -> None:
+        scope = _workshop_scope(
+            self.store,
+            budget_kind=MutationBudgetKind.COUNTED,
+            max_mutations=1,
+        )
+        checkpoint, record = scope.prepare_workshop_invocation(checkpoint=self.checkpoint)
+        checkpoint, operation_id = scope.allocate_workshop_operation_id(
+            checkpoint, record.invocation_id,
+        )
+        result = scope.dispatch_workshop_operation(
+            checkpoint=checkpoint,
+            operation=_workshop_operation(operation_id, invocation_id=record.invocation_id),
+            dispatch=lambda: None,
+            reconcile=lambda: MutationReconciliation(True, False),
+        )
+        self.assertTrue(result.committed)
+
+        checkpoint, second_id = scope.allocate_workshop_operation_id(
+            result.checkpoint, record.invocation_id,
+        )
+        with self.assertRaisesRegex(PermissionError, "cap has been exhausted"):
+            scope.dispatch_workshop_operation(
+                checkpoint=checkpoint,
+                operation=_workshop_operation(second_id, invocation_id=record.invocation_id),
+                dispatch=lambda: None,
+                reconcile=lambda: MutationReconciliation(True, False),
+            )
+
+    def test_invocation_budget_must_match_authorized_scope(self) -> None:
+        scope = _workshop_scope(
+            self.store,
+            budget_kind=MutationBudgetKind.COUNTED,
+            max_mutations=1,
+        )
+        widened = self.store.register_workshop_invocation(
+            self.checkpoint,
+            WorkshopInvocationRecord(
+                invocation_id="wider-inv",
+                action_kind=WorkshopMutationKind.RUN.value,
+                budget_kind=MutationBudgetKind.COUNTED,
+                max_mutations=5,
+                operation_sequence=1,
+            ),
+        )
+        with self.assertRaisesRegex(PermissionError, "authorized budget"):
+            scope.dispatch_workshop_operation(
+                checkpoint=widened,
+                operation=_workshop_operation("wider-inv-op-1", invocation_id="wider-inv"),
+                dispatch=lambda: None,
+                reconcile=lambda: MutationReconciliation(True, False),
+            )
+        mixed = self.store.register_workshop_invocation(
+            widened,
+            WorkshopInvocationRecord(
+                invocation_id="observed-inv",
+                action_kind=WorkshopMutationKind.RUN.value,
+                budget_kind=MutationBudgetKind.OBSERVED_WORKSHOP_BAR,
+            ),
+        )
+        with self.assertRaisesRegex(PermissionError, "authorized budget"):
+            scope.dispatch_workshop_operation(
+                checkpoint=mixed,
+                operation=_workshop_operation("observed-inv-op-1", invocation_id="observed-inv"),
+                dispatch=lambda: None,
+                reconcile=lambda: MutationReconciliation(True, False),
+            )
+        with self.assertRaisesRegex(PermissionError, "immutable"):
+            scope.update_workshop_invocation(
+                mixed,
+                replace(mixed.workshop_invocations[0], max_mutations=9),
+            )
+
+    def test_observed_bar_invocation_has_no_counted_cap(self) -> None:
+        checkpoint, record = self.scope.prepare_workshop_invocation(checkpoint=self.checkpoint)
+        for _ in range(3):
+            checkpoint, operation_id = self.scope.allocate_workshop_operation_id(
+                checkpoint, record.invocation_id,
+            )
+            result = self.scope.dispatch_workshop_operation(
+                checkpoint=checkpoint,
+                operation=_workshop_operation(operation_id, invocation_id=record.invocation_id),
+                dispatch=lambda: None,
+                reconcile=lambda: MutationReconciliation(True, False),
+            )
+            self.assertTrue(result.committed)
+            checkpoint = result.checkpoint
+
+    def test_castle_level_change_preserves_journal_and_pending_identity(self) -> None:
+        checkpoint, record = self.scope.prepare_workshop_invocation(checkpoint=self.checkpoint)
+        checkpoint, operation_id = self.scope.allocate_workshop_operation_id(
+            checkpoint, record.invocation_id,
+        )
+        result = self.scope.dispatch_workshop_operation(
+            checkpoint=checkpoint,
+            operation=_workshop_operation(operation_id, invocation_id=record.invocation_id),
+            dispatch=lambda: None,
+            reconcile=lambda: MutationReconciliation(True, False),
+        )
+        self.assertTrue(result.committed)
+
+        leveled = CastleIdentity("K1", "Main", 11)
+        loaded = self.store.load(
+            game_reset_id="reset-1",
+            account_id="account",
+            castle=leveled,
+        )
+        self.assertEqual(10, loaded.castle.castle_level)
+        leveled_scope = _workshop_scope(self.store, castle=leveled)
+        self.assertEqual((), leveled_scope.find_pending_workshop_operations())
+
+    def test_pending_resume_survives_castle_level_change(self) -> None:
+        self._dispatched_pending(game_reset_id="reset-0")
+        leveled_scope = _workshop_scope(
+            self.store,
+            castle=CastleIdentity("K1", "Main", 11),
+        )
+        pending = leveled_scope.find_pending_workshop_operations()
+
+        self.assertEqual(1, len(pending))
+        self.assertEqual(10, pending[0].castle.castle_level)
+        result = leveled_scope.resume_pending_workshop_operation(
+            pending=pending[0],
+            dispatch=lambda: None,
+            reconcile=lambda: MutationReconciliation(True, False),
+        )
+        self.assertTrue(result.committed)
+        self.assertEqual((), leveled_scope.find_pending_workshop_operations())
+
+    def test_same_day_run_tolerates_persisted_lower_castle_level(self) -> None:
+        leveled_scope = _workshop_scope(
+            self.store,
+            castle=CastleIdentity("K1", "Main", 11),
+        )
+        checkpoint, record = leveled_scope.prepare_workshop_invocation(
+            checkpoint=self.checkpoint,
+        )
+        self.assertEqual(10, checkpoint.castle.castle_level)
+
+        checkpoint, operation_id = leveled_scope.allocate_workshop_operation_id(
+            checkpoint, record.invocation_id,
+        )
+        result = leveled_scope.dispatch_workshop_operation(
+            checkpoint=checkpoint,
+            operation=_workshop_operation(operation_id, invocation_id=record.invocation_id),
+            dispatch=lambda: None,
+            reconcile=lambda: MutationReconciliation(True, False),
+        )
+        self.assertTrue(result.committed)
 
 
 class WorkshopJournalMigrationTests(unittest.TestCase):
@@ -705,6 +1000,96 @@ class InvocationFactoryTests(unittest.TestCase):
         self.assertNotEqual(first, second)
         self.assertIn("reset-1", first)
         self.assertIn("K1_Main", first)
+
+
+class WorkshopRunAuthorityTests(unittest.TestCase):
+    """Prove the shared policy/scope composition for direct and Daily adapters."""
+
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.store = DailyRunJournalStore(Path(self.temporary_directory.name))
+        self.target = DailyMaintenanceTargetConfig("account", "K1:Main", _CASTLE, ())
+        self.policy = WorkshopPolicy(
+            order_piece_total=2,
+            reward_priority=(WorkshopOrderRewardCategory.BEAST_LASSO,),
+            recyclable_item_ids=frozenset(),
+            max_cooldown_wait_ms=60_000,
+        )
+
+    def test_build_authority_composes_policy_with_authorized_scope(self) -> None:
+        for budget_kind, max_mutations in (
+            (MutationBudgetKind.OBSERVED_WORKSHOP_BAR, None),
+            (MutationBudgetKind.COUNTED, 3),
+        ):
+            with self.subTest(budget_kind=budget_kind):
+                authority = build_workshop_run_authority(
+                    target=self.target,
+                    policy=self.policy,
+                    boundary=DailyRunBoundary(_MAINTENANCE_DATE, "reset-1"),
+                    authorizer=DailyMutationAuthorizer((_workshop_acknowledgement(
+                        budget_kind=budget_kind,
+                        max_mutations=max_mutations,
+                    ),)),
+                    journal_store=self.store,
+                    budget_kind=budget_kind,
+                    max_mutations=max_mutations,
+                )
+
+                self.assertIs(self.policy, authority.policy)
+                self.assertIs(
+                    WorkshopMutationKind.RUN,
+                    authority.mutation_boundary.feature_action_kind,
+                )
+                authority.mutation_boundary.authorize(action_kind=WorkshopMutationKind.RUN)
+                self.assertFalse(
+                    authority.mutation_boundary.supports_mutation(
+                        capability=DailyQuestId.HERO_HALL,
+                    )
+                )
+                self.assertIsNone(
+                    self.store.load(
+                        game_reset_id="reset-1",
+                        account_id="account",
+                        castle=_CASTLE,
+                    )
+                )
+
+    def test_build_authority_requires_exact_acknowledgement(self) -> None:
+        with self.assertRaisesRegex(PermissionError, "exactly one matching acknowledgement"):
+            build_workshop_run_authority(
+                target=self.target,
+                policy=self.policy,
+                boundary=DailyRunBoundary(_MAINTENANCE_DATE, "reset-1"),
+                authorizer=DailyMutationAuthorizer(()),
+                journal_store=self.store,
+            )
+        with self.assertRaisesRegex(PermissionError, "exactly one matching acknowledgement"):
+            build_workshop_run_authority(
+                target=self.target,
+                policy=self.policy,
+                boundary=DailyRunBoundary(date(2026, 9, 15), "reset-2"),
+                authorizer=DailyMutationAuthorizer((_workshop_acknowledgement(),)),
+                journal_store=self.store,
+            )
+
+    def test_authority_rejects_untyped_or_miscoped_members(self) -> None:
+        with self.assertRaisesRegex(TypeError, "WorkshopPolicy"):
+            WorkshopRunAuthority(
+                policy=object(),
+                mutation_boundary=_workshop_scope(self.store),
+            )
+        with self.assertRaisesRegex(ValueError, "pet_workshop.run"):
+            WorkshopRunAuthority(
+                policy=self.policy,
+                mutation_boundary=CoreMutationBoundary(
+                    target=self.target,
+                    boundary=DailyRunBoundary(_MAINTENANCE_DATE, "reset-1"),
+                    authorizer=DailyMutationAuthorizer(()),
+                    journal_store=self.store,
+                    feature_action_kind=BuildingMutationKind.UPGRADE,
+                ),
+            )
 
 
 if __name__ == "__main__":

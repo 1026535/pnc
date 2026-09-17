@@ -10,7 +10,7 @@ from threading import Lock
 from time import sleep
 from typing import Any
 
-from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyTaskCheckpoint,
@@ -125,7 +125,7 @@ class DailyRunJournalStore:
         if (
             checkpoint.game_reset_id != game_reset_id
             or checkpoint.account_id != account_id
-            or checkpoint.castle != castle
+            or castle_identity_key(checkpoint.castle) != castle_identity_key(castle)
         ):
             raise ConfigurationError("Daily-maintenance journal identity does not match its path.", path=str(path))
         return checkpoint
@@ -250,7 +250,7 @@ class DailyRunJournalStore:
             if (
                 sanitize_artifact_segment(checkpoint.game_reset_id) != reset_dir.name
                 or checkpoint.account_id != account_id
-                or checkpoint.castle != castle
+                or castle_identity_key(checkpoint.castle) != castle_identity_key(castle)
             ):
                 raise ConfigurationError(
                     "Daily-maintenance journal identity does not match its path.",
@@ -261,7 +261,7 @@ class DailyRunJournalStore:
                     journal_path=path,
                     game_reset_id=checkpoint.game_reset_id,
                     account_id=account_id,
-                    castle=castle,
+                    castle=checkpoint.castle,
                     checkpoint=checkpoint,
                     intent=intent,
                 )

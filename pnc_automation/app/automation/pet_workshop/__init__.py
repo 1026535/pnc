@@ -5,6 +5,9 @@ from the typed ``WorkshopState``, the packaged catalog and the policy.
 ``plan_next`` is the one-step planner; ``validate_intent`` is the single
 canonical legality check shared by planning and later executor
 revalidation; ``default_policy`` returns the solver's policy instance.
+``authority`` is the separate composition module that binds an explicit
+``WorkshopPolicy`` to the authorized ``pet_workshop.run`` mutation scope for
+direct and Daily adapters.
 """
 
 from pnc_automation.app.automation.pet_workshop.planner import plan_next

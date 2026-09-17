@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +62,7 @@ from pnc_automation.app.authoring.config.daily_maintenance import (
     DailyMaintenanceTargetConfig,
 )
 from pnc_automation.app.pnc.domain.action_requests import TapAction
-from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyQuestRow,
@@ -116,7 +116,7 @@ class CoreMutationBoundary:
     authorizer: DailyMutationAuthorizer
     journal_store: DailyRunJournalStore
     feature_action_kind: FeatureActionKind | None = None
-    feature_max_mutations: int = 1
+    feature_max_mutations: int | None = 1
     feature_max_diamond_spend: int = 0
     feature_budget_kind: MutationBudgetKind = MutationBudgetKind.COUNTED
 
@@ -127,10 +127,6 @@ class CoreMutationBoundary:
             self.feature_action_kind, (BuildingMutationKind, WorkshopMutationKind)
         ):
             raise TypeError("CoreMutationBoundary.feature_action_kind must be a typed feature kind or None.")
-        if type(self.feature_max_mutations) is not int or self.feature_max_mutations <= 0:
-            raise ValueError("CoreMutationBoundary.feature_max_mutations must be positive.")
-        if type(self.feature_max_diamond_spend) is not int or self.feature_max_diamond_spend < 0:
-            raise ValueError("CoreMutationBoundary.feature_max_diamond_spend must be non-negative.")
         if not isinstance(self.feature_budget_kind, MutationBudgetKind):
             raise TypeError("CoreMutationBoundary.feature_budget_kind must be a MutationBudgetKind.")
         if (
@@ -138,6 +134,13 @@ class CoreMutationBoundary:
             and self.feature_action_kind is not WorkshopMutationKind.RUN
         ):
             raise ValueError("The observed Workshop bar budget requires the pet_workshop.run scope.")
+        if self.feature_budget_kind is MutationBudgetKind.COUNTED:
+            if type(self.feature_max_mutations) is not int or self.feature_max_mutations <= 0:
+                raise ValueError("CoreMutationBoundary.feature_max_mutations must be positive.")
+        elif self.feature_max_mutations is not None:
+            raise ValueError("The observed Workshop bar budget cannot carry a counted mutation cap.")
+        if type(self.feature_max_diamond_spend) is not int or self.feature_max_diamond_spend < 0:
+            raise ValueError("CoreMutationBoundary.feature_max_diamond_spend must be non-negative.")
         if (
             self.feature_action_kind is WorkshopMutationKind.RUN
             and self.feature_max_diamond_spend != 0
@@ -643,23 +646,27 @@ class CoreMutationBoundary:
 
         if (
             checkpoint.account_id != self.target.account_id
-            or checkpoint.castle != self.target.castle
+            or castle_identity_key(checkpoint.castle) != castle_identity_key(self.target.castle)
             or checkpoint.game_reset_id != self.boundary.game_reset_id
             or checkpoint.maintenance_date != self.boundary.maintenance_date.isoformat()
         ):
             raise PermissionError("Mutation checkpoint does not match its authorized boundary.")
 
     def _require_persisted_checkpoint(self, checkpoint: DailyTaskCheckpoint) -> None:
-        """Reject stale or unpersisted mutation history against the durable journal."""
+        """Reject stale or unpersisted mutation history against the durable journal.
+
+        The persisted castle level is volatile metadata; a caller snapshot
+        carrying only a newer level still matches its durable identity.
+        """
 
         persisted = self.journal_store.load(
             game_reset_id=checkpoint.game_reset_id,
             account_id=checkpoint.account_id,
             castle=checkpoint.castle,
         )
-        if persisted is not None and persisted != checkpoint:
+        if persisted is not None and replace(persisted, castle=checkpoint.castle) != checkpoint:
             raise RuntimeError("Mutation checkpoint is stale relative to the durable journal.")
-        if persisted is None and checkpoint.mutation_intents:
+        if persisted is None and (checkpoint.mutation_intents or checkpoint.workshop_invocations):
             raise RuntimeError("Mutation history is missing from the durable journal.")
 
     def _building_mutation_limits(
@@ -725,7 +732,10 @@ class CoreMutationBoundary:
 
         if self.feature_action_kind is not WorkshopMutationKind.RUN:
             raise PermissionError("This mutation scope does not authorize a Workshop run.")
-        if pending.account_id != self.target.account_id or pending.castle != self.target.castle:
+        if (
+            pending.account_id != self.target.account_id
+            or castle_identity_key(pending.castle) != castle_identity_key(self.target.castle)
+        ):
             raise PermissionError("The pending Workshop operation belongs to a different scope.")
         self.authorize(action_kind=WorkshopMutationKind.RUN)
         checkpoint = self.journal_store.load(
@@ -790,12 +800,20 @@ class CoreMutationBoundary:
             (intent for intent in checkpoint.mutation_intents if intent.operation_id == operation.operation_id),
             None,
         )
-        if existing is None and self.feature_budget_kind is MutationBudgetKind.COUNTED:
+        if invocation.budget_kind is not self.feature_budget_kind or (
+            invocation.budget_kind is MutationBudgetKind.COUNTED
+            and invocation.max_mutations != self.feature_max_mutations
+        ):
+            raise PermissionError(
+                "The registered Workshop invocation does not match this scope's authorized budget."
+            )
+        if existing is None and invocation.budget_kind is MutationBudgetKind.COUNTED:
             mutation_count = sum(
                 is_workshop_journaled_action(intent.action_kind)
+                and intent.invocation_id == invocation.invocation_id
                 for intent in checkpoint.mutation_intents
             )
-            if mutation_count >= self.feature_max_mutations:
+            if mutation_count >= invocation.max_mutations:
                 raise PermissionError("The Workshop mutation acknowledgement cap has been exhausted.")
         unresolved = tuple(
             intent for intent in checkpoint.mutation_intents
@@ -875,6 +893,7 @@ class CoreMutationBoundary:
         if self.feature_action_kind is not WorkshopMutationKind.RUN:
             raise PermissionError("This mutation scope does not authorize a Workshop run.")
         self._require_checkpoint_identity(checkpoint)
+        self._require_persisted_checkpoint(checkpoint)
         return self.journal_store.allocate_workshop_operation_id(checkpoint, invocation_id)
 
     def update_workshop_invocation(
@@ -882,11 +901,31 @@ class CoreMutationBoundary:
         checkpoint: DailyTaskCheckpoint,
         record: WorkshopInvocationRecord,
     ) -> DailyTaskCheckpoint:
-        """Persist the latest state of one invocation registered under this scope."""
+        """Persist the latest state of one invocation registered under this scope.
+
+        The registered identity and budget are immutable after registration;
+        ``operation_sequence`` may only advance, so a stale record cannot
+        reset allocation or widen the invocation's authorized budget.
+        """
 
         if self.feature_action_kind is not WorkshopMutationKind.RUN:
             raise PermissionError("This mutation scope does not authorize a Workshop run.")
         self._require_checkpoint_identity(checkpoint)
+        self._require_persisted_checkpoint(checkpoint)
+        existing = next(
+            (item for item in checkpoint.workshop_invocations if item.invocation_id == record.invocation_id),
+            None,
+        )
+        if existing is None:
+            raise KeyError(f"Workshop invocation '{record.invocation_id}' does not exist.")
+        if (
+            record.action_kind != existing.action_kind
+            or record.budget_kind is not existing.budget_kind
+            or record.max_mutations != existing.max_mutations
+        ):
+            raise PermissionError("A registered Workshop invocation's identity and budget are immutable.")
+        if record.operation_sequence < existing.operation_sequence:
+            raise PermissionError("A Workshop invocation's operation sequence cannot regress.")
         return self.journal_store.update_workshop_invocation(checkpoint, record)
 
     def require_hero_reconciliation(self, operation_id: str) -> DailyTaskCheckpoint:
