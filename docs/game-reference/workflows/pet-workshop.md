@@ -151,6 +151,46 @@ and returned No slots available; its operation is unconfirmed and must not
 be treated as a safe inspection control. No successful resource change was
 observed. The capped energy reading alone is not proof of zero spending.
 
+## September 18 live transition captures (main, Lv.7)
+
+**Live-observed** on `bs-main-android` (exploratory coordinate taps; the
+Workshop screen still classifies UNKNOWN). Artifact root:
+`C:/Users/lebel/pnc/artifacts/2026-09-18/pet_workshop_sim_20260918/`.
+
+- **Produce (verified):** tapping an already-selected manual producer sends
+  `ComposeactSend.RequireProduce(posId)`; the response
+  (`MERGE_UPDATE_ITEM_PRODUCE`) carries `originalPos` + `targetPos` — the
+  server chooses the spawn cell. Captured: Clay 1 (item 30001, cell 56)
+  produced Bowl 1 (30101) onto server-chosen cell 24 — matching drop group
+  21's single positive entry — with energy −1 and a circular cooldown badge
+  (`cdTime`) shown on the producer afterward.
+- **Merge (verified):** dragging one piece onto an identical Normal piece
+  produced the catalog successor at the target cell and emptied the source
+  (Wood 1 + Wood 1 → Wood 2); no energy spent.
+- **Recycle (verified):** with a piece selected, the detail-bar bin button
+  opens a "Confirm to delete?" dialog (`ConfirmBoxPanelManager`, can be
+  suppressed by a don't-ask-again preference); confirming sends
+  `RequireOperate(gid, Recovery=1)` and removes the piece. Wood 1 granted no
+  reward — consistent with `recoveryReward` absent on tiers 1–2. Observation
+  popup-settling dismissed this dialog once; the confirm button must be
+  tapped explicitly.
+- **Selection (verified):** first tap selects (border + detail panel);
+  tapping the selected piece again is the action path (`Use` when the item
+  config carries `rewards`, else `RequireProduce` for non-Auto producers,
+  gated by `status == Normal` and `not IsGridFull()`).
+- **Cooldown rejection (observed):** produce taps while a producer shows
+  the `cdTime` badge — and several later taps outside any visible window —
+  produced no board or energy change. Client sends are unconditional; the
+  server rejects silently. Whether rejection is a per-produce cooldown or a
+  hidden `num` budget is unresolved (`num` is never displayed client-side).
+- **Producer tooltips (observed):** Bowl 5 (type 3, LimitCount) reads "Tap
+  to generate items upon reaching the highest level. Disappears after
+  attempts are depleted" — consistent with `max_num` = lifetime attempts and
+  removal when `change_item_id` is absent.
+- **Orders (observed):** two order cards showed required item icons plus
+  rewards of Feed pieces and Merge EXP; neither was fulfillable from the
+  board at capture time, so submission remains unproven.
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings

@@ -187,8 +187,21 @@ class WorkshopSimulator:
         Producer ``num`` counts uses per cooldown window; reaching it marks
         the cell's cooldown marker ACTIVE until ``cooldown_ms`` of sim time
         elapses. ``max_num`` counts lifetime uses; reaching it applies the
-        authored ``change_item_id`` transform or removes the piece.
+        authored ``change_item_id`` transform or removes the piece
+        ("Disappears after attempts are depleted", per the live tooltip).
 
+        Live evidence (2026-09-18, main): one captured produce spent one
+        energy, landed an authored-group piece on a server-chosen cell
+        (``targetPos`` in the PRODUCE response), and showed a ``cdTime``
+        badge on the producer afterward. Whether the badge marks a
+        per-produce window or a ``num``-cycle boundary is not separable from
+        one sample — ``num`` is a server-only counter the client never
+        displays, and ``num``-cycle keeps ``num`` < ``max_num`` producers'
+        transform reachable, so the cycle reading is retained.
+
+        ASSUMPTION (unverified): ``num`` uses per ``cooldown_ms`` cycle —
+        alternatives (per-produce cooldown, session-scoped budget) are not
+        yet ruled out by captures.
         ASSUMPTION (unverified): with ``num=0`` the producer never enters a
         use-count cooldown; exhaustion alone bounds it.
         """
