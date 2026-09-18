@@ -191,6 +191,30 @@ Workshop screen still classifies UNKNOWN). Artifact root:
   rewards of Feed pieces and Merge EXP; neither was fulfillable from the
   board at capture time, so submission remains unproven.
 
+## September 18 second pass (main, Lv.9 board — input-timing A/B)
+
+**Live-observed** on the same instance, a different castle's board. Probe
+captures under the same artifact root plus raw frames in
+`.local-data/devin-live-test/runs/sim-transitions-20260918/turn-002/`.
+
+- **Tap-gap timing is not the produce gate (verified):** rapid ~300 ms
+  select→produce double-taps and a ~4.4 s slow pair all produced. Pass-1's
+  silent rejections were therefore producer server state (`cdTime`/`num`
+  budget on that board's items), not input sequencing — and not the ±4 px
+  humanization jitter, which was active for every successful tap here.
+- **Produce ×4 (verified):** Arbre 4 (palm, max level) → berries at a
+  server-chosen cell; Carte 4 (pouch) → stone piece; Argile 3 (clay) →
+  broken-pot shard; Arbre 4 again ~5 min later → apple. Each cost −1
+  energy; all spawns landed on server-chosen cells.
+- **Repeat production (verified):** the same producer produced again
+  minutes after its first use — cooldown/budget refreshes, consistent
+  with the `num`-cycle reading rather than a permanent per-use budget.
+- **Energy regen (observed):** +1 energy ticks were seen across ~40–90 s
+  idle windows; the exact authored interval is unconfirmed.
+- **Producer identity (observed):** selecting a producer shows its line
+  and tier in the detail bar (e.g. "Arbre 4 (Niveau Maximum) — Appuyez
+  pour générer des objets"); the ⚡ badge marks manual producers.
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings

@@ -193,11 +193,15 @@ class WorkshopSimulator:
         Live evidence (2026-09-18, main): one captured produce spent one
         energy, landed an authored-group piece on a server-chosen cell
         (``targetPos`` in the PRODUCE response), and showed a ``cdTime``
-        badge on the producer afterward. Whether the badge marks a
-        per-produce window or a ``num``-cycle boundary is not separable from
-        one sample — ``num`` is a server-only counter the client never
-        displays, and ``num``-cycle keeps ``num`` < ``max_num`` producers'
-        transform reachable, so the cycle reading is retained.
+        badge on the producer afterward. A second pass the same day saw
+        four consecutive produces succeed — including the same producer
+        again ~5 min later and a ~4 s select→produce gap — so rejection is
+        producer server state that refreshes, not input timing. Whether
+        the badge marks a per-produce window or a ``num``-cycle boundary
+        is not separable from these samples — ``num`` is a server-only
+        counter the client never displays, and ``num``-cycle keeps
+        ``num`` < ``max_num`` producers' transform reachable, so the
+        cycle reading is retained.
 
         ASSUMPTION (unverified): ``num`` uses per ``cooldown_ms`` cycle —
         alternatives (per-produce cooldown, session-scoped budget) are not
