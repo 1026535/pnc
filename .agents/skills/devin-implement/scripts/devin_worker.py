@@ -22,6 +22,7 @@ from windows_job import Job
 MODEL = "swe-2-max"
 ROLE_VARIABLE = "DEVIN_IMPLEMENT_ROLE"
 CANCEL_GRACE_SECONDS = 15
+CATALOG_MAX_ATTEMPTS = 3
 DEFAULT_PREAMBLE = (
     "You are the SWE-2 implementation worker. Do not delegate, invoke orchestration skills, "
     "change model/configuration, or start detached processes. Execute the concrete package "
@@ -72,6 +73,41 @@ def executable():
     if candidate.is_file():
         return str(candidate)
     raise RuntimeError("Devin CLI not found. Install/authenticate once using the runtime reference.")
+
+
+def model_catalog(binary: str, turn_dir: Path) -> dict:
+    """Retry only the observed catalog transport failure, never an agent prompt."""
+    command = [binary, "models", "list", "--format", "json"]
+    for attempt in range(1, CATALOG_MAX_ATTEMPTS + 1):
+        try:
+            output = subprocess.check_output(
+                command, text=True, encoding="utf-8", stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as error:
+            stderr = error.stderr or ""
+            evidence = turn_dir / f"catalog-attempt-{attempt}.stderr.log"
+            evidence.write_text(stderr, encoding="utf-8")
+            retryable = any(
+                line.startswith("Error: Connection failed: Connect HTTP error:")
+                and "error sending request for url" in line
+                and "/exa.api_server_pb.ApiServerService/GetCliModelConfigs" in line
+                for line in stderr.splitlines()
+            )
+            if not retryable or attempt == CATALOG_MAX_ATTEMPTS:
+                raise RuntimeError(
+                    f"Devin model catalog failed after {attempt} attempt(s) "
+                    f"(exit {error.returncode}); see {evidence}."
+                ) from error
+            delay = 2 * attempt
+            print(
+                f"Devin catalog connection attempt {attempt}/{CATALOG_MAX_ATTEMPTS} "
+                f"failed; retrying in {delay}s. Evidence: {evidence}",
+                file=sys.stderr, flush=True,
+            )
+            time.sleep(delay)
+        else:
+            return json.loads(output)
+    raise AssertionError("Catalog attempt limit must be positive.")
 
 
 def repository(path, expected_head):
@@ -413,7 +449,9 @@ def run(args):
     prior = read_json(run_dir / "state.json") if args.resume else None
     if prior and Path(prior["repo"]).resolve() != repo:
         raise RuntimeError("Resume repository differs from the original task.")
-    if prior and not prior.get("session_id"):
+    retrying_startup = bool(prior and prior.get("phase") == "preflight"
+                           and prior.get("status") == "failed" and prior.get("writers_stopped"))
+    if prior and not prior.get("session_id") and not retrying_startup:
         raise RuntimeError("No verified session identity. Reconcile saved identity events before recovery.")
     if not args.resume and run_dir.exists():
         raise RuntimeError("A fresh --run-dir must not exist; this prevents accidental evidence overwrite.")
@@ -435,13 +473,29 @@ def run(args):
         turn = (prior.get("turn", 0) if prior else 0) + 1
         turn_dir = run_dir / f"turn-{turn:03d}"
         turn_dir.mkdir()
-        binary = executable()
-        version = subprocess.check_output([binary, "--version"], text=True).strip()
-        catalog = json.loads(subprocess.check_output([binary, "models", "list", "--format", "json"], text=True, encoding="utf-8"))
-        variants = [variant for family in catalog["families"] for variant in family["variants"]]
-        selected = [variant for variant in variants if variant["model_uid"] == MODEL]
-        if len(selected) != 1:
-            raise RuntimeError(f"Account does not expose the exact {MODEL} variant.")
+        preflight = {"repo": str(repo), "run_dir": str(run_dir), "turn": turn,
+                     "turn_dir": str(turn_dir), "status": "running", "phase": "preflight",
+                     "session_id": prior.get("session_id") if prior else None,
+                     "agent_steps": prior.get("agent_steps", 0) if prior else 0,
+                     "expected_head": args.expected_head, "supervisor_pid": os.getpid(),
+                     "started_at": time.time(), "heartbeat_at": time.time(), "model": MODEL}
+        try:
+            binary = executable()
+            version = subprocess.check_output([binary, "--version"], text=True).strip()
+            catalog = model_catalog(binary, turn_dir)
+            variants = [variant for family in catalog["families"] for variant in family["variants"]]
+            selected = [variant for variant in variants if variant["model_uid"] == MODEL]
+            if len(selected) != 1:
+                raise RuntimeError(f"Account does not expose the exact {MODEL} variant.")
+        except Exception as error:
+            preflight.update(status="failed", writers_stopped=True,
+                             error=str(error) or type(error).__name__,
+                             elapsed_seconds=round(time.time() - preflight["started_at"], 2))
+            write_json(run_dir / "state.json", preflight)
+            write_json(turn_dir / "result.json", preflight)
+            notify_completion(preflight, args.notify_thread)
+            print(preflight["error"], file=sys.stderr, flush=True)
+            return 1
         write_json(turn_dir / "model.json", {"version": version, "model": selected[0]})
         before = snapshot(repo, turn_dir, "before")
         if not retain_preamble:
@@ -466,7 +520,7 @@ def run(args):
                    "--respect-workspace-trust", str(respect_workspace_trust).lower(),
                    "--prompt-file", str(prompt),
                    "--export", str(turn_dir / "export.json")]
-        if prior:
+        if prior and prior.get("session_id"):
             command += ["--resume", prior["session_id"]]
         command = [sys.executable, str(Path(__file__).with_name("devin_acp.py")), *command]
         state = {"repo": str(repo), "run_dir": str(run_dir), "turn": turn, "turn_dir": str(turn_dir),
