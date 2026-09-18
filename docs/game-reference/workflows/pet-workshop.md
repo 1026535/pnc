@@ -215,9 +215,47 @@ captures under the same artifact root plus raw frames in
   and tier in the detail bar (e.g. "Arbre 4 (Niveau Maximum) — Appuyez
   pour générer des objets"); the ⚡ badge marks manual producers.
 
+## September 18 third pass (main, Lv.9 board — cooldown + submit)
+
+**Live-observed** on the same instance/board later the same day. Raw frames
+in `.local-data/devin-live-test/runs/sim-transitions-20260918/turn-004/`.
+
+- **`num`-cycle cooldown verified end-to-end:** Tree 4 (`num=40`,
+  `cooldown_ms=10000`) accepted exactly 40 consecutive produces (energy
+  −1 each), then rejected the 41st with an **"In Cooldown" toast**, a blue
+  clock badge on the producer, and a **"Speedup 50"** gem button — the
+  authored `cooldown_skip_cost=50`. ~12 s later the badge cleared and the
+  next tap produced again. This pins `num` = uses per `cooldown_ms`
+  window and explains pass-1's badge/rejections as mid-cycle state from
+  prior play — not per-use cooldown, not input timing.
+- **Board-full rejection (verified):** once every usable cell held a
+  piece, further taps showed **"No slots available"** and spent no
+  energy. The server had reused freshly-merged-free cells for spawns.
+- **Order submit ×3 (verified):** a completable order shows a green
+  **"Complete"/"Terminer" button** (`btnFinish` → `OnOrderTipClick` →
+  `RequireOrderForm`). Tapping it consumed exactly the required pieces
+  (one coconut from `posList`; three coconuts on the second), dropped
+  the card, dealt a new random order, granted the reward (chest task
+  counter +1; the earlier submit granted feed + potion to the knapsack),
+  and cost no energy. Green-marked board pieces are the delivery
+  candidates (`CheckStatues` Finish state); blue marks are HalfFinish —
+  the piece is needed but the order is not fully satisfied.
+- **Merge chains (verified):** fruit berries→apple→bananas→pomegranate→
+  coconut and wood log→planks→crate follow `merge_successor_id`; ~20
+  merges all landed. Merge creates no energy delta.
+- **Energy regen (verified):** authored `energy_regen_ms=300000` (5 min)
+  matches observed ticks (152→156 over ~23 min idle; several +1 ticks
+  during the session's active play).
+- **Locked cells:** "10"/"11" overlay cells are level-gated areas; they
+  did not unlock on submit (`newAreaMap` requires the matching level).
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings
   are preserved raw; their consumers were not all traced.
-- Recycling's live energy receipt, generator depletion behavior, and order
-  submission results are unobserved; see the PW10 live-qualification ledger.
+- Generator `max_num` exhaustion/transform, feed-unlock, piece activation,
+  and recycling's live energy receipt remain unobserved — no eligible
+  board state appeared in three passes; see the PW10 live-qualification
+  ledger. True server-side drop weights are not observable without many
+  controlled samples; the simulator samples authored group weights and
+  replays captured `ProduceOutcome`s for determined tests.

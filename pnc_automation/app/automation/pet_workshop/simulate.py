@@ -198,22 +198,20 @@ class WorkshopSimulator:
         authored ``change_item_id`` transform or removes the piece
         ("Disappears after attempts are depleted", per the live tooltip).
 
-        Live evidence (2026-09-18, main): one captured produce spent one
-        energy, landed an authored-group piece on a server-chosen cell
-        (``targetPos`` in the PRODUCE response), and showed a ``cdTime``
-        badge on the producer afterward. A second pass the same day saw
-        four consecutive produces succeed — including the same producer
-        again ~5 min later and a ~4 s select→produce gap — so rejection is
-        producer server state that refreshes, not input timing. Whether
-        the badge marks a per-produce window or a ``num``-cycle boundary
-        is not separable from these samples — ``num`` is a server-only
-        counter the client never displays, and ``num``-cycle keeps
-        ``num`` < ``max_num`` producers' transform reachable, so the
-        cycle reading is retained.
+        Live evidence (2026-09-18, main): the ``num``-cycle model is
+        verified end-to-end on Tree 4 (``num=40``, ``cooldown_ms=10000``) —
+        exactly 40 consecutive produces succeeded (energy −1 each), the
+        41st tapped into an "In Cooldown" toast with a blue clock badge on
+        the producer and a "Speedup 50" gem button (the authored
+        ``cooldown_skip_cost=50``); after the window elapsed the badge
+        cleared and the next tap produced again. A full board rejects the
+        tap with "No slots available" and spends no energy, matching the
+        pre-``_spend_energy`` ``_pick_spawn_cell`` check. Earlier passes
+        the same day showed the same badge on a Clay producer mid-cycle
+        (a partially spent ``num`` budget from prior play) and silent
+        rejections on other producers — all consistent with cycle
+        bookkeeping the client never displays.
 
-        ASSUMPTION (unverified): ``num`` uses per ``cooldown_ms`` cycle —
-        alternatives (per-produce cooldown, session-scoped budget) are not
-        yet ruled out by captures.
         ASSUMPTION (unverified): with ``num=0`` the producer never enters a
         use-count cooldown; exhaustion alone bounds it.
         """
@@ -428,9 +426,16 @@ class WorkshopSimulator:
         """Consumes the order's required pieces and removes the surveyed card.
 
         Required pieces come off the lowest-id Normal cells first — the game
-        does not expose which copies a submission consumed. Order rewards are
-        not applied: Workshop level/EXP are fixed inputs, and item-family
-        rewards land outside the board model.
+        picks which copies to consume (``GetDeliveryPos`` → ``posList``) and
+        does not expose the rule; lowest-id-first is the deterministic stand-in.
+        Order rewards are not applied: Workshop level/EXP are fixed inputs,
+        and item-family rewards land outside the board model.
+
+        Live-verified 2026-09-18 (three submits on main): the completable
+        order's "Complete" button sends ``RequireOrderForm``; the required
+        pieces leave the board, the card drops, a new order is dealt, and
+        rewards grant (chest task counter +1; feed/potion rewards to the
+        knapsack, not the board). Submission costs no energy.
         """
 
         order = self._state.order_survey.order(intent.order_ref)
@@ -592,8 +597,11 @@ class WorkshopSimulator:
     def _pick_spawn_cell(self) -> int:
         """Chooses the spawn cell for a produced piece.
 
-        ASSUMPTION (unverified): the game lands a produced piece on a random
-        usable empty cell; no authored placement rule exists in the catalog.
+        The server picks the destination live (``targetPos`` in the PRODUCE
+        response); observed spawns reused freshly-freed cells. A full board
+        rejects the tap with "No slots available" and no energy spend —
+        live-verified 2026-09-18 — matching this ``WorkshopSimulationError``.
+        Random choice here is a development convenience, not a verified rule.
         """
 
         empty = [
