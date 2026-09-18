@@ -87,6 +87,12 @@ class ProduceOutcome:
 class WorkshopSimulator:
     """Applies typed Workshop intents to a state replica over sim time.
 
+    Two produce modes: by default a ``PRODUCE`` intent draws from the
+    producer's authored drop-group weights (solver development); passing a
+    ``ProduceOutcome`` instead replays one determined input (unit tests,
+    captured transitions). ``require_produce_outcome=True`` pins the second
+    mode so a missing outcome raises instead of silently drawing.
+
     ``rng`` drives drop-group draws and spawn placement; inject a seeded
     ``random.Random`` for deterministic tests. Sim time advances only through
     ``WAIT`` intents — actions are instantaneous, so cooldowns and energy
@@ -99,6 +105,7 @@ class WorkshopSimulator:
         *,
         catalog: PetWorkshopCatalog | None = None,
         rng: random.Random | None = None,
+        require_produce_outcome: bool = False,
     ) -> None:
         """Starts the replica at sim time zero with no prior producer use."""
 
@@ -106,6 +113,7 @@ class WorkshopSimulator:
             raise TypeError(f"WorkshopSimulator requires a WorkshopState, got {state!r}.")
         self._catalog = catalog if catalog is not None else load_pet_workshop_catalog()
         self._rng = rng if rng is not None else random.Random()
+        self._require_produce_outcome = require_produce_outcome
         self._state = state
         self._clock_ms = 0
         self._cycle_uses: dict[int, int] = {}
@@ -236,6 +244,10 @@ class WorkshopSimulator:
             energy.current < self._catalog.activity.production_energy_cost
         ):
             raise WorkshopSimulationError("Not enough energy to produce.")
+        if outcome is None and self._require_produce_outcome:
+            raise WorkshopSimulationError(
+                "Determined-input mode requires a ProduceOutcome for PRODUCE."
+            )
         if outcome is not None:
             group = self._catalog.drop_group(producer.group_id)
             if group is not None and not any(

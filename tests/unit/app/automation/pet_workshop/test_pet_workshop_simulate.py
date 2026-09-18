@@ -209,6 +209,20 @@ class WorkshopSimulatorTests(unittest.TestCase):
                 outcome=ProduceOutcome(item_id=FRUIT_2, cell_id=40),
             )
 
+    def test_determined_mode_requires_an_outcome_for_produce(self) -> None:
+        """Determined-input mode raises on a missing outcome instead of drawing."""
+
+        sim = WorkshopSimulator(_producing_state(), require_produce_outcome=True)
+
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1))
+
+        state = sim.apply(
+            WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1),
+            outcome=ProduceOutcome(item_id=STATUE_1, cell_id=40),
+        )
+        self.assertEqual(_cell(state, 40).item_id, STATUE_1)
+
     def test_produce_rejects_impossible_transitions(self) -> None:
         """Non-producers, zero energy, cooling markers, and full boards all stop production."""
 
