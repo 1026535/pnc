@@ -237,6 +237,14 @@ class WorkshopSimulator:
         ):
             raise WorkshopSimulationError("Not enough energy to produce.")
         if outcome is not None:
+            group = self._catalog.drop_group(producer.group_id)
+            if group is not None and not any(
+                entry.item_id == outcome.item_id for entry in group.entries
+            ):
+                raise WorkshopSimulationError(
+                    f"Item {outcome.item_id} cannot drop from producer "
+                    f"{intent.producer_item_id} (group {producer.group_id})."
+                )
             produced_item_id = outcome.item_id
             destination_id = outcome.cell_id
             produced_status = outcome.item_status

@@ -192,11 +192,22 @@ class WorkshopSimulatorTests(unittest.TestCase):
 
         state = sim.apply(
             WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1),
-            outcome=ProduceOutcome(item_id=FRUIT_2, cell_id=40),
+            outcome=ProduceOutcome(item_id=STATUE_2, cell_id=40),
         )
 
-        self.assertEqual(_cell(state, 40).item_id, FRUIT_2)
+        self.assertEqual(_cell(state, 40).item_id, STATUE_2)
         self.assertEqual(state.energy.current, 99)
+
+    def test_produce_outcome_rejects_a_piece_outside_the_drop_group(self) -> None:
+        """An injected outcome must name one of the producer's possible drops."""
+
+        sim = WorkshopSimulator(_producing_state(), rng=random.Random(7))
+
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1),
+                outcome=ProduceOutcome(item_id=FRUIT_2, cell_id=40),
+            )
 
     def test_produce_rejects_impossible_transitions(self) -> None:
         """Non-producers, zero energy, cooling markers, and full boards all stop production."""
