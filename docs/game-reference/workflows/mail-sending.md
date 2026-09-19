@@ -34,7 +34,7 @@ The sender's own active character is a poor test recipient because the inspected
 client rejects it; another user-owned character is a suitable candidate only
 after its exact name/kingdom and message are specified by the user.
 
-The current [capture findings](../../../reviewed_plans/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md)
+The current [capture findings](../../../plans/reviewed/vision/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md)
 contain player mailbox, empty Compose and field-entry evidence, with no Send.
 A future receipt must be correlated to the approved recipient and new payload;
 a prior message containing the same subject or first line is not evidence that

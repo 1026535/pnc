@@ -40,7 +40,7 @@ Saved evidence is under the integration candidate's ignored
 `..._0078_hero_hall_dispatch.png`, `..._0079_hero_hall_recruit_post.png`,
 `..._0080_hero_result_diagnostic.png`, and `..._0081_hero_after_manual_confirm.png`.
 The durable state and later disposition belong to the
-[port validation ledger](../../../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md).
+[port validation ledger](../../../plans/completed/core/PNC_CORE_PORTING_VALIDATION.md).
 
 After manual Confirm and Close, fresh Hero Hall evidence showed four Daily
 attempts and eight recruit items. Following another exact NPC 2 preflight, the

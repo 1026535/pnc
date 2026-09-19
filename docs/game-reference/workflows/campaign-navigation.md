@@ -33,7 +33,7 @@ are distinct client operations.
 This supports a bounded automation contract ending at independently recognized
 hero formation. It does not identify the current pixels of either Challenge
 control. The saved live sequence in the
-[capture findings](../../../reviewed_plans/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md)
+[capture findings](../../../plans/reviewed/vision/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md)
 separates stage 6-5, Hero Formation, battle and Victory; its formation frame has no
 current stage/mode/AP labels. Preserve prior stage identity as transition context,
 never as content observed on formation. The recorded 20 AP battle is one historic
