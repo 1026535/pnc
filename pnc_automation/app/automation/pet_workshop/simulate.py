@@ -312,7 +312,12 @@ class WorkshopSimulator:
         )
 
     def _merge(self, intent: WorkshopMergeIntent) -> None:
-        """Merges two matching Normal pieces into the catalog successor."""
+        """Merges two matching Normal pieces into the catalog successor.
+
+        The merge drag ends on the target cell, so the merged result is
+        selected — verified live 2026-09-18 (result piece kept the yellow
+        border after a drag merge).
+        """
 
         source, target = self._require_pair(
             intent.source_cell_id, intent.target_cell_id, intent.item_id, "merge"
@@ -326,7 +331,10 @@ class WorkshopSimulator:
                         target, item_id=successor, cooldown=WorkshopCooldown.CLEAR
                     ),
                 }
-            )
+            ),
+            selection=WorkshopSelection(
+                WorkshopSelectionKind.SELECTED, intent.target_cell_id
+            ),
         )
 
     def _activate(self, intent: WorkshopActivateIntent) -> None:
@@ -359,7 +367,10 @@ class WorkshopSimulator:
                         cooldown=WorkshopCooldown.CLEAR,
                     ),
                 }
-            )
+            ),
+            selection=WorkshopSelection(
+                WorkshopSelectionKind.SELECTED, intent.target_cell_id
+            ),
         )
 
     def _feed(self, intent: WorkshopFeedIntent) -> None:
@@ -394,7 +405,10 @@ class WorkshopSimulator:
                         cooldown=WorkshopCooldown.CLEAR,
                     ),
                 }
-            )
+            ),
+            selection=WorkshopSelection(
+                WorkshopSelectionKind.SELECTED, intent.producer_cell_id
+            ),
         )
 
     def _recycle(self, intent: WorkshopRecycleIntent) -> None:
@@ -420,7 +434,14 @@ class WorkshopSimulator:
             and energy.current is not None
         ):
             energy = replace(energy, current=energy.current + reward.count)
-        self._set_state(cells=self._cells_with({intent.cell_id: self._emptied(cell)}), energy=energy)
+        selection = self._state.selection
+        if selection.cell_id == intent.cell_id:
+            selection = WorkshopSelection(WorkshopSelectionKind.NONE)
+        self._set_state(
+            cells=self._cells_with({intent.cell_id: self._emptied(cell)}),
+            energy=energy,
+            selection=selection,
+        )
 
     def _submit(self, intent: WorkshopSubmitOrderIntent) -> None:
         """Consumes the order's required pieces and removes the surveyed card.
@@ -462,11 +483,15 @@ class WorkshopSimulator:
                     f"only {quantity - remaining} usable Normal pieces on board."
                 )
         survey = self._state.order_survey
+        selection = self._state.selection
+        if selection.cell_id in updates:
+            selection = WorkshopSelection(WorkshopSelectionKind.NONE)
         self._set_state(
             cells=self._cells_with(updates),
             order_survey=replace(
                 survey, orders=tuple(o for o in survey.orders if o.order_ref != intent.order_ref)
             ),
+            selection=selection,
         )
 
     def _wait(self, intent: WorkshopWaitIntent) -> None:

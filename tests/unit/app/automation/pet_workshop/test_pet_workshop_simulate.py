@@ -33,6 +33,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopProduceIntent,
     WorkshopRecycleIntent,
     WorkshopSelectIntent,
+    WorkshopSelection,
     WorkshopSelectionKind,
     WorkshopStopIntent,
     WorkshopStopReason,
@@ -354,6 +355,61 @@ class WorkshopSimulatorTests(unittest.TestCase):
             sim.apply(WorkshopSubmitOrderIntent(order_ref=3))
         self.assertIsNotNone(sim.state.order_survey.order(3))
         self.assertEqual(_cell(sim.state, 1).item_id, FRUIT_1)
+
+    def test_consuming_intents_reconcile_the_selection(self) -> None:
+        """Merge and feed select the drop target; recycle and submit clear consumed selections."""
+
+        merge_state = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=STATUE_1),
+                    fx.make_cell(1, 2, item_id=STATUE_1),
+                ),
+                selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+            )
+        ).apply(WorkshopMergeIntent(source_cell_id=1, target_cell_id=2, item_id=STATUE_1))
+        self.assertEqual(merge_state.selection.cell_id, 2)
+
+        recycle_state = WorkshopSimulator(
+            fx.make_state(
+                cells=(fx.make_cell(1, 1, item_id=STATUE_3),),
+                selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+            )
+        ).apply(WorkshopRecycleIntent(cell_id=1, item_id=STATUE_3))
+        self.assertEqual(recycle_state.selection.kind, WorkshopSelectionKind.NONE)
+
+        feed_state = WorkshopSimulator(fx.feed_locked_state()).apply(
+            WorkshopFeedIntent(food_cell_id=2, producer_cell_id=1, food_item_id=FOOD_3)
+        )
+        self.assertEqual(feed_state.selection.cell_id, 1)
+
+        order = fx.make_order(7, {FRUIT_1: 1}, ready=True)
+        submit_state = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=FRUIT_1),
+                    fx.make_cell(1, 2, item_id=STATUE_1),
+                ),
+                selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 1),
+                order_survey=WorkshopOrderSurvey(
+                    orders=(order,),
+                    coverage=WorkshopSurveyCoverage.COMPLETE,
+                    freshness=WorkshopSurveyFreshness.CURRENT,
+                ),
+            )
+        ).apply(WorkshopSubmitOrderIntent(order_ref=7))
+        self.assertEqual(submit_state.selection.kind, WorkshopSelectionKind.NONE)
+
+        unrelated = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=STATUE_3),
+                    fx.make_cell(1, 2, item_id=STATUE_1),
+                ),
+                selection=WorkshopSelection(WorkshopSelectionKind.SELECTED, 2),
+            )
+        ).apply(WorkshopRecycleIntent(cell_id=1, item_id=STATUE_3))
+        self.assertEqual(unrelated.selection.cell_id, 2)
 
     def test_select_marks_usable_cells_only(self) -> None:
         """Selecting a usable cell marks it; a locked cell leaves the selection alone."""
