@@ -502,7 +502,7 @@ The runtime catalog is semantic and data-driven: normalized title aliases map to
 | Use resource item | In Bag/Resource choose globally smallest owned numeric amount; ties Food, Wood, Iron, Gold. Tap blue `Use` once, never orange bulk-use. Resource Shop is back-only. |
 | Hero Hall 5x | From typed Home City, open the observed Hero Hall building directly; do not use Daily `Go`. Perform five single free recruitments as cooldowns allow. Campaign may run while waiting. Never use 10x or paid actions. Reopen Daily only to prove completion. |
 | Upgrade Hero 3x | Use the first fully visible level-70 hero, only if free reset is available; perform three upgrades and restore exactly level 70. |
-| Campaign natural AP | Per-castle `fixed_stage` or `progress_then_farm`; preserve saved lineup, Challenge once, Auto battle, never Blitz, and verify result. |
+| Campaign natural AP | Per-castle `fixed_stage` or `progress_then_farm`; preserve saved lineup and Challenge once. Use the explicitly selected battle mode from the match-3 plan; `game_auto` preserves this plan's prior Auto behavior. Never Blitz; verify battle result and actual Daily progress. |
 | Gather Food/Wood/Iron/Gold | Search highest available full unoccupied node with enough resources. Use cavalry only, T1 first then higher available tiers ascending until the smallest sufficient capacity; no heroes and no Quick Select. |
 | Gather alliance mine | Same cavalry-only formation policy where the Daily row and mine are eligible. |
 | Resource-building output boost | Use an owned boost item first; diamond fallback is allowed only up to 200. Farm selector must be repaired and boost UI typed before promotion. |
@@ -737,19 +737,23 @@ Acceptance: one authorized positive Arena live canary observes the configured fr
 
 ### Phase 5 — Campaign, Land of Trial, and Lost Land
 
+**Battle ownership amendment, 2026-09-21:** the [shared match-3 component plan](../gameplay/PNC_MATCH3_COMPONENT_PLAN.md) owns the API/lifecycle and `solver`, `daily_exit` and `game_auto` policies for Campaign, Arena and Lost Land; the [solver plan](../gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) owns pure rules/selection. Time Rift is deferred. Daily retains target selection, applicable quest mapping, before/after progress, claims, connected lifecycle and total budgets. Stage selection (`fixed_stage` / `progress_then_farm`) remains independent of battle mode. This amendment adds selectable behavior without silently changing existing configuration/defaults or authorizing new live spending. A fast exit is successful for Daily only when the actual row advances/completes; an unchanged/unknown row does not trigger automatic retry or mode fallback. Qualify whether the requested Arena surface serves the existing Hero Showdown quest before reusing that binding. Land of Trial remains a separate feature.
+
+M0 exposes all three choices with honest unavailable responses. V13/V14 and V30 finish their battle-boundary scope with tested API handoffs and need not implement any policy. Daily operational promotion still requires the selected policy/context to work under its existing authority/evidence gates; API availability declarations alone do not enable a Daily capability. Reuse those feature adapters and the existing connected runtime rather than implementing another battle loop here.
+
 Campaign:
 
 1. Expand `CampaignPolicy` to the per-castle execution model.
-2. Type global map, chapter map, stage detail, battle prep, active battle, victory/defeat, and AP-insufficient states.
+2. Consume V13/V14's qualified map, chapter, stage and actual formation facts, plus the shared component's active-battle/result and AP-insufficient evidence. Keep source-stage facts separate from current formation; do not duplicate their producers or alias formation to battle prep.
 3. `progress_then_farm` selects the highest actionable chapter and highest gold/unlocked node, rediscovering after a win; when blocked it farms the configured fallback.
 4. `fixed_stage` validates and selects its configured unlocked chapter/node.
-5. Require sufficient natural AP, preserve the existing lineup, Challenge once, enable Auto, never Blitz, and verify result.
+5. Require sufficient natural AP, preserve the existing lineup and Challenge once through the shared battle authority. Execute the explicit battle mode; `game_auto` confirms unlocked/on-state and waits, `solver` plays observed moves, and `daily_exit` uses its qualified exit path. Never Blitz or auto-chain another battle. Verify the actual result before the caller's safe return.
 6. Return through gold controls to typed Home and reopen Daily.
 
 Land of Trial and Lost Land are separate slices after Campaign:
 
 - Land of Trial chooses the first unlocked explicit Trial row and attacks once; win or loss counts.
-- Lost Land opens the current stage, trusts exactly five preselected strongest heroes, saves only if required, challenges once, and accepts completion only when the Daily row advances.
+- Lost Land opens the current stage, trusts exactly five preselected strongest heroes, saves only if required by its separately authorized formation contract, and challenges once through the shared battle controller in the selected mode. Its formation semantics, active battle and exit/Auto controls require qualification; accept Daily progress only from the re-read row, not from Challenge or Exit alone.
 
 ### Phase 6 — Gathering
 

@@ -6,6 +6,8 @@ Date: 2026-09-15. Status: prepared for implementation; no implementation is auth
 
 **Shared OCR modernization:** use the [OCR text recognition and localization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) for backend, model, packaging, and measured text-position qualification. It is cross-cutting infrastructure outside the 43-packet count; numbered packets retain feature semantics and action policy.
 
+**Match-3 amendment, 2026-09-21:** V13/V14 Campaign and V30 Arena add selectable `solver`, `daily_exit` and `game_auto` requests to the [shared match-3 API](../gameplay/PNC_MATCH3_COMPONENT_PLAN.md). Their new prerequisite is its M0 contract only. Completion requires production caller/contract tests, including honest unavailable behavior, not implemented battle modes or live combat. V13 forwards target/mode to the single V14-owned adapter; V30 owns the Arena adapter. Existing perception/navigation proof remains required, and V13's accepted coverage is preserved with the new caller amendment pending. The separate [solver plan](../gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) owns the algorithm.
+
 ## Outcome and design
 
 Recognize and navigate the supported Home, research, Bag, Campaign, Trial and building interfaces through one production observation and navigation path. Each numbered packet is a coherent assignment for one assigned implementation worker. A packet owns its feature from screenshot to typed facts, measured controls, navigation, callers and focused proof.
@@ -50,8 +52,8 @@ The set contains **43 implementation packets**. All packets start **not implemen
 | [V10](modules/V10_BAG_SPEEDUPS.md) | Speedup cards and item details | V09 |
 | [V11](modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | Treasure cards, chest preview and item details | V09; reuse source preview changes within V11 |
 | [V12](modules/V12_BAG_REMAINING_TABS.md) | Remaining Bag tabs discovered on the supported layout | V09; bounded capture inventory |
-| [V13](modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | Campaign map/chapter content and navigation | V01; V02 for automatic Home entry |
-| [V14](modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | Stage details, Hero Formation and return | V13 |
+| [V13](modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | Campaign map/chapter content, navigation and target/mode forwarding | V01; V02 for Home entry; M0 and V14 adapter for added caller proof |
+| [V14](modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | Stage details, Hero Formation, return and single match-3 API handoff | V13's qualified target contract; M0 for caller slice, not V13's added composed-caller test |
 | [V15](modules/V15_TRIAL_CHALLENGE.md) | Trial Challenge cards and one observed detail family | V01; V02 for automatic Home entry |
 | [V16](modules/V16_BUILDING_UPGRADE_AND_QUEUES.md) | Building upgrade, prerequisites, queue and confirmation facts | V01; V02 for automatic Home entry |
 | [V17](modules/V17_CONSTRUCTION_AND_SLOTS.md) | Construction slot menus and construction details | V16; V02 |
@@ -67,7 +69,7 @@ The set contains **43 implementation packets**. All packets start **not implemen
 | [V27](modules/V27_MARKET_TRANSPORT.md) | Market and resource-transport menus | V01; V02 for Home entry; reuse V09 resource identities |
 | [V28](modules/V28_SANCTUM_RELICS.md) | Sanctum and Relics menus | V01; V02 for Home entry; reuse item/card primitives only where they fit |
 | [V29](modules/V29_SAUROI_AND_SAUREGG.md) | Sauroi Lair and Sauregg menus | V01; V02 for ordinary Home entry; V03 for variant-specific acquisition |
-| [V30](modules/V30_ARENA_VERSUS_CENTER.md) | Arena and Versus Center menus | V01; V02 for Home entry |
+| [V30](modules/V30_ARENA_VERSUS_CENTER.md) | Arena/Versus menus and match-3 API handoff | V01; V02 for Home entry; M0 for caller slice |
 | [V31](modules/V31_SACRED_TREE.md) | Sacred Tree and blessing records | V01; V02 for Home entry |
 | [V32](modules/V32_DRAGONDOM_EVENT.md) | Dragondom event-building menus | V01; V02–03 for occupied event-slot acquisition |
 | [V33](modules/V33_LOST_CITY_HEADQUARTERS.md) | Lost City Headquarters event menus | V01; V02–03 for canonical slot identity and occupancy |
@@ -117,7 +119,7 @@ Read-only menu opening is the intended proof. Research start, donations, Use/Ope
 | Area | Disposition |
 |---|---|
 | Development Research / building package 02 | Coordinate V04 and V16–17 with the current [Research](../core/PNC_CORE_REMAINING_01_RESEARCH_LIVE_PLAN.md) and [Buildings](../gameplay/PNC_CORE_REMAINING_02_BUILDINGS_PLAN.md) owners. Preserve their typed actions/journals. |
-| Campaign | V13–14 implement vision/navigation acceptance for the current [Campaign plan](../gameplay/PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md). Battle automation remains separate. |
+| Campaign and Arena | V13–14 supply Campaign vision/navigation and the single API handoff consumed by the [Campaign caller port](../gameplay/PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md); V30 supplies the Arena handoff. Battle policies/authority/results belong to the shared match-3 component, with pure rules/selection in the solver plan. V acceptance requires API integration only for the battle boundary. |
 | World gathering and formation | V19 connects perception to the [Gathering plan](../gameplay/PNC_CORE_REMAINING_03_GATHERING_PLAN.md); it does not claim dispatch/receipt work complete. |
 | Mail, Chat, Alliance membership/manage, castle roster, More/Settings, Daily Quest | Preserve qualified support and existing [Mail/Login](../mail/PNC_CORE_REMAINING_05_MAIL_LOGIN_PLAN.md) / [Castle navigation](../account-runtime/PNC_CORE_REMAINING_06_CASTLE_NAVIGATION_PLAN.md) work. Reopen only a current, reproduced gap relevant to this goal. |
 | Login offers, updates, generic modal guard | Existing shared recognition/recovery stays owned centrally. A new feature popup is delivered in its feature packet, not in a giant “all popups” rewrite. |

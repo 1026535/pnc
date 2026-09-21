@@ -13,6 +13,7 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Building upgrades](workflows/building-upgrade.md) | Normal-upgrade UI checks, request, response handling, and automation implications inspected |
 | [Castle skins and ambience](workflows/castle-appearance.md) | Castle and ambience preview layers, world-map rendering, and appearance-collection implications |
 | [Campaign navigation](workflows/campaign-navigation.md) | Chapter 10 and stage 10-3 saved transitions, source correspondence, and bounded automation implications |
+| [Match-3 battle modes](workflows/match3-battles.md) | Packaged Auto toggle/unlock and context-dependent exit behavior; Campaign/Arena/Lost Land scope and unproved Daily-credit boundaries |
 | [Resource tile labels and markers](workflows/resource-tile-markers.md) | Resource artwork, occupancy, protection, focus markers, and OCR/automation uncertainty |
 | [Seasonal Alliance layouts](workflows/seasonal-alliance-layout.md) | Recovered Faction eligibility/layout gate and live participating/nonparticipating comparison |
 | [Neutral gathering](workflows/neutral-gathering.md) | Target/occupancy shield predicate, army-count semantics, and one correlated live collection receipt |

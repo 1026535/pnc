@@ -31,6 +31,14 @@ operation or duplicate endpoint fix to bypass a missing dependency. Hero
 optimization, formation editing/saving, battle, sweep, AP replenishment, reward
 claims, automatic Daily and a global stage catalog are also outside this package.
 
+### Match-3 handoff amendment — 2026-09-21
+
+The [shared match-3 component plan](PNC_MATCH3_COMPONENT_PLAN.md) separates the API/lifecycle from the [pure solver](PNC_MATCH3_BATTLE_SOLVER_PLAN.md). V13 carries selected target and explicit `battle_mode`; V14 owns one preparation-to-API adapter with `solver`, `daily_exit` and `game_auto` choices. Their added definition of done is offline API handoff/availability testing, not working battle policies.
+
+Reuse that adapter and the canonical M0 parser when migrating the public/API/authored callers here. V14 supplies the minimal existing-caller mode plumbing; this package owns the broader typed caller migration. Coordinate those symbols once rather than adding competing parsers or adapters. Omission continues to mean preparation-only and sends no battle execution request. Invalid values fail validation; explicit unavailable requests stop before runtime creation/navigation. Preserve typed unavailable/results/errors with no legacy fallback or automatic retry. Difficulty and stage-selection policy remain separate from battle mode.
+
+The package 04 preparation port does not wait for the solver, Auto, Exit or live battle support. Its extra caller proof uses the same offline recording shared API and real unavailable path as V14, while its live proof remains preparation → Home. Battle execution, active/result perception and authority belong to the component; later operational promotion is a separate scope. These additions amend the exclusions above only for thin API wiring, not for battle implementation.
+
 ## Current code and evidence to reuse
 
 Read current AGENTS.md, applicable implementation skills and
@@ -132,12 +140,15 @@ ownership. Authored dispatch borrows its runtime without closing it.
 
 Remove the migrated Campaign fallback/replan loop once supported callers use the
 typed path. Preserve other task branches. Do not redo V14's endpoint correction.
-Update examples only where the public contract changes. A Daily-Go adapter, if
-already required, invokes this same preparation workflow and adds no battle path
-or mutation identity.
+Update examples only where the public contract changes, including the explicit
+battle-mode/unavailable contract above. A Daily-Go preparation adapter, if already
+required, invokes this same preparation workflow and adds no mutation identity;
+operational Daily battle requests later use the shared component through the
+existing handoff, under separate capability and authority gates.
 
-Acceptance: supported original entrypoints converge, unsupported modes are
-explicit, and no caller falls back to legacy execution or continues into battle.
+Acceptance: supported original entrypoints converge, unsupported difficulty or
+battle-mode requests are explicit, and no caller falls back to legacy execution
+or continues into battle during this preparation/API-only scope.
 
 ## Validation and completion
 
@@ -148,7 +159,9 @@ the typed workflow tests and
 - Ordered Standard/Elite policy, missing/locked/no candidates and validation
   before connection.
 - Propagation of changed/missing targets or failed V-owned operations without
-  caller replay; one preparation request and zero battle requests.
+  caller replay; preparation-only calls send one preparation request and zero
+  battle requests. Explicit battle requests exercise the separate offline API
+  handoff/unavailable contract, without executing a battle policy.
 - Prior-stage/current-formation provenance, absent current stage/AP labels,
   preparation evidence after Home exit and truthful exit failure.
 - Direct/authored parity, one runtime, borrowed cleanup and preservation of both
@@ -177,8 +190,10 @@ preparation receipt, final Home/stop state and cleanup disposition. Historical
 the current execution session and scope amendment.
 
 Done requires the requested policy coverage, typed caller migration, relevant
-offline checks, dependency qualifications and production caller preparation/exit
-proof. Missing modes, facts, operations or live evidence remain incomplete. Final
+offline checks including the API amendment, dependency qualifications and production
+caller preparation/exit proof. Missing preparation difficulty coverage, facts,
+operations or live evidence remain incomplete; unimplemented battle policies do
+not block this package's API handoff acceptance. Final
 combined integration is separate. This planning revision needs document checks
 only, with no unit or live run.
 

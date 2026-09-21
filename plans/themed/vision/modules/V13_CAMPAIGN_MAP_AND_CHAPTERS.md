@@ -1,6 +1,16 @@
 # V13 — Campaign map and chapter navigation
 
-[Index and common contract](../PNC_VISION_MODULAR_PLAN.md). Depends on V01; V02 for automatic Home entry. Align with [feature04](../../gameplay/PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md). Deliverable: current visible chapter/stage-map facts and verified map/chapter/return routes.
+[Index and common contract](../PNC_VISION_MODULAR_PLAN.md). Depends on V01; V02 for automatic Home entry. Align with [feature04](../../gameplay/PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md). Deliverable: current visible chapter/stage-map facts and verified map/chapter/return routes, plus the mode-forwarding amendment below.
+
+## Match-3 caller amendment — 2026-09-21
+
+Existing accepted vision/navigation coverage and its historical receipts remain accepted. This is an **additional, pending API integration slice**, not evidence of implemented battle support. Its only new match-3 prerequisite is M0 in the [shared component plan](../../gameplay/PNC_MATCH3_COMPONENT_PLAN.md); it does not wait for the solver, Daily exit or game Auto.
+
+Expose an explicit optional `battle_mode` choice of `solver`, `daily_exit` or `game_auto` in the Campaign caller contract. Omission preserves preparation-only behavior. Keep it separate from Standard/Elite difficulty and `fixed_stage` / `progress_then_farm` stage policy. Use the shared typed contract/parser; do not allow the current `CampaignPolicy.from_params` behavior to silently discard this field or accept invalid values.
+
+Carry the selected stage identity and requested mode unchanged to the **single V14-owned Campaign handoff adapter**. Map navigation and the feature producer do not call battle execution themselves. V14 connects preparation to the shared match-3 API; package 04 reuses that adapter when migrating callers. There is no direct dependency on the pure solver and no second Campaign battle loop.
+
+**Amendment done:** offline tests exercise production parsing/selection and forwarding for all three values into the shared V14 adapter, preserve target provenance and verify omission sends no battle execution request. Reuse V14's recording-API test for the single execution call. The composed caller also uses the real M0 unavailable response to stop an explicit battle request before runtime creation/navigation, propagating a typed unavailable result without retry or fallback. A test that invokes only a mock, or documents an ignored parameter, is insufficient. Existing perception/route acceptance still applies; this amendment adds no live battle or new route run solely for API wiring.
 
 ## Current state and owners
 
@@ -23,12 +33,13 @@ Use tour15, the Chapter6 pulse validation fixture, and the saved Chapter10/path/
 3. Bind each target to its visible chapter/stage identity and current viewport. A fixed known chapter order can guide search but cannot create unseen actionable nodes.
 4. Extend the existing Campaign content producer and region planner for the evidenced layouts. Use one shared representation consumed by the current campaign task; remove touched one-off duplicate parsing.
 5. Add measured map → chapter path and explicit return edges. Verify destination chapter identity and refresh nodes after camera/viewport movement. Preserve transition context separately from newly observed facts.
+6. Complete the caller amendment above against M0 and the V14 adapter. Battle policy implementation and qualification remain in the shared component and solver plans.
 
 ## Acceptance and proof
 
 Extend `test_campaign_visual_profiles.py` and Campaign task/navigation tests with Chapter6 and10 source/validation frames. Both publishers must emit the correct current identities and geometry. Preserve the pulsing-ring regression and absence of unsupported mode/eligibility facts.
 
-Start `py tools/run_tests.py group unit.app.pnc.vision` and `group unit.app.pnc.navigation`, then affected checks. One core-runtime route: Home → Campaign map → one proved unlocked chapter path → map → Home via the bottom-right portal. Save source/destination frames, typed targets and trace. Stop if no independently measured chapter entry is available. Stage Challenge, formation and battles are outside this packet; V14 owns the next boundary.
+Start `py tools/run_tests.py group unit.app.pnc.vision` and `group unit.app.pnc.navigation`, then affected checks including the changed caller. One core-runtime route: Home → Campaign map → one proved unlocked chapter path → map → Home via the bottom-right portal. Save source/destination frames, typed targets and trace. Stop if no independently measured chapter entry is available. Stage Challenge, formation and battles are outside this packet's live proof; V14 owns preparation and the API handoff, while the shared component owns battle execution.
 
 ## Lead review and live checkpoint — 2026-09-16
 
@@ -56,7 +67,8 @@ frames, typed rows and trace. This validates the reviewed candidate's live
 boundary. Main has since accepted V12, and the V05–V07/camera integration is
 being finalized separately; integrate those changes and validate their combined
 OCR contracts before final V13 acceptance and push. V14 remains the owner of
-stage details, Hero Formation and any later battle boundary.
+stage details and Hero Formation. The 2026-09-21 amendment assigns its later
+handoff to the shared match-3 API; battle execution belongs to that component.
 
 
 ## Final integration corrections — 2026-09-16

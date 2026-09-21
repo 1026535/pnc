@@ -41,7 +41,14 @@ their feature-local work in packages 05 and 06.
    endpoint adjustment. Package 04 owns migration to typed workflow/caller
    composition. Reuse delivered preparation results; do not create a competing
    observation schema or repeat an endpoint fix. Preserve source-stage context
-   separately from the actual `PNC_HERO_FORMATION` frame.
+   separately from the actual `PNC_HERO_FORMATION` frame. The 2026-09-21
+   [match-3 component amendment](../gameplay/PNC_MATCH3_COMPONENT_PLAN.md)
+   adds mode forwarding to V13 and one shared-API handoff adapter/minimal caller
+   binding to V14. Package 04 consumes that adapter during migration. M0 plus
+   offline caller tests completes this added scope; solver, Daily-exit and Auto
+   implementations, battle authority and live combat stay outside these packages.
+   Preserve existing preparation-only calls. V30 owns the equivalent Arena API
+   adapter; neither V feature calls the pure solver directly.
 5. Continue independent policy, caller, action and receipt work without waiting
    for all 43 packets. Typed consumer fixtures prove decisions, not perception
    qualification. End-to-end acceptance requires the specific outputs consumed.

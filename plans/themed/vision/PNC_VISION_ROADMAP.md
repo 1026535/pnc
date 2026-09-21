@@ -4,6 +4,8 @@ Updated: 2026-09-16. Status: **14/43 accepted for stated coverage: V01, V02, V04
 
 [Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [OCR text modernization](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) · [Building coverage](modules/BUILDING_MENU_COVERAGE.md) · [Evidence](modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](../../reviewed/vision/modules/PLAN_RETIREMENT.md)
 
+**2026-09-21 match-3 amendment:** land M0 of the [shared component plan](../gameplay/PNC_MATCH3_COMPONENT_PLAN.md) once, then complete V13 target/mode forwarding, V14's single Campaign API adapter and V30's Arena API adapter. The API offers `solver`, `daily_exit` and `game_auto` with explicit unavailable responses until implemented. These V slices finish with offline production-caller handoff tests plus existing visual/route acceptance; no solver, Auto/Exit implementation or live battle gates them. V13's accepted vision coverage remains accepted; its additive caller slice is pending. V14 uses V13's already-qualified target contract, so V13's new composed-caller proof is not a circular prerequisite for V14. The count above records historical accepted coverage, not completion of the new slice.
+
 ## Start here
 
 **First assignment: V01. Then prioritize V02 and V04.** This proves the existing vision integration, fixes Home acquisition/panning, and completes the Institute/Development inspection path that exposed the original OCR problem.
@@ -71,7 +73,7 @@ The diagram shows shared prerequisites, not every route dependency. The tables c
 | [V02 — Home camera localization and atlas navigation](modules/V02_HOME_CAMERA_AND_NAVIGATION.md) | V01 | Home camera localization, measured pan, fresh building acquisition and verified open/return. |
 | [V04 — Institute, Development research and shared research parsing](modules/V04_INSTITUTE_DEVELOPMENT.md) | V01; H for route | Institute/Development node and detail inspection, scrolling and queue facts. |
 | [V09 — Bag shell, common cards and Resource inventory](modules/V09_BAG_SHELL_AND_RESOURCES.md) | V01 | Bag tab/card contract and correct Resource partial-card handling. |
-| [V13 — Campaign map and chapter navigation](modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | V01; H for route | Campaign map/chapter facts and the correct Home portal. |
+| [V13 — Campaign map and chapter navigation](modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | V01; H for route; M0 + V14 adapter for new caller proof | Campaign map/chapter facts and Home portal; forward target and all three battle-mode choices. |
 | [V16 — Building upgrade, prerequisites and queue menus](modules/V16_BUILDING_UPGRADE_AND_QUEUES.md) | V01; H for route | Shared building upgrade, prerequisite and queue observations. |
 
 **Recommended order:** V02 and V04 first; V09 and V13 next; V16 next or earlier when it unblocks an active building caller. Feature parsing can proceed while V02's route proof is pending. Mark that split explicitly.
@@ -89,7 +91,7 @@ The diagram shows shared prerequisites, not every route dependency. The tables c
 | [V10 — Bag Speedup cards and item details](modules/V10_BAG_SPEEDUPS.md) | V09 | Speedup type/duration/quantity and safe item inspection. |
 | [V11 — Bag Treasure, chest previews and item details](modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | V09; incorporate source preview behavior if absent | Treasure variants, possible-reward preview content and owned close. |
 | [V12 — Remaining Bag tabs on the supported layout](modules/V12_BAG_REMAINING_TABS.md) | V09; remaining-tab inventory | The other evidenced Bag tabs, or an explicit no-additional-tabs result. |
-| [V14 — Campaign stage detail, Hero Formation and return](modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | V13; proved non-spending formation entry | Stage → actual Hero Formation → return, with honest stage context. |
+| [V14 — Campaign stage detail, Hero Formation and return](modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | V13 qualified target contract; nonspending formation entry; M0 for API slice | Stage → actual Hero Formation → return; single tested Campaign match-3 handoff with mode selection. |
 | [V15 — Trial Challenge cards and read-only details](modules/V15_TRIAL_CHALLENGE.md) | V01; H for route | Trial card identity/state and one proved read-only detail family. |
 | [V17 — Construction slot menus and construction details](modules/V17_CONSTRUCTION_AND_SLOTS.md) | V02 + V16; suitable slot for live route | Construction slot/menu/detail inspection, without constructing. |
 | [V18 — Hero Hall menu and saved recruitment result surfaces](modules/V18_HERO_HALL_AND_RESULTS.md) | V01; H for route; saved result captures | Hero Hall and stable recruitment-result content without replaying recruitment. |
@@ -106,7 +108,7 @@ The diagram shows shared prerequisites, not every route dependency. The tables c
 | [V21 — Infirmary healing menus](modules/V21_INFIRMARY_HEALING.md) | V01 + V16; H for route | Infirmary wounded/healing facts and owned information controls. |
 | [V22 — Blacksmith hub and Gear inventory](modules/V22_BLACKSMITH_AND_GEAR.md) | V01 + V16; H for route | Blacksmith/Gear hub, inventory/detail and shared equipment primitives. |
 | [V27 — Market and resource-transport menus](modules/V27_MARKET_TRANSPORT.md) | V01; V09 resource contract; H for route | Market recipient list and transport form kept semantically distinct. |
-| [V30 — Arena and Versus Center menus](modules/V30_ARENA_VERSUS_CENTER.md) | V01; H for route | Versus Center/Arena rows and safe ranking/detail previews. |
+| [V30 — Arena menus and match-3 API handoff](modules/V30_ARENA_VERSUS_CENTER.md) | V01; H for route; M0 for API slice | Versus Center/Arena rows and safe previews; tested match-3 API handoff with mode selection. |
 | [V31 — Sacred Tree and blessing records](modules/V31_SACRED_TREE.md) | V01; H for route | Sacred Tree and Blessing Record content/return. |
 | [V34 — Wall and Defense Info menus](modules/V34_WALL_DEFENSE.md) | V01 + V16; H for route | Wall/Defense Info facts and verified settled destination. |
 | [V35 — Watchtower reports and information](modules/V35_WATCHTOWER.md) | V01 + V16; H for route | Watchtower empty/alert/report information where captured. |
