@@ -244,7 +244,7 @@ result identically through `bind_workshop_observation`.
 | `PNC_PET_WORKSHOP_ITEM_DETAIL` | `pet_workshop_item_detail` | `ITEM_DETAIL` | Reviewed "Fruit 4" chain dialog |
 | `PNC_PET_WORKSHOP_ORDER_DETAIL` | `pet_workshop_order_detail` | `ORDER_DETAIL` | Reviewed LV6 card-1 dialog |
 | `PNC_PET_WORKSHOP_HELP` | `pet_workshop_help` | `HELP` | Reviewed Tip rules dialog |
-| `PNC_PET_WORKSHOP_STORAGE` | `pet_workshop_storage` | `EXCLUDED_MODAL` | Reviewed Get-Slots bottom sheet |
+| `PNC_PET_WORKSHOP_STORAGE` | `pet_workshop_storage` | `EXCLUDED_MODAL` | Reviewed five-slot LV6 and six-slot LV7 Get-Slots sheets |
 | `PNC_ILLUSORY_BEAST_MANOR` | `pet_workshop_manor` | (none) | Manor is a navigation surface, not a Workshop surface; the producer returns `None` so no `workshop` content publishes |
 
 Workshop item detail, order detail, help and storage belong to the calling
@@ -252,6 +252,12 @@ workflow. The canonical `TASK_OWNED_POPUP_SCREEN_TYPES` registry in
 `app/pnc/domain/popup.py` keeps generic interruption recovery from consuming
 these surfaces. A measured close control remains available to the caller;
 its presence alone does not authorize automatic dismissal.
+
+The storage sheet's Get Slots/price anchor column follows the sheet's slot
+capacity, not its occupied-item count: the reviewed five-slot LV6 sheet
+(four occupied, one empty) shows the anchors in the first column while the
+six-slot LV7 sheet shows them in the second. Profile revision 2 bounds both
+anchor bands across the qualified drawer width so either placement matches.
 
 Screen identity comes only from independent visual-anchor profile matching;
 a screen request is never treated as proof.
@@ -291,7 +297,10 @@ populated-but-unresolved evidence stays `UNKNOWN`.
 
 Header OCR reads `workshop_level` (`Lv.N`), `workshop_exp` (`N/M` gauge,
 current value) and `energy` (`N/M` pill, current/capacity); an absent OCR
-backend leaves all three unknown.
+backend leaves all three unknown. An energy pill read whose denominator is
+not positive is OCR noise: both energy fields publish unknown rather than
+constructing an invalid gauge. Valid zero-current (`0/200`) and
+over-capacity (`240/200`) reads still publish.
 
 ### Orders
 

@@ -97,6 +97,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",
                         "trial_challenge_live",
+                        "pet_workshop_storage",
                     }
                     else 1
                 )

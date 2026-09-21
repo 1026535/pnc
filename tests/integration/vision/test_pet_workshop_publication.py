@@ -34,6 +34,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopItemStatus,
     WorkshopOccupancy,
     WorkshopOrderRewardCategory,
+    WorkshopProductionMode,
     WorkshopSelectionKind,
     WorkshopSurfaceKind,
 )
@@ -721,11 +722,18 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
         screen_type: ScreenType,
         layout_id: str,
         session_id: str,
+        *,
+        native_mode: bool = False,
+        ocr_service: Any | None = None,
     ) -> tuple[Observation, Observation, Any]:
         """Keep published Workshop dialogs inspectable by their owning workflow."""
 
-        builder, navigation = _wire(_EmptyOcrService())
-        capture = _capture(fixture, session_id=session_id)
+        builder, navigation = _wire(
+            _EmptyOcrService() if ocr_service is None else ocr_service
+        )
+        capture = _capture(
+            fixture, session_id=session_id, native_mode=native_mode
+        )
         builder_observation, navigation_observation = _build_both(
             builder, navigation, capture, screen_type
         )
@@ -832,6 +840,52 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
         self.assertIsNone(workshop.view.order_strip_bounds)
         self.assertIsNone(workshop.view.close_control_bounds)
 
+    def test_storage_native_rgba_publishes_excluded_modal(self) -> None:
+        """The six-slot LV7 sheet classifies as storage on its native frame.
+
+        The reviewed LV7 capture carries six occupied slots with Get Slots in
+        the second column; the fixed first-column bands missed it and the frame
+        fell through to the board parser, crashing on its noise energy read.
+        """
+
+        with Image.open(FIXTURES / "pet_workshop_storage_lv7_native_rgba.png") as probe:
+            self.assertEqual("RGBA", probe.mode)
+
+        observation, _, workshop = self._assert_both(
+            "pet_workshop_storage_lv7_native_rgba.png",
+            ScreenType.PNC_PET_WORKSHOP_STORAGE,
+            _STORAGE_LAYOUT_ID,
+            "pw02-storage-lv7",
+            native_mode=True,
+            ocr_service=_require_rapid_ocr_service(self),
+        )
+        state = workshop.state
+        self.assertEqual(WorkshopSurfaceKind.EXCLUDED_MODAL, state.surface)
+        self.assertEqual((), state.cells)
+        self.assertEqual((), state.order_survey.orders)
+        self.assertIsNone(state.energy.current)
+        self.assertIsNone(state.energy.capacity)
+        self.assertIsNone(state.workshop_level)
+        self.assertIsNone(state.workshop_exp)
+        self.assertEqual(WorkshopSelectionKind.UNKNOWN, state.selection.kind)
+        self.assertEqual(
+            WorkshopProductionMode.UNKNOWN, state.production_mode
+        )
+        view = workshop.view
+        self.assertEqual((900, 1600), view.image_size)
+        self.assertIsNone(view.close_control_bounds)
+        self.assertIsNone(view.order_strip_bounds)
+        self.assertIsNone(view.detail_control_bounds)
+        self.assertIsNone(view.recycle_control_bounds)
+        self.assertFalse(
+            {
+                element
+                for element in _elements(observation)
+                if element.name.startswith("PNC_PET_WORKSHOP")
+            },
+            "an excluded storage modal publishes no Workshop action controls",
+        )
+
     def test_manor_publishes_no_workshop_content(self) -> None:
         """The manor hub is a navigation screen, not a Workshop surface."""
 
@@ -861,8 +915,59 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
                 )
 
 
+class _ScriptedEnergyOcrContext:
+    """Frame-local OCR seam that reads one scripted energy-gauge line.
+
+    Every other bounded region reads empty so level, EXP and reward-count
+    fields stay unknown; only the producer's ``workshop_energy`` detail key
+    returns text.
+    """
+
+    def __init__(self, energy_text: str) -> None:
+        self._energy_text = energy_text
+
+    def read_lines(
+        self, image: Image.Image, region: Bounds, **kwargs: Any
+    ) -> tuple[OcrLine, ...]:
+        if kwargs.get("detail") == "workshop_energy":
+            return (
+                OcrLine(text=self._energy_text, bounds=region, confidence=1.0),
+            )
+        return ()
+
+
 class PetWorkshopHeaderOcrTests(unittest.TestCase):
     """RapidOCR-backed reads of the measured header counters."""
+
+    def test_energy_gauge_requires_positive_capacity(self) -> None:
+        """A nonpositive OCR denominator abstains; valid gauges are kept.
+
+        Replays the live storage failure's energy noise through the owning
+        producer: ``0/0`` and ``200/0`` must publish both fields unknown, while
+        a genuine empty gauge ``0/200`` and the over-capacity ``240/200`` keep
+        their readings.
+        """
+
+        producer = WorkshopContentProducer(matcher=OpenCvTemplateMatcher())
+        with Image.open(FIXTURES / "pet_workshop.png") as source:
+            image = source.convert("RGB")
+        cases = {
+            "0/0": (None, None),
+            "200/0": (None, None),
+            "0/200": (0, 200),
+            "240/200": (240, 200),
+        }
+        for text, expected in cases.items():
+            with self.subTest(gauge=text):
+                additions = producer.additions_for_screen(
+                    image=image,
+                    screen_type=ScreenType.PNC_PET_WORKSHOP,
+                    ocr_context=_ScriptedEnergyOcrContext(text),
+                    layout_id=_BOARD_LAYOUT_ID,
+                )
+                assert additions is not None and additions.workshop is not None
+                energy = additions.workshop.state.energy
+                self.assertEqual(expected, (energy.current, energy.capacity))
 
     def test_header_counters_read_on_real_ocr(self) -> None:
         """Level, EXP, energy and reward counts parse from measured regions."""

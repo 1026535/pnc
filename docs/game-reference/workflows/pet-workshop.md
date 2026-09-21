@@ -270,11 +270,18 @@ parser is `pnc_automation/app/pnc/vision/pet_workshop.py`:
   (tap a card) shows target items with satisfied checks plus a reward row;
   it has a close X but no submit control.
 - The storage bottom sheet (layers icon) is a premium Get-Slots drawer with
-  no close control — it dismisses on an outside tap.
+  no close control — it dismisses on an outside tap. Its Get Slots/price
+  column follows the sheet's slot capacity, not its occupied-item count:
+  the reviewed five-slot LV6 sheet (four occupied, one empty) shows the
+  anchors in the first column while the six-slot LV7 sheet shows them in
+  the second.
 - The Illusory Beast Manor hub is a navigation surface, not a Workshop
   surface; its Pet Workshop building and back chevron are measured controls.
 - Header reads: `Lv.N` workshop level, `N/M` EXP gauge, `N/M` energy pill
-  (verified: LV8 = `8/100`, `166/200`; LV6 = `79/80`, `200/200`).
+  (verified: LV8 = `8/100`, `166/200`; LV6 = `79/80`, `200/200`). An energy
+  read whose denominator is not positive is OCR noise and publishes unknown
+  rather than a zero-capacity gauge; zero-current and over-capacity reads
+  remain valid.
 
 ## Remaining uncertainty
 

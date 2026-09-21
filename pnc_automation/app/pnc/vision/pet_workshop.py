@@ -582,13 +582,17 @@ class WorkshopContentProducer:
             image=image, ocr_context=ocr_context, region=_ENERGY_REGION, detail="workshop_energy"
         )
         energy_match = _GAUGE_SEARCH.search(energy_text)
+        energy_capacity = int(energy_match.group(2)) if energy_match else None
+        energy_current = int(energy_match.group(1)) if energy_match else None
+        if energy_capacity is not None and energy_capacity <= 0:
+            # A nonpositive capacity denominator is OCR noise, not a reading;
+            # both gauge fields stay unknown rather than crash the model or
+            # publish a false zero.
+            energy_current = energy_capacity = None
         return (
             int(level_match.group(1)) if level_match else None,
             int(exp_match.group(1)) if exp_match else None,
-            WorkshopEnergy(
-                current=int(energy_match.group(1)) if energy_match else None,
-                capacity=int(energy_match.group(2)) if energy_match else None,
-            ),
+            WorkshopEnergy(current=energy_current, capacity=energy_capacity),
         )
 
     def _read_production_mode(self, prepared: PreparedFrame) -> WorkshopProductionMode:

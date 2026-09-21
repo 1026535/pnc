@@ -5847,7 +5847,7 @@
       "id": "pet_workshop_storage",
       "layout_id": "pet_workshop_storage",
       "screen": "PNC_PET_WORKSHOP_STORAGE",
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/pet_workshop_storage.png",
         "decoded_sha256": "abc05a878c87e9a83217bcc4cae1990e318662498232fb959527e53ac6c4fcfc",
@@ -5855,7 +5855,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed Workshop storage drawer from the Get Slots control and the slot price row; stored item counts stay frame-owned.",
+        "description": "Reviewed Workshop storage drawer from the Get Slots control and the slot price row; stored item counts stay frame-owned. The drawer anchors search the full row width because the Get Slots column follows slot capacity: the reviewed five-slot LV6 sheet places it in the first column and the six-slot LV7 sheet in the second.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -5866,7 +5866,7 @@
           "search_region": [
             12,
             778,
-            110,
+            490,
             45
           ],
           "threshold": 0.9
@@ -5876,7 +5876,7 @@
           "search_region": [
             12,
             820,
-            85,
+            490,
             55
           ],
           "threshold": 0.9

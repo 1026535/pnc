@@ -1446,6 +1446,20 @@
       }
     },
     {
+      "image": "pet_workshop_storage_lv7_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP_STORAGE",
+      "split": "validation",
+      "group": "2026-09-21/pet_workshop_pw02_retest",
+      "sha256": "434ea2c307f3104eac172b09ff92f91886ba270f8aef5cd5d35d7a575a4d2fa8",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP_STORAGE"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-21/pet_workshop_pw02_retest_t3_20260921/20260921T131757Z_post_actions.png",
+        "derivative": "Unmodified native RGBA session frame captured 2026-09-21 by the executor post-action observe inside run_actions('storage_open'), attempt 7, session a2398b19; the six-slot LV7 sheet whose Get Slots second-column placement defeated the first-column anchor bands."
+      }
+    },
+    {
       "image": "pet_workshop_lv6_20260917.png",
       "screen": "PNC_PET_WORKSHOP",
       "split": "validation",
