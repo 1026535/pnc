@@ -4,7 +4,7 @@ Updated 2026-09-21 from offline inspection of packaged PNC **5.0.203 / versionCo
 
 ## Requested behavior
 
-**User-confirmed, high confidence, 2026-09-21:** Campaign, Arena and Lost Land must each support our solver, early exit for fast Daily progress, and in-game Auto when unlocked. Time Rift was explicitly deferred. These are requirements, not evidence that every control or early-exit credit rule is qualified. The [shared component plan](../../../plans/themed/gameplay/PNC_MATCH3_COMPONENT_PLAN.md) owns API/lifecycle, execution policies and authority; the [solver plan](../../../plans/themed/gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) owns pure rules and move selection. V13/V14 and V30 require selectable-mode API handoff tests only at the battle boundary; their completion does not imply implemented or qualified battle modes.
+**User-confirmed, high confidence, 2026-09-21:** Campaign, Arena and Lost Land must each support our solver, early exit for fast Daily progress, and in-game Auto when unlocked. Time Rift was explicitly deferred. These are requirements, not evidence that every control or early-exit credit rule is qualified. The [match-3 epic](../../../plans/themed/gameplay/PNC_MATCH3_COMPONENT_PLAN.md) owns all delivery: M1 includes lifecycle and pure rules/combat selection, M2 implements Auto/Exit, M3 supplies feature/Daily bindings, and M4 integrates the solver and qualifies operation. The [solver design reference](../../../plans/themed/gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) retains algorithm boundaries and rule evidence without separate milestones. V13/V14 and V30 require selectable-mode API handoff tests only at the battle boundary; their completion does not imply implemented or qualified battle modes.
 
 ## Client-source findings
 

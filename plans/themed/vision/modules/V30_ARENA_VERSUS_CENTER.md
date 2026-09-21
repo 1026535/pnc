@@ -7,7 +7,7 @@ Depends on V01; V02 for Home entry; M0 of the shared match-3 component for the c
 
 Versus Center with Arena selected, visible opponent/ranking/attempt facts, Exchange Shop inspection and one observed read-only opponent/detail family, plus a mode-selectable call to the shared match-3 API.
 
-The [shared match-3 component plan](../../gameplay/PNC_MATCH3_COMPONENT_PLAN.md) owns combat entry, solver/Daily-exit/game-Auto policies and battle results; the [solver plan](../../gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) owns the pure algorithm. V30 supplies qualified menu identity, targets, safe returns and a thin caller adapter. Match-3 Arena must be distinguished from Hero Showdown before any Daily quest binding; this packet's read-only and API proofs do not qualify battle execution or early-exit credit.
+The [match-3 epic](../../gameplay/PNC_MATCH3_COMPONENT_PLAN.md) owns shared lifecycle and the pure algorithm in M1, Daily-exit/game-Auto policies in M2, and solver integration plus operational qualification in M4. V30 supplies qualified menu identity, targets, safe returns and a thin caller adapter. Match-3 Arena must be distinguished from Hero Showdown before any Daily quest binding; this packet's read-only and API proofs do not qualify battle execution or early-exit credit.
 
 September14 reference and validation captures establish Versus Center/Arena and its Home return. The Hero/Arena audit is useful dated evidence; it does not establish combat proficiency or every tab's semantics. Use the [versioned endpoint note](../../../../docs/game-reference/workflows/building-endpoints.md) as a route lead and current captured pixels as acceptance evidence.
 

@@ -33,7 +33,7 @@ Use tour15, the Chapter6 pulse validation fixture, and the saved Chapter10/path/
 3. Bind each target to its visible chapter/stage identity and current viewport. A fixed known chapter order can guide search but cannot create unseen actionable nodes.
 4. Extend the existing Campaign content producer and region planner for the evidenced layouts. Use one shared representation consumed by the current campaign task; remove touched one-off duplicate parsing.
 5. Add measured map → chapter path and explicit return edges. Verify destination chapter identity and refresh nodes after camera/viewport movement. Preserve transition context separately from newly observed facts.
-6. Complete the caller amendment above against M0 and the V14 adapter. Battle policy implementation and qualification remain in the shared component and solver plans.
+6. Complete the caller amendment above against M0 and the V14 adapter. Battle lifecycle and pure solver work remain in M1 of the match-3 epic, Auto/Exit policies in M2, and solver integration/qualification in M4; none extends this V scope.
 
 ## Acceptance and proof
 

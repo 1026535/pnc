@@ -33,7 +33,7 @@ claims, automatic Daily and a global stage catalog are also outside this package
 
 ### Match-3 handoff amendment — 2026-09-21
 
-The [shared match-3 component plan](PNC_MATCH3_COMPONENT_PLAN.md) separates the API/lifecycle from the [pure solver](PNC_MATCH3_BATTLE_SOLVER_PLAN.md). V13 carries selected target and explicit `battle_mode`; V14 owns one preparation-to-API adapter with `solver`, `daily_exit` and `game_auto` choices. Their added definition of done is offline API handoff/availability testing, not working battle policies.
+The [match-3 epic](PNC_MATCH3_COMPONENT_PLAN.md) owns the shared API/lifecycle, pure rules and combat selection in M1, and solver runtime integration in M4. The [solver design reference](PNC_MATCH3_BATTLE_SOLVER_PLAN.md) documents pure-code boundaries and rule evidence; it is not a separate delivery track. V13 carries selected target and explicit `battle_mode`; V14 owns one preparation-to-API adapter with `solver`, `daily_exit` and `game_auto` choices. Their added definition of done is offline API handoff/availability testing, not working battle policies.
 
 Reuse that adapter and the canonical M0 parser when migrating the public/API/authored callers here. V14 supplies the minimal existing-caller mode plumbing; this package owns the broader typed caller migration. Coordinate those symbols once rather than adding competing parsers or adapters. Omission continues to mean preparation-only and sends no battle execution request. Invalid values fail validation; explicit unavailable requests stop before runtime creation/navigation. Preserve typed unavailable/results/errors with no legacy fallback or automatic retry. Difficulty and stage-selection policy remain separate from battle mode.
 

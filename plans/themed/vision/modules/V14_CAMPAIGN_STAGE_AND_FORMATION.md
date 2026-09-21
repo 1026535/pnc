@@ -24,7 +24,7 @@ Use real shared request/result types and production parsing/composition. With an
 
 Also exercise the actual M0 production implementation: explicit battle requests report `not_implemented` before runtime creation/navigation/input and never report battle success. The recording implementation is a test substitution at the shared interface, not a production dummy solver or a flag that enables unfinished modes. M0's availability/error semantics are genuine delivered behavior even though its execution policies remain unimplemented.
 
-**V14 is done when its existing perception/navigation proof and these API tests pass.** It does not need solver code, Daily-exit controls, Auto waiting, battle-start authority, live combat, quest credit or all of package 04's migration. The shared component owns those battle deliverables; the [solver plan](../../gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) owns the algorithm. No new live run is required solely to verify mode wiring.
+**V14 is done when its existing perception/navigation proof and these API tests pass.** It does not need solver code, Daily-exit controls, Auto waiting, battle-start authority, live combat, quest credit or all of package 04's migration. The [match-3 epic](../../gameplay/PNC_MATCH3_COMPONENT_PLAN.md) owns those battle deliverables, including the pure algorithm in M1 and solver integration in M4. No new live run is required solely to verify mode wiring.
 
 ## Acceptance and proof
 

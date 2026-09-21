@@ -1,6 +1,6 @@
-# Shared match-3 component — API, lifecycle and battle modes
+# Match-3 epic — shared component, solver and battle modes
 
-**Status:** planned, 2026-09-21; no implementation or live qualification claimed. **Repository base:** `68cb9351c141b9467e3f2a6a54018b38df201d4c`. This plan owns the shared match-3 API and battle execution. The [solver plan](PNC_MATCH3_BATTLE_SOLVER_PLAN.md) separately owns pure rules and move selection. The [battle behavior note](../../../docs/game-reference/workflows/match3-battles.md) records versioned evidence and unknowns.
+**Status:** delivery plan consolidated into M0–M4, 2026-09-21; this revision does not claim new implementation or live qualification. **Repository base:** `68cb9351c141b9467e3f2a6a54018b38df201d4c`. This plan is the canonical delivery owner for the shared API, pure solver and battle execution. The [solver design reference](PNC_MATCH3_BATTLE_SOLVER_PLAN.md) retains algorithm boundaries and rule evidence, with no separate S-series delivery track. The [battle behavior note](../../../docs/game-reference/workflows/match3-battles.md) records versioned evidence and unknowns.
 
 ## Outcome and delivery boundary
 
@@ -13,6 +13,20 @@ Campaign, Arena and Lost Land call one match-3 component and explicitly select o
 | `game_auto` | Use the game's Auto only when unlocked. Leave it on if already on; otherwise toggle once, confirm and wait with bounds. | Observed Auto state and actual result, or explicit unavailable/stopped/unknown outcome. No unlock purchase or silent fallback. |
 
 **First delivery is M0: selectable modes, typed API and explicit unavailable responses, with no implemented battle policies.** V13/V14 and V30 need M0 plus their own caller tests; M1–M4 and the solver are not their completion prerequisites. Visible choices mean documented/public request values and availability in the existing API/authored workflow surfaces, including any existing option help. This work does not require inventing a GUI or enabling unsupported execution.
+
+## Consolidated milestones and dependencies
+
+The former S1 board-rules and S2 combat-selection deliverables are part of M1. The former S3 runtime integration deliverable is part of M4. This changes delivery ownership, not the separation between pure algorithms and runtime code.
+
+| Milestone | Deliverable and prerequisites |
+|---|---|
+| M0 | Shared contract and honest unavailable implementation; the only new match-3 prerequisite for V13/V14/V30 API handoffs. |
+| M1 | Shared observations/authorized lifecycle, pure board rules and combat-aware selection. Lifecycle and pure rules can advance independently after their shared types have one owner; combat selection builds on those rules and available behavior evidence. |
+| M2 | Daily-exit and game-Auto policies, each depending on the relevant M1 lifecycle/control evidence. Neither waits for the pure solver or its calibration. |
+| M3 | Feature/Daily bindings against M0 and the qualified feature adapters. Operational use requires the relevant M1 lifecycle plus an implemented policy; solver requests remain unavailable until M4. |
+| M4 | Integrate the M1 solver into the shared lifecycle, then qualify implemented context/mode combinations. Deterministic solver integration needs M1's lifecycle and a working pure selector; live caller proof additionally needs the relevant M3 binding and exact authorization. |
+
+These are deliverable dependencies, not a requirement to finish every context or every M1 workstream before starting later work. Missing combat traces leave calibration explicitly pending; they do not block accepted rules/lifecycle work, Auto/Exit, API bindings or deterministic solver integration. M4 may provide authorized traces for M1's model calibration. Uncalibrated estimates remain labeled, and no mode is promoted without its own evidence. No live budget is expanded by this consolidation.
 
 ## Architecture and owners
 
@@ -35,9 +49,9 @@ Use a small PNC-domain contract and a constrained match-3 session adapter follow
 
 Keep the existing runner's routed completion for ordinary workflows. The nested component returns a verified result before the parent uses its qualified return route. If battle state is uncertain, stop through the existing error/stop path, preserve evidence and prevent the runner's normal automatic exit navigation; a successful return value must not hide unsafe battle state. An actual result may remain valid even if the later Home return fails. A global `WorkflowSpec` exit-policy migration is not an M0 or V dependency; introduce only a narrowly justified change if M1 execution proves the existing stop contract insufficient.
 
-### Repository evidence informing the split
+### Repository evidence informing the architecture
 
-- `CampaignPolicy.from_params` currently reads `enabled_modes` and ignores unknown fields. Merely documenting `battle_mode` would silently discard it. The affected caller must parse/forward it explicitly and reject invalid values before connection; unknown match-3 request fields cannot silently become preparation success.
+- At the planning base, `CampaignPolicy.from_params` reads `enabled_modes` and ignores unknown fields. Merely documenting `battle_mode` would silently discard it. The affected caller must parse/forward it explicitly and reject invalid values before connection; unknown match-3 request fields cannot silently become preparation success.
 - `TaskRegistry` still registers legacy `CampaignTask`; Arena and Lost Land task IDs are not registered workflows at this base. V30 adds a thin feature adapter/API binding, not a fake completed Arena workflow. Preserve existing Campaign preparation calls while package 04 migrates their canonical dispatch.
 - `CoreWorkflowRunner` navigates to its declared exit after successful `execute`; battle uncertainty must not return normal success. Existing mutation dispatch already journals before input, and connected Daily rejects unpromoted capabilities before connection. Reuse those owners instead of creating a parallel battle journal or promoting Daily from a mode declaration.
 - There are no qualified active-board/result observations yet. V14 distinguishes actual Hero Formation from the older prep endpoint. M0 therefore needs no invented board screen, mutation capability, AP policy or live capture.
@@ -77,7 +91,11 @@ These tests, plus each V packet's existing perception/navigation acceptance, fin
 
 Package 04 consumes the V14 adapter when migrating public/authored Campaign callers. V14 exposes it beside the current consumer endpoint correction; it need not finish package 04's broader migration to test the adapter. Package 04 must not create a competing battle controller or make its preparation port wait for M1–M4.
 
-## M1 — Shared observations and authorized lifecycle
+## M1 — Shared foundations and pure solver
+
+M1 owns the shared lifecycle plus the former S1/S2 algorithm work. Preserve separate production owners: observations/session/authority supply qualified state and execute actions; pure domain code implements rules and selection without screenshots, emulator handles, gestures or authority objects. Use immutable board, rule, combat-state, action and evaluation types. Context names must not silently choose dimensions, rule variants or combat models; share one engine with only evidenced differences. See the [solver design reference](PNC_MATCH3_BATTLE_SOLVER_PLAN.md) for packaged rule evidence and unresolved mechanics.
+
+### Shared observations and authorized lifecycle
 
 Add active, resolving/turn-blocked, victory, defeat and exited observations through one feature producer consumed by both existing publishers. Keep geometry/provenance in the observation/session layer. Demand only decision-critical facts for the selected mode: unreadable tiles block solver decisions, not an otherwise qualified Auto/Exit control and terminal observation. Qualify actual context/rules, Auto off/on/locked/unknown, owned Exit confirmation, continuation setting and safe result/return boundaries.
 
@@ -85,25 +103,52 @@ Compose qualified preparation with one battle-start action through existing exac
 
 Carry source-stage/target evidence through formation with provenance and invalidate it when selection/navigation changes. Do not pretend source AP/stage fields are visible on formation. One invocation means one battle: establish Auto-next/continuation disabled before spending, or stop. Unknown action state stops without speculative Back, generic popup dismissal, return navigation or replay.
 
-**Done:** deterministic session/authority tests cover fresh observations, exactly-once dispatch, accepted/rejected/ambiguous reconciliation, no replay after restart, safe completion versus unsafe stop and retained battle evidence if return fails. Existing consumers keep their safety behavior. This foundation does not mark any mode/context operational until its policy and evidence gates pass.
+**Lifecycle acceptance:** deterministic session/authority tests cover fresh observations, exactly-once dispatch, accepted/rejected/ambiguous reconciliation, no replay after restart, safe completion versus unsafe stop and retained battle evidence if return fails. Existing consumers keep their safety behavior. This foundation does not mark any mode/context operational until its policy and evidence gates pass.
 
-## M2 — Independently deliver the three policies
+### Board rules and one-step decisions
 
-- **Solver policy:** integrate the [pure solver](PNC_MATCH3_BATTLE_SOLVER_PLAN.md). Require player control and Auto proved off; disable observed already-on Auto once and confirm before solver input, or stop. Execute one fresh-frame legal move/special click, settle and reobserve. Use visibly ready skills, select only a valid visible target when required and reobserve after each resolved skill. Bound turns, elapsed wait and repeated unchanged states. Individual hero-effect forecasting stays out of scope.
+Implement one rule engine for legal swaps, ordinary matches, supported special creation and activation. Separate detection, effect calculation and scoring without duplicating pattern knowledge. Return an explained legal swap or observed-special click with uncertainty, or an explicit no-action/unsupported-state result. Provide deterministic baseline ranking and a stable coordinate tie-break. Do not model exact random refills, unverified special placement or unsupported chaining.
+
+**Rules acceptance:** authored-board tests establish legal/illegal swaps, three/four/five matches, T/L, squares, overlapping creation precedence, the three distinct special effects, edge clipping, special clicks and deterministic no-action/ranking behavior. Cross-effect fixtures assert exactly the activated cell and its immediate orthogonal neighbours: five cells in the interior, four at a non-corner edge and three at a corner, leaving diagonals and more distant row/column cells unchanged. Pure input/output works without a screenshot, runtime, authority object or completed lifecycle. An uncalibrated baseline is not a qualified winning strategy.
+
+### Combat-aware selection
+
+Build on the board rules. Trace the packaged client's board-driven attacks, targeting, color interactions, health and turn pressure, then calibrate server-controlled behavior against available UI/report traces. Keep observed health/turn state separate from estimated damage and refill distributions. Evaluate bounded multi-turn win/survival prospects under documented uncertainty. Rank by supported win estimate, survival, expected damage/resource gain and stable coordinates; expose only terms supported by evidence, without fabricated precise probabilities.
+
+Use authored scenarios for meaningful combat ordering and observed traces for calibration. Hero skills are exogenous changes to observed state: supply ordinary visible-target ranking where needed, without adding a second hero-effect simulator. M4's runtime policy reobserves and requests a new decision after a skill resolves.
+
+**Selection acceptance:** deterministic scenarios cover meaningful survival/target tradeoffs and blocked/unknown states; calibrated terms, remaining estimates and missing evidence are documented. Authored scenarios alone cannot establish calibration. If traces are missing, keep that part of M1 pending and consume suitable M4 evidence when available; do not block independently accepted lifecycle/rules deliverables or advertise uncalibrated terms as proven.
+
+## M2 — Daily-exit and game-Auto policies
+
+Use M1's shared lifecycle and the controls qualified for the selected context. These two policies have no dependency on M1's pure solver work; solver runtime integration belongs only to M4.
+
 - **Daily-exit policy:** qualify what Exit/skip/retreat and its confirmation actually do in each context, then execute the earliest safe authorized sequence once. Return the actual result or uncertainty. A presentation skip is not assumed to be a forfeit, refund or Daily completion. No solver gestures or manual skills.
 - **Game-Auto policy:** observe unlock and on/off state, leave already-on Auto alone or toggle/confirm once; stop explicitly if locked or unknown. Wait with bounds for the actual result and prevent another battle. No solver moves, manual skills, unlock purchase or mode fallback.
 
-**Done per policy/context:** production composition and appropriate fixtures prove its controls, termination and unavailable behavior without duplicated context loops. Solver depends on its pure algorithm; Auto and Exit do not. Each policy may land independently. Availability is promoted only for the qualified implementation/context, not all modes at once.
+**Done per policy/context:** production composition and appropriate fixtures prove its controls, termination and unavailable behavior without duplicated context loops. Auto and Exit may land independently. Availability is promoted only for the qualified implementation/context, not all modes at once.
 
 ## M3 — Feature and Daily operational integration
 
 Reuse the V handoffs for Campaign and Arena. Qualify Lost Land's current route/preparation and bind it to the same API; static captures alone do not qualify combat. Lost Land is separate from Land of Trial and V33 Lost City Headquarters. Keep target/stage selection and formation policy with their feature owners; no formation edit is authorized here. Arena's exact battle family and its relationship to the catalog's `HERO_ARENA` / Hero Showdown quest remain evidence gates.
 
+Land the shared bindings and unavailable-path tests without waiting for every policy. Use M2's implemented modes through those same bindings; a solver request stays honestly unavailable until M4 supplies its runtime policy. M4 reuses these bindings rather than creating a second feature integration. M3 binding acceptance therefore does not wait on the M4 live solver proof that consumes it.
+
 Direct, authored and Daily callers use the same component and explicit mode. Daily preserves its own connected lifecycle, capability promotion, total budgets and exact observed quest objective. Capture before/after progress for applicable modes, distinguishing unchanged, advanced, complete and unknown. For fast exit, unchanged/unknown progress stops the shortcut without replay or another mode; participation does not satisfy a win/clear objective without evidence. Claims remain separate. Any further Daily attempt needs a fresh result/progress check and separately reserved authority within remaining total budget.
 
 **Done:** implemented bindings use the shared API with no nested runtime, duplicated loop, blind retry, implicit battle default or automatic capability promotion. The Daily plan's full battle delivery may wait for working policies; the V packets' contract-only acceptance may not.
 
-## M4 — Operational qualification and live limits
+## M4 — Solver integration and operational qualification
+
+### Solver runtime integration
+
+Provide M1's pure solver to the shared component through the agreed domain contract. Require a fresh settled board, player control and Auto proved off; disable observed already-on Auto once and confirm before solver input, or stop. Map one returned logical action to fresh measured input, wait for resolution and reobserve before the next decision. Use visibly ready hero skills, choose only a valid visible target when required and reobserve after each resolved skill. Bound turns, elapsed wait and repeated unchanged states. Individual hero-effect forecasting stays out of scope.
+
+The existing shared lifecycle owns the repeated loop, stop budgets, result recognition and authority. There is no second solver loop in Campaign, Arena, Lost Land, Daily or `CampaignTask`. M4 consumes M1's accepted rules/selector and lifecycle; deterministic wiring can use the explicit baseline while combat calibration remains pending. It does not reimplement the algorithm or wait for unrelated Auto/Exit combinations.
+
+**Integration acceptance:** a component-level deterministic trace proves observe → decide → one action → settle → reobserve, rejects stale/unknown required facts and retains the actual terminal result. Pure rules/selection acceptance remains independent of GUI qualification. Reuse M3's relevant caller binding for the live proof. Do not mark solver availability operational from the recording API tests or deterministic trace alone.
+
+### Live qualification and limits
 
 The retained allocation from the original solver plan is **one Campaign solver attempt, at most 20 AP total**, on the currently selected unlocked stage and active castle of configured `testing`. It is not a per-mode budget and adds no Arena/Lost Land attempt or Auto/Exit canary. Resolve exact target, cost and authority before input. No castle switch, refill, formation edit, reward claim or replay is added. No live action occurs during this planning revision.
 
@@ -113,6 +158,6 @@ Run focused component/caller groups and `py tools/run_tests.py affected --base o
 
 ## Coordination and completion
 
-Land M0 once, then V adapters, pure solver and M1 can advance against its contract. Coordinate only actual shared symbols/catalog registrations and authority changes; no whole-file or whole-roadmap lock. Pet Workshop is independent feature ownership, with its own solver and workflow; PW packets are not match-3 prerequisites. Reuse landed shared infrastructure and preserve its consumers rather than assigning battle work to PW.
+Land M0 once, then V adapters and M1's independent lifecycle/pure-solver work can advance against its contract. M2 delivers Auto/Exit; M3 supplies reusable feature/Daily bindings; M4 integrates the solver and owns operational qualification. Track solver work under M1/M4, with no separate S-series status or duplicate implementation owner. Coordinate only actual shared symbols/catalog registrations and authority changes; no whole-file or whole-roadmap lock. Pet Workshop is independent feature ownership, with its own solver and workflow; PW packets are not match-3 prerequisites. Reuse landed shared infrastructure and preserve its consumers rather than assigning battle work to PW.
 
 Report API handoff acceptance, implemented policies and operational qualification separately. The full requested feature is complete when all three modes work in Campaign, Arena and Lost Land with sufficient context-specific evidence. M0 or completed V packets alone do not meet that full release claim. Time Rift, direct socket automation, formation optimization and individual hero-effect prediction remain outside this plan.

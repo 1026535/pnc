@@ -1,6 +1,6 @@
-# Match-3 solver plan — pure rules and move selection
+# Match-3 solver design reference — M1 and M4
 
-**Status:** revised plan, 2026-09-21; implementation not claimed. **Repository base:** `68cb9351c141b9467e3f2a6a54018b38df201d4c`. This document replaces the former combined solver/lifecycle scope at this path. The [shared match-3 component plan](PNC_MATCH3_COMPONENT_PLAN.md) now owns the API, battle lifecycle, context adapters, `daily_exit`, `game_auto` and runtime integration of the solver. This plan owns only pure board rules, combat evaluation and move selection.
+**Status:** design/evidence reference, 2026-09-21; no independent solver delivery track or implementation claim. **Repository base:** `68cb9351c141b9467e3f2a6a54018b38df201d4c`. The [match-3 epic](PNC_MATCH3_COMPONENT_PLAN.md) owns all delivery milestones and acceptance. Former S1 board rules and S2 combat-aware selection are now in [M1](PNC_MATCH3_COMPONENT_PLAN.md#m1--shared-foundations-and-pure-solver); former S3 runtime integration is now in [M4](PNC_MATCH3_COMPONENT_PLAN.md#m4--solver-integration-and-operational-qualification). This file retains pure-code boundaries and versioned rule evidence so the delivery plan does not duplicate that reference material.
 
 ## Outcome and boundary
 
@@ -30,28 +30,8 @@ The [battle behavior note](../../../docs/game-reference/workflows/match3-battles
 
 Exact special placement, chained-special behavior, per-context applicability, board-to-army targeting, retaliation cadence and damage remain qualification work. Unsupported observed mechanics yield an explicit limitation rather than guessed semantics. Individual hero-effect forecasting is outside this release; the component handles visibly ready skills and reobserves their consequences.
 
-## S1 — Canonical board rules and explained one-step decisions
+## Delivery and validation ownership
 
-Implement immutable board/action types and one rule engine for legal swaps, ordinary matches, supported special creation and activation. Keep detection, effect calculation and scoring separate without duplicating pattern knowledge. Include a deterministic baseline ranking and stable coordinate tie-break so the result is inspectable and reproducible. Do not model exact random refills or unverified special chaining.
+Use M1's board-rule and combat-selection acceptance checks and M4's deterministic integration/live qualification checks in the epic. Do not maintain duplicate checklists here. Pure solver work may advance alongside lifecycle and V work once the relevant domain types have one owner; Pet Workshop neither owns nor gates it. Land shared types once and record their supplying revision.
 
-**Done:** authored-board tests establish legal/illegal swaps, three/four/five, T/L, square, overlapping creation precedence, the three distinct effects, edge clipping, special clicks and deterministic no-action/ranking behavior. Cross-effect fixtures assert exactly the activated cell and its immediate orthogonal neighbours: five cells in the interior, four at a non-corner edge and three at a corner, leaving diagonals and more distant row/column cells unchanged. Pure input/output works without a screenshot, emulator, runtime, authority object or completed component lifecycle. An uncalibrated baseline is not advertised as a qualified winning strategy.
-
-## S2 — Combat-aware selection
-
-Trace the packaged client's board-driven attacks, targeting, color interactions, health and turn pressure, then calibrate server-controlled behavior against available UI/report traces. Keep observed health/turn state separate from estimated damage and refill distributions. Evaluate bounded multi-turn win/survival prospects under documented uncertainty. Rank by supported win estimate, survival, expected damage/resource gain and stable coordinates; expose the terms actually supported by evidence rather than fabricated precise probabilities.
-
-Use authored scenarios for meaningful combat ordering and observed traces for calibration. Hero skills are exogenous changes to the observed state: provide the shared component's ordinary visible-target ranking where needed, but do not add a second hero-effect simulator. The component reobserves and requests a new decision after a skill resolves.
-
-**Done:** deterministic scenarios cover meaningful survival/target tradeoffs and blocked/unknown states; calibrated model terms and remaining estimates are documented. Missing traces can leave operational qualification pending without blocking S1 or the V API handoffs. Do not claim S2 calibration complete from authored scenarios alone.
-
-## S3 — Solver policy integration
-
-Provide the pure solver to the shared component's M2 solver policy through the agreed domain contract. The component requires a fresh settled board, player control and Auto proved off; maps one returned action to existing measured input; waits for resolution; then reobserves. It alone owns ready-skill execution, stop budgets, result recognition and authority. No second solver loop in Campaign, Arena, Lost Land, Daily or `CampaignTask`.
-
-**Done:** a component-level deterministic trace proves observe → decide → one action → settle → reobserve, rejects stale/unknown required facts and retains the actual terminal result. Rules and selector acceptance remain independent of GUI qualification. Any live solver acceptance belongs to M4 in the component plan, including the retained single Campaign attempt / 20 AP allocation; this plan creates no additional spending or retry authority.
-
-## Validation and delivery
-
-Run focused pure-component tests through `py tools/run_tests.py group <registered-group>`, then `py tools/run_tests.py affected --base origin/main --explain` for source changes. Use the full suite only for an actual shared-contract or final integration change. Generated calibration traces stay under ignored `.local-data/`; reviewed non-secret fixtures belong in `tests/data/`. Documentation changes require `git diff --check`.
-
-S1/S2 can proceed alongside component lifecycle and V work once the relevant domain types have one owner. Land shared types once and record the supplying revision. Pet Workshop has its own model and solver; PW packets neither own this algorithm nor gate it. The component plan owns operational support status for the nine requested context/mode combinations. Pure solver completion, API handoff completion and live battle qualification are separate claims.
+Generated calibration traces stay under ignored `.local-data/`; reviewed non-secret fixtures belong in `tests/data/`. The epic owns test selection, operational availability and the retained single Campaign solver attempt / 20 AP limit. Consolidating the milestones creates no additional spending or retry authority.
