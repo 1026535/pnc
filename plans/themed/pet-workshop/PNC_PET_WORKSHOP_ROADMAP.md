@@ -1,6 +1,6 @@
 # Pet Workshop roadmap — separate delivery packets
 
-Updated: 2026-09-21 UTC. **Workflow resumed by the user; 4/10 packets accepted. PW01 is merged/pushed at 14b7d68; PW03/PW04 at 4f12095; PW06 at 4d39be4. PW02 has lead corrections and awaits final integrated offline/live validation; it still gates PW05/PW07. The offline simulator is accepted and merged/pushed at 0724ad7. Main is authorized for scoped development/live validation on eligible castles other than Hopeful NPC.**
+Updated: 2026-09-21 UTC. **4/10 packets accepted and merged/pushed: PW01 at 14b7d68, PW03/PW04 at 4f12095, PW06 at 4d39be4. PW02 candidate b405304 is offline ready (2,833 passed / 7 environmental skips), remains unaccepted and gates PW05/PW07. Simulator 0724ad7 is accepted. Main testing is authorized outside Hopeful NPC. Turn 008 verified Poney NPC C31 but reached the work cutoff before entering Manor; Main was released and its role restored. Turn 009 runs the same bounded board proof after an offline-verified reduction of unnecessary Home OCR. Completion delivery is intermittent; the lead also waits directly.**
 
 [Shared contract and recognition](PNC_PET_WORKSHOP_01_RECOGNITION_STATE_PLAN.md) · [Solver and policy](PNC_PET_WORKSHOP_02_SOLVER_POLICY_PLAN.md) · [Execution and integration](PNC_PET_WORKSHOP_03_EXECUTION_INTEGRATION_PLAN.md)
 
@@ -45,7 +45,7 @@ Status is maintained here. Keep detailed review findings, commands, supported co
 | Packet | Former ID | Offline implementation dependency | Status | Accepted base / result and remaining condition |
 | --- | --- | --- | --- | --- |
 | [PW01 — Shared contract and catalog](packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Merged/pushed | Accepted implementation `14b7d68`; 2,574 passed / 7 environmental skips, all 78 Workshop tests passed, portable installed-package proof passed. No live effect. |
-| [PW02 — Recognition and controls](packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Awaiting validation | Turn 010 corrections received independent review; lead fixed remaining reward/scroll undercoverage, ambiguous selection and color-only state inference, and added actual RGBA/real-OCR coverage. Fifteen focused checks plus the new shifted-strip regression pass. Final integrated source-bound offline proof and applicable candidate live proof remain required. |
+| [PW02 — Recognition and controls](packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Awaiting validation | Candidate `b405304`: 2,833 passed / 7 skips plus 5 lead regressions. Turn 008 proved identity and safe release but not board entry; the five-minute phase spent no resources. Saved-frame comparison proves a narrower Home request preserves identity/guards/controls and reduces observation cost. Corrected turn 009 is delegated with unchanged board/identity proof and five-minute/no-switch/no-reconnect/no-spending limits. |
 | [PW03 — Effort, reservations and policy](packets/PW03_EFFORT_RESERVATIONS_POLICY.md) | S1 | PW01 | Merged/pushed | Accepted at `4f12095`, with identical production/test content to final-tested `dc810c8`. Independent lead review and corrections complete; 2,741 passed / 7 environmental skips, no failures or errors. No live effect in this pure package. |
 | [PW04 — One-step solver](packets/PW04_ONE_STEP_SOLVER.md) | S2 | PW03 policy implementation | Merged/pushed | Accepted with PW03 at `4f12095`; all 166 focused tests included in final full proof. Canonical revalidation covers proposed mutations and current-goal production. PW05/PW07 still need accepted PW02. |
 | [PW05 — Screenshot/proposal milestone](packets/PW05_SCREENSHOT_PROPOSAL_MILESTONE.md) | R2 | PW02 + PW04 | Planned | Lead must review actual labels and decisions, including three-coconut rejection. |
@@ -129,6 +129,8 @@ Record detailed acceptance under the packet: reviewed revision, supported scope,
 For a blocked packet, record its exact missing dependency, interface or observation. Continue independent ready work. Repeatedly polling an unchanged state or retrying the same failed live action is not progress.
 
 ## Validation and acceptance
+
+The Workshop run operates on the board; storage operations remain excluded. Recognizing an already-open storage overlay is a passive safeguard tested against saved captures, not a reason to open storage during live qualification. Historical live assignments that included intentional storage inspection were broader than needed. Applicable board, route and gameplay validation requirements remain in force.
 
 Use these statuses: **Planned**, **In progress**, **Offline ready**, **Accepted for stated coverage**, **Integrated**, or **Blocked: exact prerequisite**. They describe delivery evidence, not a claim that every underlying repository capability is new. Record partial recognition coverage explicitly; it does not waive PW10's full release requirements.
 
