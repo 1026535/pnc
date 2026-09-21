@@ -245,6 +245,12 @@ class AppToolError(RuntimeError):
         self.uncertain = uncertain
 
 
+def is_unknown_app_tool_error(error, name):
+    """Recognize the native bridge's rejection before it invokes the host tool."""
+    return (isinstance(error, dict) and error.get("code") == -32602
+            and str(error.get("message", "")).endswith(f"Unknown Codex app tool: {name}"))
+
+
 async def call_app_tool(thread_id, name, arguments, error_path):
     """Call the existing native MCP bridge without invoking a model or changing its settings."""
     plugin_root = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "plugins/cache/openai-bundled/codex-app-tools"
@@ -269,7 +275,12 @@ async def call_app_tool(thread_id, name, arguments, error_path):
                 response = json.loads(line)
                 if response.get("id") == identifier:
                     if "error" in response:
-                        raise RuntimeError(str(response["error"])[:500])
+                        error = response["error"]
+                        # The native bridge rejects an unknown tool before forwarding
+                        # it to the host, so retrying cannot duplicate delivery.
+                        if method == "tools/call" and is_unknown_app_tool_error(error, name):
+                            raise AppToolError(str(error)[:500], uncertain=False)
+                        raise RuntimeError(str(error)[:500])
                     return response["result"]
             raise RuntimeError("App messaging connection closed before acknowledgement.")
 

@@ -140,6 +140,58 @@ class MonitorTests(unittest.TestCase):
             monitor.health_check(self.root, self.config, state, 1800)
             delivery.assert_called_once()
 
+    def test_older_unknown_tool_rejection_retries_but_uncertain_host_error_does_not(self):
+        run, turn_dir = self.terminal_worker()
+        for code, message, retry in (
+            (-32602, "MCP error -32602: Unknown Codex app tool: send_message_to_thread", True),
+            (-32603, "Host failed after submission", False),
+        ):
+            with self.subTest(code=code):
+                monitor.write_json(turn_dir / "notification.json", {
+                    "status": "pending", "at": 0, "uncertain": True,
+                    "error": str({"code": code, "message": message}),
+                })
+                with patch.object(monitor, "checked_delivery", return_value={
+                    "status": "delivered", "at": 900,
+                }) as delivery:
+                    monitor.health_check(self.root, self.config, {"active_turn": "review"}, 900)
+                self.assertEqual(delivery.call_count, int(retry))
+
+    def test_resolved_callback_rejections_stay_quiet_across_monitor_restart(self):
+        run, turn_dir = self.terminal_worker()
+        monitor.resolve_completion(run, 1, "Reviewed; correction turn delegated.")
+        for uncertain in (False, True):
+            with self.subTest(uncertain=uncertain):
+                monitor.write_json(turn_dir / "notification.json", {
+                    "status": "pending", "at": 0, "uncertain": uncertain,
+                    "error": str({"code": -32602, "message":
+                                  "MCP error -32602: Unknown Codex app tool: send_message_to_thread"}),
+                })
+                with patch.object(monitor, "checked_delivery") as delivery:
+                    for now in (900, 1800):
+                        state = {}
+                        monitor.health_check(self.root, self.config, state, now)
+                        self.assertEqual(state["workers"][str(run)]["followup"], "resolved")
+                    delivery.assert_not_called()
+
+    def test_mismatched_resolution_does_not_suppress_rejected_callback_retry(self):
+        run, turn_dir = self.terminal_worker()
+        for change in ({"turn": 2}, {"run_dir": str(self.root / "other")}):
+            with self.subTest(change=change):
+                monitor.write_json(turn_dir / "lead-resolution.json", {
+                    "run_dir": str(run), "turn": 1, "resolution": "Reviewed.", **change,
+                })
+                monitor.write_json(turn_dir / "notification.json", {
+                    "status": "pending", "at": 0, "uncertain": True,
+                    "error": str({"code": -32602, "message":
+                                  "MCP error -32602: Unknown Codex app tool: send_message_to_thread"}),
+                })
+                with patch.object(monitor, "checked_delivery", return_value={
+                    "status": "delivered", "at": 900,
+                }) as delivery:
+                    monitor.health_check(self.root, self.config, {}, 900)
+                    delivery.assert_called_once()
+
     def test_delivered_empty_completion_reminds_once_across_monitor_restart(self):
         run, turn_dir = self.terminal_worker()
         with patch.object(monitor, "send_notification", AsyncMock()) as send:

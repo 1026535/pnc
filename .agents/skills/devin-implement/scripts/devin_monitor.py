@@ -6,6 +6,7 @@ Rollout format is a verified local integration, not a public cache-control API.
 """
 
 import argparse
+import ast
 import asyncio
 from contextlib import contextmanager
 import ctypes
@@ -18,7 +19,10 @@ import subprocess
 import sys
 import time
 
-from devin_worker import AppToolError, call_app_tool, read_json, send_notification, tail, write_json
+from devin_worker import (
+    AppToolError, call_app_tool, is_unknown_app_tool_error,
+    read_json, send_notification, tail, write_json,
+)
 
 PROMPT = ("Cache keepalive only. Do not call tools, inspect worker progress, or produce commentary. "
           "Return an empty final response.")
@@ -222,16 +226,23 @@ def resolve_completion(run_dir: Path, turn: int, resolution: str) -> Path:
     return path
 
 
-def check_completion_followup(config, run, current, lead_active, now):
-    """Remind an idle lead once about delivered but unresolved work; never resume a worker."""
-    turn_dir = Path(current["turn_dir"])
-    resolution_path = turn_dir / "lead-resolution.json"
+def completion_is_resolved(run, current):
+    """Match completed lead follow-up to this exact run and turn."""
+    resolution_path = Path(current["turn_dir"]) / "lead-resolution.json"
     if resolution_path.exists():
         resolution = read_json(resolution_path)
         if (resolution.get("turn") == current["turn"]
                 and Path(resolution.get("run_dir", "")) == Path(run)
                 and resolution.get("resolution", "").strip()):
-            return "resolved"
+            return True
+    return False
+
+
+def check_completion_followup(config, run, current, lead_active, now):
+    """Remind an idle lead once about delivered but unresolved work; never resume a worker."""
+    if completion_is_resolved(run, current):
+        return "resolved"
+    turn_dir = Path(current["turn_dir"])
     note_path = turn_dir / "notification.json"
     if not note_path.exists():
         return "notification-unavailable"
@@ -260,6 +271,17 @@ def check_completion_followup(config, run, current, lead_active, now):
     return "reminder-attempted"
 
 
+def confirmed_nondelivery(notification):
+    """Also recognize rejection records from supervisors started before this fix."""
+    if notification.get("uncertain") is False:
+        return True
+    try:
+        error = ast.literal_eval(notification.get("error", ""))
+    except (SyntaxError, ValueError, TypeError):
+        return False
+    return is_unknown_app_tool_error(error, "send_message_to_thread")
+
+
 def health_check(directory, config, state, now):
     """Check registered runs every fifteen minutes and emit only new actionable anomalies."""
     for registration in (directory / "runs").glob("*.json"):
@@ -280,9 +302,9 @@ def health_check(directory, config, state, now):
         if current["state"] == "terminal":
             # Only retry a conclusively undelivered callback, after the supervisor has had time to finish.
             note = Path(current["turn_dir"]) / "notification.json"
-            if note.exists():
+            if note.exists() and not completion_is_resolved(run, current):
                 notification = read_json(note)
-                if (notification.get("status") == "pending" and notification.get("uncertain") is False
+                if (notification.get("status") == "pending" and confirmed_nondelivery(notification)
                         and now - notification.get("at", now) > 120
                         and now >= previous.get("retry_after", 0)):
                     result["retry_after"] = now + HEALTH_INTERVAL

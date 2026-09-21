@@ -1,6 +1,7 @@
 """Exercise worker boundaries offline; no test authenticates or calls a model."""
 
 import argparse
+import asyncio
 import ctypes
 from ctypes import wintypes as wt
 from contextlib import redirect_stdout
@@ -15,7 +16,7 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import devin_worker as worker
 
@@ -41,6 +42,44 @@ def process_running(pid):
         return result == 258
     finally:
         api.CloseHandle(handle)
+
+
+class AppToolDeliveryTests(unittest.TestCase):
+    """Keep rejected bridge calls retryable without replaying uncertain sends."""
+
+    def test_unknown_tool_is_definite_nondelivery_but_other_failures_are_uncertain(self):
+        cases = (
+            ({"error": {"code": -32602, "message":
+                "MCP error -32602: Unknown Codex app tool: send_message_to_thread"}}, False),
+            ({"error": {"code": -32603, "message": "Host failed after submission"}}, True),
+            ({"result": {"isError": True, "content": [{"type": "text", "text": "Failed"}]}}, True),
+            (None, True),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            server = root / "plugins/cache/openai-bundled/codex-app-tools/test/server.mjs"
+            server.parent.mkdir(parents=True)
+            server.touch()
+            for response, uncertain in cases:
+                with self.subTest(response=response):
+                    reply = (json.dumps({"jsonrpc": "2.0", "id": 2, **response}) + "\n").encode() if response else b""
+                    process = SimpleNamespace(
+                        stdin=SimpleNamespace(write=Mock(), drain=AsyncMock()),
+                        stdout=SimpleNamespace(readline=AsyncMock(side_effect=[
+                            b'{"jsonrpc":"2.0","id":1,"result":{}}\n', reply,
+                        ])),
+                        returncode=None, kill=Mock(), wait=AsyncMock(return_value=0),
+                    )
+                    with patch.dict(os.environ, {
+                        "CODEX_HOME": str(root), "CODEX_MCP_NODE_PATH": "node",
+                        "CODEX_APP_TOOLS_PIPE_PATH": "unit-test-pipe",
+                    }), patch.object(worker.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)):
+                        with self.assertRaises(worker.AppToolError) as raised:
+                            asyncio.run(worker.send_notification("test-task", "completed", root / "stderr.log"))
+                    self.assertEqual(raised.exception.uncertain, uncertain)
+                    calls = [json.loads(c.args[0]) for c in process.stdin.write.call_args_list]
+                    self.assertEqual(sum(c.get("method") == "tools/call" for c in calls), 1)
+                    process.kill.assert_called_once()
 
 
 class CatalogTests(unittest.TestCase):
