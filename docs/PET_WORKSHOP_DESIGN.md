@@ -13,6 +13,7 @@ requirements and sequencing.
 | Observation integration (`ObservationAdditions.workshop`, both publishers) | `Observation`, `observation_builder.py`, `navigation_perception.py`, `observation_provenance.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Feature parser + measured controls | `pnc_automation/app/pnc/vision/` (planned) | Pending PW02 |
 | Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` | Implemented (PW03/PW04 solver slice, 2026-09-16) |
+| Offline logical transition simulation | `pnc_automation/app/automation/pet_workshop/simulate.py` | Development/testing adapter; no live input |
 | Mutation authority, durable invocation journal, shared run-boundary/authority factories | `pnc_automation/app/pnc/domain/feature_actions.py`, `pnc_automation/app/automation/engine/core_daily_mutation.py` (Workshop scope), `pnc_automation/app/pnc/persistence/daily_run_journal_store.py` (schema v2), `pnc_automation/app/automation/daily_maintenance/invocation_factory.py`, `pnc_automation/app/automation/pet_workshop/authority.py` | Implemented (PW06 authority slice) |
 | Execution gestures, UI action execution, entry points, Daily Maintenance enablement | existing task/engine owners | Pending Plan 03 (PW07–PW09) |
 
@@ -237,9 +238,10 @@ and `NavigationPerception`.
 ## Solver and policy
 
 Owned by Plan 02 (PW03/PW04): `pnc_automation/app/automation/pet_workshop/`
-implements the pure offline solver. No module in this package performs
-emulator, image, filesystem, clock or network I/O; authored state
-transitions exist only in `tests/support/pnc/pet_workshop_solver.py`.
+implements the pure offline solver. Planning and validation perform no
+emulator, image, filesystem, clock or network I/O. Authored observation
+fixtures live in `tests/support/pnc/pet_workshop_solver.py`; the development
+simulator below owns generated logical transitions.
 
 - `board.py` — `BoardFacts` partitions observed cells (normal, inactive,
   feed-locked and bubble pieces, usable-empty cells, unread pieces) and
@@ -308,6 +310,38 @@ Every `WorkshopDecision` is a proposal: intents carry logical targets only,
 the planner never touches game state, and execution is a separate Plan 03
 step that re-validates the intent on a fresh observation through the same
 `validate_intent` before any gesture.
+
+## Offline transition simulator
+
+`simulate.py` provides `WorkshopSimulator(state, catalog=..., rng=...,
+require_produce_outcome=...)`. `apply(intent, outcome=...)` returns the next
+`WorkshopState`; `state` and `clock_ms` expose its current replica and simulated
+time. It reuses the packaged catalog and shared intent/state models. Supply
+an existing catalog to avoid even the default packaged-JSON load; no APK,
+emulator, recognition service or network is a runtime dependency.
+
+The simulator models logical outcomes for solver development and regression
+tests. It does not validate screenshots, input gestures, navigation or live
+authority. Merges, activations, feeds, recycling, production and submission
+update the board. Complete orders derive readiness through `BoardFacts` after
+board updates; incomplete requirements or insufficient unread stock yield
+unknown readiness. Known sufficient stock can establish readiness even on a
+partially observed board.
+
+Producer use counts and deadlines belong to the occupying piece and are
+discarded when it is removed or replaced. `WAIT` alone advances time, energy
+regeneration and cooldowns. Initial ACTIVE markers use one conservative full
+authored cooldown window; prior use counts are not observable and start at
+zero. These assumptions can differ from a live board captured mid-cycle.
+
+Default production samples authored drop weights with an injectable RNG.
+`ProduceOutcome` supplies observed item/status/destination values for replay;
+`require_produce_outcome=True` rejects a missing production outcome. Random
+spawn placement and lowest-cell-first order consumption are development
+conventions where the actual server choice is not modeled. Workshop level/EXP
+remain fixed, order replacements and external inventory rewards are not
+generated, and bubble generation is excluded. Saved live facts and remaining
+uncertainty are recorded in `docs/game-reference/workflows/pet-workshop.md`.
 
 ## Mutation authority and durable journal — implemented (PW06)
 
