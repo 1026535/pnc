@@ -10,11 +10,13 @@ from __future__ import annotations
 import random
 import unittest
 
+from pnc_automation.app.automation.pet_workshop import plan_next
 from pnc_automation.app.automation.pet_workshop.simulate import (
     ProduceOutcome,
     WorkshopSimulationError,
     WorkshopSimulator,
 )
+from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopActivateIntent,
     WorkshopCell,
@@ -50,7 +52,15 @@ STATUE_2 = 10102
 STATUE_3 = 10103
 FRUIT_2 = 20102
 FRUIT_1 = fx.FRUIT_1
+BOWL_1 = 30101
+BOWL_3 = 30103
+BOWL_4 = 30104
+BOWL_5 = 30105
+CLAY_3 = 30003
+CLAY_4 = 30004
+FOOD_1 = 31101
 FOOD_3 = fx.FOOD_3
+SEA_CREATURE_1 = 41101
 TRAP = fx.TRAP_FEED_LOCKED
 FISHING_TOOL_9 = fx.FISHING_TOOL_9
 FISHING_TOOL_6 = fx.FISHING_TOOL_6
@@ -444,6 +454,334 @@ class WorkshopSimulatorTests(unittest.TestCase):
             sim.apply(WorkshopStopIntent(reason=WorkshopStopReason.ZERO_ENERGY)), sim.state
         )
         self.assertEqual(sim.state.cells, initial.cells)
+
+    def test_order_readiness_refreshes_after_a_stock_changing_merge(self) -> None:
+        """A merge completing an order flips ready; the planner then submits it.
+
+        Reproduces review finding R1: ``plan_next -> apply -> plan_next`` must
+        reach SUBMIT once the board satisfies the order instead of stopping on
+        the stale ``ready=False`` marker.
+        """
+
+        survey = WorkshopOrderSurvey(
+            orders=(
+                fx.make_order(
+                    7,
+                    {FRUIT_2: 2},
+                    rewards=(
+                        WorkshopOrderReward(
+                            category=WorkshopOrderRewardCategory.WORKSHOP_EXP,
+                            quantity=25,
+                        ),
+                    ),
+                    ready=False,
+                ),
+            ),
+            coverage=WorkshopSurveyCoverage.COMPLETE,
+            freshness=WorkshopSurveyFreshness.CURRENT,
+        )
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=FRUIT_1),
+                    fx.make_cell(1, 2, item_id=FRUIT_1),
+                    fx.make_cell(1, 3, item_id=FRUIT_2),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id > 3),
+                ),
+                order_survey=survey,
+            )
+        )
+        catalog = fx.catalog()
+        policy = fx.make_policy()
+
+        first = plan_next(sim.state, catalog, policy)
+        self.assertIsInstance(first.intent, WorkshopMergeIntent)
+
+        state = sim.apply(first.intent)
+        self.assertEqual(state.order_survey.order(7).ready, True)
+
+        second = plan_next(state, catalog, policy)
+        self.assertIsInstance(second.intent, WorkshopSubmitOrderIntent)
+        self.assertEqual(second.intent.order_ref, 7)
+        state = sim.apply(second.intent)
+        self.assertIsNone(state.order_survey.order(7))
+        self.assertEqual(_cell(state, 2).occupancy, WorkshopOccupancy.EMPTY)
+        self.assertEqual(_cell(state, 3).occupancy, WorkshopOccupancy.EMPTY)
+
+    def test_order_readiness_drops_when_stock_leaves_the_board(self) -> None:
+        """Submitting one order flips a ready order back when shared stock is consumed."""
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=FRUIT_2),
+                    fx.make_cell(1, 2, item_id=FRUIT_2),
+                    fx.make_cell(1, 3, item_id=FRUIT_2),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id > 3),
+                ),
+                order_survey=WorkshopOrderSurvey(
+                    orders=(
+                        fx.make_order(7, {FRUIT_2: 2}, ready=True),
+                        fx.make_order(8, {FRUIT_2: 3}, ready=True),
+                    ),
+                    coverage=WorkshopSurveyCoverage.COMPLETE,
+                    freshness=WorkshopSurveyFreshness.CURRENT,
+                ),
+            )
+        )
+
+        state = sim.apply(WorkshopSubmitOrderIntent(order_ref=7))
+
+        self.assertIsNone(state.order_survey.order(7))
+        self.assertEqual(state.order_survey.order(8).ready, False)
+
+    def test_order_readiness_stays_underived_while_stock_is_unread(self) -> None:
+        """Unread stock or incomplete requirements cannot prove new readiness."""
+
+        def exp_order(order_ref: int, **kwargs):
+            return fx.make_order(
+                order_ref,
+                {FRUIT_2: 2},
+                rewards=(
+                    WorkshopOrderReward(
+                        category=WorkshopOrderRewardCategory.WORKSHOP_EXP,
+                        quantity=25,
+                    ),
+                ),
+                ready=False,
+                **kwargs,
+            )
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=STATUE_1),
+                    fx.make_cell(1, 2, item_id=STATUE_1),
+                    fx.make_cell(1, 3, item_id=FRUIT_2),
+                    fx.make_cell(
+                        2, 1, occupancy=WorkshopOccupancy.UNKNOWN, item_status=None
+                    ),
+                    *(
+                        cell
+                        for cell in fx.make_empty_cells()
+                        if cell.cell_id not in (1, 2, 3, 8)
+                    ),
+                ),
+                order_survey=WorkshopOrderSurvey(
+                    orders=(
+                        exp_order(7),
+                        exp_order(8, completeness=RowRecognitionStatus.CLIPPED),
+                    ),
+                    coverage=WorkshopSurveyCoverage.COMPLETE,
+                    freshness=WorkshopSurveyFreshness.CURRENT,
+                ),
+            )
+        )
+
+        state = sim.apply(
+            WorkshopMergeIntent(source_cell_id=1, target_cell_id=2, item_id=STATUE_1)
+        )
+
+        self.assertIsNone(state.order_survey.order(7).ready)
+        self.assertIsNone(state.order_survey.order(8).ready)
+
+    def test_clipped_ready_control_is_invalidated_when_stock_changes(self) -> None:
+        """A previously ready clipped card cannot retain stale readiness."""
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=fx.FRUIT_5),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+                ),
+                order_survey=WorkshopOrderSurvey(
+                    orders=(
+                        fx.make_order(
+                            7, {fx.FRUIT_5: 1}, ready=True,
+                            completeness=RowRecognitionStatus.CLIPPED,
+                        ),
+                    ),
+                    coverage=WorkshopSurveyCoverage.PARTIAL,
+                    freshness=WorkshopSurveyFreshness.CURRENT,
+                ),
+            )
+        )
+
+        state = sim.apply(WorkshopRecycleIntent(cell_id=1, item_id=fx.FRUIT_5))
+
+        self.assertIsNone(state.order_survey.order(7).ready)
+
+    def test_reused_cell_does_not_inherit_the_removed_producers_uses(self) -> None:
+        """A fresh Bowl 5 on a recycled cell starts with zero lifetime uses.
+
+        Reproduces review finding R2: nine uses spent by the recycled Bowl 5
+        must not follow the fresh producer later built on the same cell.
+        """
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=BOWL_5, cooldown=WorkshopCooldown.CLEAR),
+                    fx.make_cell(1, 2, item_id=CLAY_4, cooldown=WorkshopCooldown.CLEAR),
+                    fx.make_cell(1, 3, item_id=BOWL_3),
+                    fx.make_cell(1, 4, item_id=BOWL_4),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id > 4),
+                )
+            )
+        )
+        for destination in range(5, 14):
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=BOWL_5),
+                outcome=ProduceOutcome(item_id=FOOD_1, cell_id=destination),
+            )
+        sim.apply(WorkshopRecycleIntent(cell_id=1, item_id=BOWL_5))
+        sim.apply(
+            WorkshopProduceIntent(cell_id=2, producer_item_id=CLAY_4),
+            outcome=ProduceOutcome(item_id=BOWL_3, cell_id=1),
+        )
+        sim.apply(WorkshopMergeIntent(source_cell_id=3, target_cell_id=1, item_id=BOWL_3))
+        state = sim.apply(
+            WorkshopMergeIntent(source_cell_id=4, target_cell_id=1, item_id=BOWL_4)
+        )
+        self.assertEqual(_cell(state, 1).item_id, BOWL_5)
+
+        state = sim.apply(
+            WorkshopProduceIntent(cell_id=1, producer_item_id=BOWL_5),
+            outcome=ProduceOutcome(item_id=FOOD_1, cell_id=14),
+        )
+
+        self.assertEqual(_cell(state, 1).item_id, BOWL_5)
+        self.assertEqual(_cell(state, 14).item_id, FOOD_1)
+
+    def test_replacing_a_cooling_piece_drops_its_deadline(self) -> None:
+        """A merge superseding a cooling producer frees the successor to produce."""
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=CLAY_3, cooldown=WorkshopCooldown.CLEAR),
+                    fx.make_cell(1, 2, item_id=CLAY_3),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id > 2),
+                )
+            )
+        )
+        for destination in range(3, 33):  # thirty uses trigger the cooldown cycle
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=CLAY_3),
+                outcome=ProduceOutcome(item_id=BOWL_1, cell_id=destination),
+            )
+        self.assertEqual(_cell(sim.state, 1).cooldown, WorkshopCooldown.ACTIVE)
+
+        state = sim.apply(
+            WorkshopMergeIntent(source_cell_id=2, target_cell_id=1, item_id=CLAY_3)
+        )
+        self.assertEqual(_cell(state, 1).item_id, CLAY_4)
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
+
+        state = sim.apply(
+            WorkshopProduceIntent(cell_id=1, producer_item_id=CLAY_4),
+            outcome=ProduceOutcome(item_id=BOWL_3, cell_id=2),
+        )
+        self.assertEqual(_cell(state, 2).item_id, BOWL_3)
+
+    def test_unchanged_producers_keep_counters_and_deadlines(self) -> None:
+        """Removing another piece leaves a producer's deadline and lifetime intact."""
+
+        sim = WorkshopSimulator(_producing_state(FISHING_TOOL_9))
+        for destination in range(2, 12):  # ten uses trigger the cooldown cycle
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=FISHING_TOOL_9),
+                outcome=ProduceOutcome(item_id=SEA_CREATURE_1, cell_id=destination),
+            )
+        self.assertEqual(_cell(sim.state, 1).cooldown, WorkshopCooldown.ACTIVE)
+
+        sim.apply(WorkshopRecycleIntent(cell_id=2, item_id=SEA_CREATURE_1))
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=FISHING_TOOL_9)
+            )
+        sim.apply(WorkshopWaitIntent(max_wait_ms=3_000))
+        for destination in (2, *range(12, 20)):  # nine more uses keep the piece
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=FISHING_TOOL_9),
+                outcome=ProduceOutcome(item_id=SEA_CREATURE_1, cell_id=destination),
+            )
+        self.assertEqual(_cell(sim.state, 1).item_id, FISHING_TOOL_9)
+
+        state = sim.apply(
+            WorkshopProduceIntent(cell_id=1, producer_item_id=FISHING_TOOL_9),
+            outcome=ProduceOutcome(item_id=SEA_CREATURE_1, cell_id=20),
+        )
+        self.assertEqual(_cell(state, 1).item_id, FISHING_TOOL_6)
+
+    def test_initial_cooldown_expires_on_cumulative_wait_time(self) -> None:
+        """An initially ACTIVE marker clears once total waited time reaches the window.
+
+        Reproduces review finding R3: three 10s waits must expire a 30s
+        cooldown exactly as one 30s wait does.
+        """
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=MAP_1, cooldown=WorkshopCooldown.ACTIVE),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+                )
+            )
+        )
+
+        sim.apply(WorkshopWaitIntent(max_wait_ms=10_000))
+        sim.apply(WorkshopWaitIntent(max_wait_ms=10_000))
+        self.assertEqual(_cell(sim.state, 1).cooldown, WorkshopCooldown.ACTIVE)
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1))
+
+        state = sim.apply(WorkshopWaitIntent(max_wait_ms=10_000))
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
+        state = sim.apply(
+            WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1),
+            outcome=ProduceOutcome(item_id=STATUE_1, cell_id=2),
+        )
+        self.assertEqual(_cell(state, 2).item_id, STATUE_1)
+
+    def test_initial_cooldown_expires_exactly_at_the_window(self) -> None:
+        """Waits reaching the authored cooldown exactly clear the marker at expiry."""
+
+        def cooling_state():
+            return fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=MAP_1, cooldown=WorkshopCooldown.ACTIVE),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+                )
+            )
+
+        exact = WorkshopSimulator(cooling_state())
+        state = exact.apply(WorkshopWaitIntent(max_wait_ms=30_000))
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
+
+        partitioned = WorkshopSimulator(cooling_state())
+        partitioned.apply(WorkshopWaitIntent(max_wait_ms=29_999))
+        self.assertEqual(
+            _cell(partitioned.state, 1).cooldown, WorkshopCooldown.ACTIVE
+        )
+        state = partitioned.apply(WorkshopWaitIntent(max_wait_ms=1))
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
+
+    def test_produce_triggered_cooldown_expires_across_partitioned_waits(self) -> None:
+        """A cycle cooldown armed by production expires on the same deadline clock."""
+
+        sim = WorkshopSimulator(_producing_state(FISHING_TOOL_9))
+        for destination in range(2, 12):  # ten uses trigger the cooldown cycle
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=FISHING_TOOL_9),
+                outcome=ProduceOutcome(item_id=SEA_CREATURE_1, cell_id=destination),
+            )
+        self.assertEqual(_cell(sim.state, 1).cooldown, WorkshopCooldown.ACTIVE)
+
+        sim.apply(WorkshopWaitIntent(max_wait_ms=1_500))
+        self.assertEqual(_cell(sim.state, 1).cooldown, WorkshopCooldown.ACTIVE)
+        state = sim.apply(WorkshopWaitIntent(max_wait_ms=1_500))
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
 
 
 if __name__ == "__main__":

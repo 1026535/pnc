@@ -10,8 +10,11 @@ exhaustion applies ``max_num``/``change_item_id``.
 
 The simulator holds the unobservable bookkeeping the observation model omits:
 sim time, per-producer cycle and lifetime use counts, cooldown deadlines and
-energy-regen progress. ``WorkshopState`` itself stays an observation model —
-``apply`` returns the next *observable* state.
+energy-regen progress. Producer bookkeeping belongs to the occupying piece —
+removing or replacing a piece discards its counters and deadlines — and the
+surveyed orders' ``ready`` markers are re-derived from current board stock
+after every piece-changing transition. ``WorkshopState`` itself stays an
+observation model — ``apply`` returns the next *observable* state.
 
 Workshop level and EXP are fixed inputs: the replica starts at the authored
 level and never advances it — order EXP rewards and item ``exp`` fields are
@@ -30,6 +33,8 @@ import random
 from dataclasses import dataclass, replace
 from typing import Mapping
 
+from pnc_automation.app.automation.pet_workshop.board import BoardFacts
+from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopActivateIntent,
     WorkshopCell,
@@ -42,6 +47,7 @@ from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopItemStatus,
     WorkshopMergeIntent,
     WorkshopOccupancy,
+    WorkshopOrder,
     WorkshopProduceIntent,
     WorkshopRecycleIntent,
     WorkshopSelectIntent,
@@ -107,7 +113,12 @@ class WorkshopSimulator:
         rng: random.Random | None = None,
         require_produce_outcome: bool = False,
     ) -> None:
-        """Starts the replica at sim time zero with no prior producer use."""
+        """Starts the replica at sim time zero with no prior producer use.
+
+        Producer use counts start empty; initially ACTIVE cooldown markers
+        seed conservative full-window deadlines (see
+        ``_initial_cooldown_deadlines``).
+        """
 
         if not isinstance(state, WorkshopState):
             raise TypeError(f"WorkshopSimulator requires a WorkshopState, got {state!r}.")
@@ -118,7 +129,7 @@ class WorkshopSimulator:
         self._clock_ms = 0
         self._cycle_uses: dict[int, int] = {}
         self._lifetime_uses: dict[int, int] = {}
-        self._cooling_until_ms: dict[int, int] = {}
+        self._cooling_until_ms: dict[int, int] = self._initial_cooldown_deadlines()
         self._regen_progress_ms = 0
 
     @property
@@ -279,12 +290,11 @@ class WorkshopSimulator:
                 cooldown=WorkshopCooldown.CLEAR,
             )
         }
+        self._drop_piece_bookkeeping(destination_id)
         lifetime = self._lifetime_uses.get(intent.cell_id, 0) + 1
         self._lifetime_uses[intent.cell_id] = lifetime
         if producer.max_num > 0 and lifetime >= producer.max_num:
-            self._cycle_uses.pop(intent.cell_id, None)
-            self._lifetime_uses.pop(intent.cell_id, None)
-            self._cooling_until_ms.pop(intent.cell_id, None)
+            self._drop_piece_bookkeeping(intent.cell_id)
             if producer.change_item_id is not None:
                 updates[intent.cell_id] = replace(
                     cell, item_id=producer.change_item_id, cooldown=WorkshopCooldown.CLEAR
@@ -323,6 +333,7 @@ class WorkshopSimulator:
             intent.source_cell_id, intent.target_cell_id, intent.item_id, "merge"
         )
         successor = self._successor(intent.item_id, "merge")
+        self._drop_piece_bookkeeping(intent.source_cell_id, intent.target_cell_id)
         self._set_state(
             cells=self._cells_with(
                 {
@@ -356,6 +367,7 @@ class WorkshopSimulator:
                 f"Activation target on cell {intent.target_cell_id} is not Inactive."
             )
         successor = self._successor(intent.item_id, "activate")
+        self._drop_piece_bookkeeping(intent.source_cell_id, intent.target_cell_id)
         self._set_state(
             cells=self._cells_with(
                 {
@@ -395,6 +407,8 @@ class WorkshopSimulator:
             raise WorkshopSimulationError(
                 f"Cell {intent.producer_cell_id} is not feed-locked."
             )
+        self._drop_piece_bookkeeping(intent.food_cell_id)
+        self._cooling_until_ms.pop(intent.producer_cell_id, None)
         self._set_state(
             cells=self._cells_with(
                 {
@@ -437,6 +451,7 @@ class WorkshopSimulator:
         selection = self._state.selection
         if selection.cell_id == intent.cell_id:
             selection = WorkshopSelection(WorkshopSelectionKind.NONE)
+        self._drop_piece_bookkeeping(intent.cell_id)
         self._set_state(
             cells=self._cells_with({intent.cell_id: self._emptied(cell)}),
             energy=energy,
@@ -486,6 +501,7 @@ class WorkshopSimulator:
         selection = self._state.selection
         if selection.cell_id in updates:
             selection = WorkshopSelection(WorkshopSelectionKind.NONE)
+        self._drop_piece_bookkeeping(*updates)
         self._set_state(
             cells=self._cells_with(updates),
             order_survey=replace(
@@ -507,14 +523,6 @@ class WorkshopSimulator:
             cell = self._observed_cell(cell_id)
             if cell is not None and cell.cooldown == WorkshopCooldown.ACTIVE:
                 updates[cell_id] = replace(cell, cooldown=WorkshopCooldown.CLEAR)
-        for cell in self._state.cells:
-            if cell.cell_id in updates or cell.cooldown != WorkshopCooldown.ACTIVE:
-                continue
-            producer = (
-                self._catalog.producer_for(cell.item_id) if cell.item_id is not None else None
-            )
-            if producer is not None and intent.max_wait_ms >= producer.cooldown_ms:
-                updates[cell.cell_id] = replace(cell, cooldown=WorkshopCooldown.CLEAR)
         energy = self._state.energy
         capacity = energy.capacity or self._catalog.activity.energy_capacity
         if energy.current is not None and energy.current < capacity:
@@ -530,9 +538,75 @@ class WorkshopSimulator:
     # --- internals -------------------------------------------------------
 
     def _set_state(self, **changes) -> None:
-        """Applies field-level changes to the replicated state."""
+        """Applies field-level changes to the replicated state.
+
+        A ``cells`` change means the piece inventory may have changed, so the
+        surveyed orders' ``ready`` markers are re-derived from the resulting
+        board before the new state is visible — the single canonical path for
+        readiness recomputation.
+        """
 
         self._state = replace(self._state, **changes)
+        if "cells" in changes:
+            self._refresh_order_readiness()
+
+    def _refresh_order_readiness(self) -> None:
+        """Re-derives surveyed orders' ``ready`` markers from current stock.
+
+        The client re-evaluates the submit control whenever board stock
+        changes, so every piece-changing transition re-derives it here.
+        Sufficient usable Normal stock proves ``ready=True``; insufficient
+        stock proves ``ready=False`` only when no unread or unobserved cell
+        could still hide required pieces — otherwise the marker reverts to
+        ``None`` rather than keeping a stale observation. Cards whose
+        requirements were not completely read become unknown: their earlier
+        ready control cannot establish readiness after the stock changes.
+        """
+
+        survey = self._state.order_survey
+        if not survey.orders:
+            return
+        board = BoardFacts(self._state)
+        stock_exact = self._stock_fully_known(board)
+        changed = False
+        orders: list[WorkshopOrder] = []
+        for order in survey.orders:
+            ready = self._derived_ready(order, board, stock_exact)
+            if ready != order.ready:
+                changed = True
+                orders.append(replace(order, ready=ready))
+            else:
+                orders.append(order)
+        if changed:
+            self._set_state(order_survey=replace(survey, orders=tuple(orders)))
+
+    def _derived_ready(
+        self, order: WorkshopOrder, board: BoardFacts, stock_exact: bool
+    ) -> bool | None:
+        """Returns the ready control state one completely-read card would show."""
+
+        if order.completeness != RowRecognitionStatus.COMPLETE:
+            return None
+        if all(
+            board.normal_count(item_id) >= quantity
+            for item_id, quantity in order.requirements.items()
+        ):
+            return True
+        return False if stock_exact else None
+
+    def _stock_fully_known(self, board: BoardFacts) -> bool:
+        """Returns whether no unobserved or unread cell could hide usable stock."""
+
+        if board.unobserved_cell_ids or board.unread_piece_cells:
+            return False
+        return all(
+            cell.access != WorkshopCellAccess.UNKNOWN
+            and (
+                cell.access != WorkshopCellAccess.USABLE
+                or cell.occupancy != WorkshopOccupancy.UNKNOWN
+            )
+            for cell in self._state.cells
+        )
 
     def _observed_cell(self, cell_id: int) -> WorkshopCell | None:
         """Returns the observed cell with one id, or ``None`` when unobserved."""
@@ -596,6 +670,41 @@ class WorkshopSimulator:
         """Returns whether the cell's producer is inside a cooldown window."""
 
         return self._cooling_until_ms.get(cell_id, 0) > self._clock_ms
+
+    def _initial_cooldown_deadlines(self) -> dict[int, int]:
+        """Anchors each initially observed ACTIVE marker to one full window.
+
+        An ACTIVE marker first seen in the opening state may have started at
+        any time before observation, so the replica conservatively assumes
+        the full authored ``cooldown_ms`` window remains from sim time zero.
+        Later cooldowns enter through ``_produce`` with a measured deadline;
+        both expire against the cumulative sim clock in ``_wait``.
+        """
+
+        deadlines: dict[int, int] = {}
+        for cell in self._state.cells:
+            if cell.cooldown != WorkshopCooldown.ACTIVE or cell.item_id is None:
+                continue
+            producer = self._catalog.producer_for(cell.item_id)
+            if producer is not None:
+                deadlines[cell.cell_id] = producer.cooldown_ms
+        return deadlines
+
+    def _drop_piece_bookkeeping(self, *cell_ids: int) -> None:
+        """Forgets producer bookkeeping tied to pieces leaving their cells.
+
+        Cycle/lifetime use counts and cooldown deadlines describe the
+        occupying piece, not the cell: removal and replacement transitions
+        call this for every cell whose piece left or was superseded, so a
+        fresh piece never inherits the prior occupant's counters. Cells
+        whose piece only changed state — for example a feed-unlocked
+        producer — keep their bookkeeping.
+        """
+
+        for cell_id in cell_ids:
+            self._cycle_uses.pop(cell_id, None)
+            self._lifetime_uses.pop(cell_id, None)
+            self._cooling_until_ms.pop(cell_id, None)
 
     def _spend_energy(self, cost: int) -> WorkshopEnergy:
         """Returns the energy bar after one spend; unknown stays unknown."""
