@@ -42,6 +42,18 @@ Recognized fixture manifest, measured-control/profile ownership, both-publisher 
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
 
+### Current live continuation — 2026-09-21 UTC
+
+**Awaiting validation, not accepted or merged.** Candidate remains `b405304d92a1577472c88511d1679d8c717b1337`; the source-bound offline evidence is unchanged. Turn 007's ignored harness bypassed initial canonical popup recovery by supplying a raw observation. The lead corrected that call after reproducing the failure offline; normal recovery already worked. No production popup change was justified. Evidence: recognition checkout `.local-data/review/pw02/review-live-turn007.md`.
+
+Turn 008 verified active **Poney NPC C31**, with no switch, launch or reconnect. Its five measured taps were canonical identity navigation. One lease lasted **299.4 seconds** (17:34:00.896–17:39:00.266 UTC), with zero spending and stable Home at exit. The work cutoff refused the first exploratory Manor swipe; Workshop was never reached. The lead independently confirmed lease availability and restored Main's original `read_only` role and complete config hash. Do not call this board or route acceptance.
+
+Lead review found unnecessary full Home-content requests in the ignored harness. Exact saved-frame replay preserved identity/layout/guard/controls with narrow requests: builder 15.96s versus 1.63s; navigation perception 14.14s versus 1.05s. These are single measurements, not latency guarantees. The prior live offer remains blocked through both narrowed paths. The corrected harness leaves full Workshop publication, canonical fresh castle identity and every phase/input limit unchanged; two deadline/full-equality regressions pass. Evidence: `.local-data/review/pw02/{review-live-turn008.md,saved-home-scope-profile.json,scoped-popup-proof.json}` and live-run `turn-008/lead-scope-correction/execution-proof.json`.
+
+The same `global-milk` session is resumed as **turn 009**, startup verified, with one five-minute phase on Main's active eligible non-Hopeful castle. No switch, launch/reconnect, spending or storage. The lead owns temporary role restoration in `.local-data/review/pw02/main-role-restore-scoped-board.json`. Final board/header and equal same-capture production publication remain the acceptance gate, followed by supported return. The user was notified of the observed failure, release, offline correction and new bounded check.
+
+**Completion transport limitation:** turn 007's native callback failed with an empty tool catalog; an attempted bridge fix failed actual verification and was reverted. Turn 008's callback arrived successfully, so delivery is intermittent and no repair is claimed. The lead also waits directly on the current supervisor. Turns 007/008 are resolved with reviewed evidence and concrete subsequent assignments; later queue dispatch must retain a functioning completion owner.
+
 ### Current correction disposition — 2026-09-21
 
 **Offline ready, awaiting final board validation; not accepted or merged.** Candidate `b405304d92a1577472c88511d1679d8c717b1337` includes fetched main `68cb935`. Lead reviewed cedar-stealer turn 013's actual changes and found no blocking code defects. The canonical storage profile now recognizes both saved drawer placements, and the header parser leaves both energy fields unknown for an invalid OCR denominator while preserving `0/200` and `240/200`. Storage operations remain excluded; the user's clarification above governs acceptance.
