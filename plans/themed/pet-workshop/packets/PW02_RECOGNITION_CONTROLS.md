@@ -50,6 +50,8 @@ The lead independently verified the full-suite evidence against HEAD and source 
 
 The remaining final-candidate live boundary is board classification/header and same-capture publication, followed by supported return. Prior unchanged dialog/route evidence remains reusable; do not repeat storage, detail/help or strip exercises for this correction. Global-milk's next package is **offline preparation only** of one five-minute phase with one lease and a single deadline. The lead must review that harness before arranging another short Main window. Main is released/read_only, and no reconnect is currently authorized. PW05/PW07 remain dependent on accepted PW02.
 
+**Preparation reviewed:** global-milk turn 005 completed offline. Lead corrected three execution/evidence defects: publisher disagreement omitted from the pass verdict, reuse of the preparation manifest path, and nested runtime calls bypassing deadline gates. The reviewed copy preserves prior evidence, refuses a second invocation, compares complete typed Workshop content, and gates nested captures/inputs under the original phase deadline. Four phase/import checks and two lead regressions passed; production source is unchanged. The implementation checkout's `.local-data/review/pw02/{review-live-turn005.md,final-board-preparation.json}` records exact executable paths/hashes, findings, checks and the in-flight timeout limitation. The lead has asked for Main availability; execution and PW02 acceptance remain pending that reply.
+
 
 ### Execution record — 2026-09-16
 
