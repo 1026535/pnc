@@ -247,6 +247,12 @@ result identically through `bind_workshop_observation`.
 | `PNC_PET_WORKSHOP_STORAGE` | `pet_workshop_storage` | `EXCLUDED_MODAL` | Reviewed Get-Slots bottom sheet |
 | `PNC_ILLUSORY_BEAST_MANOR` | `pet_workshop_manor` | (none) | Manor is a navigation surface, not a Workshop surface; the producer returns `None` so no `workshop` content publishes |
 
+Workshop item detail, order detail, help and storage belong to the calling
+workflow. The canonical `TASK_OWNED_POPUP_SCREEN_TYPES` registry in
+`app/pnc/domain/popup.py` keeps generic interruption recovery from consuming
+these surfaces. A measured close control remains available to the caller;
+its presence alone does not authorize automatic dismissal.
+
 Screen identity comes only from independent visual-anchor profile matching;
 a screen request is never treated as proof.
 

@@ -56,8 +56,13 @@ from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
+from tests.support.automation.engine.make_observed_action_executor import (
+    _make_observed_action_executor,
+)
+from tests.support.automation.session import FakeSession
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
+from tests.support.runtime.observation_service import FakeObservationService
 
 
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
@@ -717,6 +722,8 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
         layout_id: str,
         session_id: str,
     ) -> tuple[Observation, Observation, Any]:
+        """Keep published Workshop dialogs inspectable by their owning workflow."""
+
         builder, navigation = _wire(_EmptyOcrService())
         capture = _capture(fixture, session_id=session_id)
         builder_observation, navigation_observation = _build_both(
@@ -733,6 +740,18 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
                         observation, capture, screen_type, layout_id
                     )
                 )
+                session = FakeSession()
+                observer = FakeObservationService(observations=[])
+                executor = _make_observed_action_executor(session)
+                recovered = executor.recover_interruption_if_required(
+                    observation,
+                    label_prefix="inspect_workshop_dialog",
+                    observe=observer.observe,
+                )
+                self.assertIsNone(recovered)
+                self.assertEqual([], session.taps)
+                self.assertEqual([], session.key_events)
+                self.assertEqual([], observer.requests)
         self.assertEqual(builder_observation.workshop, navigation_observation.workshop)
         return builder_observation, navigation_observation, workshops[0]
 
