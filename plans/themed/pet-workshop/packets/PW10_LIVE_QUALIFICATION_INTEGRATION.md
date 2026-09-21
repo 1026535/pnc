@@ -20,6 +20,8 @@ The user has limited main-instance exploration time and offered later availabili
 
 Use `test-bluestacks-live` / `write-code-live` as applicable and the production caller with the canonical lease. No raw coordinate probe or agent-visual identity bypass qualifies the unattended implementation. Existing production/ordinary-merge evidence need not be repeated as a separate broad survey; qualify new caller boundaries and previously untested mechanics with the smallest useful sequence.
 
+Home entry follows the [PW07 Manor/V44 ownership boundary](PW07_WORKFLOW_EXECUTION.md#home-entry-ownership-after-the-v44-review--2026-09-21). Workshop owns the target-specific route; any consumed V44 camera/scan capability must be accepted and integrated before claiming that route. A system-node inventory entry or the successful exploratory Home tap does not close this gate. Continue independent offline qualification while that dependency is pending.
+
 | Group | Smallest required proof | Bound and result |
 | --- | --- | --- |
 | Navigation/identity and ordinary action integration | Exact native-input preflight, Home → Manor → Workshop, current board/level/orders and normal exit through the wired caller | One representative eligible castle; no broad roster/account tour. Include any needed regular action in the later sequence rather than duplicate a basic merge exercise. |
