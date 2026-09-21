@@ -7,10 +7,13 @@ and compares machine-readable reports against the reviewed label manifest
 
 - the ready three-coconut order is read as three pieces and rejected
 - the Wood 10 + beast-lasso detail recipe is eligible but never executable
+- the same lasso recipe on the board strip reads completely, stays
+  eligible, and reports not-ready with no Complete control
 - the saved produce-and-merge sequence stays distinguishable through
   recognized deltas while the foliage-occluded Tree 4 brackets abstain
 - black, unknown and unreadable frames yield no gameplay proposal
 - invalid inputs fail with actionable errors; native RGBA stays native
+- duplicate output stems are rejected before any report is written
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
@@ -41,6 +45,7 @@ from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
 LABELS_PATH = TEST_DATA_ROOT / "pet_workshop" / "analysis_labels.json"
 
+_BOARD_LASSO = "pet_workshop_board_lasso_native_rgba.png"
 _DETAIL_LASSO = "pet_workshop_order_detail_lasso_native_rgba.png"
 _TREE4 = "pet_workshop_selected_tree4_native_rgba.png"
 _PRODUCED = "pet_workshop_produced_native_rgba.png"
@@ -90,7 +95,7 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
 
         labels = load_labels(LABELS_PATH)
         self.assertEqual(
-            {_DETAIL_LASSO, _TREE4, _PRODUCED, _MERGED}, set(labels)
+            {_BOARD_LASSO, _DETAIL_LASSO, _TREE4, _PRODUCED, _MERGED}, set(labels)
         )
         for name in sorted(labels):
             with self.subTest(image=name):
@@ -137,6 +142,36 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
         assert decision is not None
         self.assertEqual("stop", decision["intent"]["kind"])
         self.assertEqual("excluded_surface", decision["intent"]["stop_reason"])
+        self.assertFalse(decision["intent"]["gameplay"])
+
+    def test_lasso_board_order_is_eligible_but_not_ready(self) -> None:
+        """The scrolled-left lasso card reads fully and stays unsubmittable."""
+
+        report = self._report(_BOARD_LASSO)
+        self.assertEqual("board", report["workshop"]["surface"])
+        # The left-clipped sliver keeps the survey partial -> no gesture.
+        self.assertEqual("partial", report["workshop"]["order_survey"]["coverage"])
+        self.assertEqual("clipped", _order(report, 1)["completeness"])
+
+        order = _order(report, 3)
+        # The full-width card ending inside the frame is complete, not clipped.
+        self.assertEqual("complete", order["completeness"])
+        self.assertEqual({"20210": 1, "20105": 1}, order["requirements"])
+        self.assertEqual(
+            [("beast_lasso", 2), ("feed", 4380)],
+            [(reward["category"], reward["quantity"]) for reward in order["rewards"]],
+        )
+        # No Complete control is measured on this card.
+        self.assertIs(False, order["ready"])
+        assessment = order["assessment"]
+        self.assertTrue(assessment["eligible"])
+        self.assertEqual("beast_lasso", assessment["category"])
+        self.assertFalse(assessment["unresolved"])
+        # The partial survey still yields a non-gameplay inspection only.
+        decision = report["decision"]
+        self.assertIsNotNone(decision)
+        assert decision is not None
+        self.assertEqual("inspect", decision["intent"]["kind"])
         self.assertFalse(decision["intent"]["gameplay"])
 
     def test_saved_produce_and_merge_sequence_is_distinguishable(self) -> None:
@@ -222,7 +257,7 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
     def test_native_rgba_input_stays_native(self) -> None:
         """Native captures report their real mode, never a conversion."""
 
-        for name in (_DETAIL_LASSO, _TREE4, _PRODUCED, _MERGED):
+        for name in (_BOARD_LASSO, _DETAIL_LASSO, _TREE4, _PRODUCED, _MERGED):
             with self.subTest(image=name):
                 report = self._report(name)
                 self.assertEqual("RGBA", report["input"]["mode"])
@@ -259,6 +294,30 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
             index = json.loads((out_dir / "index.json").read_text(encoding="utf-8"))
             self.assertEqual(1, len(index["reports"]))
             self.assertEqual("ok", index["reports"][0]["status"])
+
+    def test_duplicate_output_stems_are_rejected(self) -> None:
+        """Two valid inputs sharing a basename fail before any report write."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for dirname in ("dir_a", "dir_b"):
+                directory = Path(tmp) / dirname
+                directory.mkdir()
+                image_path = directory / "screen.png"
+                Image.new("RGB", (32, 32)).save(image_path)
+                paths.append(image_path)
+            out_dir = Path(tmp) / "out"
+            # Only costly perception is stubbed: the naming boundary is real.
+            with mock.patch(
+                "tools.pet_workshop_analyze.build_perception"
+            ) as build:
+                with self.assertRaisesRegex(AnalysisError, "output name collision"):
+                    main([*[str(path) for path in paths], "--out-dir", str(out_dir)])
+            build.assert_not_called()
+            self.assertFalse(out_dir.exists())
+            self.assertEqual([], list(Path(tmp).rglob("*.report.json")))
+            self.assertEqual([], list(Path(tmp).rglob("*.annotated.png")))
+            self.assertEqual([], list(Path(tmp).rglob("index.json")))
 
 
 if __name__ == "__main__":

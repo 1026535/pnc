@@ -1629,6 +1629,20 @@
         "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051343Z_explore_026_after_swipe.png",
         "derivative": "Unmodified native RGBA session frame after the Fruit 2 pair merge swipe on the LV8 board: Fruit 3 occupies cell 17 and its selection brackets measure cleanly."
       }
+    },
+    {
+      "image": "pet_workshop_board_lasso_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-16/pet_workshop_exploration",
+      "sha256": "a9f2359e9525d5b6a4dce6feaaeb086db2627d037f3016a4fb33c6ebd45e9b5d",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051131Z_explore_011_after_swipe.png",
+        "derivative": "Unmodified native RGBA session frame: the LV8 order strip scrolled left, showing the complete Wood 10 + Fruit 5 card (beast lasso x2, feed 4380) with no Complete control, beside a left-clipped card and a fulfilled single-coconut card."
+      }
     }
   ]
 }

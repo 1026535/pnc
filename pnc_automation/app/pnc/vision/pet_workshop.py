@@ -117,7 +117,12 @@ _CARD_MIN_WIDTH = 30
 # narrower visible fragment cannot prove full requirements, even when it
 # touches the timer viewport rather than the physical screenshot edge.
 _CARD_FULL_MIN_WIDTH = 160
-_CARD_CLIP_RIGHT_X = 532
+# A card run ending within three columns of the frame's right edge may
+# continue past the viewport: edge vignette can hide a card's last border
+# columns, so termination is only proven by a larger visible margin. A
+# full-width panel ending further inside (e.g. the scrolled-left strip's
+# third card ending at x1=534) is complete.
+_CARD_CLIP_RIGHT_X = 537
 _CARD_CLIP_LEFT_X = 92
 # Requirement tiles sit as a centered group inside the card, each ~48-52 px
 # wide with colored inlay interiors that read as non-panel columns.
@@ -221,11 +226,15 @@ _EMPTY_CELL_TEMPLATE = _DATA_DIR / "pet_workshop_cell_empty.png"
 # per-produce production mode on this frame.
 _BOLT_TEMPLATE = _DATA_DIR / "pet_workshop_ov_bolt.png"
 
-# Order-strip requirement icons at slot scale (36 x 42 crops).
+# Order-strip requirement icons at slot scale (36 x 42 crops). The tile
+# inlay carries a card-level state tint: fulfilled recipes sit on green,
+# unfulfilled on blue, so an icon observed on both tints keeps one crop per
+# reviewed appearance.
 _STRIP_REQUIREMENT_TEMPLATES = (
     ("pet_workshop_req_food_9.png", 31109),
     ("pet_workshop_req_fruit_4.png", 20104),
     ("pet_workshop_req_fruit_5.png", 20105),
+    ("pet_workshop_req_fruit_5_blue.png", 20105),
     ("pet_workshop_req_statue_4.png", 10204),
     ("pet_workshop_req_treasure_6.png", 10106),
     ("pet_workshop_req_treasure_7.png", 10107),

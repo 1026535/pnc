@@ -270,10 +270,15 @@ parser is `pnc_automation/app/pnc/vision/pet_workshop.py`:
   a clean merged frame of the same sequence measures its brackets and reads
   `SELECTED`.
 - Order cards sit in a three-slot top strip; the right edge can clip the
-  third card to a sliver. A card's green Complete button appears only when
-  all requirements are satisfiable from the board. The order-detail modal
-  (tap a card) shows target items with satisfied checks plus a reward row;
-  it has a close X but no submit control.
+  third card to a sliver. Scrolling left swaps the clipping: the leading
+  card becomes a sliver while the trailing card ends just inside the frame
+  and still reads complete. Requirement tiles carry a card-level state
+  tint (fulfilled recipes sit on green, unfulfilled on blue); an icon
+  observed on both tints keeps one template per reviewed appearance, e.g.
+  Fruit 5 ships a green and a blue crop. A card's green Complete button
+  appears only when all requirements are satisfiable from the board. The
+  order-detail modal (tap a card) shows target items with satisfied checks
+  plus a reward row; it has a close X but no submit control.
 - The storage bottom sheet (layers icon) is a premium Get-Slots drawer with
   no close control — it dismisses on an outside tap. Its Get Slots/price
   column follows the sheet's slot capacity, not its occupied-item count:
@@ -396,6 +401,11 @@ Reviewed expectations live in `tests/data/pet_workshop/analysis_labels.json`
 provenance kind (`real_screenshot`/`synthesized`) and a subset of the report
 to match. Add a promoted fixture's entry there to make
 `--fail-on-mismatch` and the analysis regression cover it.
+
+Output files are named by each input's stem. Two inputs that share a
+basename would overwrite each other, so the run is rejected with an
+actionable error before any report is written — rename the inputs or
+analyze them in separate `--out-dir` runs.
 
 ## Remaining uncertainty
 

@@ -314,8 +314,14 @@ from fixed slot positions: an empty slot publishes no order, and a card
 clipped by the frame edge still publishes with `CLIPPED` completeness. Each
 full panel measures 168/169 reference pixels; a visible panel below 160 pixels
 is also clipped, including a fragment hidden behind the timer after scrolling.
+A panel is edge-clipped only when its measured run reaches the frame's final
+columns (reference x >= 537); a full-width panel ending just inside that
+boundary still reads complete.
 This is a qualification of the measured layout, not a logical order invariant. Each
 card reads its requirement icons against the measured tile-inlay runs —
+the inlay carries a card-level state tint (fulfilled recipes sit on green,
+unfulfilled on blue), so an icon observed on both tints keeps one template
+per reviewed appearance (e.g. Fruit 5 ships green and blue crops) —
 when runs and matched icons do not agree one-for-one the card reads
 `UNREADABLE` rather than silently shrinking the recipe. Reward groups are
 measured independently from foreground pixels above the cream panel baseline.

@@ -602,6 +602,24 @@ def _resolve_inputs(images: Iterable[str], fixture_names: Iterable[str]) -> list
     return resolved
 
 
+def _reject_stem_collisions(inputs: Sequence[AnalysisInput]) -> None:
+    """Fails fast when distinct inputs would write the same output names."""
+
+    stems: dict[str, list[Path]] = {}
+    for analysis_input in inputs:
+        stems.setdefault(analysis_input.path.stem, []).append(analysis_input.path)
+    duplicates = {stem: paths for stem, paths in stems.items() if len(paths) > 1}
+    if duplicates:
+        details = "; ".join(
+            f"{stem}: {', '.join(str(path) for path in paths)}"
+            for stem, paths in sorted(duplicates.items())
+        )
+        raise AnalysisError(
+            f"output name collision: {details}. "
+            "Rename the inputs or analyze them in separate --out-dir runs."
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -648,6 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     inputs = _resolve_inputs(args.images, fixture_names)
     if not inputs:
         parser.error("no inputs: pass image paths or --fixtures")
+    _reject_stem_collisions(inputs)
 
     perception = build_perception().perception
     catalog = load_pet_workshop_catalog()

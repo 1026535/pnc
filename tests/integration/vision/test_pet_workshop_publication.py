@@ -530,6 +530,52 @@ class PetWorkshopBoardPublicationTests(unittest.TestCase):
                 self.assertIsNotNone(workshop.view.order_strip_bounds)
         self.assertEqual(builder_observation.workshop, navigation_observation.workshop)
 
+    def test_scrolled_lasso_card_publishes_complete_unready_order(self) -> None:
+        """The left-scrolled lasso card reads its recipe fully and stays unready."""
+
+        builder, navigation = _wire(_require_rapid_ocr_service(self))
+        capture = _capture(
+            "pet_workshop_board_lasso_native_rgba.png",
+            session_id="pw05-board-lasso",
+            native_mode=True,
+        )
+        builder_observation, navigation_observation = _build_both(
+            builder, navigation, capture, ScreenType.PNC_PET_WORKSHOP
+        )
+        for name, observation in (
+            ("observation_builder", builder_observation),
+            ("navigation_perception", navigation_observation),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_board_identity(observation, capture)
+                workshop = self._assert_board_observation(observation, capture)
+                state = workshop.state
+                self.assertEqual((8, 8, 166, 200), (
+                    state.workshop_level, state.workshop_exp,
+                    state.energy.current, state.energy.capacity,
+                ))
+                orders = state.order_survey.orders
+                self.assertEqual(3, len(orders))
+                # The leading left-edge sliver keeps the survey partial.
+                self.assertEqual("clipped", orders[0].completeness.value)
+                self.assertEqual({20105: 1}, orders[0].requirements)
+                # The full-width card ending inside the frame reads completely:
+                # Wood 10 + Fruit 5 on the unfulfilled blue tile inlay, lasso
+                # rewards measured, and no Complete control -> not ready.
+                lasso = orders[2]
+                self.assertEqual({20210: 1, 20105: 1}, lasso.requirements)
+                self.assertEqual(
+                    (
+                        WorkshopOrderRewardCategory.BEAST_LASSO,
+                        WorkshopOrderRewardCategory.FEED,
+                    ),
+                    tuple(reward.category for reward in lasso.rewards),
+                )
+                self.assertEqual((2, 4380), tuple(r.quantity for r in lasso.rewards))
+                self.assertEqual("complete", lasso.completeness.value)
+                self.assertIs(False, lasso.ready)
+        self.assertEqual(builder_observation.workshop, navigation_observation.workshop)
+
     def test_missed_reward_icon_keeps_unknown_group(self) -> None:
         """Missing EXP art cannot disappear inside the preceding feed count zone."""
 
