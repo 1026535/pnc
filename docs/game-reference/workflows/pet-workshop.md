@@ -264,7 +264,11 @@ parser is `pnc_automation/app/pnc/vision/pet_workshop.py`:
   selection bar with an inspect `!` medallion; a blue recycle trash button
   appears only for recyclable pieces (Treasure shows it, an inactive Bowl
   does not). Control presence is item-dependent and must be measured, not
-  assumed.
+  assumed. Palm foliage can chronically occlude a selected cell's brackets:
+  on the 2026-09-16 frames 022-025 the selected Tree 4 cell stays
+  below-threshold on every frame, so selection correctly publishes unknown;
+  a clean merged frame of the same sequence measures its brackets and reads
+  `SELECTED`.
 - Order cards sit in a three-slot top strip; the right edge can clip the
   third card to a sliver. A card's green Complete button appears only when
   all requirements are satisfiable from the board. The order-detail modal
@@ -368,6 +372,30 @@ spacing is an unsupported causal explanation until demonstrated. Preserve
 the manual fallback while automatic recognition is unqualified. The
 September 27 roadmap amendment owns these scoped corrections and the
 separate design, offline, live and merge/push milestones.
+
+## Saved-screenshot analysis (PW05, 2026-09-21)
+
+`tools/pet_workshop_analyze.py` replays saved captures through the
+production recognizer and accepted planner, writing one
+`pet_workshop_analysis/v1` report plus an annotated review image per frame
+under an ignored output directory. It reads images and writes reports only —
+no emulator, ADB, lease or live state — and non-Workshop frames produce no
+gesture proposal.
+
+```powershell
+# All labeled fixtures into the default .local-data/pet-workshop-analysis/
+py tools/pet_workshop_analyze.py --fixtures --fail-on-mismatch
+
+# Specific frames (fixture names or explicit paths) with a custom output dir
+py tools/pet_workshop_analyze.py pet_workshop_merged_native_rgba.png `
+    C:\path\to\saved.png --out-dir .local-data\pw05\run1
+```
+
+Reviewed expectations live in `tests/data/pet_workshop/analysis_labels.json`
+(`pet_workshop_analysis_labels/v1`): each sample names the fixture, its
+provenance kind (`real_screenshot`/`synthesized`) and a subset of the report
+to match. Add a promoted fixture's entry there to make
+`--fail-on-mismatch` and the analysis regression cover it.
 
 ## Remaining uncertainty
 

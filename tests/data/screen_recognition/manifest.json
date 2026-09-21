@@ -1573,6 +1573,62 @@
       "expected_visual_screens": [
         "PNC_POPUP"
       ]
+    },
+    {
+      "image": "pet_workshop_order_detail_lasso_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP_ORDER_DETAIL",
+      "split": "validation",
+      "group": "2026-09-16/pet_workshop_exploration",
+      "sha256": "912f8e1b6ab632b0c31d548e298925e775a2c772ec77efdbb0cbef13333499f1",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP_ORDER_DETAIL"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051148Z_explore_013_after_tap.png",
+        "derivative": "Unmodified native RGBA session frame: the order detail modal for the Wood 10 + Fruit 5 recipe whose rewards include a beast lasso (LV8 session, strip order 3)."
+      }
+    },
+    {
+      "image": "pet_workshop_selected_tree4_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-16/pet_workshop_exploration",
+      "sha256": "f409f3ec4176b773d276d7e2ffac8bd288d4e395f1168dafe3723ff014e7471b",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051309Z_explore_022_after_tap.png",
+        "derivative": "Unmodified native RGBA session frame after the Tree 4 producer tap on the LV8 board: the ready three-coconut order card is fully read and the selected producer's corner brackets are foliage-occluded."
+      }
+    },
+    {
+      "image": "pet_workshop_produced_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-16/pet_workshop_exploration",
+      "sha256": "e83c7be259271a18fed4168dcffdd8521315d3023c19d5bdb8e1884be6a57008",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051324Z_explore_024_after_tap.png",
+        "derivative": "Unmodified native RGBA session frame after the selected Tree 4 produce tap on the LV8 board: one energy spent and a new Fruit 2 dropped on cell 14."
+      }
+    },
+    {
+      "image": "pet_workshop_merged_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-16/pet_workshop_exploration",
+      "sha256": "10de1b6b66f3c2e0430ea0322caa2d9cfc7286adfab5dea634b056d7a9f7143a",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051343Z_explore_026_after_swipe.png",
+        "derivative": "Unmodified native RGBA session frame after the Fruit 2 pair merge swipe on the LV8 board: Fruit 3 occupies cell 17 and its selection brackets measure cleanly."
+      }
     }
   ]
 }

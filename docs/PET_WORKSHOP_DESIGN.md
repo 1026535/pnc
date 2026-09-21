@@ -293,7 +293,12 @@ Selection reads the four corner brackets of the selection frame (all rotated
 orientations). A cell needs at least two corner votes with no competing cell
 reaching two votes to publish `SELECTED`; `NONE` publishes only when no
 corner evidence exists and the selection bar is independently measured empty;
-populated-but-unresolved evidence stays `UNKNOWN`.
+populated-but-unresolved evidence stays `UNKNOWN`. Chronically occluded
+brackets keep the abstention: on the 2026-09-16 produce sequence (frames
+022-025) palm foliage shadows the selected Tree 4 cell 7 below the two-vote
+bar on every frame of the state, so selection publishes `UNKNOWN` and no
+per-instance corner template was authored; the clean merged frame 026
+measures its brackets and publishes `SELECTED` cell 17.
 
 Header OCR reads `workshop_level` (`Lv.N`), `workshop_exp` (`N/M` gauge,
 current value) and `energy` (`N/M` pill, current/capacity); an absent OCR
@@ -326,7 +331,10 @@ scroll surface publishes as `WorkshopView.order_strip_bounds`, `None` on
 surfaces without qualified strip chrome evidence. The order-detail modal
 reads the same requirement pair and reward icons from its pedestals with
 `source="order_detail"`; it has no submit control so `ready` stays `None`,
-and pedestal/icon disagreement keeps the order `UNREADABLE`. Unexposed
+and pedestal/icon disagreement keeps the order `UNREADABLE`. Detail icon
+templates cover the Fruit 4/5, Treasure 6 and Wood 10 requirement icons and
+the feed, workshop-exp and beast-lasso reward icons seen on the reviewed
+modals. Unexposed
 server orders are never synthesized.
 
 ### Measured controls
@@ -452,6 +460,51 @@ Every `WorkshopDecision` is a proposal: intents carry logical targets only,
 the planner never touches game state, and execution is a separate Plan 03
 step that re-validates the intent on a fresh observation through the same
 `validate_intent` before any gesture.
+
+## Saved-frame analysis and review
+
+`tools/pet_workshop_analyze.py` (PW05) closes the offline milestone: given
+saved captures it replays each frame through the canonical production
+publishers — the real selector registry, packaged visual recognizer, OCR
+context and `WorkshopContentProducer`, wired exactly like the live observer —
+and runs the accepted `plan_next` over the published state. It performs no
+I/O beyond reading the named images and writing its own reports: no
+emulator, ADB, lease or game state is touched, and no gesture can come out
+of it.
+
+Inputs are positional image paths or fixture names resolved against
+`tests/data/screen_recognition/`, or `--fixtures` for every image the label
+manifest names. Native pixel layout is preserved into the report (a native
+RGBA capture reports `mode=RGBA`); labels record each input's provenance
+kind (`real_screenshot` vs `synthesized`) so real frames stay distinct from
+synthesized states and simulator outputs. Missing files, unreadable images
+and malformed label manifests fail with actionable errors.
+
+Per input the tool writes under its ignored output directory
+(`.local-data/pet-workshop-analysis/` by default):
+
+- `<stem>.report.json` — schema `pet_workshop_analysis/v1`: input provenance
+  and decoded-image hash, screen decision, the full typed Workshop state and
+  measured view, each surveyed order with its `assess_order` verdict, and
+  the planner's `WorkshopDecision` (intent kind plus reason; gameplay
+  intents are flagged). `decision` is `null` when no workshop published, so
+  black, unknown or unreadable frames can never propose a gesture.
+- `<stem>.annotated.png` — the source frame with measured controls and read
+  facts drawn for lead review: order-strip bounds, per-card eligibility
+  color, READY markers, cell outlines with item names, the selection
+  highlight, and a summary text block.
+- `index.json` — the run manifest (report names, status, label verdicts).
+
+`tests/data/pet_workshop/analysis_labels.json` is the authored reviewed-
+label manifest: a subset match over each report's recognized facts and
+decision. `compare_labels` checks it and `--fail-on-mismatch` makes a run
+nonzero on any divergence; `tests/integration/vision/
+test_pet_workshop_analysis.py` replays the manifest and the milestone's
+required behaviors end to end. The promoted native fixtures
+(`pet_workshop_*_native_rgba.png` in `tests/data/screen_recognition/`)
+cover the reviewed Wood 10 + Fruit 5 + beast-lasso detail modal and the
+saved Tree 4 produce-and-merge sequence (selection abstention on the
+occluded frames, `SELECTED` 17 on the clean merged frame).
 
 ## Offline transition simulator
 

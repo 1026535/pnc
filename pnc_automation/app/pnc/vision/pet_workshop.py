@@ -241,11 +241,14 @@ _STRIP_REWARD_TEMPLATES = (
 # Order-detail icons at modal scale (~70 px requirement, ~44 px reward crops).
 _DETAIL_REQUIREMENT_TEMPLATES = (
     ("pet_workshop_od_req_fruit_4.png", 20104),
+    ("pet_workshop_od_req_fruit_5.png", 20105),
     ("pet_workshop_od_req_treasure_6.png", 10106),
+    ("pet_workshop_od_req_wood_10.png", 20210),
 )
 _DETAIL_REWARD_TEMPLATES = (
     ("pet_workshop_od_rew_feed.png", WorkshopOrderRewardCategory.FEED),
     ("pet_workshop_od_rew_exp.png", WorkshopOrderRewardCategory.WORKSHOP_EXP),
+    ("pet_workshop_od_rew_lasso.png", WorkshopOrderRewardCategory.BEAST_LASSO),
 )
 
 # The selection bracket's four orientations: the authored corner rotated.

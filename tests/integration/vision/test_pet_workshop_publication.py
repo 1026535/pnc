@@ -812,6 +812,38 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
             _elements(observation),
         )
 
+    def test_order_detail_native_rgba_publishes_lasso_recipe(self) -> None:
+        """The LV8 lasso order modal reads its Wood 10 + Fruit 5 recipe."""
+
+        observation, _, workshop = self._assert_both(
+            "pet_workshop_order_detail_lasso_native_rgba.png",
+            ScreenType.PNC_PET_WORKSHOP_ORDER_DETAIL,
+            _ORDER_DETAIL_LAYOUT_ID,
+            "pw05-order-detail-lasso",
+            native_mode=True,
+        )
+        state = workshop.state
+        self.assertEqual(WorkshopSurfaceKind.ORDER_DETAIL, state.surface)
+        self.assertIsNone(workshop.view.order_strip_bounds)
+        self.assertIsNotNone(workshop.view.close_control_bounds)
+        orders = state.order_survey.orders
+        self.assertEqual(1, len(orders))
+        order = orders[0]
+        self.assertEqual({20210: 1, 20105: 1}, order.requirements)
+        self.assertEqual(
+            (
+                WorkshopOrderRewardCategory.FEED,
+                WorkshopOrderRewardCategory.BEAST_LASSO,
+            ),
+            tuple(reward.category for reward in order.rewards),
+        )
+        self.assertEqual("order_detail", order.source)
+        self.assertIsNone(order.ready)
+        self.assertNotIn(
+            UiElementId.PNC_PET_WORKSHOP_NEXT_BOARD_BUTTON,
+            _elements(observation),
+        )
+
     def test_help_surface_publishes_close_control(self) -> None:
         """The Tip rules dialog reports the help surface and its close X."""
 

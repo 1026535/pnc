@@ -1,0 +1,141 @@
+{
+  "schema": "pet_workshop_analysis_labels/v1",
+  "version": 1,
+  "annotation": "Reviewed labels for tools/pet_workshop_analyze.py: expected recognized Workshop facts and planner decisions per fixture. Values were captured from the production recognizer and planner on the referenced native RGBA captures and reviewed against the frames. 'expected' is a subset of the report document; unlisted facts are unconstrained.",
+  "samples": [
+    {
+      "image": "pet_workshop_order_detail_lasso_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 order detail modal (strip order 3): Wood 10 + Fruit 5 recipe, feed + beast lasso rewards. The modal proves the recipe but admits no board actions; ready is not evaluated on this surface.",
+      "expected": {
+        "screen": {
+          "screen_type": "pnc_pet_workshop_order_detail",
+          "layout_id": "pet_workshop_order_detail",
+          "guard": "clear"
+        },
+        "workshop": {
+          "surface": "order_detail",
+          "energy": {"current": null, "capacity": null},
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20210": 1, "20105": 1},
+            "rewards": [
+              {"category": "feed"},
+              {"category": "beast_lasso"}
+            ],
+            "completeness": "complete",
+            "ready": null,
+            "source": "order_detail",
+            "assessment": {
+              "eligible": true,
+              "ineligible_reason": "",
+              "category": "beast_lasso",
+              "unresolved": false
+            }
+          }
+        },
+        "decision": {
+          "intent": {"kind": "stop", "stop_reason": "excluded_surface", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_selected_tree4_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 board right after the Tree 4 (cell 7) producer tap. The ready order card holds three Fruit 5 pieces; the clipped third card hides the Wood 10 recipe. Palm foliage chronically occludes cell 7's selection brackets, so selection must stay unknown (no per-instance corner template was authored).",
+      "expected": {
+        "screen": {"screen_type": "pnc_pet_workshop", "layout_id": "pet_workshop_board"},
+        "workshop": {
+          "surface": "board",
+          "workshop_level": 8,
+          "energy": {"current": 166, "capacity": 200},
+          "production_mode": "ordinary",
+          "selection": {"kind": "unknown", "cell_id": null},
+          "cells": {
+            "7": {"item_id": 20004, "occupancy": "occupied"},
+            "14": {"occupancy": "empty"},
+            "17": {"item_id": 20102, "occupancy": "occupied"}
+          }
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest"}],
+            "completeness": "complete",
+            "ready": true,
+            "source": "order_strip",
+            "assessment": {
+              "eligible": false,
+              "ineligible_reason": "piece total 3 != 2",
+              "unresolved": false
+            }
+          },
+          "3": {
+            "requirements": {"20210": 1},
+            "rewards": [{"category": "beast_lasso"}],
+            "completeness": "clipped",
+            "assessment": {"eligible": false, "unresolved": true}
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_produced_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 board after the Tree 4 produce tap: one energy spent (166 -> 165) and a new Fruit 2 dropped on cell 14. Selection stays unknown (brackets still occluded); the order strip is unchanged.",
+      "expected": {
+        "screen": {"screen_type": "pnc_pet_workshop"},
+        "workshop": {
+          "surface": "board",
+          "energy": {"current": 165, "capacity": 200},
+          "selection": {"kind": "unknown", "cell_id": null},
+          "cells": {
+            "7": {"item_id": 20004, "occupancy": "occupied"},
+            "14": {"item_id": 20102, "occupancy": "occupied"},
+            "17": {"item_id": 20102, "occupancy": "occupied"}
+          }
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "assessment": {"eligible": false, "ineligible_reason": "piece total 3 != 2"}
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_merged_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 board after the Fruit 2 merge swipe: cell 14's Fruit 2 merged into cell 17's pair leaving 14 empty and 17 holding Fruit 3, whose brackets measure cleanly so selection is recognized. Energy stays at 165 (merge is free).",
+      "expected": {
+        "screen": {"screen_type": "pnc_pet_workshop"},
+        "workshop": {
+          "surface": "board",
+          "energy": {"current": 165, "capacity": 200},
+          "selection": {"kind": "selected", "cell_id": 17},
+          "cells": {
+            "17": {"item_id": 20103, "occupancy": "occupied"},
+            "14": {"occupancy": "empty"}
+          }
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "assessment": {"eligible": false, "ineligible_reason": "piece total 3 != 2"}
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    }
+  ]
+}
