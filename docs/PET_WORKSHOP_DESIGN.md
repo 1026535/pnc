@@ -11,7 +11,7 @@ requirements and sequencing.
 | Catalog data + typed loader | `pnc_automation/app/pnc/pet_workshop_catalog.py` + `pnc_automation/app/pnc/data/pet_workshop/catalog.json` | Implemented (PW01 catalog slice, 2026-09-16) |
 | Shared state/view/intent models, policy + interface contracts | `pnc_automation/app/pnc/domain/pet_workshop.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
 | Observation integration (`ObservationAdditions.workshop`, both publishers) | `Observation`, `observation_builder.py`, `navigation_perception.py`, `observation_provenance.py` | Implemented (PW01 shared-state slice, 2026-09-16) |
-| Feature parser + measured controls | `pnc_automation/app/pnc/vision/pet_workshop.py` | Candidate under PW02 review (2026-09-17) |
+| Feature parser + measured controls | `pnc_automation/app/pnc/vision/pet_workshop.py` | Accepted for stated PW02 coverage (2026-09-21) |
 | Solver, policy, `plan_next`, `validate_intent` | `pnc_automation/app/automation/pet_workshop/` | Implemented (PW03/PW04 solver slice, 2026-09-16) |
 | Offline logical transition simulation | `pnc_automation/app/automation/pet_workshop/simulate.py` | Development/testing adapter; no live input |
 | Mutation authority, durable invocation journal, shared run-boundary/authority factories | `pnc_automation/app/pnc/domain/feature_actions.py`, `pnc_automation/app/automation/engine/core_daily_mutation.py` (Workshop scope), `pnc_automation/app/pnc/persistence/daily_run_journal_store.py` (schema v2), `pnc_automation/app/automation/daily_maintenance/invocation_factory.py`, `pnc_automation/app/automation/pet_workshop/authority.py` | Implemented (PW06 authority slice) |
@@ -350,6 +350,23 @@ outside tap.
 | Manor -> Workshop | `pet_workshop_manor` -> `pet_workshop_board` | `PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON` (measured building anchor) | frame 008 -> 009 | Qualified |
 | Workshop -> Manor | `pet_workshop_board` -> `pet_workshop_manor` | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 002 -> 003 | Qualified |
 | Manor -> Home | `pet_workshop_manor` -> home city | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 004 -> 005 | Qualified |
+
+### Final PW02 live proof (2026-09-21)
+
+Candidate `b405304` was independently reviewed on Main/Poney NPC C31.
+The native 900x1600 RGBA board at 17:52:31 UTC published equal full Workshop
+payloads through both production paths: LV7, EXP67, energy15/200, 63 measured
+cells. Eleven of 26 occupied cells had recognized identities; other identities,
+most action states and both visible orders remained unknown/unreadable.
+Rows are numbered bottom-up, matching the canonical catalog. This is partial
+recognition coverage, not qualification of unattended gameplay.
+
+One 234.6-second lease used ten non-spending navigation inputs and returned
+through measured Workshop→Manor→Home controls. Home→Manor succeeded with
+fresh-label exploratory setup; it does not qualify a canonical production
+edge. The lead restored Main's original role and verified release. Evidence:
+shared `.local-data/artifacts/2026-09-21/pet_workshop_pw02_board_scoped_b405304/`
+and the recognition checkout's `.local-data/review/pw02/review-live-turn009.md`.
 
 ### Evidence gaps
 

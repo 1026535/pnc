@@ -42,6 +42,18 @@ Recognized fixture manifest, measured-control/profile ownership, both-publisher 
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
 
+### Acceptance — 2026-09-21 UTC
+
+**Accepted for stated recognition/control coverage; landing in progress.** Final live candidate `b405304d92a1577472c88511d1679d8c717b1337` passed the lead's independent review after the complete correction cycle. Integrated `95e31da` is based on current main `f6fa298`; runtime, tests and packaged resources are byte-identical to the final offline/live candidate. Only documentation/plans changed during integration. Final full proof remains **2,833 passed / 7 unchanged environmental skips**, with source fingerprint `6fc1657581eafd52e08793b648c44cb2eca452ae059029cfaf5ae47a549e5e46` bound to `b405304`. No repeated full/live suite is justified by documentation-only integration.
+
+The separate Devin turn 009 ran one **234.6-second** Main/Poney NPC C31 lease (17:49:29.039–17:53:23.600 UTC), ten non-spending inputs and no launch/reconnect, castle switch, storage or raw Back. Actual candidate paths published equal complete typed payloads from native capture 33: **LV7, EXP67/90, energy15/200**, with frame/layout provenance. Lead visually verified the header and all eleven identified pieces using the canonical bottom-up row numbering. The earlier apparent row mismatch was a lead interpretation error. Measured Manor→Workshop and Workshop→Manor→Home controls passed; Main ended stable Home. Lead independently confirmed lease release and restored original read_only plus complete config hash.
+
+Acceptance does not promote unknowns to facts: only 11/26 occupied cells had known identities on this board; most item states and both visible orders remained unknown/unreadable. The parser safely abstained. Existing ready-three-coconut, clipped-card and missing-reward regressions remain part of the accepted saved-image proof. Home→Manor succeeded as exploratory fresh-label setup but still lacks a canonical measured source-control owner, so PW07 must not register that edge yet. Four-mechanic, recycle and consumption/level-result qualification remains with PW10. Prior unchanged item/order/help evidence remains reusable; storage stays excluded with a passive saved-frame guard.
+
+Evidence in the recognition checkout: `.local-data/review/pw02/{review-live-turn009.md,acceptance-proof.json,main-role-restore-scoped-board.json}`; `.local-data/devin-live-test/runs/pw02-main-20260921/turn-009/{handoff.md,evidence.json}`; complete artifact references in `live-scoped-board-b405304/evidence.json` and its canonical trace. Native board PNG: `.local-data/artifacts/2026-09-21/pet_workshop_pw02_board_scoped_b405304/20260921T175231Z_c3_board.png` under the shared root. Source-bound offline result: `.test-impact/pw02-storage-final-results.json` in the recognition checkout.
+
+PW05/PW07 may consume the immutable landed dependency once push is verified. The following dated records are historical and retain failure/authorization provenance.
+
 ### Current live continuation — 2026-09-21 UTC
 
 **Awaiting validation, not accepted or merged.** Candidate remains `b405304d92a1577472c88511d1679d8c717b1337`; the source-bound offline evidence is unchanged. Turn 007's ignored harness bypassed initial canonical popup recovery by supplying a raw observation. The lead corrected that call after reproducing the failure offline; normal recovery already worked. No production popup change was justified. Evidence: recognition checkout `.local-data/review/pw02/review-live-turn007.md`.
