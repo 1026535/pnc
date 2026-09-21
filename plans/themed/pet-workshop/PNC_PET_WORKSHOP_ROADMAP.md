@@ -130,6 +130,8 @@ For a blocked packet, record its exact missing dependency, interface or observat
 
 ## Validation and acceptance
 
+The Workshop run operates on the board; storage operations remain excluded. Recognizing an already-open storage overlay is a passive safeguard tested against saved captures, not a reason to open storage during live qualification. Historical live assignments that included intentional storage inspection were broader than needed. Applicable board, route and gameplay validation requirements remain in force.
+
 Use these statuses: **Planned**, **In progress**, **Offline ready**, **Accepted for stated coverage**, **Integrated**, or **Blocked: exact prerequisite**. They describe delivery evidence, not a claim that every underlying repository capability is new. Record partial recognition coverage explicitly; it does not waive PW10's full release requirements.
 
 - **Contract ready for handoff:** consumed interfaces and implementations are reviewed, checked and present in a recorded accepted dependency commit. Same-worker PW03/PW04 development may precede that external handoff; another worker cannot consume unreviewed shared code. No substitute runtime models or stubs.
