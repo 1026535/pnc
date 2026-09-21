@@ -35,3 +35,7 @@ Follow the [common validation and acceptance gates](../PNC_PET_WORKSHOP_ROADMAP.
 Portable labeled fixtures, offline analysis command, generated report locations and exact reviewed proposed actions. Lead acceptance is the first screenshot/proposal milestone and is mandatory before the lead invokes a production gameplay caller in PW10. PW06 and PW07 may finish their scoped offline work independently of this analysis-tool/report handoff.
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
+
+### Delegation — 2026-09-21 UTC
+
+**Delegated, offline only.** Recognition session `cedar-stealer`, turn 014, starts from accepted `1f14e06` in `pet-workshop-pw01`. Brief: `.local-data/devin-briefs/pw05-implementation.md`; run: `.local-data/devin-implement/pw01-platform-check`. Scope is this packet's real-parser/planner analysis tool, portable labels/fixtures, review images and behavioral checks. The lead reviews exact reports and three-coconut rejection. Shared policy/authority/workflow owners remain unchanged; any material shared-contract issue returns to the lead. No Main/ADB/lease access. Lead owns status records and acceptance.

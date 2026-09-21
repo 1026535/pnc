@@ -44,7 +44,7 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 
 ### Acceptance — 2026-09-21 UTC
 
-**Accepted for stated recognition/control coverage; landing in progress.** Final live candidate `b405304d92a1577472c88511d1679d8c717b1337` passed the lead's independent review after the complete correction cycle. Integrated `95e31da` is based on current main `f6fa298`; runtime, tests and packaged resources are byte-identical to the final offline/live candidate. Only documentation/plans changed during integration. Final full proof remains **2,833 passed / 7 unchanged environmental skips**, with source fingerprint `6fc1657581eafd52e08793b648c44cb2eca452ae059029cfaf5ae47a549e5e46` bound to `b405304`. No repeated full/live suite is justified by documentation-only integration.
+**Accepted for stated recognition/control coverage and merged/pushed at `1f14e061c61a808d063cf19231e82738c3dc0555`.** Final live candidate `b405304d92a1577472c88511d1679d8c717b1337` passed the lead's independent review after the complete correction cycle. Integrated `95e31da` is based on current main `f6fa298`; runtime, tests and packaged resources are byte-identical to the final offline/live candidate. Only documentation/plans changed during integration. Final full proof remains **2,833 passed / 7 unchanged environmental skips**, with source fingerprint `6fc1657581eafd52e08793b648c44cb2eca452ae059029cfaf5ae47a549e5e46` bound to `b405304`. No repeated full/live suite is justified by documentation-only integration.
 
 The separate Devin turn 009 ran one **234.6-second** Main/Poney NPC C31 lease (17:49:29.039–17:53:23.600 UTC), ten non-spending inputs and no launch/reconnect, castle switch, storage or raw Back. Actual candidate paths published equal complete typed payloads from native capture 33: **LV7, EXP67/90, energy15/200**, with frame/layout provenance. Lead visually verified the header and all eleven identified pieces using the canonical bottom-up row numbering. The earlier apparent row mismatch was a lead interpretation error. Measured Manor→Workshop and Workshop→Manor→Home controls passed; Main ended stable Home. Lead independently confirmed lease release and restored original read_only plus complete config hash.
 
@@ -52,7 +52,7 @@ Acceptance does not promote unknowns to facts: only 11/26 occupied cells had kno
 
 Evidence in the recognition checkout: `.local-data/review/pw02/{review-live-turn009.md,acceptance-proof.json,main-role-restore-scoped-board.json}`; `.local-data/devin-live-test/runs/pw02-main-20260921/turn-009/{handoff.md,evidence.json}`; complete artifact references in `live-scoped-board-b405304/evidence.json` and its canonical trace. Native board PNG: `.local-data/artifacts/2026-09-21/pet_workshop_pw02_board_scoped_b405304/20260921T175231Z_c3_board.png` under the shared root. Source-bound offline result: `.test-impact/pw02-storage-final-results.json` in the recognition checkout.
 
-PW05/PW07 may consume the immutable landed dependency once push is verified. The following dated records are historical and retain failure/authorization provenance.
+Push and shared-main fast-forward are verified. PW05/PW07 now consume immutable dependency `1f14e06` in separate offline assignments. The following dated records are historical and retain failure/authorization provenance.
 
 ### Current live continuation — 2026-09-21 UTC
 

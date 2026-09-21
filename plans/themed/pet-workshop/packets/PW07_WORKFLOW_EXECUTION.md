@@ -39,3 +39,7 @@ Follow the [common validation and acceptance gates](../PNC_PET_WORKSHOP_ROADMAP.
 Accepted action session, workflow factory/context/result and target-runner interfaces, registered route evidence, action/lifecycle tests and ownership notes. PW08 and PW09 receive the same immutable accepted implementation commit without waiting for PW05 reports or a live window. Neither adapter can enable gameplay ahead of the common live-use gates.
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
+
+### Delegation — 2026-09-21 UTC
+
+**Delegated, offline only.** Persistent authority session `fearless-sprite`, turn 005, starts from accepted `1f14e06` in `pet-workshop-authority`. Brief: `.local-data/devin-briefs/pw07-implementation.md`; run: `.local-data/devin-implement/pw06`. It owns the action/session/workflow/continuation package through the existing policy validator, boundary and journal. The canonical simulator may aid logical tests. PW05 proceeds independently; it remains a live-use gate. Home→Manor has no accepted measured production control, so the worker must preserve a truthful unavailable-entry disposition and must not register an inferred edge. No live/account/config access. Lead owns status, independent review and subsequent exact-candidate live assignment.
