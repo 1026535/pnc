@@ -1,6 +1,6 @@
 # Pet Workshop roadmap — separate delivery packets
 
-Updated: 2026-09-17. **4/10 packets accepted. PW01 is merged/pushed at 14b7d68; PW03/PW04 at 4f12095; PW06 at 4d39be4. PW02 remains with Devin and is the next dependency for PW05/PW07. Main evidence collection is complete; future live input awaits the configured-role decision.**
+Updated: 2026-09-21 UTC. **Workflow resumed by the user; 4/10 packets accepted. PW01 is merged/pushed at 14b7d68; PW03/PW04 at 4f12095; PW06 at 4d39be4. PW02 is fixing independent-review findings and still gates PW05/PW07. Simulator corrections run independently. Main is authorized for scoped development/live validation on eligible castles other than Hopeful NPC.**
 
 [Shared contract and recognition](PNC_PET_WORKSHOP_01_RECOGNITION_STATE_PLAN.md) · [Solver and policy](PNC_PET_WORKSHOP_02_SOLVER_POLICY_PLAN.md) · [Execution and integration](PNC_PET_WORKSHOP_03_EXECUTION_INTEGRATION_PLAN.md)
 
@@ -45,7 +45,7 @@ Status is maintained here. Keep detailed review findings, commands, supported co
 | Packet | Former ID | Offline implementation dependency | Status | Accepted base / result and remaining condition |
 | --- | --- | --- | --- | --- |
 | [PW01 — Shared contract and catalog](packets/PW01_SHARED_CONTRACT_CATALOG.md) | C0 | Current accepted repository base | Merged/pushed | Accepted implementation `14b7d68`; 2,574 passed / 7 environmental skips, all 78 Workshop tests passed, portable installed-package proof passed. No live effect. |
-| [PW02 — Recognition and controls](packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Delegated | Resumed `cedar-stealer` turn 009 after the user-confirmed Windows Update interruption, preserving measurements and fixture candidates on base `4f1e119`. Native readiness confirmed; implementation remains offline. |
+| [PW02 — Recognition and controls](packets/PW02_RECOGNITION_CONTROLS.md) | R1 | PW01 | Fixing findings | Candidate `0219d42` rebased on current main `147d77a`; `cedar-stealer` turn 010 addresses review batch R1–R5. Three-coconut undercount and chest 1→91 reproduced independently. Final offline evidence, correction review and applicable candidate live proof remain required. |
 | [PW03 — Effort, reservations and policy](packets/PW03_EFFORT_RESERVATIONS_POLICY.md) | S1 | PW01 | Merged/pushed | Accepted at `4f12095`, with identical production/test content to final-tested `dc810c8`. Independent lead review and corrections complete; 2,741 passed / 7 environmental skips, no failures or errors. No live effect in this pure package. |
 | [PW04 — One-step solver](packets/PW04_ONE_STEP_SOLVER.md) | S2 | PW03 policy implementation | Merged/pushed | Accepted with PW03 at `4f12095`; all 166 focused tests included in final full proof. Canonical revalidation covers proposed mutations and current-goal production. PW05/PW07 still need accepted PW02. |
 | [PW05 — Screenshot/proposal milestone](packets/PW05_SCREENSHOT_PROPOSAL_MILESTONE.md) | R2 | PW02 + PW04 | Planned | Lead must review actual labels and decisions, including three-coconut rejection. |
@@ -145,3 +145,13 @@ PW02 supplies the reviewed evidence for source controls and destination identiti
 ## Completion
 
 Completion requires all ten packet dispositions to be supported by their actual evidence and the [Plan 03 definition of done](PNC_PET_WORKSHOP_03_EXECUTION_INTEGRATION_PLAN.md#6-tests-and-completion). Report remaining conditions and source-control state accurately. A missing required live state remains pending; do not silently reduce the agreed four-mechanic scope or treat positive-energy blockage as observed zero.
+
+### Workflow resume and simulator — 2026-09-21 UTC
+
+The user explicitly resumed the queue after developing an offline Workshop simulator and renewed Main access for development/live testing, excluding **Hopeful NPC**. This supersedes the pause and earlier Main-release timing. It authorizes the Main live phase and its necessary temporary canonical role configuration: Main is currently saved as `read_only`; immediately before a leased phase, the lead changes only its role to `live_testing` and restores its original role after cleanup. Never bypass roles in memory, preempt another lease, or leave elevated configuration behind. Prefer the active C24+ non-Hopeful castle; authorized configured switching is available when necessary. Exact action/target/budget and candidate revision still belong in each bounded live assignment. Earlier unlimited Workshop-energy exploration permission does not authorize purchases, refill, premium fusion or unrelated resource use.
+
+The shared checkout now matches fetched `origin/main` at `147d77a`; the coordinator was fast-forwarded and PW02 rebased cleanly onto it. The unrelated root `nul`, PW02 `nul` and PW02 generated egg-info remain untouched. The preceding PW02 worker saved an implementation but was never accepted; the screenshot showing four accepted packets remains accurate.
+
+Independent review found five correction groups recorded under PW02. Native session `cedar-stealer` resumed as turn 010 on `0219d42`; this coding phase remains offline. Separately, simulator session `mixed-cheque` is implementing the three reproduced simulator findings on `codex/pet-workshop-sim` at `90c4fdb` plus its pending fixes. Its original suite contained 18 simulator tests; the lead's focused run passed all 184 Workshop tests but independently exposed stale order readiness, stale producer counters after cell reuse and non-accumulating initial cooldown waits. Simulator code is not yet accepted. Supply the accepted canonical simulator revision to later development consumers; do not copy dirty implementations or treat simulated states as pixel/live evidence.
+
+The existing native completion callback and single Python monitor now cover both active workers. Monitor directory: `C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-sim/.local-data/devin-monitor-review-fixes`; heartbeat remains `devin-cache-keepalive-2`. Continue independent correction review, required validation and integration when each worker returns, then dispatch PW05/PW07 only when their real dependencies are accepted.
