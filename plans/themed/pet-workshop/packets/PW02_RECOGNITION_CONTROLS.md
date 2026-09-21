@@ -42,6 +42,14 @@ Recognized fixture manifest, measured-control/profile ownership, both-publisher 
 
 Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-and-lead-review). Keep detailed acceptance evidence with this packet and its summary status in the roadmap.
 
+### Current correction disposition — 2026-09-21
+
+**Offline ready, awaiting final board validation; not accepted or merged.** Candidate `b405304d92a1577472c88511d1679d8c717b1337` includes fetched main `68cb935`. Lead reviewed cedar-stealer turn 013's actual changes and found no blocking code defects. The canonical storage profile now recognizes both saved drawer placements, and the header parser leaves both energy fields unknown for an invalid OCR denominator while preserving `0/200` and `240/200`. Storage operations remain excluded; the user's clarification above governs acceptance.
+
+The lead independently verified the full-suite evidence against HEAD and source fingerprint `6fc1657581eafd52e08793b648c44cb2eca452ae059029cfaf5ae47a549e5e46`: **2,833 passed, 7 unchanged environmental skips**, all 334 modules, no failures/errors. Five additional lead checks passed, covering the two drawer fixtures, invalid/zero/over-capacity energy, real header OCR and native RGBA board publication. The new tracked fixture is byte-identical to the original crashing capture. Evidence is in the implementation checkout's `.test-impact/pw02-storage-final-{selection,results}.json` and `.local-data/review/pw02/{review-turn013.md,lead-turn013-regressions.log}`.
+
+The remaining final-candidate live boundary is board classification/header and same-capture publication, followed by supported return. Prior unchanged dialog/route evidence remains reusable; do not repeat storage, detail/help or strip exercises for this correction. Global-milk's next package is **offline preparation only** of one five-minute phase with one lease and a single deadline. The lead must review that harness before arranging another short Main window. Main is released/read_only, and no reconnect is currently authorized. PW05/PW07 remain dependent on accepted PW02.
+
 
 ### Execution record — 2026-09-16
 
