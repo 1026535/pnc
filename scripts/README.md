@@ -68,6 +68,25 @@ steps:
 
 This expands during script preparation into ordinary single-target prepared steps. Runtime tasks still execute against one concrete castle at a time.
 
+## Campaign battle modes
+
+The `campaign` task accepts an optional `battle_mode` selecting one shared
+match-3 battle policy: `solver`, `daily_exit`, or `game_auto`. The Python API
+exposes the same choice as `campaign(battle_mode=...)`. Shared Arena and Lost
+Land contexts exist in the typed contract but have no feature adapter yet.
+
+M0 ships no battle policy: every explicit battle mode fails closed with a typed
+`not_implemented` unavailability error before any emulator connection. Omit
+`battle_mode` to keep the existing battle-preparation-only behavior.
+
+```yaml
+steps:
+  - task: campaign
+    params:
+      enabled_modes: [standard]
+      battle_mode: solver
+```
+
 ## Nightly Daily Maintenance
 
 NPC 2 (`mega_old_acc/npc_2`, K157) and free cookies

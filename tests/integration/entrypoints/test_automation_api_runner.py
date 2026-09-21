@@ -192,3 +192,57 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
                 )
             ],
         )
+
+    def test_python_campaign_forwards_explicit_battle_mode(self) -> None:
+        """Propagates the selected shared match-3 mode into the typed task request."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        api.campaign(account_id="account_a", battle_mode="solver")
+
+        self.assertEqual(
+            fake_runner.task_calls,
+            [
+                (
+                    TaskId.CAMPAIGN,
+                    "account_a",
+                    {"enabled_modes": ["standard"], "battle_mode": "solver"},
+                )
+            ],
+        )
+
+    def test_python_campaign_omits_battle_mode_when_unset(self) -> None:
+        """Preserves the existing campaign parameter surface when no battle mode is selected."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        api.campaign(account_id="account_a")
+
+        self.assertEqual(
+            fake_runner.task_calls,
+            [
+                (TaskId.CAMPAIGN, "account_a", {"enabled_modes": ["standard"]}),
+            ],
+        )
+
+    def test_python_session_campaign_forwards_battle_mode(self) -> None:
+        """The prepared-session campaign wrapper forwards the same explicit mode."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.use_account("account_a") as session:
+            session.campaign(battle_mode="daily_exit")
+
+        self.assertEqual(
+            fake_runner.task_calls,
+            [
+                (
+                    TaskId.CAMPAIGN,
+                    "account_a",
+                    {"enabled_modes": ["standard"], "battle_mode": "daily_exit"},
+                )
+            ],
+        )

@@ -16,9 +16,19 @@ from pnc_automation.app.automation.engine.observed_action_executor import Observ
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.runner import AutomationRunner, CoreStepExecutor, RunResult, StepRunResult
 from pnc_automation.app.authoring.scripts.loader import load_run_script
-from pnc_automation.app.authoring.scripts.models import PreparedScriptStep, RunScript, ScriptStep
+from pnc_automation.app.authoring.scripts.models import (
+    PreparedRunScript,
+    PreparedScriptStep,
+    RunScript,
+    ScriptStep,
+)
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.automation.engine.task import CoreWorkflowTaskDefinition, TaskId, TaskStatus
+from pnc_automation.app.automation.match3.component import (
+    Match3Component,
+    UnavailableMatch3Component,
+)
+from pnc_automation.app.automation.engine.match3_preflight import require_match3_task_available
 from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.authoring.mail.loader import (
@@ -158,6 +168,7 @@ class ScriptRunner:
         repr=False,
     )
     instance_closer: BlueStacksInstanceCloser | None = field(default=None, repr=False)
+    match3_component: Match3Component = field(default_factory=UnavailableMatch3Component, repr=False)
 
     def reserve_accounts(
         self,
@@ -238,6 +249,7 @@ class ScriptRunner:
             castle_targets=self.config.find_castle_targets(account.id),
             castle_refs=castle_refs,
         )
+        self._require_match3_availability(prepared_script)
         core_steps = tuple(
             step
             for step in prepared_script.steps
@@ -288,6 +300,17 @@ class ScriptRunner:
             raise
         runner.close()
         return result
+
+    def _require_match3_availability(self, prepared_script: PreparedRunScript) -> None:
+        """Rejects explicit match-3 battle requests before any connected session is built."""
+
+        for prepared_step in prepared_script.steps:
+            require_match3_task_available(
+                self.match3_component,
+                prepared_step.parsed_params,
+                task=prepared_step.task.value,
+                script=prepared_script.name,
+            )
 
     def _validate_core_script_dependencies(
         self,
@@ -603,6 +626,7 @@ class ScriptRunner:
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
                 close_callback=connected_runtime.close,
                 core_step_executor=core_step_executor,
+                match3_component=self.match3_component,
             )
         except BaseException as error:
             close_preserving_error(

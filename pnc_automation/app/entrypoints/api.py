@@ -248,10 +248,19 @@ class AutomationSession:
             max_parallel_marches=max_parallel_marches,
         )
 
-    def campaign(self, *, enabled_modes: list[str] | None = None) -> StepRunResult:
+    def campaign(
+        self,
+        *,
+        enabled_modes: list[str] | None = None,
+        battle_mode: str | None = None,
+    ) -> StepRunResult:
         """Runs one direct campaign step against the prepared session."""
 
-        return self.api.campaign(account_id=self.account_id, enabled_modes=enabled_modes)
+        return self.api.campaign(
+            account_id=self.account_id,
+            enabled_modes=enabled_modes,
+            battle_mode=battle_mode,
+        )
 
     def send_alliance_chat_message(self, *, message: str) -> StepRunResult:
         """Runs one direct alliance-chat step against the prepared session."""
@@ -539,13 +548,24 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         enabled_modes: list[str] | None = None,
+        battle_mode: str | None = None,
     ) -> StepRunResult:
-        """Runs one direct campaign step using current-castle semantics."""
+        """Runs one direct campaign step using current-castle semantics.
 
+        ``battle_mode`` selects an explicit shared match-3 battle mode
+        (``solver``, ``daily_exit`` or ``game_auto``); omitting it keeps the
+        existing preparation-only behavior.
+        """
+
+        params: dict[str, Any] = {
+            "enabled_modes": ["standard"] if enabled_modes is None else list(enabled_modes),
+        }
+        if battle_mode is not None:
+            params["battle_mode"] = battle_mode
         return self.run_task(
             account_id=self._resolve_account_id(account_id),
             task_id=TaskId.CAMPAIGN,
-            params={"enabled_modes": ["standard"] if enabled_modes is None else list(enabled_modes)},
+            params=params,
         )
 
     def send_alliance_chat_message(
@@ -924,10 +944,19 @@ def gathering(
     )
 
 
-def campaign(*, account_id: str | None = None, enabled_modes: list[str] | None = None) -> StepRunResult:
+def campaign(
+    *,
+    account_id: str | None = None,
+    enabled_modes: list[str] | None = None,
+    battle_mode: str | None = None,
+) -> StepRunResult:
     """Runs one direct campaign step through the default application facade."""
 
-    return _default_api().campaign(account_id=account_id, enabled_modes=enabled_modes)
+    return _default_api().campaign(
+        account_id=account_id,
+        enabled_modes=enabled_modes,
+        battle_mode=battle_mode,
+    )
 
 
 def send_alliance_chat_message(*, account_id: str | None = None, message: str) -> StepRunResult:

@@ -18,6 +18,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
 from pnc_automation.app.pnc.domain.campaign import CampaignMode
 from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId
+from pnc_automation.app.pnc.domain.match3 import Match3Mode
 
 TEnum = TypeVar("TEnum", bound=StrEnum)
 
@@ -251,17 +252,28 @@ class CampaignPolicy:
     """Task parameters for campaign automation."""
 
     enabled_modes: tuple[CampaignMode, ...] = (CampaignMode.STANDARD,)
+    battle_mode: Match3Mode | None = None
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any]) -> "CampaignPolicy":
-        """Builds a typed policy from raw script params."""
+        """Builds a typed policy from raw script params and rejects unknown keys."""
 
+        unexpected = set(params) - {"enabled_modes", "battle_mode"}
+        if unexpected:
+            field = sorted(unexpected)[0]
+            raise ScriptValidationError(f"Unexpected campaign parameter '{field}'.", field=field)
+        battle_mode = params.get("battle_mode")
         return cls(
             enabled_modes=_parse_enum_list(
                 params.get("enabled_modes", [member.value for member in cls().enabled_modes]),
                 enum_type=CampaignMode,
                 field_name="enabled_modes",
-            )
+            ),
+            battle_mode=(
+                _parse_enum_value(battle_mode, enum_type=Match3Mode, field_name="battle_mode")
+                if "battle_mode" in params
+                else None
+            ),
         )
 
 

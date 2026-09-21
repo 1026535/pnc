@@ -47,6 +47,7 @@ from pnc_automation.app.automation.engine.task import (
     TaskStatus,
     require_no_params,
 )
+from pnc_automation.app.automation.match3 import UnavailableMatch3Component
 from pnc_automation.app.authoring.config.models import AccountConfig, DefaultsConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import (
     PreparedRunScript,
@@ -1844,6 +1845,7 @@ def _minimal_script_runner(
     runner.castle_roster_store = castle_roster_store
     runner.mail_archive_store = mail_archive_store
     runner.chat_archive_store = archive_store
+    runner.match3_component = UnavailableMatch3Component()
     return runner
 
 

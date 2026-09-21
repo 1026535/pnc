@@ -21,6 +21,11 @@ from pnc_automation.app.automation.engine.task import (
 )
 from pnc_automation.app.automation.engine.task_executor import TaskExecutionResult, TaskExecutor
 from pnc_automation.app.automation.engine.task_context import TaskContext
+from pnc_automation.app.automation.match3.component import (
+    Match3Component,
+    UnavailableMatch3Component,
+)
+from pnc_automation.app.automation.engine.match3_preflight import require_match3_task_available
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
@@ -106,6 +111,7 @@ class AutomationRunner:
     policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
     close_callback: Callable[[], None] | None = field(default=None, repr=False)
     core_step_executor: CoreStepExecutor | None = field(default=None, repr=False)
+    match3_component: Match3Component = field(default_factory=UnavailableMatch3Component, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
     def close(self) -> None:
@@ -257,6 +263,7 @@ class AutomationRunner:
         """Executes one script step until it succeeds or fails."""
 
         task = self.task_registry.require(step.task)
+        require_match3_task_available(self.match3_component, step.parsed_params, task=step.task.value)
         building_core_requested = (
             step.task in {TaskId.BUILDING_CONSTRUCT, TaskId.BUILDING_UPGRADE}
             and (

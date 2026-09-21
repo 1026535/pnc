@@ -1,6 +1,6 @@
 # Match-3 epic — shared component, solver and battle modes
 
-**Status:** delivery plan consolidated into M0–M4, 2026-09-21; this revision does not claim new implementation or live qualification. **Repository base:** `68cb9351c141b9467e3f2a6a54018b38df201d4c`. This plan is the canonical delivery owner for the shared API, pure solver and battle execution. The [solver design reference](PNC_MATCH3_BATTLE_SOLVER_PLAN.md) retains algorithm boundaries and rule evidence, with no separate S-series delivery track. The [battle behavior note](../../../docs/game-reference/workflows/match3-battles.md) records versioned evidence and unknowns.
+**Status:** M0 implemented and reviewed, 2026-09-22. M1–M4 and live qualification remain pending. **Repository base:** `68cb9351c141b9467e3f2a6a54018b38df201d4c`. This plan is the canonical delivery owner for the shared API, pure solver and battle execution. The [solver design reference](PNC_MATCH3_BATTLE_SOLVER_PLAN.md) retains algorithm boundaries and rule evidence, with no separate S-series delivery track. The [battle behavior note](../../../docs/game-reference/workflows/match3-battles.md) records versioned evidence and unknowns.
 
 ## Outcome and delivery boundary
 
@@ -76,6 +76,10 @@ Availability preflight needs only context/mode, not a selected stage or connecte
 Use one shared production API with a real unavailable implementation. Test substitution belongs at its declared interface using the real typed request/result models, not copied V-local enums or production dummy solver loops. An in-test available implementation can record an execution call; no runtime flag may force unfinished production modes available.
 
 **M0 done:** tests prove all three mode values and contexts survive validation, invalid values fail, availability is honest, and real unavailable requests cannot connect, navigate, spend, retry or report success. Existing preparation-only behavior remains intact. Publish the contract revision so V adapters and pure solver work can proceed independently. No battle observations, spending integration, solver algorithm, exit automation or Auto waiting are required.
+
+**M0 implementation checkpoint:** canonical types are in `pnc_automation/app/pnc/domain/match3.py`; the API and unavailable implementation are in `pnc_automation/app/automation/match3/`. `Match3Target` retains existing Campaign facts, `ScreenDecision`, `DetectedListEntry` and source `FrameRef`, validating supplied provenance without claiming runtime readiness. Campaign's direct/authored parser preserves the explicit mode and rejects invalid/unknown inputs. The engine checks component availability and its own execution binding before connection or feature actions: an available component alone cannot make legacy preparation satisfy a battle request. Package 04 replaces the binding refusal when it composes the V14 adapter. The V coordinator confirmed this reference shape meets the V14/V30 caller amendment; their adapter execution tests remain separately owned and pending.
+
+Validation: 104 focused contract/caller tests and 22 architecture tests passed. The final portable run on `8207d06` passed 2,865 tests with seven skips across all 337 portable modules; evidence is `.test-impact/m0-integration-full-results.json` in the implementation worktree. An earlier full run had one mail archive concurrency failure; that test passed in this final run without persistence changes. After reconciling newer main's popup changes and consolidated plan, all 121 selected contract/caller/popup tests passed. No live action or resource spend was needed for M0.
 
 ## V13/V14/V30 handoff acceptance — depends only on M0
 

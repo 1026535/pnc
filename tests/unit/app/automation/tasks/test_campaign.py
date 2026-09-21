@@ -12,6 +12,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     build_home_city_object_metadata,
 )
 from pnc_automation.app.pnc.domain.campaign import CampaignMode, CampaignNodeFacts
+from pnc_automation.app.pnc.domain.match3 import Match3Mode
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedListEntry,
@@ -22,6 +23,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.errors import ScriptValidationError
 
 from tests.support.pnc.observations import make_observation
 from tests.support.pnc.spatial import make_spatial_object, make_spatial_surface
@@ -208,3 +210,34 @@ class CampaignTests(FlowAndTaskFixtures, unittest.TestCase):
         )
 
         self.assertEqual(result.status, TaskStatus.SUCCESS)
+
+    def test_campaign_policy_parses_battle_mode_independently_of_difficulty(self) -> None:
+        """battle_mode selects one shared match-3 mode without changing enabled_modes."""
+
+        policy = CampaignTask().parse_params(
+            {"enabled_modes": ["elite"], "battle_mode": "game_auto"}
+        )
+
+        self.assertEqual(policy.enabled_modes, (CampaignMode.ELITE,))
+        self.assertEqual(policy.battle_mode, Match3Mode.GAME_AUTO)
+
+    def test_campaign_policy_keeps_battle_mode_unset_by_default(self) -> None:
+        """Omission preserves the existing preparation-only campaign behavior."""
+
+        policy = CampaignTask().parse_params({"enabled_modes": ["standard"]})
+
+        self.assertIsNone(policy.battle_mode)
+
+    def test_campaign_policy_rejects_invalid_battle_mode_values(self) -> None:
+        """Misspelled, non-string or container battle modes fail validation."""
+
+        for invalid in ("auto", "solve", "", 3, ["solver"], True):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ScriptValidationError):
+                    CampaignTask().parse_params({"battle_mode": invalid})
+
+    def test_campaign_policy_rejects_unknown_parameters(self) -> None:
+        """Unknown campaign keys fail instead of silently dropping battle-mode typos."""
+
+        with self.assertRaisesRegex(ScriptValidationError, "battle_modes"):
+            CampaignTask().parse_params({"battle_modes": ["solver"]})
