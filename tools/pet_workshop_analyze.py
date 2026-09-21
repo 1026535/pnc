@@ -607,7 +607,8 @@ def _reject_stem_collisions(inputs: Sequence[AnalysisInput]) -> None:
 
     stems: dict[str, list[Path]] = {}
     for analysis_input in inputs:
-        stems.setdefault(analysis_input.path.stem, []).append(analysis_input.path)
+        # Reports must remain distinct on the supported Windows filesystem.
+        stems.setdefault(analysis_input.path.stem.casefold(), []).append(analysis_input.path)
     duplicates = {stem: paths for stem, paths in stems.items() if len(paths) > 1}
     if duplicates:
         details = "; ".join(

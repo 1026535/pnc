@@ -298,12 +298,19 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
     def test_duplicate_output_stems_are_rejected(self) -> None:
         """Two valid inputs sharing a basename fail before any report write."""
 
+        for second_name in ("screen.png", "SCREEN.png"):
+            with self.subTest(second_name=second_name):
+                self._assert_colliding_inputs_rejected(second_name)
+
+    def _assert_colliding_inputs_rejected(self, second_name: str) -> None:
+        """Checks the real CLI boundary, including Windows case collisions."""
+
         with tempfile.TemporaryDirectory() as tmp:
             paths = []
-            for dirname in ("dir_a", "dir_b"):
+            for dirname, filename in (("dir_a", "screen.png"), ("dir_b", second_name)):
                 directory = Path(tmp) / dirname
                 directory.mkdir()
-                image_path = directory / "screen.png"
+                image_path = directory / filename
                 Image.new("RGB", (32, 32)).save(image_path)
                 paths.append(image_path)
             out_dir = Path(tmp) / "out"
