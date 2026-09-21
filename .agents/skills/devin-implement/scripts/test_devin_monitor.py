@@ -1,6 +1,7 @@
 """Exercise timer lifecycle and anomaly detection without model or app requests."""
 
 import asyncio
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -33,6 +34,22 @@ class MonitorTests(unittest.TestCase):
                  "fingerprint": [1, 10, 20, 0], "in_flight": False}
         value.update(kwargs)
         return value
+
+    def terminal_worker(self, turn=1, status="incomplete"):
+        """Create a delivered result with no lead follow-up, matching the observed gap."""
+        run = self.root / "worker"
+        turn_dir = run / f"turn-{turn:03d}"
+        turn_dir.mkdir(parents=True, exist_ok=True)
+        result = {"run_dir": str(run), "turn_dir": str(turn_dir), "turn": turn,
+                  "status": status, "writers_stopped": True}
+        monitor.write_json(run / "state.json", result)
+        monitor.write_json(turn_dir / "result.json", result)
+        monitor.write_json(turn_dir / "notification.json", {"status": "delivered", "at": 0})
+        registrations = self.root / "runs"
+        registrations.mkdir(exist_ok=True)
+        key = hashlib.sha256(str(run).lower().encode()).hexdigest()
+        monitor.write_json(registrations / (key + ".json"), {"run_dir": str(run)})
+        return run, turn_dir
 
     def test_identity_and_incremental_partial_lines(self):
         self.assertEqual(monitor.rollout_path("lead", self.rollout), self.rollout)
@@ -117,8 +134,91 @@ class MonitorTests(unittest.TestCase):
                 patch.object(monitor, "checked_delivery", return_value={"status": "delivered", "at": 900}) as delivery:
             state = {}
             monitor.health_check(self.root, self.config, state, 900)
+            monitor.write_json(self.root / "lead-resolution.json", {
+                "run_dir": "worker", "turn": 1, "resolution": "Reviewed; waiting on named evidence.",
+            })
             monitor.health_check(self.root, self.config, state, 1800)
             delivery.assert_called_once()
+
+    def test_delivered_empty_completion_reminds_once_across_monitor_restart(self):
+        run, turn_dir = self.terminal_worker()
+        with patch.object(monitor, "send_notification", AsyncMock()) as send:
+            monitor.health_check(self.root, self.config, {}, 900)
+            # A fresh monitor state must not repeat the persisted reminder.
+            monitor.health_check(self.root, self.config, {}, 1800)
+        send.assert_called_once()
+        self.assertIn(str(run), send.call_args.args[1])
+        self.assertEqual(monitor.read_json(turn_dir / "lead-followup.json")["status"], "delivered")
+        self.assertFalse((turn_dir / "lead-resolution.json").exists())
+        self.assertEqual(monitor.read_json(run / "state.json")["status"], "incomplete")
+
+    def test_followup_grace_and_active_review_remain_quiet(self):
+        self.terminal_worker()
+        with patch.object(monitor, "send_notification", AsyncMock()) as send:
+            state = {}
+            monitor.health_check(self.root, self.config, state, 899)
+            state["active_turn"] = "review"
+            monitor.health_check(self.root, self.config, state, 7200)
+            send.assert_not_called()
+            state["active_turn"] = None
+            monitor.health_check(self.root, self.config, state, 8100)
+            send.assert_called_once()
+
+    def test_resolution_closes_only_exact_turn_and_cli_requires_registration(self):
+        run, turn_dir = self.terminal_worker()
+        monitor.main(["resolve", "--monitor-dir", str(self.root), "--run-dir", str(run),
+                      "--turn", "1", "--resolution", "Reviewed; launched correction turn 2."])
+        self.assertEqual(monitor.read_json(turn_dir / "lead-resolution.json")["turn"], 1)
+        with patch.object(monitor, "send_notification", AsyncMock()) as send:
+            monitor.health_check(self.root, self.config, {}, 900)
+            send.assert_not_called()
+            self.terminal_worker(turn=2)
+            monitor.health_check(self.root, self.config, {}, 1800)
+            send.assert_called_once()
+        for path in (self.root / "runs").glob("*.json"):
+            path.unlink()
+        with self.assertRaisesRegex(ValueError, "registered"):
+            monitor.main(["resolve", "--monitor-dir", str(self.root), "--run-dir", str(run),
+                          "--turn", "2", "--resolution", "Blocked on evidence."])
+
+    def test_resolution_rejects_active_mismatched_and_unreleased_turns(self):
+        run, turn_dir = self.terminal_worker()
+        baseline = monitor.read_json(turn_dir / "result.json")
+        for change in ({"status": "running"}, {"writers_stopped": False},
+                       {"run_dir": str(self.root / "other")}, {"turn": 2}):
+            with self.subTest(change=change):
+                monitor.write_json(turn_dir / "result.json", {**baseline, **change})
+                with self.assertRaises(ValueError):
+                    monitor.resolve_completion(run, 1, "Reviewed.")
+        monitor.write_json(turn_dir / "result.json", baseline)
+        with self.assertRaises(ValueError):
+            monitor.resolve_completion(run, 1, " ")
+        self.assertFalse((turn_dir / "lead-resolution.json").exists())
+
+    def test_wrong_turn_resolution_cannot_hide_unhandled_completion(self):
+        run, turn_dir = self.terminal_worker()
+        monitor.write_json(turn_dir / "lead-resolution.json", {
+            "run_dir": str(run), "turn": 2, "resolution": "Reviewed another turn.",
+        })
+        with patch.object(monitor, "send_notification", AsyncMock()) as send:
+            monitor.health_check(self.root, self.config, {}, 900)
+            send.assert_called_once()
+
+    def test_followup_definite_failure_retries_but_uncertainty_does_not(self):
+        _, turn_dir = self.terminal_worker()
+        with patch.object(monitor.time, "time", return_value=900), \
+                patch.object(monitor, "send_notification", AsyncMock(
+                    side_effect=monitor.AppToolError("not submitted", uncertain=False))) as send:
+            monitor.health_check(self.root, self.config, {}, 900)
+            monitor.health_check(self.root, self.config, {}, 1799)
+            send.assert_called_once()
+        with patch.object(monitor.time, "time", return_value=1800), \
+                patch.object(monitor, "send_notification", AsyncMock(
+                    side_effect=monitor.AppToolError("acknowledgement lost", uncertain=True))) as send:
+            monitor.health_check(self.root, self.config, {}, 1800)
+            monitor.health_check(self.root, self.config, {}, 3600)
+            send.assert_called_once()
+        self.assertTrue(monitor.read_json(turn_dir / "lead-followup.json")["uncertain"])
 
     def test_stop_during_rearm_wins(self):
         async def update(config, status, error_path):
@@ -150,6 +250,14 @@ class MonitorTests(unittest.TestCase):
         monitor.write_json(self.root / "state.json", {"status": "stopped", "offset": self.rollout.stat().st_size,
                            "active_turn": None, "rearm_pending": False})
         self.test_stop_during_rearm_wins()
+
+    def test_restart_acknowledges_timer_while_lead_installs_monitor(self):
+        monitor.write_json(self.root / "state.json", {
+            "status": "stopped", "offset": self.rollout.stat().st_size,
+            "active_turn": "installing-update", "rearm_pending": False,
+        })
+        self.test_stop_during_rearm_wins()
+        self.assertEqual(monitor.read_json(self.root / "state.json")["active_turn"], "installing-update")
 
     def test_snapshot_tolerates_partial_tool_record(self):
         turn = self.root / "turn"
