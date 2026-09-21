@@ -43,6 +43,58 @@ def process_running(pid):
         api.CloseHandle(handle)
 
 
+class CatalogTests(unittest.TestCase):
+    """Bound catalog retries without network access or model inference."""
+
+    def transport_error(self):
+        """Reproduce the CLI's observed preflight connection diagnostic."""
+        return subprocess.CalledProcessError(1, ["devin", "models", "list"], stderr=(
+            "Error: Connection failed: Connect HTTP error: HTTP error: error sending request for url "
+            "(https://server.codeium.com/exa.api_server_pb.ApiServerService/GetCliModelConfigs)\n"
+        ))
+
+    def test_connection_failure_can_succeed_on_third_attempt(self):
+        catalog = {"families": [{"variants": [{"model_uid": worker.MODEL}]}]}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(subprocess, "check_output", side_effect=[
+                 self.transport_error(), self.transport_error(), json.dumps(catalog),
+             ]) as request, patch.object(worker.time, "sleep") as sleep:
+            self.assertEqual(worker.model_catalog("devin", Path(directory)), catalog)
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
+            self.assertEqual(len(list(Path(directory).glob("catalog-*.stderr.log"))), 2)
+
+    def test_connection_failures_stop_after_three_attempts(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(subprocess, "check_output", side_effect=self.transport_error()) as request, \
+             patch.object(worker.time, "sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "after 3 attempt"):
+                worker.model_catalog("devin", Path(directory))
+            self.assertEqual(request.call_count, 3)
+            self.assertEqual(sleep.call_count, 2)
+            self.assertIn("GetCliModelConfigs", (Path(directory) / "catalog-attempt-3.stderr.log").read_text())
+
+    def test_non_transport_rejection_is_not_retried(self):
+        for diagnostic in ("Error: Not authorized (401)", "Error: permission_denied", "Error: quota exceeded (429)"):
+            with self.subTest(diagnostic=diagnostic), tempfile.TemporaryDirectory() as directory, \
+                 patch.object(subprocess, "check_output", side_effect=subprocess.CalledProcessError(
+                     1, ["devin"], stderr=diagnostic,
+                 )) as request, patch.object(worker.time, "sleep") as sleep:
+                with self.assertRaisesRegex(RuntimeError, "after 1 attempt"):
+                    worker.model_catalog("devin", Path(directory))
+                self.assertEqual(request.call_count, 1)
+                sleep.assert_not_called()
+
+    def test_invalid_catalog_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(subprocess, "check_output", return_value="invalid JSON") as request, \
+             patch.object(worker.time, "sleep") as sleep:
+            with self.assertRaises(json.JSONDecodeError):
+                worker.model_catalog("devin", Path(directory))
+            self.assertEqual(request.call_count, 1)
+            sleep.assert_not_called()
+
+
 class AtomicRecordTests(unittest.TestCase):
     """Exercise the observed Windows replacement failure without model calls."""
 
@@ -334,6 +386,47 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertEqual((turn / "stdout.log").read_text(encoding="utf-8"), "visible stdout: café\n")
         self.assertEqual((turn / "stderr.log").read_text(encoding="utf-8"), "visible stderr: café\n")
         self.assertTrue(worker.read_json(self.run_dir / "state.json")["writers_stopped"])
+
+    def test_failed_fresh_catalog_notifies_and_can_start_on_resume(self):
+        """Exhausted preflight leaves a recoverable turn, not an orphan directory."""
+        with patch.object(worker, "model_catalog", side_effect=RuntimeError("catalog retries exhausted")), \
+             patch.object(worker, "notify_completion") as notify:
+            self.assertEqual(self.invoke(), 1)
+        state = worker.read_json(self.run_dir / "state.json")
+        self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["phase"], "preflight")
+        self.assertTrue(state["writers_stopped"])
+        self.assertIsNone(state["session_id"])
+        self.assertEqual(worker.read_json(self.run_dir / "turn-001/result.json"), state)
+        self.assertFalse((self.run_dir / "turn-001/prompt.md").exists())
+        notify.assert_called_once_with(state, None)
+        self.args.resume = True
+        self.assertEqual(self.invoke(), 0)
+        self.assertEqual(worker.read_json(self.run_dir / "state.json")["turn"], 2)
+
+    def test_failed_resumed_catalog_preserves_session_and_step_count(self):
+        """Preflight failure cannot erase prior session identity or evidence counts."""
+        self.assertEqual(self.invoke(), 0)
+        original = worker.read_json(self.run_dir / "state.json")
+        self.args.resume = True
+        with patch.object(worker, "model_catalog", side_effect=RuntimeError("catalog retries exhausted")):
+            self.assertEqual(self.invoke(), 1)
+        failed = worker.read_json(self.run_dir / "state.json")
+        self.assertEqual(failed["session_id"], original["session_id"])
+        self.assertEqual(failed["agent_steps"], original["agent_steps"])
+        self.assertEqual(failed["turn"], 2)
+        self.assertEqual(self.invoke(), 0)
+        recovered = worker.read_json(self.run_dir / "state.json")
+        self.assertEqual(recovered["turn"], 3)
+        self.assertEqual(recovered["status"], "exited")
+
+    def test_missing_model_is_not_retried_or_launched(self):
+        with patch.object(worker, "model_catalog", return_value={"families": []}) as catalog:
+            self.assertEqual(self.invoke(), 1)
+        catalog.assert_called_once()
+        state = worker.read_json(self.run_dir / "state.json")
+        self.assertIn("does not expose", state["error"])
+        self.assertNotIn("bootstrap_pid", state)
 
     def test_fresh_and_resume_preserve_state(self):
         """Public fresh/resume defaults grant full access and preserve unrelated work/identity."""

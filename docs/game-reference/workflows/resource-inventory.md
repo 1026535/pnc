@@ -81,7 +81,7 @@ with reviewed row and provenance entries in `manual_annotations.json`. The
 original frames and OCR replay remain under the integration candidate's ignored
 `.local-data/artifacts/core_resume/manual_update_20260913T214455Z/`;
 `resource_edge_geometry.json` records the pre-repair geometry check. Exact
-filenames, target, results and cleanup are in the [validation ledger](../../../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md#published-checkpoint-and-resource-edge-investigation).
+filenames, target, results and cleanup are in the [validation ledger](../../../plans/completed/core/PNC_CORE_PORTING_VALIDATION.md#published-checkpoint-and-resource-edge-investigation).
 
 ## Live confirmation — September 16
 

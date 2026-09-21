@@ -1,7 +1,7 @@
 # Pet Workshop design
 
 Canonical implementation reference for the Pet Workshop (merge-board) feature.
-Status is tracked per section; the reviewed plans under `reviewed_plans/` own
+Status is tracked per section; the themed plans under `plans/themed/` own
 requirements and sequencing.
 
 ## Owner map

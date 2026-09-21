@@ -44,7 +44,7 @@
 - Config templates and authored config: `config/`
 - Runtime evidence and reports: `.local-data/` (ignored)
 - Test-selection evidence: `.test-impact/` (ignored)
-- Plans: `reviewed_plans/`
+- Plans: `plans/`
 - Skills: `.agents/skills/`; shared instructions: `instructions/`
 
 ## Game Behavior Evidence

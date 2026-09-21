@@ -1,7 +1,7 @@
 # Porting a workflow to the replacement core
 
-Current execution plan: [six independent feature packages](../reviewed_plans/PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
-The [A/B coordination record](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md)
+Current execution plan: [six independent feature packages](../plans/themed/core/PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
+The [A/B coordination record](../plans/themed/operations/PNC_AB_COORDINATED_CONTINUATION.md)
 is historical for those packages. The merged baseline is
 `6bc27585fbac1244672cf4a653ea6248955a4aca`; the ownership revision below supersedes
 older blanket A-runtime/B-vision and whole-file reservations for these six tasks.
@@ -227,7 +227,7 @@ Traces and screenshots are under `artifacts/2026-09-12/serious_stuff/`. The fina
 
 ## Historical issues resolved
 
-Earlier Daily validation recorded a visible cavalry Go control that OCR classified as `unknown_action` and a City HUD sparkle that was mistaken for a popup close control. The canonical parser and popup ownership fixes now have deterministic regressions and final role-selected validation. The original evidence and limits remain in the [replacement-core validation ledger](../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md); those historical observations do not describe the current Daily result.
+Earlier Daily validation recorded a visible cavalry Go control that OCR classified as `unknown_action` and a City HUD sparkle that was mistaken for a popup close control. The canonical parser and popup ownership fixes now have deterministic regressions and final role-selected validation. The original evidence and limits remain in the [replacement-core validation ledger](../plans/completed/core/PNC_CORE_PORTING_VALIDATION.md); those historical observations do not describe the current Daily result.
 
 The replacement runner supports `WorkflowEffect.READ_ONLY` and `WorkflowEffect.NONSPENDING_STATE_CHANGE`. Collect-mail uses the latter because opening unread mail may update read state and archive persistence writes local files, while it spends no in-game resources. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
 
