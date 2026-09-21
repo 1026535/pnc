@@ -39,3 +39,9 @@ Use the [common handoff record](../PNC_PET_WORKSHOP_ROADMAP.md#worker-handoff-an
 ### Delegation — 2026-09-21 UTC
 
 **Delegated, offline only.** Recognition session `cedar-stealer`, turn 014, starts from accepted `1f14e06` in `pet-workshop-pw01`. Brief: `.local-data/devin-briefs/pw05-implementation.md`; run: `.local-data/devin-implement/pw01-platform-check`. Scope is this packet's real-parser/planner analysis tool, portable labels/fixtures, review images and behavioral checks. The lead reviews exact reports and three-coconut rejection. Shared policy/authority/workflow owners remain unchanged; any material shared-contract issue returns to the lead. No Main/ADB/lease access. Lead owns status records and acceptance.
+
+### Freeze recovery — 2026-09-21
+
+Turn 014 was interrupted with no tracked source edits or completed acceptance evidence. The lead verified absent supervisor/children and native `cedar-stealer` identity in the exact checkout, preserving `turn-014/recovery-original-state.json` and `recovery-evidence.json`. Same session resumed as **turn 015**, base `1f14e06`, with `.local-data/devin-briefs/pw05-recover-20260921.md`; startup and the replacement completion route were verified. Unrelated `nul` and `pnc_automation.egg-info/` remain untouched.
+
+User-approved simulator use is available for logical development, while PW07 owns any necessary simulator changes. PW05 keeps actual native recognition/geometry evidence separate from simulated or downscaled images and routes concrete simulator gaps to the lead. Status remains **Delegated**; final candidate/report review, offline evidence and any applicable live proof remain required before acceptance. The new lead and Main's 01:00–05:00 Toronto limit are recorded in the roadmap; this assignment has no live authority.
