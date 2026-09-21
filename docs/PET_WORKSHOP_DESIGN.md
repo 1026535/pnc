@@ -260,9 +260,28 @@ classifies as `USABLE`/`LOCKED` x `EMPTY`/`OCCUPIED`/`UNKNOWN`:
 - Grass-cover cells match the catalog's seeded `unlockType=2` covers and read
   `LOCKED`/`UNKNOWN` (contents hidden).
 - Recognized pieces map to catalog item ids; unmodeled pieces (bread, feed
-  bags, bolt producers) read `OCCUPIED` with `item_id=None` and
-  `item_status=UNKNOWN` rather than guessing.
+  bags, bolt producers) read `OCCUPIED` with `item_id=None` rather than
+  guessing.
+- `item_status` is measured independently of identity against qualified
+  full-cell appearances, including the surrounding overlay area. A tight
+  sprite match or colored pixels cannot establish `NORMAL`. Missing or
+  conflicting state matches remain `UNKNOWN`. The state references use the
+  shared cached matcher at threshold 0.97, with the measured cell inset by
+  two pixels. Asset names preserve fixture level and source cell: LV8 normal
+  cells 1/2/4/5/7/8/12/15/17/20/24/36/46, inactive 3/52/56; LV6 normal
+  4/8/9 and inactive 1, from the tracked board fixtures. These references
+  qualify only represented appearances; bubble/feed-lock states remain gaps.
 - `cooldown` is not observed on any fixture and stays `UNKNOWN`.
+
+`production_mode` reads `ORDINARY` only while a producer bolt overlay is
+measured on the board; without bolt evidence it stays `UNKNOWN` rather than
+inferring ordinary play from the board alone.
+
+Selection reads the four corner brackets of the selection frame (all rotated
+orientations). A cell needs at least two corner votes with no competing cell
+reaching two votes to publish `SELECTED`; `NONE` publishes only when no
+corner evidence exists and the selection bar is independently measured empty;
+populated-but-unresolved evidence stays `UNKNOWN`.
 
 Header OCR reads `workshop_level` (`Lv.N`), `workshop_exp` (`N/M` gauge,
 current value) and `energy` (`N/M` pill, current/capacity); an absent OCR
@@ -270,15 +289,30 @@ backend leaves all three unknown.
 
 ### Orders
 
-Three fixed card slots sit at the top of the board. Each card reads its
-requirement icons and per-icon counts (nearest numeric token inside the card
-band), reward icons plus counts, the centered portrait bounds, and the green
-Complete submit control. `ready=True` only when that control is visually
-measured; a card clipped by the frame edge reads `CLIPPED` with the visible
-facts it retains and `ready=None`; a fully clipped card keeps empty
-requirements/rewards. The order-detail modal reads the same requirement pair
-and reward icons with `source="order_detail"` and no submit control
-(`ready=False`). Unexposed server orders are never synthesized.
+Order cards are detected from measured panel coverage along the strip, not
+from fixed slot positions: an empty slot publishes no order, and a card
+clipped by the frame edge still publishes with `CLIPPED` completeness. Each
+full panel measures 168/169 reference pixels; a visible panel below 160 pixels
+is also clipped, including a fragment hidden behind the timer after scrolling.
+This is a qualification of the measured layout, not a logical order invariant. Each
+card reads its requirement icons against the measured tile-inlay runs —
+when runs and matched icons do not agree one-for-one the card reads
+`UNREADABLE` rather than silently shrinking the recipe. Reward groups are
+measured independently from foreground pixels above the cream panel baseline.
+Each group must contain one icon match. An unmatched group publishes an
+`UNKNOWN` reward and marks the card unreadable, including when OCR returns
+nothing. Count OCR starts at the icon's right edge and stops before the next
+measured group, so a missed icon cannot enlarge its predecessor's count zone.
+Unread quantities stay `None`; unknown group text is retained as `label`.
+The centered
+portrait bounds and green Complete submit control publish per card;
+`ready=True` only when that control is visually measured. The measured
+scroll surface publishes as `WorkshopView.order_strip_bounds`, `None` on
+surfaces without qualified strip chrome evidence. The order-detail modal
+reads the same requirement pair and reward icons from its pedestals with
+`source="order_detail"`; it has no submit control so `ready` stays `None`,
+and pedestal/icon disagreement keeps the order `UNREADABLE`. Unexposed
+server orders are never synthesized.
 
 ### Measured controls
 
@@ -286,20 +320,21 @@ Profile control anchors publish `visible_elements` only on a visual match:
 back chevron (board/manor/storage), board help glyph, storage warehouse,
 locked next-board `>>`, and the selection-bar inspect `!` plus recycle trash
 pair. `WorkshopView` carries the measured bounds: `cell_bounds`,
-`order_views` (portrait + submit), `detail_control_bounds`,
-`close_control_bounds`, `recycle_control_bounds`, all `None` when unmeasured.
+`order_views` (portrait + submit), `order_strip_bounds`,
+`detail_control_bounds`, `close_control_bounds`, `recycle_control_bounds`,
+all `None` when unmeasured.
 Recycle is item-dependent (Treasure shows it; an inactive Bowl does not) and
 is never inferred. Storage has no close control — the sheet dismisses on an
 outside tap.
 
 ### Route evidence (2026-09-16 exploration frames)
 
-| Route | Source profile -> destination | Measured control | Artifact pair | Confidence |
+| Route | Source profile -> destination | Measured control | Artifact pair | Qualification |
 |---|---|---|---|---|
-| Home -> Manor | home city -> `pet_workshop_manor` | `PNC_HOME_ILLUSORY_BEAST_MANOR_BUTTON` (semantic, camera-relative building) | frame 006 -> 007 | High |
-| Manor -> Workshop | `pet_workshop_manor` -> `pet_workshop_board` | `PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON` (measured building anchor) | frame 008 -> 009 | High |
-| Workshop -> Manor | `pet_workshop_board` -> `pet_workshop_manor` | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 002 -> 003 | High |
-| Manor -> Home | `pet_workshop_manor` -> home city | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 004 -> 005 | High |
+| Home -> Manor | home city -> `pet_workshop_manor` | `PNC_HOME_ILLUSORY_BEAST_MANOR_BUTTON` (semantic name only; no producer/profile publishes its measured bounds) | frame 006 -> 007 | **Unqualified** — missing a canonical control-owner measurement of the manor building on the Home city map; historical coordinate navigation does not qualify the edge |
+| Manor -> Workshop | `pet_workshop_manor` -> `pet_workshop_board` | `PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON` (measured building anchor) | frame 008 -> 009 | Qualified |
+| Workshop -> Manor | `pet_workshop_board` -> `pet_workshop_manor` | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 002 -> 003 | Qualified |
+| Manor -> Home | `pet_workshop_manor` -> home city | `PNC_BACK_BUTTON_TOP_LEFT` (measured chevron) | frame 004 -> 005 | Qualified |
 
 ### Evidence gaps
 

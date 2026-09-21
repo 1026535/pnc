@@ -569,7 +569,9 @@ class WorkshopView:
     """Measured geometry and capture provenance paired with one WorkshopState.
 
     ``cell_bounds`` maps observed board cell ids to their measured bounds;
-    ``order_views`` carries per-card portrait/submit geometry. The named
+    ``order_views`` carries per-card portrait/submit geometry.
+    ``order_strip_bounds`` is the measured order-strip scroll surface; it
+    stays ``None`` when the strip was not proved on this frame. The named
     control bounds are the safe detail/close/recycle/confirmation controls
     measured on this frame. The recognizer supplies ``image_size`` from the
     capture. ``frame_ref``, ``source_screen`` and ``source_layout_id`` are
@@ -579,6 +581,7 @@ class WorkshopView:
 
     cell_bounds: Mapping[int, Bounds] = field(default_factory=dict)
     order_views: tuple[WorkshopOrderView, ...] = ()
+    order_strip_bounds: Bounds | None = None
     detail_control_bounds: Bounds | None = None
     close_control_bounds: Bounds | None = None
     recycle_control_bounds: Bounds | None = None
@@ -604,6 +607,7 @@ class WorkshopView:
         if len(set(refs)) != len(refs):
             raise ValueError("WorkshopView order_views must have unique order refs.")
         for name in (
+            "order_strip_bounds",
             "detail_control_bounds",
             "close_control_bounds",
             "recycle_control_bounds",
