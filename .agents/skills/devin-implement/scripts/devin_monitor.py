@@ -206,6 +206,60 @@ def checked_delivery(config, message, path):
     return record
 
 
+def resolve_completion(run_dir: Path, turn: int, resolution: str) -> Path:
+    """Record the lead's completed follow-up, not merely receipt or worker acceptance."""
+    if turn < 1 or not resolution.strip():
+        raise ValueError("A positive turn and concrete follow-up resolution are required.")
+    turn_dir = run_dir / f"turn-{turn:03d}"
+    result = read_json(turn_dir / "result.json")
+    if (result.get("turn") != turn or Path(result.get("run_dir", "")) != run_dir
+            or result.get("status") not in {"exited", "incomplete", "failed", "cancelled"}
+            or result.get("writers_stopped") is not True):
+        raise ValueError("Resolve only the exact terminal turn after its writers have stopped.")
+    path = turn_dir / "lead-resolution.json"
+    write_json(path, {"run_dir": str(run_dir), "turn": turn, "at": time.time(),
+                      "resolution": resolution.strip()})
+    return path
+
+
+def check_completion_followup(config, run, current, lead_active, now):
+    """Remind an idle lead once about delivered but unresolved work; never resume a worker."""
+    turn_dir = Path(current["turn_dir"])
+    resolution_path = turn_dir / "lead-resolution.json"
+    if resolution_path.exists():
+        resolution = read_json(resolution_path)
+        if (resolution.get("turn") == current["turn"]
+                and Path(resolution.get("run_dir", "")) == Path(run)
+                and resolution.get("resolution", "").strip()):
+            return "resolved"
+    note_path = turn_dir / "notification.json"
+    if not note_path.exists():
+        return "notification-unavailable"
+    note = read_json(note_path)
+    if note.get("status") != "delivered":
+        return "notification-unconfirmed"
+    if lead_active or now - note.get("at", now) < HEALTH_INTERVAL:
+        return "awaiting-lead"
+    # A successful/uncertain reminder is not replayed, including after monitor restart.
+    reminder_path = turn_dir / "lead-followup.json"
+    if reminder_path.exists():
+        prior = read_json(reminder_path)
+        if prior.get("status") == "delivered" or prior.get("uncertain") is not False:
+            return "reminder-sent-or-uncertain"
+        if now - prior.get("at", now) < HEALTH_INTERVAL:
+            return "reminder-retry-pending"
+    message = (
+        f"Devin follow-up missing for run {run}, turn {current['turn']}. "
+        "The completion notification was delivered, but no lead resolution was recorded. "
+        f"Read {turn_dir}/result.json and its compact handoff, reconcile existing review/work, "
+        "then finish the next authorized action or record the concrete wait/blocker. "
+        "Use devin_monitor.py resolve only after doing that work. "
+        "Do not repeat an already handled review, restart Devin blindly, or read full exports."
+    )
+    checked_delivery(config, message, reminder_path)
+    return "reminder-attempted"
+
+
 def health_check(directory, config, state, now):
     """Check registered runs every fifteen minutes and emit only new actionable anomalies."""
     for registration in (directory / "runs").glob("*.json"):
@@ -237,6 +291,9 @@ def health_check(directory, config, state, now):
                     delivery = checked_delivery(config, message, directory / (registration.stem + "-callback.json"))
                     notification.update(delivery)
                     write_json(note, notification)
+            result["followup"] = check_completion_followup(
+                config, run, current, bool(state.get("active_turn")), now,
+            )
         state["workers"][run] = result
 
 
@@ -254,6 +311,7 @@ def run_monitor(directory):
         next_health = 0
         retry_at = 0
         failures = 0
+        startup_pending = True
         try:
             while True:
                 now = time.time()
@@ -264,11 +322,13 @@ def run_monitor(directory):
                     break
                 events, state["offset"] = read_events(rollout, state["offset"])
                 observe_events(state, events)
-                if state.get("rearm_pending") and not state.get("active_turn") and now >= retry_at:
+                if (state.get("rearm_pending") and (startup_pending or not state.get("active_turn"))
+                        and now >= retry_at):
                     try:
                         asyncio.run(set_heartbeat(config, "ACTIVE", directory / "rearm.stderr.log"))
                         state.update(rearm_pending=False, rearmed_at=time.time(), last_error=None)
                         failures = 0
+                        startup_pending = False
                     except Exception as error:
                         failures += 1
                         state["last_error"] = str(error)[-500:]
@@ -297,15 +357,27 @@ def run_monitor(directory):
 def main(argv=None):
     """Register runs, start one hidden monitor, inspect compact state, or stop and pause it."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("start", "register", "status", "stop", "run"))
+    parser.add_argument("action", choices=("start", "register", "status", "stop", "run", "resolve"))
     parser.add_argument("--monitor-dir", required=True)
     parser.add_argument("--thread-id", default=os.environ.get("CODEX_THREAD_ID"))
     parser.add_argument("--automation-id")
     parser.add_argument("--name", default="Devin cache keepalive")
     parser.add_argument("--rollout")
     parser.add_argument("--run-dir", action="append", default=[])
+    parser.add_argument("--turn", type=int)
+    parser.add_argument("--resolution")
     args = parser.parse_args(argv)
     directory = Path(args.monitor_dir).resolve()
+    if args.action == "resolve":
+        if len(args.run_dir) != 1 or args.turn is None or not args.resolution:
+            parser.error("resolve requires one --run-dir, --turn and --resolution")
+        run = Path(args.run_dir[0]).resolve()
+        registered = directory / "runs" / (hashlib.sha256(str(run).lower().encode()).hexdigest() + ".json")
+        if not registered.is_file():
+            raise ValueError("Resolve requires a run registered with this monitor.")
+        path = resolve_completion(run, args.turn, args.resolution)
+        print(json.dumps({"status": "resolved", "turn": args.turn, "record": str(path)}))
+        return
     if args.action == "run":
         run_monitor(directory)
         return

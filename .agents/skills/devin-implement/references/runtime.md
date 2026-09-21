@@ -53,6 +53,8 @@ On completion, `turn-NNN/result.json` and `handoff.md` hold the result; logs, ex
 
 `exited` means the CLI supplied a final response with valid model evidence. A zero exit without a new final response, including observed headless permission rejections, is `incomplete`. The lead evaluates readiness separately. The launcher does not retry automatically.
 
+An empty native `end_turn` is also incomplete, not evidence of a computer sleep or accepted implementation. Check the compact result, worktree changes and one bounded relevant output sample. If a repeated survey left an architectural choice unresolved, settle that choice in the lead's next handoff rather than replaying the same investigation. Resume only after a relevant decision/context/state change and writer cleanup. Record the completed recovery with the monitor's `resolve` command; callback delivery alone does not close it.
+
 On a failure without another recorded error, `result.json` carries `error` sourced from the adapter's `acp-error.json` — which preserves the peer's JSON-RPC detail such as `cognition.ai/errorKind` and `cognition.ai/retryable` — plus a bounded `stderr_tail`; the completion message includes a short diagnosis. A `retryable` ACP failure supports a normal resume with the same run directory.
 
 ## Side questions through the owned connection

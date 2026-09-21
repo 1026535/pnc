@@ -319,7 +319,9 @@ def notify_completion(state, thread_id):
         message = (f"Devin worker turn {state['turn']} is {state['status']}. "
                    f"Run: {state['run_dir']}. Read the compact result at {turn_dir / 'result.json'} "
                    "and its handoff, then continue this task through review, corrections, or recovery. "
-                   "Do not read the full conversation/export or repeat an already handled turn.")
+                   "Do not read the full conversation/export or repeat an already handled turn. "
+                   "After completing the follow-up or recording its concrete wait/blocker, "
+                   "record this turn with the registered monitor's resolve command; receipt alone is not resolution.")
         if state["status"] == "failed" and state.get("error"):
             message += " Diagnosis: " + str(state["error"])[:300]
         asyncio.run(send_notification(thread_id, message, turn_dir / "notification.stderr.log"))
