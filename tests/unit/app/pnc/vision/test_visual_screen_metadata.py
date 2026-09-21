@@ -35,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(86, len(catalog["profiles"]))
+        self.assertEqual(87, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]

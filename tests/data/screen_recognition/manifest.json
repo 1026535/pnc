@@ -23,6 +23,16 @@
       ]
     },
     {
+      "image": "king_return_welcome.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-09-21/157_farm/v44_foundation",
+      "sha256": "8d5ca43d176146e7dd20b57f2d5218e334470beb69790ee1d8bd408c32e43c00",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
       "image": "vip_daily_reset.png",
       "screen": "PNC_VIP_DAILY_RESET",
       "split": "reference",

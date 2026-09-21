@@ -10,7 +10,7 @@ from pnc_automation.app import build_application_runner
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
     TASK_OWNED_POPUP_SCREEN_TYPES,
-    preferred_transient_popup_candidate,
+    decide_popup_recovery,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from tests.live_smoke_support import build_live_runtime_bundle
@@ -43,13 +43,29 @@ class LivePopupRecoverySmokeTests(unittest.TestCase):
                 "applicability_skip: no blocking popup was naturally present on the configured active castle"
             )
         overlay = cls.before.popup_overlay
-        candidate = None if overlay is None else preferred_transient_popup_candidate(overlay)
-        if candidate is None or candidate.control_kind in {
-            PopupControlKind.UPDATE_CONFIRM,
-            PopupControlKind.RECONNECT_CONFIRM,
-        }:
+        decision = decide_popup_recovery(
+            screen_type=cls.before.screen_type,
+            blocking_popup=cls.before.blocking_popup,
+            visible_selector_ids=frozenset(cls.before.visible_elements),
+            popup_overlay=overlay,
+        )
+        candidate = (
+            None
+            if overlay is None or decision is None or decision.control_kind is None
+            else overlay.candidate(decision.control_kind)
+        )
+        if (
+            decision is None
+            or decision.blocked
+            or decision.selector_id is None
+            or candidate is None
+            or decision.control_kind in {
+                PopupControlKind.UPDATE_CONFIRM,
+                PopupControlKind.RECONNECT_CONFIRM,
+            }
+        ):
             raise unittest.SkipTest(
-                "applicability_skip: popup smoke only actuates measured non-affirmative dismiss controls"
+                "applicability_skip: popup smoke only actuates measured non-spending dismissal controls"
             )
         executor = connected.runtime.require_observed_action_executor(
             "Live popup recovery requires the canonical observed-action executor."

@@ -26,6 +26,7 @@ class PopupControlKind(StrEnum):
     POPUP_BACK = "popup_back"
     UPDATE_CONFIRM = "update_confirm"
     RECONNECT_CONFIRM = "reconnect_confirm"
+    KING_RETURN_GET_STARTED = "king_return_get_started"
 
 
 class PopupEvidenceKind(StrEnum):
@@ -125,6 +126,18 @@ def decide_popup_recovery(
                 selector_id=UiElementId.PNC_RECONNECT_CONFIRM_BUTTON,
                 control_kind=PopupControlKind.RECONNECT_CONFIRM,
                 reason="confirm_reconnect",
+            )
+        start = popup_overlay.candidate(PopupControlKind.KING_RETURN_GET_STARTED)
+        if (
+            screen_type == ScreenType.PNC_POPUP
+            and popup_overlay.layout_id == "king_return_welcome"
+            and start is not None
+            and UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON in visible_selector_ids
+        ):
+            return PopupRecoveryDecision(
+                selector_id=UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON,
+                control_kind=PopupControlKind.KING_RETURN_GET_STARTED,
+                reason="dismiss_king_return_welcome",
             )
         candidate = preferred_transient_popup_candidate(popup_overlay)
         if candidate is not None:

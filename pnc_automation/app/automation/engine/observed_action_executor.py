@@ -44,6 +44,7 @@ from pnc_automation.app.pnc.vision.selectors import ClickOutcome, SelectorDefini
 _SAFE_TRANSIENT_POPUP_SELECTORS: tuple[UiElementId, ...] = (
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
     UiElementId.PNC_POPUP_CLOSE_BUTTON,
+    UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON,
 )
 
 class ObservationCallback(Protocol):

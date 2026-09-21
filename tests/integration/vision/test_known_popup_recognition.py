@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.domain.popup import (
     PopupDismissCandidate,
     PopupEvidenceKind,
     PopupOverlayObservation,
+    decide_popup_recovery,
 )
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -35,6 +36,10 @@ from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
+from tests.support.automation.engine.make_observed_action_executor import _make_observed_action_executor
+from tests.support.automation.session import FakeSession
+from tests.support.pnc.observations import make_observation
+from tests.support.runtime.observation_service import FakeObservationService
 
 
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
@@ -85,6 +90,12 @@ class KnownPopupRecognitionTests(unittest.TestCase):
     def test_known_profiles_publish_typed_controls_through_builder_and_navigation(self) -> None:
         builder, navigation = _wire()
         expected = {
+            "king_return_welcome.png": (
+                ScreenType.PNC_POPUP,
+                UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON,
+                PopupControlKind.KING_RETURN_GET_STARTED,
+                "king_return_welcome",
+            ),
             "savannah_hero_offer.png": (
                 ScreenType.PNC_POPUP,
                 UiElementId.PNC_POPUP_CLOSE_BUTTON,
@@ -151,6 +162,84 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     self.assertEqual(close.frame_ref, capture.frame_ref)
                     self.assertEqual(close.source_screen, screen)
                     self.assertEqual(close.source_layout_id, layout_id)
+
+    def test_king_return_welcome_uses_one_measured_get_started_tap(self) -> None:
+        """Both publishers can dismiss the exact welcome and recapture Home."""
+
+        builder, navigation = _wire()
+        capture = _capture("king_return_welcome.png")
+        for observation in (builder.build(capture), navigation.build(capture)):
+            with self.subTest(publisher=type(observation).__name__):
+                selector = UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON
+                decision = decide_popup_recovery(
+                    screen_type=observation.screen_type,
+                    blocking_popup=observation.blocking_popup,
+                    visible_selector_ids=frozenset(observation.visible_elements),
+                    popup_overlay=observation.popup_overlay,
+                )
+                self.assertEqual(selector, decision.selector_id)
+                session = FakeSession()
+                observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
+                recovered = _make_observed_action_executor(session).recover_interruption_if_required(
+                    observation, label_prefix="king_return_welcome", observe=observer.observe,
+                )
+                self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+                self.assertEqual([observation.require(selector).action_point], session.taps)
+                self.assertEqual([], session.key_events)
+
+    def test_king_return_welcome_needs_identity_and_button(self) -> None:
+        """The button alone and unrelated offers cannot authorize this action."""
+
+        builder, navigation = _wire()
+        source = _capture("king_return_welcome.png")
+        without_staff = source.image.copy()
+        ImageDraw.Draw(without_staff).rectangle((575, 215, 780, 415), fill=(18, 24, 38))
+        without_button = source.image.copy()
+        ImageDraw.Draw(without_button).rectangle((355, 825, 590, 920), fill=(18, 24, 38))
+        for image, keeps_identity in ((without_staff, False), (without_button, True)):
+            for observation in (
+                builder.build(replace(source, image=image)),
+                navigation.build(replace(source, image=image)),
+            ):
+                with self.subTest(keeps_identity=keeps_identity):
+                    self.assertEqual(
+                        keeps_identity,
+                        observation.decision.layout_id == "king_return_welcome",
+                    )
+                    self.assertFalse(observation.has(UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON))
+        for name in ("savannah_hero_offer.png", "lucifer_special_offer.png", "home_city_popup_x_regression.png"):
+            with self.subTest(unrelated=name):
+                observation = builder.build(_capture(name))
+                self.assertFalse(observation.has(UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON))
+
+        observation = builder.build(source)
+        wrong_layout = replace(observation.popup_overlay, layout_id="unrelated_get_started")
+        decision = decide_popup_recovery(
+            screen_type=observation.screen_type,
+            blocking_popup=observation.blocking_popup,
+            visible_selector_ids=frozenset(observation.visible_elements),
+            popup_overlay=wrong_layout,
+        )
+        self.assertIsNone(decision.selector_id)
+        for kind, selector in (
+            (PopupControlKind.UPDATE_CONFIRM, UiElementId.PNC_UPDATE_CONFIRM_BUTTON),
+            (PopupControlKind.RECONNECT_CONFIRM, UiElementId.PNC_RECONNECT_CONFIRM_BUTTON),
+        ):
+            with self.subTest(priority=kind):
+                start = observation.popup_overlay.candidate(PopupControlKind.KING_RETURN_GET_STARTED)
+                self.assertIsNotNone(start)
+                competing = replace(start, control_kind=kind)
+                overlay = replace(
+                    observation.popup_overlay,
+                    candidates=(competing, *observation.popup_overlay.candidates),
+                )
+                decision = decide_popup_recovery(
+                    screen_type=observation.screen_type,
+                    blocking_popup=observation.blocking_popup,
+                    visible_selector_ids=frozenset((*observation.visible_elements, selector)),
+                    popup_overlay=overlay,
+                )
+                self.assertEqual(selector, decision.selector_id)
 
     def test_generic_fallback_owns_raw_savannah_when_named_profiles_are_filtered(self) -> None:
         builder, navigation = _wire()

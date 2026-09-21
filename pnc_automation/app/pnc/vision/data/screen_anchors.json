@@ -851,6 +851,50 @@
       ]
     },
     {
+      "id": "king_return_welcome",
+      "layout_id": "king_return_welcome",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "king_return_welcome.png",
+        "decoded_sha256": "8d5ca43d176146e7dd20b57f2d5218e334470beb69790ee1d8bd408c32e43c00",
+        "capture_group": "2026-09-21/157_farm/v44_foundation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Returning-player King Return entry identity from separate static character and staff art; Get Started is a separately measured control.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/king_return_welcome_face.png",
+          "search_region": [78, 225, 115, 130],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/popup/king_return_welcome_staff.png",
+          "search_region": [330, 120, 150, 145],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_KING_RETURN_GET_STARTED_BUTTON",
+          "popup_control_kind": "king_return_get_started",
+          "anchor": {
+            "image": "screen_anchors/popup/king_return_welcome_start.png",
+            "search_region": [195, 485, 160, 80],
+            "threshold": 0.9
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [0, 0, 540, 960],
+      "occludes": ["PNC_HOME_CITY"]
+    },
+    {
       "id": "lucifer_special_offer",
       "layout_id": "lucifer_special_offer_full_height",
       "screen": "PNC_POPUP",

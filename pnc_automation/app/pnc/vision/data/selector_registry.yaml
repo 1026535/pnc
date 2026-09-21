@@ -2565,6 +2565,15 @@ selectors:
   status: planned
   detection_kind: semantic
   materialize_relative_bounds: false
+- id: PNC_KING_RETURN_GET_STARTED_BUTTON
+  screens:
+  - PNC_POPUP
+  status: screenshot_seeded
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Published only by the captured King Return welcome profile; its current-frame template measures the client-side dismissal control.
 - id: PNC_UPDATE_CONFIRM_BUTTON
   screens:
   - PNC_POPUP

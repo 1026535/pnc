@@ -30,3 +30,35 @@ An exact Manage Characters preflight then verified `K157 / Sword NPC / level 29`
 and returned Home. No price, reward, resource, account, or castle-switch action ran.
 Evidence is recorded in
 `.local-data/reports/popup_live_lucifer_main_20260915.json`.
+
+## King Return welcome entry
+
+On September 21, 2026, a 900×1600 capture from `157_farm` during V44 validation
+showed the full-screen text “Greetings! So glad to have you back! Let me help you
+catch up.” and one **Get Started** button. The original frame is
+`artifacts/2026-09-21/157_farm/20260921T180355Z_core_20260921T180345Z_29a6b69e_0004_core_route_source.png`;
+the reviewed screen fixture is `tests/data/screen_recognition/king_return_welcome.png`.
+The live observation classified it as `UNKNOWN` with no blocking popup. The user
+subsequently dismissed it by tapping Get Started. The active castle and installed
+build were not established before the overlay blocked the identity preflight.
+
+The recovered **5.0.203 / version code 233** client identifies this as
+`KING_RETURN_ENTRY_WIN`. `commands/kingreturn/kingreturncommand.lua:346-355`
+passes the server's `firstLogIn`, `offlineDay`, and end times to
+`datas/kingreturndata.lua:137-151`. `CheckEntranceIsOpen` and
+`ShowKingReturnEntry` in that data file open the entry window only while a King
+Return activity remains active, `FIRST_LOGIN` is true, the transfer-area window
+does not take precedence, and the entry has not opened in this session. The
+server's eligibility threshold for `firstLogIn` is unknown; the consulted client
+does not define an absence-duration threshold.
+
+`uis/kingreturn/kingreturnentrywin.lua:82-87` handles Get Started by clearing
+`FIRST_LOGIN` and `isEntryWinShowing`, firing a local entrance-button update
+event, and closing the entry window. That handler makes no purchase, claim, or
+network request and opens no next screen. The separate login-gift claim sends
+`REQ_RECEIVE` and is outside this dismissal. This source finding and the user's
+click report support automatic dismissal of this exact entry overlay. The visual
+profile requires distinct character and staff artwork; its Get Started control
+is measured separately on the current frame. Shared popup recovery makes one tap
+and requires a fresh observation. A still-present entry, an unrecognized follow-up
+screen, or a different tutorial remains a stop, with no assumed Home transition.

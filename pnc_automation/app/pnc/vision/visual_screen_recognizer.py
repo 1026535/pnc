@@ -48,6 +48,7 @@ _VISUAL_DISMISS_KINDS = frozenset({
 _VISUAL_DISMISS_SELECTOR_KINDS = {
     UiElementId.PNC_POPUP_CLOSE_BUTTON: _VISUAL_DISMISS_KINDS,
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: frozenset({PopupControlKind.CLOSE_TEXT}),
+    UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON: frozenset({PopupControlKind.KING_RETURN_GET_STARTED}),
 }
 
 
@@ -493,7 +494,7 @@ def load_visual_screen_recognizer(
                         f"Visual profile {identifier} dismiss control {selector.value} "
                         "requires popup_control_kind."
                     )
-                if popup_control_kind not in _VISUAL_DISMISS_KINDS or popup_control_kind not in allowed_kinds:
+                if popup_control_kind not in allowed_kinds:
                     raise ValueError(
                         f"Visual profile {identifier} has incompatible popup control kind "
                         f"{popup_control_kind.value} for {selector.value}."
