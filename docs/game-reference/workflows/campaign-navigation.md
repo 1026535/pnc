@@ -94,14 +94,17 @@ scene anchor and measured Home portal are unchanged. The two native map fixtures
 
 **Live-observed:** on the parked `testing` M1 run, the current castle's Chapter 6
 marker opened `Ch.6 Marsh of Tear` with five numbered stage cores and four
-padlocked nodes. The live diagnostic classified that visible path as UNKNOWN
-because only the terrain anchor missed its 0.95 bound at 0.929546; the title
-(0.991448) and Back (0.863272) anchors already qualified. No stage, Challenge,
+padlocked nodes. The live diagnostic classified that visible path as UNKNOWN.
+Canonical offline replay isolated the missed terrain anchor: 0.929546 against
+its 0.95 bound; the title (0.991448) and Back (0.863272) anchors qualified. No stage, Challenge,
 battle, or spending action was taken, and the refused Back dispatch was correct
 while the frame stayed UNKNOWN. Sources are runtime `20260922T202247Z_d3962b64`
 captures 0037/0038 under `2026-09-22/testing`, tracked as
 `campaign_chapter_6_path_20260922.png` and
 `campaign_chapter_6_path_holdout_20260922.png`.
+These frames were captured seconds apart in one session. They share a capture
+group and establish correlated temporal consistency, not independent-session
+generalization, despite the second file's historical `holdout` name.
 
 **Scoped calibration:** the `campaign_chapter_6` terrain anchor is bound at
 0.92 — the only change; title identity stays 0.95 and Back stays 0.85. Both

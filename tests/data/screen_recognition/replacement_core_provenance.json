@@ -1252,8 +1252,8 @@
     "source": "artifacts/2026-09-22/testing/20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
     "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
     "reference_size": [900, 1600],
-    "capture_group": "2026-09-22/testing/m1_campaign_preentry_holdout",
-    "notes": "Unmodified current-build Chapter 6 path holdout captured seconds later before the refused Back dispatch; independent appearance check for the calibrated terrain bound."
+    "capture_group": "2026-09-22/testing/m1_campaign_preentry",
+    "notes": "Unmodified current-build Chapter 6 path frame captured seconds later before the refused Back dispatch; correlated temporal check from the same session, not an independent holdout."
   },
   {
     "asset": "tests/data/screen_recognition/campaign_chapter_10_unmasked.png",
