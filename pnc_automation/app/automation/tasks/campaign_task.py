@@ -1,4 +1,4 @@
-"""Task that advances one configured campaign stage."""
+"""Task that advances one configured campaign stage to its observed detail surface."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pnc_automation.app.automation.engine.task import (
 )
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.core.errors import TaskVerificationError
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapListEntryAction
 from pnc_automation.app.pnc.domain.campaign import CampaignMode
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
@@ -26,16 +26,19 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.domain.policy_models import CampaignPolicy
 from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 
 class CampaignTask(BaseAutomationTask):
-    """Opens one campaign stage and advances to battle preparation."""
+    """Opens one campaign stage and stops at its observed detail surface.
+
+    The stage-detail Challenge control is observed, but the surface it opens is
+    not evidence-qualified, so the task never predicts or taps it. A stage-row
+    selection does not establish the separate transition into Hero Formation.
+    """
 
     id = TaskId.CAMPAIGN
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     preflight = TaskPreflight.HOME_CITY
-    required_recognition_selectors = (UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,)
 
     def parse_params(self, params: Mapping[str, Any]) -> CampaignPolicy:
         """Builds the typed campaign policy."""
@@ -54,20 +57,17 @@ class CampaignTask(BaseAutomationTask):
         }
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
-        """Plans one campaign increment from the current screen."""
+        """Plans one campaign increment from the current screen.
+
+        Stage detail is the proven boundary: the Challenge control's
+        destination is unproven, so the plan stops and re-observes rather than
+        issuing an unverified follow-up tap.
+        """
 
         if observation.screen_type not in campaign_flow_screen_types():
             return context.flows.open_campaign_map(observation, runtime_state=context.runtime_state)
-        if observation.screen_type == ScreenType.PNC_BATTLE_PREP:
-            return []
         if observation.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
-            return [
-                TapAction(
-                    selector_id=UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,
-                    reason="open_battle_prep",
-                    observe_after=True,
-                )
-            ]
+            return []
 
         candidates = _eligible_stages(observation, context.params.enabled_modes)
         target = choose_priority_entry(
@@ -79,32 +79,31 @@ class CampaignTask(BaseAutomationTask):
             return []
         return [
             _tap_entry(target, kind=ListEntryKind.CAMPAIGN_STAGE, reason="open_campaign_stage"),
-            TapAction(
-                selector_id=UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,
-                reason="open_battle_prep",
-                observe_after=True,
-            ),
         ]
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
-        """Verifies either navigation to campaign or a prepared battle."""
+        """Verifies entry and stage opening without crediting an unqualified route."""
 
         if before.screen_type not in campaign_flow_screen_types():
-            if after.screen_type == ScreenType.PNC_BATTLE_PREP:
-                return TaskResult.success("Campaign battle preparation was already open after entry.")
             if after.screen_type in campaign_flow_screen_types():
                 return TaskResult.replan("Reached campaign flow for stage planning.")
             return TaskResult.failure("Campaign task could not reach the campaign flow.", retryable=True)
-        if before.screen_type == ScreenType.PNC_BATTLE_PREP:
-            return TaskResult.skipped("Campaign battle preparation was already open.")
+        if after.screen_type == ScreenType.PNC_HERO_FORMATION:
+            return TaskResult.failure(
+                "Hero Formation appeared without a proven Campaign stage transition.",
+                retryable=False,
+            )
+        if before.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
+            return TaskResult.failure(
+                "Campaign stage detail is the proven boundary; the stage-to-formation transition is unqualified.",
+                retryable=False,
+            )
         if before.screen_type in {
             ScreenType.PNC_CAMPAIGN_MAP,
             ScreenType.PNC_CAMPAIGN_CHAPTER,
         } and not _eligible_stages(before, context.params.enabled_modes):
             return TaskResult.skipped("No eligible campaign stages were visible.")
-        if after.screen_type == ScreenType.PNC_BATTLE_PREP:
-            return TaskResult.success("Campaign advanced to battle preparation.")
-        if before.screen_type == ScreenType.PNC_CAMPAIGN_MAP and after.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
+        if after.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
             return TaskResult.replan("Opened campaign stage details.")
         return TaskResult.failure("Campaign did not produce a verified state change.", retryable=True)
 

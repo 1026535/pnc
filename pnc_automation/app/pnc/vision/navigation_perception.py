@@ -24,6 +24,7 @@ from pnc_automation.app.pnc.vision.building_details import filter_building_detai
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
     bind_campaign_chapter_identity,
+    bind_campaign_stage_detail,
     bind_list_entry,
     bind_spatial_surface,
     bind_hero_recruit_result,
@@ -321,6 +322,12 @@ class NavigationPerception:
             ),
             campaign_chapter=bind_campaign_chapter_identity(
                 content.campaign_chapter,
+                frame_ref=screenshot.frame_ref,
+                source_screen=screen,
+                source_layout_id=decision.layout_id,
+            ),
+            campaign_stage=bind_campaign_stage_detail(
+                content.campaign_stage,
                 frame_ref=screenshot.frame_ref,
                 source_screen=screen,
                 source_layout_id=decision.layout_id,

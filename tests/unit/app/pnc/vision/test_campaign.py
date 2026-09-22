@@ -13,6 +13,7 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     RowRecognitionStatus,
 )
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision import campaign
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.image.models import Bounds
@@ -205,6 +206,178 @@ class CampaignDiscNumberTests(unittest.TestCase):
         )
         value, _backend = self._read([OcrResult(lines=(), words=()), result])
         self.assertIsNone(value)
+
+
+class CampaignStageDetailProducerTests(unittest.TestCase):
+    """Stage-detail facts publish only from bounded credible reads."""
+
+    def setUp(self) -> None:
+        self.image = Image.new("RGB", (540, 960), (0, 0, 0))
+
+    def _additions(
+        self, results: list[OcrResult]
+    ) -> tuple[campaign.ObservationAdditions, _QueuedOcrBackend]:
+        context, backend = _ocr_context(self.image, results)
+        additions = campaign.build_campaign_additions(
+            image=self.image,
+            screen_type=ScreenType.PNC_CAMPAIGN_STAGE,
+            ocr_context=context,
+            template_matcher=None,
+        )
+        return additions, backend
+
+    def _reads(
+        self,
+        *,
+        title: str | None = "[10-3] Grandia Ruins",
+        gauge: str | None = "150/120",
+        cost: str | None = "12",
+        confidence: float = 0.9,
+    ) -> list[OcrResult]:
+        return [
+            _line_result(
+                *([] if title is None else [OcrLine(text=title, bounds=Bounds(0, 0, 8, 8), confidence=confidence)])
+            ),
+            _line_result(
+                *([] if gauge is None else [OcrLine(text=gauge, bounds=Bounds(0, 0, 8, 8), confidence=confidence)])
+            ),
+            _line_result(
+                *([] if cost is None else [OcrLine(text=cost, bounds=Bounds(0, 0, 8, 8), confidence=confidence)])
+            ),
+        ]
+
+    def test_stage_detail_publishes_title_gauge_and_cost_from_bounded_regions(self) -> None:
+        additions, backend = self._additions(self._reads())
+
+        detail = additions.campaign_stage
+        self.assertIsNotNone(detail)
+        assert detail is not None
+        self.assertEqual(10, detail.chapter_number)
+        self.assertEqual(3, detail.stage_number)
+        self.assertEqual("Grandia Ruins", detail.name)
+        self.assertEqual(150, detail.action_points)
+        self.assertEqual(120, detail.max_action_points)
+        self.assertEqual(12, detail.challenge_cost)
+        self.assertIsNone(detail.mode)
+        self.assertEqual((), additions.list_entries)
+        self.assertIsNone(additions.campaign_chapter)
+        self.assertEqual(3, len(backend.regions))
+        self.assertTrue(all(region is not None for region in backend.regions))
+
+    def test_unreadable_title_keeps_ordinals_and_name_unknown(self) -> None:
+        additions, _backend = self._additions(self._reads(title="Grandia Ruins"))
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertIsNone(detail.chapter_number)
+        self.assertIsNone(detail.stage_number)
+        self.assertIsNone(detail.name)
+        self.assertEqual(150, detail.action_points)
+        self.assertEqual(12, detail.challenge_cost)
+
+    def test_title_with_nonpositive_ordinals_abstains(self) -> None:
+        additions, _backend = self._additions(self._reads(title="[0-0] Grandia Ruins"))
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertIsNone(detail.chapter_number)
+        self.assertIsNone(detail.stage_number)
+
+    def test_conflicting_gauge_reads_abstain(self) -> None:
+        additions, _backend = self._additions(
+            self._reads()[:1]
+            + [
+                _line_result(
+                    OcrLine(text="150/120", bounds=Bounds(0, 0, 8, 8), confidence=0.9),
+                    OcrLine(text="90/60", bounds=Bounds(20, 0, 8, 8), confidence=0.9),
+                )
+            ]
+            + self._reads(title=None, gauge=None)[2:]
+        )
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertIsNone(detail.action_points)
+        self.assertIsNone(detail.max_action_points)
+
+    def test_low_confidence_or_conflicting_title_does_not_publish_identity(self) -> None:
+        for lines in (
+            (OcrLine(text="[10-3] Grandia Ruins", bounds=Bounds(0, 0, 80, 18), confidence=0.5),),
+            (
+                OcrLine(text="[10-3] Grandia Ruins", bounds=Bounds(0, 0, 80, 18), confidence=0.95),
+                OcrLine(text="[10-5] Grandia Ruins", bounds=Bounds(0, 20, 80, 18), confidence=0.95),
+            ),
+        ):
+            with self.subTest(lines=lines):
+                additions, _backend = self._additions([_line_result(*lines)] + self._reads()[1:])
+                detail = additions.campaign_stage
+                assert detail is not None
+                self.assertIsNone(detail.chapter_number)
+                self.assertIsNone(detail.stage_number)
+                self.assertIsNone(detail.name)
+                self.assertEqual(12, detail.challenge_cost)
+
+    def test_low_confidence_gauge_read_abstains(self) -> None:
+        additions, _backend = self._additions(self._reads(gauge="150/120", confidence=0.9)[:1] + [
+            _line_result(OcrLine(text="150/120", bounds=Bounds(0, 0, 8, 8), confidence=0.5))
+        ] + self._reads(title=None, gauge=None)[2:])
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertIsNone(detail.action_points)
+        self.assertIsNone(detail.max_action_points)
+
+    def test_gauge_with_zero_max_abstains_before_the_domain_model(self) -> None:
+        additions, _backend = self._additions(self._reads(gauge="150/0"))
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertIsNone(detail.action_points)
+        self.assertIsNone(detail.max_action_points)
+
+    def test_conflicting_cost_reads_abstain(self) -> None:
+        additions, _backend = self._additions(
+            self._reads()[:2]
+            + [
+                _line_result(
+                    OcrLine(text="12", bounds=Bounds(0, 0, 8, 8), confidence=0.9),
+                    OcrLine(text="8", bounds=Bounds(20, 0, 8, 8), confidence=0.9),
+                )
+            ]
+        )
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertIsNone(detail.challenge_cost)
+
+    def test_nonpositive_or_low_confidence_cost_abstains(self) -> None:
+        for cost, confidence in (("0", 0.99), ("12", 0.5)):
+            with self.subTest(cost=cost, confidence=confidence):
+                additions, _backend = self._additions(
+                    self._reads(cost=cost, confidence=0.9)[:2]
+                    + [_line_result(OcrLine(text=cost, bounds=Bounds(0, 0, 8, 8), confidence=confidence))]
+                )
+                detail = additions.campaign_stage
+                assert detail is not None
+                self.assertIsNone(detail.challenge_cost)
+
+    def test_fully_unreadable_reads_publish_no_stage_detail(self) -> None:
+        additions, backend = self._additions(self._reads(title=None, gauge=None, cost=None))
+
+        self.assertIsNone(additions.campaign_stage)
+        self.assertEqual(3, len(backend.regions))
+
+    def test_non_campaign_screens_publish_no_stage_detail(self) -> None:
+        context, _backend = _ocr_context(self.image, [])
+        for screen in (ScreenType.PNC_HOME_CITY, ScreenType.PNC_CAMPAIGN_CHAPTER):
+            with self.subTest(screen=screen):
+                additions = campaign.build_campaign_additions(
+                    image=self.image,
+                    screen_type=screen,
+                    ocr_context=context,
+                    template_matcher=None,
+                )
+                self.assertIsNone(additions.campaign_stage)
 
 
 if __name__ == "__main__":

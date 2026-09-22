@@ -214,8 +214,8 @@ class CampaignVisualProfileTests(unittest.TestCase):
         recognition = load_visual_screen_recognizer().recognize(erased)
         self.assertNotIn("campaign_map_southern_view", recognition.profile_ids)
 
-    def test_stage_content_request_preserves_controls_without_unused_body_ocr(self) -> None:
-        """A recognized stage skips popup guard OCR while retaining measured controls."""
+    def test_stage_content_request_preserves_controls_with_only_bounded_detail_ocr(self) -> None:
+        """A recognized stage reads only its reviewed regions and retains measured controls."""
         capture = _capture(_image("campaign_stage_10_3.png"))
         for path in ("builder", "navigation"):
             with self.subTest(path=path):
@@ -237,7 +237,60 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertTrue(observation.has(selector))
                     self.assertEqual(observation.visible_elements[selector].frame_ref, capture.frame_ref)
                 self.assertFalse(observation.list_entries)
-                self.assertEqual(backend.regions, [])
+                self.assertEqual(3, len(backend.regions))
+                self.assertTrue(all(region is not None for region in backend.regions))
+
+    def test_stage_detail_facts_publish_through_both_publishers_with_provenance(self) -> None:
+        """Both observation paths bind the reviewed stage facts to the stage frame."""
+        capture = _capture(_image("campaign_stage_10_3.png"))
+        lines = (
+            OcrLine("[10-3] Grandia Ruins", Bounds(142, 211, 256, 27), 0.99),
+            OcrLine("150/120", Bounds(368, 590, 84, 24), 0.95),
+            OcrLine("12", Bounds(244, 646, 30, 18), 0.95),
+        )
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                backend = _CampaignCropOcrService(lines)
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if path == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
+                detail = observation.campaign_stage
+                self.assertIsNotNone(detail)
+                assert detail is not None
+                self.assertEqual(detail.chapter_number, 10)
+                self.assertEqual(detail.stage_number, 3)
+                self.assertEqual(detail.name, "Grandia Ruins")
+                self.assertEqual(detail.action_points, 150)
+                self.assertEqual(detail.max_action_points, 120)
+                self.assertEqual(detail.challenge_cost, 12)
+                self.assertIsNone(detail.mode)
+                self.assertEqual(detail.frame_ref, capture.frame_ref)
+                self.assertEqual(detail.source_screen, ScreenType.PNC_CAMPAIGN_STAGE)
+                self.assertEqual(detail.source_layout_id, "campaign_stage_10_3")
+
+    def test_stage_detail_abstains_when_reviewed_regions_are_unreadable(self) -> None:
+        """Empty OCR leaves every stage fact unobserved instead of defaulting."""
+        capture = _capture(_image("campaign_stage_10_3.png"))
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                backend = _CampaignCropOcrService(())
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if path == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertIsNone(observation.campaign_stage)
 
     def test_campaign_ocr_regions_scale_reference_geometry(self) -> None:
         """Scale the reviewed Campaign regions without changing their native reference geometry."""

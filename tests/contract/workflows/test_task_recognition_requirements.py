@@ -48,7 +48,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
             tuple(selector.value for selector in GatheringTask.required_recognition_selectors),
         )
         self.assertEqual(
-            ("PNC_CAMPAIGN_BATTLE_BUTTON",),
+            (),
             tuple(selector.value for selector in CampaignTask.required_recognition_selectors),
         )
 
@@ -66,7 +66,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
             max_retries_per_step=1,
         )
 
-        for task in (GatheringTask(), CampaignTask()):
+        for task in (GatheringTask(),):
             with self.subTest(task=task.id.value):
                 with self.assertRaises(TaskVerificationError) as raised:
                     task_executor.execute(task=task, context=Mock(), before=Mock())
@@ -98,7 +98,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
         account = AccountConfig(id="account", instance_id="instance", pnc_account_id="pnc")
         before = make_observation(ScreenType.PNC_MORE_MENU)
 
-        for task in (GatheringTask(), CampaignTask()):
+        for task in (GatheringTask(),):
             with self.subTest(task=task.id.value):
                 action_executor = Mock()
                 action_executor.action_executor.selector_registry = _unsupported_task_registry()

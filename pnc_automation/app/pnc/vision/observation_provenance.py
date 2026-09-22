@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
-from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity
+from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity, CampaignStageDetail
 from typing import TypeVar
 
 from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
@@ -534,4 +534,29 @@ def bind_campaign_chapter_identity(
         frame_ref=identity.frame_ref or frame_ref,
         source_screen=identity.source_screen or source_screen,
         source_layout_id=identity.source_layout_id if identity.source_layout_id is not None else source_layout_id,
+    )
+
+
+def bind_campaign_stage_detail(
+    detail: CampaignStageDetail | None,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> CampaignStageDetail | None:
+    """Adds missing stage-detail provenance while rejecting contradictory proof."""
+
+    if detail is None:
+        return None
+    if detail.frame_ref is not None and detail.frame_ref != frame_ref:
+        raise SelectorResolutionError("Campaign stage detail proof belongs to a different capture frame.")
+    if detail.source_screen is not None and detail.source_screen != source_screen:
+        raise SelectorResolutionError("Campaign stage detail proof belongs to a different source screen.")
+    if detail.source_layout_id is not None and detail.source_layout_id != source_layout_id:
+        raise SelectorResolutionError("Campaign stage detail proof belongs to a different source layout.")
+    return replace(
+        detail,
+        frame_ref=detail.frame_ref or frame_ref,
+        source_screen=detail.source_screen or source_screen,
+        source_layout_id=detail.source_layout_id if detail.source_layout_id is not None else source_layout_id,
     )

@@ -2146,6 +2146,7 @@ class PncObservationEnricher:
         if request.allows_screen(screen_type) and screen_type in {
             ScreenType.PNC_CAMPAIGN_MAP,
             ScreenType.PNC_CAMPAIGN_CHAPTER,
+            ScreenType.PNC_CAMPAIGN_STAGE,
         }:
             return build_campaign_additions(
                 image=image,
