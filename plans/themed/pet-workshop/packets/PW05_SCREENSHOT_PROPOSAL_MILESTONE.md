@@ -4,6 +4,16 @@
 
 **Kind:** Implementation packet. **Dependencies:** [PW02](PW02_RECOGNITION_CONTROLS.md), [PW04](PW04_ONE_STEP_SOLVER.md)
 
+## Current review — live006, 2026-09-22
+
+Status: **fixing findings**, candidate `c920dadd3c52d7e3ae538582120561516628f255`; no packet acceptance. Existing exact-source full evidence:2,850 passed/seven environmental skips. Native separate Devin live006 naturally exercised Growth after Home: both candidate publishers independently replay exact profile/typed measured dismiss, actual input ledger shows one tap(85,55), and native fresh Home proves recovery. This shared slice is isolated at `485f012f7ffcbdd0dd11719be87611786f1db38d` for final integration validation, owned by climbing-foxtrot002.
+
+Lead visually verified Hopium K157 C31 active and final Home, reviewed18 actual inputs with zero switch/spending, and confirmed all cited check artifacts exist. Main was phase-started then closed; canonical lease free and original role/full config hash restored. Cleanup record and independent evidence are in PW05 checkout `.local-data/review/pw05/main-role-restore-growth-20260922.json` and `lead-live006-proof.json`.
+
+Consolidated corrections R6-01–R6-04: clearly ready three-Fruit5 card is inconsistently ready/false; detail image contains three Fruit5 and one Item Chest×1 but parser reports two plus three unknown rewards; after measured close the harness must reacquire current Workshop content before deciding on its second portrait; green fulfilled Fruit5 is observed and must not be labeled absent. Native examples become captured regressions, with current geometry and conservative unknowns preserved. Unmodeled feed-card identities remain explicitly unreadable. No gameplay rule changed, so these findings belong to perception/harness tests rather than invented simulator behavior.
+
+Same cedar-stealer session turn023 owns that coherent offline correction batch; supervisor53720/bootstrap26176 startup verified. Exact review and brief: `.local-data/review/pw05/review-live-released-turn006.md`, `.local-data/devin-briefs/pw05-live006-corrections.md`. Blue unfulfilled Fruit5, eligible two-piece lasso-not-ready, full requested detail identities and final corrected live proof remain pending. No energy depletion has occurred. PW07 proceeds independently.
+
 ## Read before implementation
 
 - [Plan 01: saved evidence and native input modes](../PNC_PET_WORKSHOP_01_RECOGNITION_STATE_PLAN.md#3-evidence-and-existing-owners)
