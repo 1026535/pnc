@@ -16,6 +16,8 @@ Use pure immutable board, rule, combat-state, action and evaluation types under 
 
 The solver returns a legal swap or observed-special click with an explanation and uncertainty, or an explicit no-action/unsupported-state result. Share pattern detection and legal-action enumeration across contexts. Context names must not silently select board dimensions, rules or a combat model. Add only evidenced differences to a small rules contract; no game/plugin framework or separate Campaign/Arena algorithms.
 
+The pure baseline now exists at `pnc_automation/app/pnc/domain/match3_solver/` (immutable `models.py`, canonical `rules.py` detector, `selection.py` with `decide()`). It implements the evidenced run/square rules, creation precedence, the three activation footprints and an uncalibrated lexicographic one-step ranking over supported candidates. Combat-aware selection, calibration, lifecycle wiring and operational availability remain pending; this package is not a runtime component.
+
 ## Evidence and limits
 
 The [battle behavior note](../../../docs/game-reference/workflows/match3-battles.md) records source paths, build and unresolved behavior. Findings below are artifact-observed in packaged PNC **5.0.203 / versionCode 233**, rather than proof of the current server or measured UI.
