@@ -413,11 +413,11 @@ analyze them in separate `--out-dir` runs.
 `C:/Users/lebel/pnc/.local-data/artifacts/2026-09-22/pet_workshop_pw05_hopium_growth_c920dad`
 (board, two survey frames, one order detail; LV8, energy 123→124):
 
-- The green **Complete** order control animates through a bounded set of
-  bounce keyframes — the whole button shifts vertically by about a pixel
-  between phases, and each card animates on its own clock. Recognition
-  carries one measured template per observed keyframe (canonical plus
-  alternates authored from these captures) at the unchanged match
+- The green **Complete** order control differs across the captured frames
+  and between cards in one frame. Animation is the inferred cause; these
+  snapshots do not establish its full cycle or independent timing.
+  Recognition retains measured appearances (canonical plus alternates
+  authored from these captures) at the unchanged match
   threshold; it does not relax confidence or guess coordinates. Cards
   that render no Complete control still publish `ready=None`/`False`
   with no measured `submit_bounds`.

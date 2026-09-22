@@ -282,12 +282,10 @@ _SEL_CORNER_TEMPLATES = tuple(
 )
 _INSPECT_TEMPLATE = _DATA_DIR / "pet_workshop_sel_inspect.png"
 _RECYCLE_TEMPLATE = _DATA_DIR / "pet_workshop_sel_recycle.png"
-# The green Complete button plays a short keyframe bounce: the whole pill
-# shifts vertically through a handful of discrete phases, and the second
-# card renders one phase differently than the first. Each crop is a measured
-# keyframe sampled from the reviewed 2026-09-22 captures; the family is
-# matched under the unchanged control threshold and frames without the
-# control stay far below it.
+# The green Complete button differs across the reviewed 2026-09-22 captures
+# and between cards in one frame. Retain those measured appearances under
+# the unchanged control threshold; the captures do not establish the full
+# animation cycle. Frames without the control stay below the threshold.
 _COMPLETE_TEMPLATES = (
     _DATA_DIR / "pet_workshop_ctl_complete.png",
     _DATA_DIR / "pet_workshop_ctl_complete_2.png",
