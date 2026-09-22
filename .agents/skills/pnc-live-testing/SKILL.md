@@ -20,8 +20,9 @@ The assignment cannot widen what configuration and policy allow. When they confl
 ## Resolve and reserve the target
 
 1. Resolve the account, castle, instance, ADB path, and BlueStacks config through repository configuration and the canonical runtime — never hard-code ports or device IDs, and let the runtime resolve credentials without reading or repeating them. Treat `accounts[].live_roles` as authority. If no castle is named, use the active castle on the configured `testing` instance; never switch accounts or castles unless the assignment authorizes it.
-2. Acquire the canonical process-scoped instance lease through the existing session and entry points before ADB access. One declared reservation — including an assignment-declared multi-instance bundle — spans every dependent check; do not re-acquire per check. Record which instances were already running so cleanup can preserve them.
-3. Verify fresh account/castle identity and screen state and capture a baseline before the first check.
+2. Acquire the canonical process-scoped instance lease through the existing session and entry points before ADB access; that task lease remains the default. One declared task reservation — including an assignment-declared multi-instance bundle — spans every dependent check; do not re-acquire per check. Record which instances were already running so cleanup can preserve them.
+3. When the assignment or its plan declares a long reservation, carry the issued receipt path through the canonical transport (`PNC_INSTANCE_RESERVATION_RECEIPT` or the documented argument) without ever printing or logging its contents, renew the reservation at meaningful checkpoints and on resumption, and treat an active foreign reservation on any assigned instance as a stop condition for that instance. Release the long reservation only when this assignment owns its terminal semantic scope; a reservation inherited from a broader plan or series remains held for its owner.
+4. Verify fresh account/castle identity and screen state and capture a baseline before the first check.
 
 ## Execute the assigned checks
 
@@ -34,7 +35,7 @@ The assignment cannot widen what configuration and policy allow. When they confl
 
 ## Finish and package once
 
-1. Restore the assignment's stable ending screen when the existing flow supports it, apply the stated cleanup policy, preserve instances that were already running, and release the lease. Record actual mutations and authorized-versus-actual spending.
+1. Restore the assignment's stable ending screen when the existing flow supports it, apply the stated cleanup policy, preserve instances that were already running, and release every task lease. Release a declared long reservation only when this assignment owns its terminal semantic scope. Record actual mutations and authorized-versus-actual spending.
 2. Leave raw screenshots, traces, OCR, observations, and workflow output under the canonical configured artifact root; do not copy them into `DEVIN_IMPLEMENT_TURN_DIR` or recursively scan the artifact tree.
 3. Write one `evidence.json` in `DEVIN_IMPLEMENT_TURN_DIR` following the curated evidence contract in the live-test brief. Verify every assigned check has a verdict with non-passing results explained, every cited artifact exists and belongs to this run, and cleanup plus lease release are explicit.
 4. Return one compact terminal handoff: `READY_FOR_REVIEW`, `BLOCKED`, or `FAILED`; the `evidence.json` path; and, only when blocked, the consolidated required user actions. No per-check progress, pasted logs, or investigation narration.

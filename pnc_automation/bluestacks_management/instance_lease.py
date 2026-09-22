@@ -16,7 +16,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
-from pnc_automation.core.errors import InstanceBusyError
+from pnc_automation.bluestacks_management.instance_reservation import (
+    RESERVATION_RECEIPT_ENV,
+    InstanceReservation,
+    InstanceReservationClaim,
+    InstanceReservationStatus,
+    InstanceReservationStore,
+    _foreign_reservation_error,
+    require_safe_label,
+    resolve_reservation_duration,
+)
+from pnc_automation.core.errors import InstanceBusyError, InstanceReservedError
 from pnc_automation.core.lifecycle import close_preserving_error
 from pnc_automation.core.infra.storage.native_locking import (
     ensure_lock_byte as _ensure_lock_byte,
@@ -133,10 +143,12 @@ class InstanceLeaseRegistry:
     )
     wait_timeout_seconds: float = 120.0
     poll_interval_seconds: float = 0.25
+    reservation_store: InstanceReservationStore | None = None
     _leases: dict[str, _NativeInstanceLease] = field(default_factory=dict, init=False, repr=False)
     _reference_counts: dict[str, int] = field(default_factory=dict, init=False, repr=False)
     _finalizers: dict[str, Callable[[], None]] = field(default_factory=dict, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _default_reservation_store: InstanceReservationStore | None = field(default=None, init=False, repr=False)
 
     def acquire(
         self,
@@ -183,6 +195,10 @@ class InstanceLeaseRegistry:
                     "Declare the complete instance bundle before connecting to any instance."
                 )
 
+            # A foreign active long reservation rejects admission immediately,
+            # before any instance resolution or native-lock waiting.
+            self._raise_for_foreign_reservations(frozenset(requested_keys))
+
             deadline = time.monotonic() + wait_seconds
             while True:
                 acquired: dict[str, _NativeInstanceLease] = {}
@@ -194,6 +210,13 @@ class InstanceLeaseRegistry:
                             lease_key=lease_key,
                             display_name=display_name,
                         )
+                    # Recheck under the metadata mutex after taking the native
+                    # locks so a claim racing publication cannot admit work that
+                    # a concurrently published foreign reservation now covers.
+                    with self._reservations().metadata_lock():
+                        conflicts = self._reservation_conflicts(frozenset(requested_keys))
+                    if conflicts:
+                        raise _foreign_reservation_error(list(conflicts))
                 except BaseException as error:
                     cleanup_errors: list[BaseException] = []
                     for lease in acquired.values():
@@ -206,7 +229,7 @@ class InstanceLeaseRegistry:
                             "BlueStacks lease acquisition and rollback both failed.",
                             [error, *cleanup_errors],
                         ) from None
-                    if not isinstance(error, InstanceBusyError):
+                    if not isinstance(error, InstanceBusyError) or isinstance(error, InstanceReservedError):
                         raise
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
@@ -241,11 +264,154 @@ class InstanceLeaseRegistry:
 
         return InstanceLeaseBundle(self.acquire_many(display_names, timeout_seconds=timeout_seconds))
 
+    def claim_reservation(
+        self,
+        display_names: tuple[str, ...],
+        *,
+        scope_id: str,
+        owner_label: str,
+        duration_seconds: float | None = None,
+    ) -> InstanceReservationClaim:
+        """Claims one all-or-none long reservation after proving every target idle.
+
+        Native task locks establish idleness first; the private receipt is written
+        and the record published under the short-held metadata mutex; the task
+        locks are then released. Any held task lock or foreign active claim fails
+        the whole bundle without partial state.
+        """
+
+        requested = _normalize_display_names(display_names)
+        ordered = tuple(sorted(requested, key=lambda item: item[0]))
+        scope_label = require_safe_label(scope_id, "scope_id")
+        owner = require_safe_label(owner_label, "owner_label")
+        duration = resolve_reservation_duration(duration_seconds)
+        store = self._reservations()
+        acquired: dict[str, _NativeInstanceLease] = {}
+        try:
+            for lease_key, display_name in ordered:
+                acquired[lease_key] = self._acquire_once(
+                    lease_key=lease_key,
+                    display_name=display_name,
+                )
+            receipt, receipt_path = store.issue_receipt(scope_id=scope_label)
+            try:
+                reservation = store.publish_claim(
+                    receipt=receipt,
+                    owner_label=owner,
+                    instances=tuple(display_name for _lease_key, display_name in ordered),
+                    duration_seconds=duration,
+                )
+            except BaseException:
+                store.remove_receipt(receipt_path)
+                raise
+        finally:
+            for lease in acquired.values():
+                lease.release()
+        return InstanceReservationClaim(reservation=reservation, receipt_path=receipt_path)
+
+    def renew_reservation(
+        self,
+        receipt_path: Path,
+        *,
+        duration_seconds: float | None = None,
+    ) -> InstanceReservation:
+        """Extends the caller's idle deadline through the authoritative store."""
+
+        return self._reservations().renew(receipt_path, duration_seconds=duration_seconds)
+
+    def release_reservation(self, receipt_path: Path) -> InstanceReservation | None:
+        """Releases the caller's whole declared scope through the authoritative store."""
+
+        return self._reservations().release(receipt_path)
+
+    def reservation_status(
+        self,
+        display_names: tuple[str, ...],
+    ) -> tuple[InstanceReservationStatus, ...]:
+        """Builds secret-free per-instance status without ADB or emulator resolution."""
+
+        store = self._reservations()
+        records = store.load()
+        now = store.now()
+        statuses: list[InstanceReservationStatus] = []
+        for display_name in display_names:
+            lease_key = display_name.strip().casefold()
+            covering = [record for record in records if lease_key in record.instance_keys]
+            active = next((record for record in covering if record.is_active(now)), None)
+            shown = active if active is not None else (covering[-1] if covering else None)
+            if shown is None:
+                state = "none"
+            elif active is not None:
+                state = "active"
+            else:
+                state = "expired"
+            task_state = _probe_task_lock(self.root, lease_key)
+            statuses.append(
+                InstanceReservationStatus(
+                    display_name=display_name,
+                    reservation_state=state,
+                    task_lock_state=task_state,
+                    claimable=state != "active" and task_state == "idle",
+                    scope_id=shown.scope_id if shown is not None else None,
+                    owner_label=shown.owner_label if shown is not None else None,
+                    expires_at=shown.expires_at if shown is not None else None,
+                )
+            )
+        return tuple(statuses)
+
+    def _reservations(self) -> InstanceReservationStore:
+        """Returns the authoritative reservation store rooted at this lease root."""
+
+        if self.reservation_store is not None:
+            return self.reservation_store
+        if self._default_reservation_store is None:
+            self._default_reservation_store = InstanceReservationStore(lease_root=self.root)
+        return self._default_reservation_store
+
+    def _reservation_conflicts(
+        self,
+        requested_keys: frozenset[str],
+    ) -> tuple[InstanceReservation, ...]:
+        """Returns active foreign reservations intersecting the requested bundle."""
+
+        store = self._reservations()
+        covering = tuple(record for record in store.load() if record.covers_any(requested_keys))
+        if not covering:
+            return ()
+        now = store.now()
+        active = tuple(record for record in covering if record.is_active(now))
+        if not active:
+            return ()
+        digest = self._presented_capability_digest(store)
+        return tuple(
+            record
+            for record in active
+            if digest is None or record.capability_digest != digest
+        )
+
+    def _presented_capability_digest(self, store: InstanceReservationStore) -> str | None:
+        """Reads the caller's private receipt digest from the canonical env carrier."""
+
+        raw_path = os.environ.get(RESERVATION_RECEIPT_ENV)
+        if not raw_path:
+            return None
+        try:
+            return store.read_receipt(Path(raw_path)).capability_digest
+        except Exception:
+            return None
+
+    def _raise_for_foreign_reservations(self, requested_keys: frozenset[str]) -> None:
+        """Rejects admission covered by an active foreign long reservation."""
+
+        conflicts = self._reservation_conflicts(requested_keys)
+        if conflicts:
+            raise _foreign_reservation_error(list(conflicts))
+
     def _acquire_once(self, *, lease_key: str, display_name: str) -> _NativeInstanceLease:
         """Attempts one native lock acquisition without waiting."""
 
         self.root.mkdir(parents=True, exist_ok=True)
-        path = self.root / f"{hashlib.sha256(lease_key.encode('utf-8')).hexdigest()}.lock"
+        path = _lease_lock_path(self.root, lease_key)
         # ``a+b`` is intentionally avoided: Windows opens append-mode handles with
         # append-on-write semantics, which caused owner JSON to accumulate on reuse.
         path.touch(exist_ok=True)
@@ -342,6 +508,39 @@ def _raise_release_errors(errors: list[BaseException]) -> None:
     if len(errors) == 1:
         raise errors[0]
     raise BaseExceptionGroup("Multiple BlueStacks lease finalizers failed.", errors)
+
+
+def _lease_lock_path(root: Path, lease_key: str) -> Path:
+    """Derives the per-instance native lock file from its normalized key."""
+
+    return root / f"{hashlib.sha256(lease_key.encode('utf-8')).hexdigest()}.lock"
+
+
+def _probe_task_lock(root: Path, lease_key: str) -> str:
+    """Probes one native task lock without claiming it or touching diagnostics."""
+
+    path = _lease_lock_path(root, lease_key)
+    try:
+        if not path.exists() or path.stat().st_size == 0:
+            return "idle"
+    except OSError:
+        return "unknown"
+    try:
+        handle = path.open("r+b", buffering=0)
+    except OSError:
+        return "unknown"
+    try:
+        try:
+            _lock_file_nonblocking(handle)
+        except OSError:
+            return "busy"
+        try:
+            _unlock_file(handle)
+        except OSError:
+            pass
+        return "idle"
+    finally:
+        handle.close()
 
 
 def _normalize_display_names(display_names: tuple[str, ...]) -> tuple[tuple[str, str], ...]:

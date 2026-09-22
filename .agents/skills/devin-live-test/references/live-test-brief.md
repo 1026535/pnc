@@ -11,10 +11,13 @@ meaningless. Finish all other authorized checks before handback.
 Target and authority:
 Repository/worktree and baseline SHA. Authorized account/castle or the canonical
 configured-testing-instance default; allowed live role; declared instance bundle;
-authorized switching; permitted mutations; and stable ending screen. If spending may
-occur, give the exact action, target, resource type, maximum amount or attempts,
-precondition, success signal, and budget stop condition from the request or approved
-plan. The configured live role and canonical lease remain authoritative.
+authorized switching; permitted mutations; and stable ending screen. When the plan
+or series declares a persistent long reservation, name its scope, the renewal
+checkpoints, and whether this assignment owns its terminal release; transport the
+receipt to the worker without printing its contents. If spending may occur, give
+the exact action, target, resource type, maximum amount or attempts, precondition,
+success signal, and budget stop condition from the request or approved plan. The
+configured live role and canonical lease remain authoritative.
 
 Known evidence and non-goals:
 Relevant implementation refs, known passing offline checks, reusable saved evidence,
@@ -26,11 +29,13 @@ Execution ownership:
 Read AGENTS.md and .agents/skills/test-bluestacks-live/SKILL.md before ADB access.
 Choose the smallest supported tests, application entry points, or authored workflows
 that prove all assigned postconditions. Run the smallest missing offline preflight,
-acquire one canonical reservation for the declared bundle, verify fresh identity and
+acquire the canonical task lease for the declared bundle, verify fresh identity and
 baseline state, execute dependent checks under that lease, perform routine bounded
-diagnosis, and continue safe independent checks after a failure. Keep raw live evidence
-under the canonical configured artifact root. Do not send intermediate updates or ask
-the lead to choose routine test, navigation, retry, or evidence details.
+diagnosis, and continue safe independent checks after a failure. Under a declared
+long reservation, carry its receipt, renew at meaningful checkpoints, and defer to
+active foreign reservations. Keep raw live evidence under the canonical configured
+artifact root. Do not send intermediate updates or ask the lead to choose routine
+test, navigation, retry, or evidence details.
 
 Completion and user blockers:
 Complete every safe authorized check and package failed, blocked, and not-run results.
@@ -39,7 +44,9 @@ required, such as new authorization, credentials, an account action, an unresolv
 target choice, or a resource-budget decision. Finish every other safe check and
 consolidate all known required user actions into one terminal BLOCKED handoff. Treat
 transport or tool failure without a user remedy as FAILED. Restore the requested stable
-screen when supported, apply cleanup, and release the lease.
+screen when supported, apply cleanup, and release every task lease. Release a declared
+long reservation only when this assignment owns its terminal semantic scope; an
+inherited plan or series reservation remains held for its owner.
 
 Packaged result:
 Before handback, write evidence.json in DEVIN_IMPLEMENT_TURN_DIR using the contract

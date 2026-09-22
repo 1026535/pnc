@@ -49,6 +49,10 @@ class InstanceBusyError(AutomationError):
         super().__init__(message=message, kind=AutomationErrorKind.INSTANCE_BUSY, details=details)
 
 
+class InstanceReservedError(InstanceBusyError):
+    """Raised when an agent-scoped long reservation covers the selected emulator instance."""
+
+
 class DeviceConnectionError(AutomationError):
     """Raised when the target emulator session cannot be reached reliably."""
 

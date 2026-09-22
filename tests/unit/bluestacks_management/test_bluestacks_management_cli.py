@@ -5,6 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -12,7 +13,12 @@ from unittest.mock import Mock, patch
 import unittest
 
 from pnc_automation.bluestacks_management.__main__ import _run_monitor, main
-from pnc_automation.core.config.host import BlueStacksHostConfig, BlueStacksMemoryPolicy
+from pnc_automation.bluestacks_management.instance_reservation import RESERVATION_RECEIPT_ENV
+from pnc_automation.core.config.host import (
+    BlueStacksHostConfig,
+    BlueStacksInstanceBinding,
+    BlueStacksMemoryPolicy,
+)
 from pnc_automation.bluestacks_management.instance_memory_monitor import (
     MemoryMonitorDisposition,
     MemoryMonitorResult,
@@ -221,6 +227,265 @@ class BlueStacksManagementCliTests(unittest.TestCase):
         self.assertNotIn("cli-secret-sentinel", stdout.getvalue() + stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
         self.assertIn('"failure_phase": "configuration"', stderr.getvalue())
+
+    def test_reservation_subcommands_route_arguments(self) -> None:
+        """Routes every reservation operation with its parsed arguments."""
+
+        with patch(
+            "pnc_automation.bluestacks_management.__main__._claim_reservation", return_value=0
+        ) as claim:
+            self.assertEqual(
+                main(
+                    [
+                        "claim-reservation",
+                        "--instance",
+                        "Instance A",
+                        "--instance",
+                        "Instance B",
+                        "--scope-id",
+                        "scope-1",
+                        "--label",
+                        "agent-x",
+                        "--duration-seconds",
+                        "300",
+                        "--lease-root",
+                        "leases",
+                    ]
+                ),
+                0,
+            )
+        arguments = claim.call_args.args[0]
+        self.assertEqual(arguments.instances, ["Instance A", "Instance B"])
+        self.assertEqual(arguments.scope_id, "scope-1")
+        self.assertEqual(arguments.duration_seconds, 300.0)
+        self.assertEqual(arguments.lease_root, Path("leases"))
+
+        with patch(
+            "pnc_automation.bluestacks_management.__main__._renew_reservation", return_value=0
+        ) as renew:
+            self.assertEqual(main(["renew-reservation", "--receipt", "r.json"]), 0)
+        self.assertEqual(renew.call_args.args[0].receipt, Path("r.json"))
+
+        with patch(
+            "pnc_automation.bluestacks_management.__main__._release_reservation", return_value=0
+        ) as release:
+            self.assertEqual(main(["release-reservation", "--receipt", "r.json"]), 0)
+        self.assertEqual(release.call_args.args[0].receipt, Path("r.json"))
+
+        with patch(
+            "pnc_automation.bluestacks_management.__main__._reservation_status", return_value=0
+        ) as status:
+            self.assertEqual(main(["reservation-status", "--config", "custom.yaml"]), 0)
+        self.assertEqual(status.call_args.args[0].config, "custom.yaml")
+
+    def test_claim_renew_release_lifecycle_is_secret_free(self) -> None:
+        """Claim, renew, and release emit safe output that never contains capability material."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            lease_root = Path(directory)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    main(
+                        [
+                            "claim-reservation",
+                            "--instance",
+                            "Instance A",
+                            "--scope-id",
+                            "scope-1",
+                            "--label",
+                            "agent-x",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    0,
+                )
+            claimed = json.loads(stdout.getvalue())
+            receipt_path = Path(claimed["receipt_path"])
+            capability = json.loads(receipt_path.read_bytes())["capability"]
+            self.assertNotIn(capability, stdout.getvalue())
+            self.assertNotIn("capability_digest", stdout.getvalue())
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    main(
+                        [
+                            "renew-reservation",
+                            "--receipt",
+                            str(receipt_path),
+                            "--duration-seconds",
+                            "120",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertTrue(json.loads(stdout.getvalue())["renewed"])
+            self.assertNotIn(capability, stdout.getvalue())
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    main(
+                        [
+                            "release-reservation",
+                            "--receipt",
+                            str(receipt_path),
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    0,
+                )
+            self.assertTrue(json.loads(stdout.getvalue())["released"])
+
+    def test_renew_and_release_accept_env_receipt(self) -> None:
+        """The canonical environment carrier supplies the receipt path without a flag."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            lease_root = Path(directory)
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    main(
+                        [
+                            "claim-reservation",
+                            "--instance",
+                            "Instance A",
+                            "--scope-id",
+                            "scope-env",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    0,
+                )
+            receipts = list((lease_root / "long-reservation-receipts").glob("*.json"))
+            self.assertEqual(len(receipts), 1)
+            with (
+                patch.dict("os.environ", {RESERVATION_RECEIPT_ENV: str(receipts[0])}),
+                redirect_stdout(StringIO()),
+            ):
+                self.assertEqual(main(["release-reservation", "--lease-root", str(lease_root)]), 0)
+
+    def test_release_without_receipt_fails_without_exception_text(self) -> None:
+        """A missing receipt carrier reports a sanitized failure instead of raising."""
+
+        stderr = StringIO()
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            redirect_stderr(stderr),
+        ):
+            self.assertEqual(
+                main(["release-reservation", "--lease-root", tempfile.gettempdir()]),
+                1,
+            )
+        self.assertIn('"error_type": "ReservationReceiptRequired"', stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_reservation_status_lists_configured_inventory_without_adb(self) -> None:
+        """Status prints every configured instance state without constructing the resolver."""
+
+        config = BlueStacksHostConfig(
+            config_path=Path("accounts.yaml"),
+            metadata_path=Path("bluestacks.conf"),
+            instances=(
+                BlueStacksInstanceBinding(id="one", display_name="Instance A"),
+                BlueStacksInstanceBinding(id="two", display_name="Instance B"),
+            ),
+            accounts=(),
+            memory_policy=BlueStacksMemoryPolicy(enabled=True, restart_roles=frozenset()),
+        )
+        stdout = StringIO()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch(
+                "pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config",
+                return_value=config,
+            ),
+            patch(
+                "pnc_automation.bluestacks_management.__main__.BlueStacksInstanceResolver",
+                side_effect=AssertionError("resolver must not be constructed"),
+            ),
+            redirect_stdout(stdout),
+        ):
+            self.assertEqual(
+                main(
+                    [
+                        "reservation-status",
+                        "--config",
+                        "accounts.yaml",
+                        "--lease-root",
+                        directory,
+                    ]
+                ),
+                0,
+            )
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(
+            [(entry["display_name"], entry["reservation_state"], entry["task_lock_state"]) for entry in payload["instances"]],
+            [("Instance A", "none", "idle"), ("Instance B", "none", "idle")],
+        )
+        self.assertTrue(all(entry["claimable"] for entry in payload["instances"]))
+
+    def test_reservation_status_surfaces_active_claim_without_secrets(self) -> None:
+        """Status after a claim reports scope diagnostics but never capability material."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            lease_root = Path(directory)
+            with redirect_stdout(StringIO()):
+                main(
+                    [
+                        "claim-reservation",
+                        "--instance",
+                        "Instance A",
+                        "--scope-id",
+                        "scope-1",
+                        "--label",
+                        "agent-x",
+                        "--lease-root",
+                        str(lease_root),
+                    ]
+                )
+            receipt = next((lease_root / "long-reservation-receipts").glob("*.json"))
+            capability = json.loads(receipt.read_bytes())["capability"]
+
+            config = BlueStacksHostConfig(
+                config_path=Path("accounts.yaml"),
+                metadata_path=Path("bluestacks.conf"),
+                instances=(BlueStacksInstanceBinding(id="one", display_name="Instance A"),),
+                accounts=(),
+                memory_policy=BlueStacksMemoryPolicy(enabled=True, restart_roles=frozenset()),
+            )
+            stdout = StringIO()
+            with (
+                patch(
+                    "pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config",
+                    return_value=config,
+                ),
+                redirect_stdout(stdout),
+            ):
+                self.assertEqual(
+                    main(
+                        [
+                            "reservation-status",
+                            "--config",
+                            "accounts.yaml",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    0,
+                )
+            entry = json.loads(stdout.getvalue())["instances"][0]
+            self.assertEqual(entry["reservation_state"], "active")
+            self.assertEqual(entry["scope_id"], "scope-1")
+            self.assertEqual(entry["owner_label"], "agent-x")
+            self.assertFalse(entry["claimable"])
+            self.assertNotIn(capability, stdout.getvalue())
+            self.assertNotIn("capability", stdout.getvalue())
 
     def test_legacy_tool_paths_are_thin_compatibility_shims(self) -> None:
         """Keeps existing operator commands forwarding to the package module."""

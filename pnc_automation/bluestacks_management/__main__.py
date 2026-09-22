@@ -7,6 +7,7 @@ from dataclasses import asdict
 from datetime import datetime
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 import time
@@ -23,7 +24,11 @@ from pnc_automation.bluestacks_management.fleet_restart import (
     is_maintenance_window,
     TORONTO_MAINTENANCE_ZONE,
 )
-from pnc_automation.bluestacks_management.instance_lease import DEFAULT_INSTANCE_LEASE_ROOT
+from pnc_automation.bluestacks_management.instance_lease import (
+    DEFAULT_INSTANCE_LEASE_ROOT,
+    InstanceLeaseRegistry,
+)
+from pnc_automation.bluestacks_management.instance_reservation import RESERVATION_RECEIPT_ENV
 from pnc_automation.bluestacks_management.instance_memory_monitor import BlueStacksInstanceMemoryMonitor
 from pnc_automation.bluestacks_management.instance_memory_monitor import MemoryMonitorDisposition
 from pnc_automation.bluestacks_management.instance_shutdown import (
@@ -78,10 +83,72 @@ def main(argv: list[str] | None = None) -> int:
         help="Refuse delayed invocations outside the scheduled 01:55-02:00 Toronto window.",
     )
 
+    claim_parser = subparsers.add_parser(
+        "claim-reservation",
+        help="Claim one agent-scoped long reservation over configured display names.",
+    )
+    claim_parser.add_argument(
+        "--instance",
+        action="append",
+        dest="instances",
+        required=True,
+        metavar="DISPLAY_NAME",
+        help="Configured display name; repeat for a declared multi-instance bundle.",
+    )
+    claim_parser.add_argument("--scope-id", required=True, help="Assigned reservation scope label.")
+    claim_parser.add_argument("--label", default="agent", help="Safe owner label for status diagnostics.")
+    claim_parser.add_argument(
+        "--duration-seconds",
+        type=float,
+        default=None,
+        help="Bounded idle deadline; defaults to two hours.",
+    )
+    claim_parser.add_argument("--lease-root", type=Path, default=DEFAULT_INSTANCE_LEASE_ROOT)
+
+    renew_parser = subparsers.add_parser(
+        "renew-reservation",
+        help="Renew the caller's live reservation idle deadline.",
+    )
+    renew_parser.add_argument(
+        "--receipt",
+        type=Path,
+        default=None,
+        help=f"Private receipt path; defaults to ${RESERVATION_RECEIPT_ENV}.",
+    )
+    renew_parser.add_argument("--duration-seconds", type=float, default=None)
+    renew_parser.add_argument("--lease-root", type=Path, default=DEFAULT_INSTANCE_LEASE_ROOT)
+
+    release_parser = subparsers.add_parser(
+        "release-reservation",
+        help="Release the caller's whole declared reservation scope.",
+    )
+    release_parser.add_argument(
+        "--receipt",
+        type=Path,
+        default=None,
+        help=f"Private receipt path; defaults to ${RESERVATION_RECEIPT_ENV}.",
+    )
+    release_parser.add_argument("--lease-root", type=Path, default=DEFAULT_INSTANCE_LEASE_ROOT)
+
+    status_parser = subparsers.add_parser(
+        "reservation-status",
+        help="Print secret-free configured-instance reservation and task-lock status.",
+    )
+    status_parser.add_argument("--config", default="config/accounts.yaml")
+    status_parser.add_argument("--lease-root", type=Path, default=DEFAULT_INSTANCE_LEASE_ROOT)
+
     arguments = parser.parse_args(argv)
     if arguments.command == "monitor":
         return _run_monitor(arguments)
-    return _restart_open(arguments, parser=parser)
+    if arguments.command == "restart-open":
+        return _restart_open(arguments, parser=parser)
+    if arguments.command == "claim-reservation":
+        return _claim_reservation(arguments)
+    if arguments.command == "renew-reservation":
+        return _renew_reservation(arguments)
+    if arguments.command == "release-reservation":
+        return _release_reservation(arguments)
+    return _reservation_status(arguments)
 
 
 def _run_monitor(arguments: argparse.Namespace) -> int:
@@ -175,6 +242,130 @@ def _restart_open(arguments: argparse.Namespace, *, parser: argparse.ArgumentPar
     except Exception as error:
         _report_cli_failure(logger, error, default_phase="configuration")
         return 1
+
+
+def _claim_reservation(arguments: argparse.Namespace) -> int:
+    """Claims one long reservation and prints only its safe public fields."""
+
+    registry = InstanceLeaseRegistry(root=arguments.lease_root)
+    try:
+        claim = registry.claim_reservation(
+            tuple(arguments.instances),
+            scope_id=arguments.scope_id,
+            owner_label=arguments.label,
+            duration_seconds=arguments.duration_seconds,
+        )
+    except Exception as error:
+        _report_cli_failure(None, error, default_phase="state")
+        return 1
+    print(
+        json.dumps(
+            {
+                "claimed": True,
+                "scope_id": claim.reservation.scope_id,
+                "owner_label": claim.reservation.owner_label,
+                "instances": list(claim.reservation.instances),
+                "expires_at": claim.reservation.expires_at,
+                "receipt_path": str(claim.receipt_path),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _renew_reservation(arguments: argparse.Namespace) -> int:
+    """Renews the caller's live reservation and prints its new expiry."""
+
+    receipt = _receipt_argument(arguments)
+    if receipt is None:
+        _report_cli_failure(
+            None,
+            None,
+            default_phase="state",
+            error_type="ReservationReceiptRequired",
+        )
+        return 1
+    registry = InstanceLeaseRegistry(root=arguments.lease_root)
+    try:
+        record = registry.renew_reservation(receipt, duration_seconds=arguments.duration_seconds)
+    except Exception as error:
+        _report_cli_failure(None, error, default_phase="state")
+        return 1
+    print(
+        json.dumps(
+            {
+                "renewed": True,
+                "scope_id": record.scope_id,
+                "expires_at": record.expires_at,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _release_reservation(arguments: argparse.Namespace) -> int:
+    """Releases the caller's whole scope; repeated release is harmless."""
+
+    receipt = _receipt_argument(arguments)
+    if receipt is None:
+        _report_cli_failure(
+            None,
+            None,
+            default_phase="state",
+            error_type="ReservationReceiptRequired",
+        )
+        return 1
+    registry = InstanceLeaseRegistry(root=arguments.lease_root)
+    try:
+        record = registry.release_reservation(receipt)
+    except Exception as error:
+        _report_cli_failure(None, error, default_phase="state")
+        return 1
+    print(
+        json.dumps(
+            {
+                "released": record is not None,
+                "scope_id": record.scope_id if record is not None else None,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _reservation_status(arguments: argparse.Namespace) -> int:
+    """Prints configured inventory with reservation and task-lock state; never runs ADB."""
+
+    try:
+        config = load_bluestacks_host_config(Path(arguments.config))
+        statuses = InstanceLeaseRegistry(root=arguments.lease_root).reservation_status(
+            tuple(instance.display_name for instance in config.instances)
+        )
+    except Exception as error:
+        _report_cli_failure(None, error, default_phase="configuration")
+        return 1
+    print(
+        json.dumps(
+            {"instances": [asdict(status) for status in statuses]},
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def _receipt_argument(arguments: argparse.Namespace) -> Path | None:
+    """Resolves the private receipt path from the flag or canonical env carrier."""
+
+    if arguments.receipt is not None:
+        return arguments.receipt
+    raw_path = os.environ.get(RESERVATION_RECEIPT_ENV)
+    return Path(raw_path) if raw_path else None
 
 
 def _report_cli_failure(

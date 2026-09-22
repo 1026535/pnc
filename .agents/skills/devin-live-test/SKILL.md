@@ -14,7 +14,8 @@ Hand Devin one complete live-testing assignment, then collect one packaged resul
 - Invocation or an approved plan must authorize live testing through Devin. Discovery of this skill, a code change that might benefit from live testing, or offline-test permission alone is insufficient.
 - Follow [test-bluestacks-live](../test-bluestacks-live/SKILL.md) as the canonical live policy. Resolve targets through repository configuration, treat `accounts[].live_roles` and the canonical lease as authority, verify fresh identity and screen state, and preserve pre-existing instances.
 - Delegate actions permitted by the resolved live role and lease. If an action may spend resources, the request or approved plan must provide the exact action, target, and budget required by [write-code-live](../write-code-live/SKILL.md); include those limits in the brief and let Devin execute only within them.
-- Use one worker and one declared instance bundle. Before launch, confirm the lead and other workers do not hold or use the target lease. Devin acquires one canonical reservation for the assignment, retains it across dependent checks, and releases it during cleanup.
+- Use one worker and one declared instance bundle. Before launch, confirm the lead and other workers do not hold or use the target lease; consult `py -m pnc_automation.bluestacks_management reservation-status` when a long reservation may exist. Devin acquires one canonical process-scoped task lease for the assignment, retains it across dependent checks, and releases it during cleanup.
+- A prompt, plan, or series may instead declare a persistent agent-scoped long reservation. When one applies, the brief must carry the issued receipt to Devin through a secure transport without exposing its contents in the brief text, name the renewal checkpoints, and state whether this assignment owns the reservation's terminal release. A reservation inherited from a broader plan or series remains held for its owner; Devin releases it only when the assignment owns the terminal semantic scope.
 - The assignment owns live validation only. Devin may inspect code and artifacts and run existing checks, but must not edit source, tests, fixtures, configuration, plans, documentation, or Git state; install dependencies; commit; or open a pull request. Preserve the starting worktree exactly.
 - Do not place credentials, tokens, ignored configuration values, or account secrets in the brief, manifest, or handback. Let the canonical runtime resolve authorized local configuration.
 
@@ -43,11 +44,11 @@ Register the run with the single lead monitor under `.local-data/devin-monitor`,
 The brief must tell Devin to read `AGENTS.md` and `.agents/skills/test-bluestacks-live/SKILL.md` before ADB access. Devin should:
 
 - select and run all checks needed for the assignment, preferring supported repository entry points over raw ADB commands;
-- keep one declared lease across dependent live checks and avoid repeated setup or identity discovery;
+- keep one declared task lease across dependent live checks and avoid repeated setup or identity discovery;
 - perform routine bounded recovery and inspect screenshots, OCR, observations, and logs when a check fails;
 - continue to remaining safe checks when one check fails, recording dependencies that make another check unsafe or meaningless;
 - make ordinary test-selection, sequencing, evidence, and diagnostic decisions itself instead of returning them to the lead; and
-- end on the requested stable screen, apply the cleanup policy, release the lease, and preserve any instance that was already running.
+- end on the requested stable screen, apply the cleanup policy, release every task lease, preserve any instance that was already running, and release a declared long reservation only when the assignment owns its terminal semantic scope.
 
 Devin must not return `NEEDS_LEAD`, ask routine questions, or stop merely because a check failed or evidence is incomplete. It completes every safe authorized check and packages failed, blocked, or not-run results. It may return `BLOCKED` only when progress requires concrete user intervention, such as new authorization, credentials, an account action, a target choice unavailable from configuration, or a resource-budget decision. Consolidate every known required user action into that one terminal handoff instead of revealing blockers serially. Transport or tool failure without a user remedy is `FAILED`, not a blocker.
 
