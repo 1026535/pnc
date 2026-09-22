@@ -50,6 +50,10 @@ _DETAIL_LASSO = "pet_workshop_order_detail_lasso_native_rgba.png"
 _TREE4 = "pet_workshop_selected_tree4_native_rgba.png"
 _PRODUCED = "pet_workshop_produced_native_rgba.png"
 _MERGED = "pet_workshop_merged_native_rgba.png"
+_THREE_FRUIT5 = "pet_workshop_board_three_fruit5_native_rgba.png"
+_THREE_FRUIT5_S2 = "pet_workshop_board_three_fruit5_survey_2_native_rgba.png"
+_THREE_FRUIT5_S4 = "pet_workshop_board_three_fruit5_survey_4_native_rgba.png"
+_DETAIL_CHEST = "pet_workshop_order_detail_chest_native_rgba.png"
 
 
 def _order(report: dict, order_ref: int) -> dict:
@@ -95,7 +99,18 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
 
         labels = load_labels(LABELS_PATH)
         self.assertEqual(
-            {_BOARD_LASSO, _DETAIL_LASSO, _TREE4, _PRODUCED, _MERGED}, set(labels)
+            {
+                _BOARD_LASSO,
+                _DETAIL_LASSO,
+                _TREE4,
+                _PRODUCED,
+                _MERGED,
+                _THREE_FRUIT5,
+                _THREE_FRUIT5_S2,
+                _THREE_FRUIT5_S4,
+                _DETAIL_CHEST,
+            },
+            set(labels),
         )
         for name in sorted(labels):
             with self.subTest(image=name):
@@ -129,8 +144,8 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
         order = _order(report, 1)
         self.assertEqual({"20210": 1, "20105": 1}, order["requirements"])
         self.assertEqual(
-            ["feed", "beast_lasso"],
-            [reward["category"] for reward in order["rewards"]],
+            [("feed", 4380), ("beast_lasso", 2)],
+            [(reward["category"], reward["quantity"]) for reward in order["rewards"]],
         )
         self.assertEqual("complete", order["completeness"])
         self.assertIsNone(order["ready"])
@@ -173,6 +188,46 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
         assert decision is not None
         self.assertEqual("inspect", decision["intent"]["kind"])
         self.assertFalse(decision["intent"]["gameplay"])
+
+    def test_ready_detection_holds_across_complete_animation_phases(self) -> None:
+        """The bouncing Complete control reads ready on captured keyframes.
+
+        The button pulses through bounded bounce keyframes; each measured
+        crop in the template family must match at the unchanged threshold
+        on both ready cards while the clipped card abstains.
+        """
+
+        for name in (_THREE_FRUIT5, _THREE_FRUIT5_S2, _THREE_FRUIT5_S4):
+            with self.subTest(image=name):
+                report = self._report(name)
+                views = {
+                    view["order_ref"]: view
+                    for view in report["view"]["order_views"]
+                }
+                for ref, bounds in ((1, [330, 170, 120, 32]), (2, [625, 170, 120, 32])):
+                    self.assertIs(True, _order(report, ref)["ready"], ref)
+                    self.assertEqual(bounds, views[ref]["submit_bounds"], ref)
+                self.assertIsNone(_order(report, 3)["ready"])
+                self.assertIsNone(views[3]["submit_bounds"])
+                self.assertEqual("clipped", _order(report, 3)["completeness"])
+                self.assertEqual("unreadable", _order(report, 2)["completeness"])
+                self.assertEqual(
+                    {"20105": 3}, _order(report, 1)["requirements"]
+                )
+
+    def test_chest_detail_reads_one_grouped_reward_with_quantity(self) -> None:
+        """The single chest box never splits into two pedestal runs."""
+
+        report = self._report(_DETAIL_CHEST)
+        self.assertEqual("order_detail", report["workshop"]["surface"])
+        order = _order(report, 1)
+        self.assertEqual({"20105": 3}, order["requirements"])
+        self.assertEqual(
+            [("chest", 1)],
+            [(reward["category"], reward["quantity"]) for reward in order["rewards"]],
+        )
+        self.assertEqual("complete", order["completeness"])
+        self.assertIsNone(order["ready"])
 
     def test_saved_produce_and_merge_sequence_is_distinguishable(self) -> None:
         """Recognized deltas separate the select/produce/merge frames."""

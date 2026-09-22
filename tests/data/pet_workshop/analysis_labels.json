@@ -180,6 +180,171 @@
           "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
         }
       }
+    },
+    {
+      "image": "pet_workshop_board_three_fruit5_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 order strip captured 2026-09-22 (hopium live run): the first card holds three Fruit 5 pieces with an animated Complete control; the second card shows a Complete control but its recipe inlay reads no requirement icons (unreadable, unmodeled feed-card identity); the third is a right-clipped sliver. The Complete button pulses through bounded bounce keyframes, so readiness must be recognized across all observed phases.",
+      "expected": {
+        "screen": {"screen_type": "pnc_pet_workshop", "layout_id": "pet_workshop_board", "guard": "clear"},
+        "workshop": {
+          "surface": "board",
+          "workshop_level": 8,
+          "energy": {"current": 123, "capacity": 200},
+          "production_mode": "ordinary",
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest", "quantity": 1}],
+            "completeness": "complete",
+            "ready": true,
+            "source": "order_strip",
+            "assessment": {
+              "eligible": false,
+              "ineligible_reason": "piece total 3 != 2",
+              "unresolved": false
+            }
+          },
+          "2": {
+            "requirements": {},
+            "rewards": [{"category": "feed", "quantity": 1771}],
+            "completeness": "unreadable",
+            "ready": true,
+            "assessment": {"eligible": false, "unresolved": true}
+          },
+          "3": {
+            "requirements": {},
+            "rewards": [{"category": "beast_lasso", "quantity": 1}],
+            "completeness": "clipped",
+            "ready": null,
+            "assessment": {"eligible": false, "unresolved": true}
+          }
+        },
+        "view": {
+          "order_views": {
+            "1": {"submit_bounds": [330, 170, 120, 32]},
+            "2": {"submit_bounds": [625, 170, 120, 32]},
+            "3": {"submit_bounds": null}
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_board_three_fruit5_survey_2_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "Same LV8 strip as pet_workshop_board_three_fruit5_native_rgba.png, captured after the second bounded survey swipe on 2026-09-22. The Complete controls render a different bounce keyframe, so both ready cards must still measure submit controls and the clipped/unreadable diagnostics stay unchanged.",
+      "expected": {
+        "screen": {"screen_type": "pnc_pet_workshop", "layout_id": "pet_workshop_board", "guard": "clear"},
+        "workshop": {
+          "surface": "board",
+          "workshop_level": 8,
+          "energy": {"current": 123, "capacity": 200},
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest", "quantity": 1}],
+            "completeness": "complete",
+            "ready": true,
+            "source": "order_strip",
+            "assessment": {"eligible": false, "ineligible_reason": "piece total 3 != 2"}
+          },
+          "2": {
+            "requirements": {},
+            "completeness": "unreadable",
+            "ready": true,
+            "assessment": {"eligible": false, "unresolved": true}
+          },
+          "3": {
+            "requirements": {},
+            "completeness": "clipped",
+            "ready": null,
+            "assessment": {"eligible": false, "unresolved": true}
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_board_three_fruit5_survey_4_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "Same LV8 strip captured after the fourth bounded survey swipe on 2026-09-22, with the Complete controls in yet another bounce keyframe. Energy regenerated to 124 between captures; order facts are identical to the initial capture.",
+      "expected": {
+        "screen": {"screen_type": "pnc_pet_workshop", "layout_id": "pet_workshop_board", "guard": "clear"},
+        "workshop": {
+          "surface": "board",
+          "workshop_level": 8,
+          "energy": {"current": 124, "capacity": 200},
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest", "quantity": 1}],
+            "completeness": "complete",
+            "ready": true,
+            "source": "order_strip",
+            "assessment": {"eligible": false, "ineligible_reason": "piece total 3 != 2"}
+          },
+          "2": {
+            "requirements": {},
+            "completeness": "unreadable",
+            "ready": true,
+            "assessment": {"eligible": false, "unresolved": true}
+          },
+          "3": {
+            "requirements": {},
+            "completeness": "clipped",
+            "ready": null,
+            "assessment": {"eligible": false, "unresolved": true}
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_order_detail_chest_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 order detail modal (strip order 1) captured 2026-09-22: three centered Fruit 5 pedestals and a single framed Item Chest reward with measured quantity 1. The chest art overlaps its own frame's bottom edge, which must not split the reward row into two pedestal runs.",
+      "expected": {
+        "screen": {
+          "screen_type": "pnc_pet_workshop_order_detail",
+          "layout_id": "pet_workshop_order_detail",
+          "guard": "clear"
+        },
+        "workshop": {
+          "surface": "order_detail",
+          "energy": {"current": null, "capacity": null},
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest", "quantity": 1}],
+            "completeness": "complete",
+            "ready": null,
+            "source": "order_detail",
+            "assessment": {
+              "eligible": false,
+              "ineligible_reason": "piece total 3 != 2",
+              "unresolved": false
+            }
+          }
+        },
+        "decision": {
+          "intent": {"kind": "stop", "stop_reason": "excluded_surface", "gameplay": false}
+        }
+      }
     }
   ]
 }

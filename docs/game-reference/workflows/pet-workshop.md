@@ -407,6 +407,34 @@ basename would overwrite each other, so the run is rejected with an
 actionable error before any report is written — rename the inputs or
 analyze them in separate `--out-dir` runs.
 
+## September 22 live006 recognition corrections (PW05)
+
+**Artifact-observed** on the four promoted native captures under
+`C:/Users/lebel/pnc/.local-data/artifacts/2026-09-22/pet_workshop_pw05_hopium_growth_c920dad`
+(board, two survey frames, one order detail; LV8, energy 123→124):
+
+- The green **Complete** order control animates through a bounded set of
+  bounce keyframes — the whole button shifts vertically by about a pixel
+  between phases, and each card animates on its own clock. Recognition
+  carries one measured template per observed keyframe (canonical plus
+  alternates authored from these captures) at the unchanged match
+  threshold; it does not relax confidence or guess coordinates. Cards
+  that render no Complete control still publish `ready=None`/`False`
+  with no measured `submit_bounds`.
+- The order-detail reward row draws each reward inside its own framed
+  box whose bottom edge forms the pedestal run; the Item Chest's art
+  pokes through that edge and splits it visually, so runs separated by
+  small gaps are merged back into one pedestal. Reward quantity badges
+  sit lower than strip badges and can overhang the icon's right edge —
+  the count zone reaches deeper/rightward and reads comma-grouped values
+  (chest 1, feed "4,380" → 4380, lasso 2).
+- The detail requirement band spans the modal's full centered pedestal
+  row (three on the chest order); pedestals outside recognized template
+  families keep unknown coverage rather than being dropped.
+- `portrait_bounds` and `submit_bounds` are measured independently: the
+  card portrait region can resize between animation frames while the
+  control's measured bounds stay fixed.
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings

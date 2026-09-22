@@ -165,16 +165,30 @@ _HELP_CLOSE_SEARCH = Bounds(x=430, y=100, width=95, height=80)
 # Order-detail modal: requirement and reward icons stand on blue pedestals
 # whose lip rows are measurable coverage (an unmatched pedestal preserves an
 # unknown requirement/reward rather than vanishing). Reward counts float at
-# each icon's top edge.
-_OD_REQUIREMENT_BAND = Bounds(x=160, y=285, width=370, height=95)
+# each icon's top edge. Requirement icons form a centered group whose extent
+# is measured on the modal (a three-icon group starts left of x150), so the
+# band spans the modal with margin rather than assuming a fixed left edge.
+_OD_REQUIREMENT_BAND = Bounds(x=120, y=285, width=410, height=95)
 _OD_REQ_PEDESTAL_BAND = (366, 384)
 _OD_REWARD_BAND = Bounds(x=180, y=440, width=360, height=60)
 _OD_REW_PEDESTAL_BAND = (508, 522)
 _OD_REWARD_TOKEN_BAND = Bounds(x=140, y=424, width=400, height=76)
 _OD_PEDESTAL_MIN_WIDTH = 30
+# One reward box's bottom lip can be interrupted where its icon art pokes
+# through a small gap (the Item Chest does exactly that); runs separated by
+# a much smaller gap than the spacing between distinct reward boxes are one
+# pedestal, not two. Distinct boxes measured on the modal sit ~20+ px apart.
+_OD_PEDESTAL_MERGE_GAP = 8
 _OD_PEDESTAL_PAD_X = 20
-_OD_COUNT_ZONE_Y = (-20, 4)
-_OD_COUNT_ZONE_RIGHT_PAD = 18
+# Detail count badges overlap the icon's top edge and can extend several
+# pixels into the icon (Item Chest "1", feed "4,380" on the 2026-09-22 and
+# lasso detail frames); a zone clipped at the badge's bottom edge loses or
+# fragments the OCR read, so the lower bound keeps a few pixels of margin.
+_OD_COUNT_ZONE_Y = (-20, 21)
+# Wide count badges (feed "4,380") overhang the icon's right edge by ~22 px;
+# a short pad clips the trailing digits. The next icon's left edge still
+# bounds the zone, so the pad only widens into the same pedestal group.
+_OD_COUNT_ZONE_RIGHT_PAD = 26
 
 _CELL_OVERLAY_THRESHOLD = 0.90
 _CELL_ITEM_THRESHOLD = 0.90
@@ -255,6 +269,7 @@ _DETAIL_REQUIREMENT_TEMPLATES = (
     ("pet_workshop_od_req_wood_10.png", 20210),
 )
 _DETAIL_REWARD_TEMPLATES = (
+    ("pet_workshop_od_rew_chest.png", WorkshopOrderRewardCategory.CHEST),
     ("pet_workshop_od_rew_feed.png", WorkshopOrderRewardCategory.FEED),
     ("pet_workshop_od_rew_exp.png", WorkshopOrderRewardCategory.WORKSHOP_EXP),
     ("pet_workshop_od_rew_lasso.png", WorkshopOrderRewardCategory.BEAST_LASSO),
@@ -267,12 +282,25 @@ _SEL_CORNER_TEMPLATES = tuple(
 )
 _INSPECT_TEMPLATE = _DATA_DIR / "pet_workshop_sel_inspect.png"
 _RECYCLE_TEMPLATE = _DATA_DIR / "pet_workshop_sel_recycle.png"
-_COMPLETE_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_complete.png"
+# The green Complete button plays a short keyframe bounce: the whole pill
+# shifts vertically through a handful of discrete phases, and the second
+# card renders one phase differently than the first. Each crop is a measured
+# keyframe sampled from the reviewed 2026-09-22 captures; the family is
+# matched under the unchanged control threshold and frames without the
+# control stay far below it.
+_COMPLETE_TEMPLATES = (
+    _DATA_DIR / "pet_workshop_ctl_complete.png",
+    _DATA_DIR / "pet_workshop_ctl_complete_2.png",
+    _DATA_DIR / "pet_workshop_ctl_complete_3.png",
+    _DATA_DIR / "pet_workshop_ctl_complete_4.png",
+    _DATA_DIR / "pet_workshop_ctl_complete_5.png",
+    _DATA_DIR / "pet_workshop_ctl_complete_6.png",
+)
 _COMPLETE_TEMPLATE_SIZE = (72, 19)
 _BACK_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_back.png"
 _CLOSE_X_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_close_x.png"
 
-_NUMERIC_TOKEN = re.compile(r"\d+")
+_NUMERIC_TOKEN = re.compile(r"\d+(?:,\d{3})*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -417,7 +445,9 @@ class WorkshopContentProducer:
             region=_OD_REWARD_BAND,
             threshold=_DETAIL_ICON_THRESHOLD,
         )
-        rew_pedestals = _pedestal_runs(prepared.pixels, _OD_REW_PEDESTAL_BAND)
+        rew_pedestals = _pedestal_runs(
+            prepared.pixels, _OD_REW_PEDESTAL_BAND, merge_gap=_OD_PEDESTAL_MERGE_GAP
+        )
         rewards, orphans = self._read_detail_rewards(
             image=image,
             prepared=prepared,
@@ -705,9 +735,10 @@ class WorkshopContentProducer:
             if complete_search is None or not _fits(complete_search, _COMPLETE_TEMPLATE_SIZE):
                 ready = None
             else:
-                submit_bounds = self._control(
-                    prepared, _COMPLETE_TEMPLATE, complete_search, _CONTROL_THRESHOLD
+                best = self._best(
+                    prepared, _COMPLETE_TEMPLATES, complete_search, _CONTROL_THRESHOLD
                 )
+                submit_bounds = best[0].bounds if best is not None else None
                 ready = submit_bounds is not None
             if card.clipped:
                 completeness = RowRecognitionStatus.CLIPPED
@@ -1171,11 +1202,15 @@ def _numeric_tokens(lines) -> list[tuple[int, Bounds, str]]:
         for word in line.words:
             digits = _NUMERIC_TOKEN.search(word.text)
             if digits:
-                tokens.append((int(digits.group(0)), word.bounds, word.text))
+                tokens.append(
+                    (int(digits.group(0).replace(",", "")), word.bounds, word.text)
+                )
         if not line.words:
             digits = _NUMERIC_TOKEN.search(line.text)
             if digits:
-                tokens.append((int(digits.group(0)), line.bounds, line.text))
+                tokens.append(
+                    (int(digits.group(0).replace(",", "")), line.bounds, line.text)
+                )
     return tokens
 
 
@@ -1409,13 +1444,29 @@ def _tile_coverage(
     return slots == len(icons)
 
 
-def _pedestal_runs(pixels: np.ndarray, band: tuple[int, int]) -> list[tuple[int, int]]:
-    """Detect detail-modal pedestal columns from their blue lip rows."""
+def _pedestal_runs(
+    pixels: np.ndarray, band: tuple[int, int], *, merge_gap: int = 0
+) -> list[tuple[int, int]]:
+    """Detect detail-modal pedestal columns from their blue lip rows.
+
+    ``merge_gap`` rejoins lip runs split by icon art protruding through a
+    small gap in one box's bottom edge; a wider gap stays two distinct
+    pedestals.
+    """
 
     ped = _pedestal_mask(pixels)
     y0, y1 = band
     frac = ped[y0:y1, 120:530].mean(axis=0)
-    return [(a + 120, b + 120) for a, b in _column_runs(frac >= 0.45, _OD_PEDESTAL_MIN_WIDTH)]
+    runs = _column_runs(frac >= 0.45, _OD_PEDESTAL_MIN_WIDTH)
+    if merge_gap:
+        merged: list[tuple[int, int]] = []
+        for a, b in runs:
+            if merged and a - merged[-1][1] - 1 <= merge_gap:
+                merged[-1] = (merged[-1][0], b)
+            else:
+                merged.append((a, b))
+        runs = merged
+    return [(a + 120, b + 120) for a, b in runs]
 
 
 def _pedestals_covered(
