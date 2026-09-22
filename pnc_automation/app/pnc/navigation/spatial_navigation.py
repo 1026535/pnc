@@ -982,7 +982,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
 
         self.require_surface(observation).require_visible_object(target)
         if target.source_kind == SpatialObjectSourceKind.YOLO:
-            if target.action_point is None:
+            if target.action_point is None or target.action_qualification is None:
                 raise SelectorResolutionError(
                     "World YOLO detections require a qualified inspection point before tapping.",
                     object_kind=target.kind,

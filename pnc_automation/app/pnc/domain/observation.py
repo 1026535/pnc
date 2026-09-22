@@ -331,6 +331,25 @@ class SpatialObjectQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialObjectActionQualification:
+    """Binds one measured object action to its reviewed geometry and destination."""
+
+    geometry_policy: str
+    expected_screen: ScreenType
+    review_ref: str
+
+    def __post_init__(self) -> None:
+        """Reject incomplete action evidence before an object becomes actionable."""
+
+        if not self.geometry_policy.strip():
+            raise ValueError("Spatial-object action geometry policy cannot be empty.")
+        if not isinstance(self.expected_screen, ScreenType) or self.expected_screen == ScreenType.UNKNOWN:
+            raise ValueError("Spatial-object action qualification requires a known destination screen.")
+        if not self.review_ref.strip():
+            raise ValueError("Spatial-object action qualification requires a review reference.")
+
+
+@dataclass(frozen=True, slots=True)
 class DetectedSpatialObject:
     """Represents one visible scene object extracted from a spatial surface."""
 
@@ -347,6 +366,7 @@ class DetectedSpatialObject:
     estimated_world_coordinate: tuple[int, int] | None = None
     confirmed_world_coordinate: tuple[int, int] | None = None
     action_bounds: Bounds | None = None
+    action_qualification: SpatialObjectActionQualification | None = None
     source_kind: SpatialObjectSourceKind | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     frame_ref: FrameRef | None = None
@@ -409,6 +429,14 @@ class DetectedSpatialObject:
                     "Spatial-object action bounds must remain inside the object bounds.",
                     object_kind=self.kind,
                 )
+        if self.action_qualification is not None:
+            if not isinstance(self.action_qualification, SpatialObjectActionQualification):
+                raise TypeError("Spatial-object action qualification must be typed.")
+            if self.action_point is None or self.action_bounds is None:
+                raise SelectorResolutionError(
+                    "Qualified spatial objects require an action point and action bounds.",
+                    object_kind=self.kind,
+                )
 
     def require_metadata(self, key: str) -> Any:
         """Returns a required spatial-object metadata field or fails fast."""
@@ -442,6 +470,27 @@ class DetectedSpatialObject:
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialDetectionCandidate:
+    """Records one source-pixel detector candidate and its publication decision."""
+
+    label: str
+    confidence: float
+    bounds: Bounds
+    published: bool
+    exclusion_reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialDetectionDiagnostics:
+    """Binds detector candidates and their region policy to one spatial surface."""
+
+    source_kind: SpatialObjectSourceKind
+    region_bounds: Bounds
+    policy_version: str
+    candidates: tuple[SpatialDetectionCandidate, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SpatialSurfaceObservation:
     """Stores the current spatial-surface viewport plus all visible scene objects."""
 
@@ -449,6 +498,7 @@ class SpatialSurfaceObservation:
     viewport: SpatialViewport
     objects: tuple[DetectedSpatialObject, ...] = ()
     camera_proof: HomeCityCameraProof | None = None
+    detection_diagnostics: tuple[SpatialDetectionDiagnostics, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def objects_of_kind(self, kind: SpatialObjectKind) -> tuple[DetectedSpatialObject, ...]:

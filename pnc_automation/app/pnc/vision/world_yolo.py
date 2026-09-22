@@ -12,10 +12,14 @@ from PIL import Image
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedSpatialObject,
+    SpatialDetectionCandidate,
+    SpatialDetectionDiagnostics,
+    SpatialObjectActionQualification,
     SpatialObjectSourceKind,
 )
 from pnc_automation.app.pnc.vision.world_yolo_qualification import (
     WORLD_YOLO_QUALIFICATION,
+    WorldYoloInteractionQualification,
     WorldYoloQualification,
 )
 from pnc_automation.core.vision.detection.protocol import ObjectDetector
@@ -55,6 +59,7 @@ class WorldYoloResult:
     raw_detections: tuple[YoloDetection, ...]
     objects: tuple[DetectedSpatialObject, ...]
     rejected: tuple[WorldYoloRejectedDetection, ...]
+    diagnostics: SpatialDetectionDiagnostics
 
 
 def world_yolo_roi_bounds(image_size: tuple[int, int]) -> Bounds:
@@ -78,6 +83,7 @@ class WorldYoloProducer:
 
     detector: ObjectDetector
     qualification: WorldYoloQualification = WORLD_YOLO_QUALIFICATION
+    interaction_qualification: WorldYoloInteractionQualification | None = None
 
     def __post_init__(self) -> None:
         """Bind the producer to the reviewed model identity and exact class IDs."""
@@ -88,6 +94,14 @@ class WorldYoloProducer:
             raise ValueError("World YOLO class IDs differ from the qualified export.")
         if self.qualification.roi_version != WORLD_YOLO_ROI_VERSION:
             raise ValueError("World YOLO qualification was reviewed for a different ROI version.")
+        interaction = self.interaction_qualification
+        if interaction is not None:
+            if interaction.model_sha256 != self.qualification.model_sha256:
+                raise ValueError("World YOLO interaction was reviewed for a different model export.")
+            if interaction.roi_version != self.qualification.roi_version:
+                raise ValueError("World YOLO interaction was reviewed for a different ROI version.")
+            if any(label not in self.qualification.qualified_class_map for label in interaction.classes):
+                raise ValueError("World YOLO interaction classes must already be observation-qualified.")
 
     def observe(
         self,
@@ -101,6 +115,7 @@ class WorldYoloProducer:
         raw = self.detector.detect(image)
         objects: list[DetectedSpatialObject] = []
         rejected: list[WorldYoloRejectedDetection] = []
+        diagnostic_candidates: list[SpatialDetectionCandidate] = []
         for index, detection in enumerate(raw):
             reasons: list[WorldYoloExclusion] = []
             if not roi.contains_bounds(detection.bounds):
@@ -113,11 +128,40 @@ class WorldYoloProducer:
                 reasons.append(WorldYoloExclusion.HUD_OVERLAP)
             if reasons:
                 rejected.append(WorldYoloRejectedDetection(detection, tuple(reasons)))
+                diagnostic_candidates.append(SpatialDetectionCandidate(
+                    label=detection.label,
+                    confidence=detection.confidence,
+                    bounds=detection.bounds,
+                    published=False,
+                    exclusion_reasons=tuple(reason.value for reason in reasons),
+                ))
                 continue
+            action_point = None
+            action_bounds = None
+            action_qualification = None
+            interaction = (
+                None
+                if self.interaction_qualification is None
+                else self.interaction_qualification.classes.get(detection.label)
+            )
+            if interaction is not None:
+                action_point = _interaction_point(detection.bounds, interaction.point_ratio)
+                action_bounds = Bounds(action_point[0], action_point[1], 1, 1)
+                action_qualification = SpatialObjectActionQualification(
+                    geometry_policy=(
+                        f"box_ratio:{interaction.point_ratio[0]:.6f},"
+                        f"{interaction.point_ratio[1]:.6f}"
+                    ),
+                    expected_screen=interaction.expected_screen,
+                    review_ref=interaction.review_ref,
+                )
             objects.append(
                 DetectedSpatialObject(
                     kind=self.qualification.qualified_class_map[detection.label],
                     bounds=detection.bounds,
+                    action_point=action_point,
+                    action_bounds=action_bounds,
+                    action_qualification=action_qualification,
                     source_kind=SpatialObjectSourceKind.YOLO,
                     metadata={
                         "model_sha256": self.detector.model_sha256,
@@ -131,12 +175,24 @@ class WorldYoloProducer:
                     },
                 )
             )
+            diagnostic_candidates.append(SpatialDetectionCandidate(
+                label=detection.label,
+                confidence=detection.confidence,
+                bounds=detection.bounds,
+                published=True,
+            ))
         return WorldYoloResult(
             roi=roi,
             roi_version=WORLD_YOLO_ROI_VERSION,
             raw_detections=raw,
             objects=tuple(objects),
             rejected=tuple(rejected),
+            diagnostics=SpatialDetectionDiagnostics(
+                source_kind=SpatialObjectSourceKind.YOLO,
+                region_bounds=roi,
+                policy_version=WORLD_YOLO_ROI_VERSION,
+                candidates=tuple(diagnostic_candidates),
+            ),
         )
 
 
@@ -151,10 +207,19 @@ def _intersects(left: Bounds, right: Bounds) -> bool:
     )
 
 
+def _interaction_point(bounds: Bounds, ratio: tuple[float, float]) -> tuple[int, int]:
+    """Map one reviewed normalized point to an interior source pixel."""
+
+    x = bounds.x + min(bounds.width - 1, max(0, math.floor(bounds.width * ratio[0])))
+    y = bounds.y + min(bounds.height - 1, max(0, math.floor(bounds.height * ratio[1])))
+    return x, y
+
+
 def load_world_yolo_producer(
     model_path: Path,
     *,
     qualification: WorldYoloQualification = WORLD_YOLO_QUALIFICATION,
+    interaction_qualification: WorldYoloInteractionQualification | None = None,
 ) -> WorldYoloProducer:
     """Load a local export using the training owner's reviewed inference contract."""
 
@@ -163,4 +228,4 @@ def load_world_yolo_producer(
         confidence_threshold=qualification.confidence_threshold,
         nms_iou_threshold=qualification.nms_iou_threshold,
     )
-    return WorldYoloProducer(detector, qualification)
+    return WorldYoloProducer(detector, qualification, interaction_qualification)

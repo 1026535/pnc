@@ -42,9 +42,14 @@ from pnc_automation.app.pnc.domain.feature_actions import FeatureActionKind
 from pnc_automation.app.pnc.domain.pet_workshop import WorkshopMutationKind
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.bag_items import TreasureIdentity
-from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_names_match, normalize_castle_display_name
 from pnc_automation.app.pnc.domain.chat import ChatChannel
-from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedSpatialObject,
+    Observation,
+    SpatialObjectSourceKind,
+    VisibleElementSourceKind,
+)
 from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     RowRecognitionStatus,
@@ -59,6 +64,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     TapSpatialObjectAction,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    WorldMapNavigator,
     home_city_scan_step_budget,
     home_city_scan_steps,
 )
@@ -67,7 +73,10 @@ from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleMatchStatus,
     resolve_current_castle_match,
 )
-from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
+from pnc_automation.app.pnc.domain.mail import (
+    MailboxAvailability, MailboxType, PlayerProfileRoute, PlayerProfileRouteKind,
+)
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -477,6 +486,145 @@ class WorkflowContext:
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation
+
+    def inspect_world_yolo_castle(
+        self,
+        *,
+        active_castle: CastleIdentity,
+    ) -> tuple[DetectedSpatialObject, Observation, Observation, Observation, Observation]:
+        """Match one remote Castle label to Player Info before returning to World."""
+
+        source = self._runtime.observe(
+            "world_yolo_castle_source",
+            include_content=True,
+            request=ObservationRequest.world_map_yolo_object_analysis(),
+        )
+        if (
+            source.screen_type != ScreenType.PNC_WORLD_MAP
+            or source.blocking_popup
+            or source.spatial_surface is None
+            or source.spatial_surface.surface_type != SpatialSurfaceType.WORLD_MAP
+        ):
+            raise RuntimeError("Castle inspection requires a fresh unblocked World spatial surface.")
+        if self._last_observation is not None and source.captured_at <= self._last_observation.captured_at:
+            raise RuntimeError("Castle inspection source was stale relative to workflow navigation.")
+        candidates = tuple(
+            object_
+            for object_ in source.spatial_surface.objects
+            if object_.kind == SpatialObjectKind.CASTLE
+            and object_.source_kind == SpatialObjectSourceKind.YOLO
+        )
+        if len(candidates) != 1:
+            raise RuntimeError(
+                "Castle inspection requires exactly one qualified interior YOLO Castle."
+            )
+        target = candidates[0]
+        qualification = target.action_qualification
+        if qualification is None or qualification.expected_screen != ScreenType.PNC_PLAYER_TERRITORY:
+            raise RuntimeError("Castle interaction is not qualified for Player Territory.")
+        if target.name_text is None or castle_names_match(
+            normalize_castle_display_name(target.name_text), "My Territory"
+        ):
+            raise RuntimeError("Castle inspection requires one readable remote name on the source frame.")
+        if castle_names_match(normalize_castle_display_name(target.name_text), active_castle.castle_name):
+            raise RuntimeError("Castle inspection cannot use the active castle as a remote target.")
+        executor = self._runtime.runtime.require_observed_action_executor(
+            "World Castle inspection requires the canonical observed action executor."
+        )
+        actions = WorldMapNavigator().tap_visible_object(
+            source,
+            target,
+            reason="inspect_qualified_world_yolo_castle",
+            observe_after=True,
+            follow_up_request=ObservationRequest.world_yolo_castle_detail_follow_up(),
+        )
+        detail = executor.execute_actions(
+            actions,
+            source,
+            observe=lambda label, request=None: self._runtime.observe(
+                f"world_yolo_castle_{label}",
+                include_content=True,
+                request=request or ObservationRequest.world_yolo_castle_detail_follow_up(),
+            ),
+        ).observation
+        if (
+            detail.screen_type != qualification.expected_screen
+            or detail.blocking_popup
+            or detail.captured_at <= source.captured_at
+            or not detail.has(UiElementId.PNC_PLAYER_TERRITORY_HEADER)
+            or not detail.has(UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON)
+        ):
+            raise RuntimeError("Castle tap did not open the qualified read-only Player Territory detail.")
+        profile = executor.execute_actions(
+            ScreenFlowPlanner().open_player_profile(
+                detail,
+                PlayerProfileRoute(kind=PlayerProfileRouteKind.PLAYER_TERRITORY),
+            ),
+            detail,
+            observe=lambda label, request=None: self._runtime.observe(
+                f"world_yolo_castle_profile_{label}",
+                include_content=True,
+                request=request or ObservationRequest.player_profile_follow_up(),
+            ),
+        ).observation
+        if (
+            profile.screen_type != ScreenType.PNC_PLAYER_PROFILE
+            or profile.blocking_popup
+            or profile.captured_at <= detail.captured_at
+            or profile.profile_player_name is None
+            or not castle_names_match(
+                normalize_castle_display_name(target.name_text),
+                profile.profile_player_name,
+            )
+        ):
+            raise RuntimeError("Castle Player Info did not match the selected World label.")
+        return_source = profile
+        returned = executor.execute_actions(
+            (
+                KeyEventAction(
+                    key_code="KEYCODE_BACK",
+                    reason="leave_world_yolo_castle_profile",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.world_yolo_castle_detail_follow_up(),
+                ),
+            ),
+            profile,
+            observe=lambda label, request=None: self._runtime.observe(
+                f"world_yolo_castle_return_{label}",
+                include_content=True,
+                request=request or ObservationRequest.world_yolo_castle_detail_follow_up(),
+            ),
+        ).observation
+        if returned.screen_type == ScreenType.PNC_PLAYER_TERRITORY and not returned.blocking_popup:
+            territory = returned
+            if territory.captured_at <= profile.captured_at:
+                raise RuntimeError("Castle profile return did not produce a fresh Territory frame.")
+            return_source = territory
+            returned = executor.execute_actions(
+                (
+                    KeyEventAction(
+                        key_code="KEYCODE_BACK",
+                        reason="leave_world_yolo_castle_detail",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.world_yolo_castle_detail_follow_up(),
+                    ),
+                ),
+                territory,
+                observe=lambda label, request=None: self._runtime.observe(
+                    f"world_yolo_castle_return_{label}",
+                    include_content=True,
+                    request=request or ObservationRequest.world_yolo_castle_detail_follow_up(),
+                ),
+            ).observation
+        if (
+            returned.screen_type != ScreenType.PNC_WORLD_MAP
+            or returned.blocking_popup
+            or returned.captured_at <= return_source.captured_at
+        ):
+            raise RuntimeError("Castle inspection did not return to a fresh unblocked World frame.")
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = returned
+        return target, source, detail, profile, returned
 
     def open_building(self, target: HomeCityObjectId) -> Observation:
         """Opens one exact building through NavigationCore and records its fresh endpoint."""

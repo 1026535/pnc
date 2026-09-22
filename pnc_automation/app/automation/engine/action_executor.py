@@ -36,6 +36,8 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     RowRecognitionStatus,
+    SpatialObjectKind,
+    SpatialObjectQuery,
     SpatialObjectSourceKind,
     SpatialSurfaceType,
     VisibleElement,
@@ -47,6 +49,7 @@ from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.core.text.normalization import normalize_ocr_text
 
 
 _HUMAN_DELAY_JITTER_RANGE = (0.9, 1.1)
@@ -178,27 +181,36 @@ class ActionExecutor:
                         object_kind=expected.kind,
                     )
                 if expected.source_kind == SpatialObjectSourceKind.YOLO:
-                    raise SelectorResolutionError(
-                        "World YOLO observations are not qualified for spatial taps.",
-                        object_kind=expected.kind,
+                    self._validate_yolo_spatial_action(
+                        object_=expected,
+                        observation=observation,
+                        target=action.target_point,
+                        query=action.query,
+                        require_unique_query=False,
                     )
             target = action.target_point
             if target is None:
                 object_ = self._require_spatial_object(action, observation)
                 if object_.source_kind == SpatialObjectSourceKind.YOLO:
-                    raise SelectorResolutionError(
-                        "World YOLO observations are not qualified for spatial taps.",
-                        object_kind=object_.kind,
+                    self._validate_yolo_spatial_action(
+                        object_=object_,
+                        observation=observation,
+                        target=object_.action_point,
+                        query=action.query,
+                        require_unique_query=True,
                     )
                 target = (
                     object_.action_point
-                    if action.use_action_point and object_.action_point is not None
+                    if object_.source_kind == SpatialObjectSourceKind.YOLO
+                    or (action.use_action_point and object_.action_point is not None)
                     else object_.bounds.center()
                 )
             elif action.expected_object is None and observation.spatial_surface is not None:
                 surface = observation.spatial_surface
-                if any(
-                    object_.source_kind == SpatialObjectSourceKind.YOLO
+                matches = tuple(
+                    object_
+                    for object_ in surface.objects
+                    if object_.source_kind == SpatialObjectSourceKind.YOLO
                     and (
                         object_.bounds.contains_point(target)
                         or (
@@ -207,9 +219,19 @@ class ActionExecutor:
                             and object_.matches(action.query)
                         )
                     )
-                    for object_ in surface.objects
-                ):
-                    raise SelectorResolutionError("World YOLO observations are not qualified for spatial taps.")
+                )
+                if matches:
+                    if action.query is None or len(matches) != 1:
+                        raise SelectorResolutionError(
+                            "World YOLO spatial taps require one exact semantic object.",
+                        )
+                    self._validate_yolo_spatial_action(
+                        object_=matches[0],
+                        observation=observation,
+                        target=target,
+                        query=action.query,
+                        require_unique_query=True,
+                    )
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
                 self.session.tap_point(*target)
@@ -557,6 +579,54 @@ class ActionExecutor:
         if action.query is None:
             raise SelectorResolutionError("TapSpatialObjectAction requires a semantic spatial-object query.")
         return observation.require_spatial_object(action.query)
+
+    @staticmethod
+    def _validate_yolo_spatial_action(
+        *,
+        object_: DetectedSpatialObject,
+        observation: Observation,
+        target: tuple[int, int] | None,
+        query: SpatialObjectQuery | None,
+        require_unique_query: bool,
+    ) -> None:
+        """Require reviewed geometry, one semantic match, and current-frame YOLO provenance."""
+
+        qualification = object_.action_qualification
+        if qualification is None or object_.action_point is None or object_.action_bounds is None:
+            raise SelectorResolutionError(
+                "World YOLO observations are not qualified for spatial taps.",
+                object_kind=object_.kind,
+            )
+        if object_.kind == SpatialObjectKind.CASTLE and (
+            object_.name_text is None
+            or normalize_ocr_text(object_.name_text) == "MYTERRITORY"
+        ):
+            raise SelectorResolutionError(
+                "World YOLO Castle taps require a current remote player name label.",
+                object_kind=object_.kind,
+            )
+        if observation.frame_ref is None or object_.frame_ref != observation.frame_ref:
+            raise SelectorResolutionError(
+                "World YOLO spatial target belongs to a different capture frame.",
+                object_kind=object_.kind,
+            )
+        if target != object_.action_point or not object_.action_bounds.contains_point(target):
+            raise SelectorResolutionError(
+                "World YOLO tap point differs from its reviewed action geometry.",
+                object_kind=object_.kind,
+            )
+        if query is not None and observation.spatial_surface is not None:
+            matches = tuple(
+                candidate
+                for candidate in observation.spatial_surface.objects
+                if candidate.source_kind == SpatialObjectSourceKind.YOLO
+                and candidate.matches(query)
+            )
+            if object_ not in matches or (require_unique_query and len(matches) != 1):
+                raise SelectorResolutionError(
+                    "World YOLO semantic target is absent or ambiguous on the current frame.",
+                    object_kind=object_.kind,
+                )
 
     def _sleep_ms(self, milliseconds: int) -> None:
         """Sleeps using millisecond units for action pacing."""

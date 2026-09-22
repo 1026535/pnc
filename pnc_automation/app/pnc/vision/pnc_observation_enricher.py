@@ -28,6 +28,7 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     RowRecognitionStatus,
     ObservedTextFieldState,
+    SpatialObjectKind,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -2062,9 +2063,28 @@ class PncObservationEnricher:
                         for element in {**visible_elements, **world.visible_elements}.values()
                     ),
                 )
+                objects = result.objects
+                if self.world_yolo_producer.interaction_qualification is not None:
+                    objects = tuple(
+                        replace(
+                            object_,
+                            name_text=_read_world_yolo_castle_name(
+                                image=image,
+                                bounds=object_.bounds,
+                                ocr_context=ocr_context,
+                            ),
+                        )
+                        if object_.kind == SpatialObjectKind.CASTLE and object_.action_qualification is not None
+                        else object_
+                        for object_ in objects
+                    )
                 world = replace(
                     world,
-                    spatial_surface=replace(world.spatial_surface, objects=result.objects),
+                    spatial_surface=replace(
+                        world.spatial_surface,
+                        objects=objects,
+                        detection_diagnostics=(result.diagnostics,),
+                    ),
                 )
             return _with_status_banner(world, _build_status_banner_additions(
                 image=image, lines=status_lines, request=request,
@@ -7490,6 +7510,44 @@ def _build_home_city_additions(
         ),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )
+
+
+def _read_world_yolo_castle_name(
+    *,
+    image: Image.Image,
+    bounds: Bounds,
+    ocr_context: ObservationOcrContext,
+) -> str | None:
+    """Read one name immediately below a qualified Castle box on the same frame."""
+
+    top = bounds.y + bounds.height
+    if top >= image.height:
+        return None
+    margin = max(4, bounds.width // 10)
+    left = max(0, bounds.x - margin)
+    right = min(image.width, bounds.x + bounds.width + margin)
+    bottom = min(image.height, top + max(28, round(image.height * 0.045)))
+    if right <= left or bottom <= top:
+        return None
+    region = Bounds(left, top, right - left, bottom - top)
+    try:
+        result = ocr_context.read_result(
+            image,
+            region,
+            reuse_full_frame=False,
+            purpose=OcrReadPurpose.CONTENT,
+            detail="world_yolo_castle_name",
+        )
+    except ScreenClassificationError:
+        return None
+    names = tuple(
+        line.text.strip()
+        for line in result.lines
+        if line.confidence >= 0.8
+        and any(character.isalpha() for character in line.text)
+        and abs(line.bounds.center()[0] - bounds.center()[0]) <= bounds.width * 0.3
+    )
+    return names[0] if len(names) == 1 else None
 
 
 def _build_world_map_additions(

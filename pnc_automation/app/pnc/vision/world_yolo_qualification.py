@@ -8,6 +8,59 @@ import math
 from types import MappingProxyType
 
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+
+
+@dataclass(frozen=True, slots=True)
+class WorldYoloClassInteraction:
+    """One reviewed click policy and expected read-only destination for a YOLO class."""
+
+    point_ratio: tuple[float, float]
+    expected_screen: ScreenType
+    review_ref: str
+
+    def __post_init__(self) -> None:
+        """Keep interaction geometry explicit and strictly inside a detection box."""
+
+        if (
+            not isinstance(self.point_ratio, tuple)
+            or len(self.point_ratio) != 2
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (float, int))
+                or not math.isfinite(value)
+                or not 0 < value < 1
+                for value in self.point_ratio
+            )
+        ):
+            raise ValueError("World YOLO interaction point ratios must be finite values inside (0, 1).")
+        if not isinstance(self.expected_screen, ScreenType) or self.expected_screen == ScreenType.UNKNOWN:
+            raise ValueError("World YOLO interaction requires a known destination screen.")
+        if not self.review_ref.strip():
+            raise ValueError("World YOLO interaction requires a review reference.")
+
+
+@dataclass(frozen=True, slots=True)
+class WorldYoloInteractionQualification:
+    """Pins actionable geometry to one exact reviewed model and ROI revision."""
+
+    model_sha256: str
+    roi_version: str
+    classes: Mapping[str, WorldYoloClassInteraction]
+
+    def __post_init__(self) -> None:
+        """Freeze the class policy and reject incomplete model identity."""
+
+        if len(self.model_sha256) != 64 or any(char not in "0123456789abcdef" for char in self.model_sha256):
+            raise ValueError("World YOLO interaction requires a lowercase SHA-256 model identity.")
+        if not self.roi_version.strip():
+            raise ValueError("World YOLO interaction requires a reviewed ROI version.")
+        if not self.classes:
+            raise ValueError("World YOLO interaction requires at least one reviewed class.")
+        for label, policy in self.classes.items():
+            if not label.strip() or not isinstance(policy, WorldYoloClassInteraction):
+                raise TypeError("World YOLO interaction classes require typed policies.")
+        object.__setattr__(self, "classes", MappingProxyType(dict(self.classes)))
 
 
 @dataclass(frozen=True, slots=True)

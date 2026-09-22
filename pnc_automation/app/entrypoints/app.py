@@ -20,6 +20,10 @@ from pnc_automation.core.lifecycle import close_preserving_error
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.open_building import OpenBuildingResult, build_open_building_workflow
 from pnc_automation.app.automation.refresh_castle_roster import RefreshCastleRosterResult, RefreshCastleRosterWorkflow
+from pnc_automation.app.automation.world_yolo_castle_inspection import (
+    WorldYoloCastleInspectionResult,
+    WorldYoloCastleInspectionWorkflow,
+)
 from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
     DailyQuestStatusResult,
     DailyQuestStatusWorkflow,
@@ -64,6 +68,7 @@ class ApplicationRunner:
     """Owns the configured runtime used by the CLI entry point."""
 
     script_runner: ScriptRunner
+    world_yolo_producer: WorldYoloProducer | None = None
 
     def reserve_accounts(self, account_ids: tuple[str, ...]) -> InstanceLeaseBundle:
         """Reserves every physical instance used by the supplied accounts."""
@@ -172,6 +177,39 @@ class ApplicationRunner:
                 core_runtime.close,
                 error,
                 message="Daily canary execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
+
+    def run_world_yolo_castle_inspection(
+        self,
+        *,
+        account_id: str,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    ) -> CoreWorkflowResult[WorldYoloCastleInspectionResult]:
+        """Inspect one qualified World Castle and return Home on the replacement core."""
+
+        if self.world_yolo_producer is None or self.world_yolo_producer.interaction_qualification is None:
+            raise ValueError("World Castle inspection requires a reviewed YOLO interaction policy.")
+        account = self.script_runner.config.require_account(account_id)
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+            required_role=LiveAutomationRole.SMOKE_TEST,
+            session_cleanup_policy=session_cleanup_policy,
+        )
+        try:
+            active_castle = core_runtime.preflight_active_castle_identity()
+            result = CoreWorkflowRunner[WorldYoloCastleInspectionResult](core_runtime).run(
+                WorldYoloCastleInspectionWorkflow(active_castle=active_castle)
+            )
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="World Castle inspection and BlueStacks phase cleanup both failed.",
             )
             raise
         core_runtime.close()
@@ -420,7 +458,7 @@ def build_application_runner(
             world_yolo_producer=world_yolo_producer,
         ),
     )
-    return ApplicationRunner(script_runner=script_runner)
+    return ApplicationRunner(script_runner=script_runner, world_yolo_producer=world_yolo_producer)
 
 
 def build_observation_builder(

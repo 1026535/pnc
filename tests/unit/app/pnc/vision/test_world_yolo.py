@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import Mock
 
 from PIL import Image
 
@@ -13,6 +14,7 @@ from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     Observation,
     SpatialObjectKind,
+    SpatialObjectActionQualification,
     SpatialObjectQuery,
     SpatialObjectRelationship,
     SpatialObjectSourceKind,
@@ -23,14 +25,20 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapNavigator
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import _read_world_yolo_castle_name
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.world_yolo import (
     WorldYoloExclusion,
     WorldYoloProducer,
     world_yolo_roi_bounds,
 )
-from pnc_automation.app.pnc.vision.world_yolo_qualification import WORLD_YOLO_QUALIFICATION
+from pnc_automation.app.pnc.vision.world_yolo_qualification import (
+    WORLD_YOLO_QUALIFICATION,
+    WorldYoloClassInteraction,
+    WorldYoloInteractionQualification,
+)
 from pnc_automation.core.vision.detection.yolo_onnx import YoloDetection
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
@@ -55,6 +63,36 @@ def _castle_qualification():
 
 
 class WorldYoloTests(unittest.TestCase):
+    def test_castle_name_crop_accepts_one_text_label_and_ignores_level(self) -> None:
+        image = Image.new("RGB", (900, 1600))
+        context = Mock()
+        context.read_result.return_value = OcrResult(
+            lines=(
+                OcrLine("19", Bounds(410, 906, 25, 20), 0.99),
+                OcrLine("Remote Lord", Bounds(300, 930, 115, 24), 0.93),
+            ),
+            words=(),
+        )
+
+        name = _read_world_yolo_castle_name(
+            image=image,
+            bounds=Bounds(223, 727, 249, 188),
+            ocr_context=context,
+        )
+
+        self.assertEqual(name, "Remote Lord")
+        self.assertEqual(context.read_result.call_args.args[1], Bounds(199, 915, 297, 72))
+        context.read_result.return_value = OcrResult(
+            lines=(
+                OcrLine("Remote Lord", Bounds(300, 930, 115, 24), 0.93),
+                OcrLine("Other Lord", Bounds(320, 950, 105, 24), 0.91),
+            ),
+            words=(),
+        )
+        self.assertIsNone(_read_world_yolo_castle_name(
+            image=image, bounds=Bounds(223, 727, 249, 188), ocr_context=context,
+        ))
+
     def test_roi_is_interior_with_inward_rounding_at_supported_sizes(self) -> None:
         self.assertEqual(world_yolo_roi_bounds((540, 960)), Bounds(108, 212, 324, 479))
         self.assertEqual(world_yolo_roi_bounds((900, 1600)), Bounds(180, 352, 540, 800))
@@ -85,6 +123,8 @@ class WorldYoloTests(unittest.TestCase):
         self.assertEqual(castle.metadata["detection_index"], 0)
         self.assertEqual(castle.metadata["confidence_threshold"], 0.35)
         self.assertEqual(castle.metadata["qualification_review"], WORLD_YOLO_QUALIFICATION.review_ref)
+        self.assertEqual(len(result.diagnostics.candidates), 4)
+        self.assertEqual(sum(candidate.published for candidate in result.diagnostics.candidates), 1)
         self.assertEqual(
             tuple(rejection.reasons for rejection in result.rejected),
             (
@@ -154,15 +194,34 @@ class WorldYoloTests(unittest.TestCase):
             observation,
             spatial_surface=replace(observation.spatial_surface, objects=(test_point_target,)),
         )
+        with self.assertRaisesRegex(SelectorResolutionError, "qualified inspection point"):
+            WorldMapNavigator().tap_visible_object(
+                with_point, test_point_target, reason="inspect_yolo_castle",
+            )
+
+        qualified_target = replace(
+            test_point_target,
+            action_bounds=Bounds(*test_point_target.action_point, 1, 1),
+            action_qualification=SpatialObjectActionQualification(
+                geometry_policy="fixture_point",
+                expected_screen=ScreenType.PNC_PLAYER_TERRITORY,
+                review_ref="test_fixture",
+            ),
+        )
+        qualified_observation = replace(
+            observation,
+            spatial_surface=replace(observation.spatial_surface, objects=(qualified_target,)),
+        )
         actions = WorldMapNavigator().tap_visible_object(
-            with_point, test_point_target, reason="inspect_yolo_castle",
+            qualified_observation, qualified_target, reason="inspect_yolo_castle",
         )
         self.assertEqual(actions[0].target_point, target.bounds.center())
 
         edge_target = replace(
-            target,
+            qualified_target,
             bounds=Bounds(100, 350, 110, 105),
             action_point=(155, 402),
+            action_bounds=Bounds(155, 402, 1, 1),
         )
         edge_observation = replace(
             observation,
@@ -192,8 +251,18 @@ class WorldYoloTests(unittest.TestCase):
             detector, _castle_qualification(),
         ).observe(Image.new("RGB", (540, 960))).objects
         base = make_observation(ScreenType.PNC_WORLD_MAP, image_size=(540, 960))
-        targets = tuple(replace(candidate, frame_ref=base.frame_ref, action_point=candidate.bounds.center())
-                        for candidate in candidates)
+        targets = tuple(replace(
+            candidate,
+            name_text="Remote Lord",
+            frame_ref=base.frame_ref,
+            action_point=candidate.bounds.center(),
+            action_bounds=Bounds(*candidate.bounds.center(), 1, 1),
+            action_qualification=SpatialObjectActionQualification(
+                geometry_policy="fixture_point",
+                expected_screen=ScreenType.PNC_PLAYER_TERRITORY,
+                review_ref="test_fixture",
+            ),
+        ) for candidate in candidates)
         observation = replace(base, spatial_surface=SpatialSurfaceObservation(
             SpatialSurfaceType.WORLD_MAP,
             SpatialViewport(SpatialViewportAddressingKind.COORDINATE_BAR, x=485, y=73),
@@ -217,9 +286,60 @@ class WorldYoloTests(unittest.TestCase):
         )))
         with self.assertRaisesRegex(SelectorResolutionError, "different capture frame"):
             executor.execute_action(action, fresh)
-        with self.assertRaisesRegex(SelectorResolutionError, "not qualified for spatial taps"):
-            executor.execute_action(action, observation)
-        self.assertEqual(executor.session.taps, [])
+        executor.execute_action(action, observation)
+        self.assertEqual(executor.session.taps, [targets[1].action_point])
+
+    def test_qualified_semantic_yolo_tap_uses_reviewed_point_even_without_action_point_flag(self) -> None:
+        detection = YoloDetection(2, "castle", 0.95, Bounds(205, 350, 110, 105))
+        interaction = WorldYoloInteractionQualification(
+            model_sha256=WORLD_YOLO_QUALIFICATION.model_sha256,
+            roi_version=WORLD_YOLO_QUALIFICATION.roi_version,
+            classes={"castle": WorldYoloClassInteraction(
+                point_ratio=(0.4, 0.3),
+                expected_screen=ScreenType.PNC_PLAYER_TERRITORY,
+                review_ref="test_fixture",
+            )},
+        )
+        target = WorldYoloProducer(
+            FakeDetector((detection,)), interaction_qualification=interaction,
+        ).observe(Image.new("RGB", (540, 960))).objects[0]
+        base = make_observation(ScreenType.PNC_WORLD_MAP, image_size=(540, 960))
+        target = replace(target, frame_ref=base.frame_ref, name_text="Remote Lord")
+        observation = replace(base, spatial_surface=SpatialSurfaceObservation(
+            SpatialSurfaceType.WORLD_MAP,
+            SpatialViewport(SpatialViewportAddressingKind.COORDINATE_BAR, x=485, y=73),
+            objects=(target,),
+        ))
+        executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(), session=FakeSession(),
+            stable_click_delay_ms=0, post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0, chat_post_action_observe_delay_ms=0,
+            logger=build_logger(), sleep=lambda _: None,
+        )
+        query = SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.CASTLE)
+
+        executor.execute_action(TapSpatialObjectAction(query=query), observation)
+
+        self.assertNotEqual(target.action_point, target.bounds.center())
+        self.assertEqual(executor.session.taps, [target.action_point])
+        with self.assertRaisesRegex(SelectorResolutionError, "differs from its reviewed action geometry"):
+            executor.execute_action(
+                TapSpatialObjectAction(query=query, target_point=target.bounds.center()),
+                observation,
+            )
+        second = replace(target, bounds=Bounds(310, 350, 110, 105), action_point=(354, 381),
+                         action_bounds=Bounds(354, 381, 1, 1))
+        ambiguous = replace(observation, spatial_surface=replace(
+            observation.spatial_surface, objects=(target, second),
+        ))
+        with self.assertRaisesRegex(SelectorResolutionError, "ambiguous"):
+            executor.execute_action(TapSpatialObjectAction(query=query), ambiguous)
+        no_name = replace(observation, spatial_surface=replace(
+            observation.spatial_surface, objects=(replace(target, name_text=None),),
+        ))
+        with self.assertRaisesRegex(SelectorResolutionError, "remote player name label"):
+            executor.execute_action(TapSpatialObjectAction(query=query), no_name)
+        self.assertEqual(executor.session.taps, [target.action_point])
 
     def test_semantic_and_concrete_spatial_actions_cannot_tap_yolo_castle(self) -> None:
         """The executor guards every spatial action path, including query fallback."""
@@ -240,13 +360,13 @@ class WorldYoloTests(unittest.TestCase):
             logger=build_logger(), sleep=lambda _: None,
         )
         query = SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.CASTLE)
-        for action in (
-            TapSpatialObjectAction(query=query),
-            TapSpatialObjectAction(query=query, target_point=target.bounds.center()),
-            TapSpatialObjectAction(target_point=target.bounds.center()),
+        for action, message in (
+            (TapSpatialObjectAction(query=query), "not qualified for spatial taps"),
+            (TapSpatialObjectAction(query=query, target_point=target.bounds.center()), "not qualified for spatial taps"),
+            (TapSpatialObjectAction(target_point=target.bounds.center()), "one exact semantic object"),
         ):
             with self.subTest(action=action), self.assertRaisesRegex(
-                SelectorResolutionError, "not qualified for spatial taps",
+                SelectorResolutionError, message,
             ):
                 executor.execute_action(action, observation)
         self.assertEqual(executor.session.taps, [])

@@ -150,6 +150,21 @@ class ObservationRequest:
         )
 
     @classmethod
+    def world_yolo_castle_detail_follow_up(cls) -> "ObservationRequest":
+        """Recognize the read-only Player Territory opened from one Castle box."""
+
+        return cls(
+            candidate_screen_types=frozenset(
+                {ScreenType.PNC_WORLD_MAP, ScreenType.PNC_PLAYER_TERRITORY}
+            ),
+            ocr_screen_types=frozenset(
+                {ScreenType.PNC_WORLD_MAP, ScreenType.PNC_PLAYER_TERRITORY}
+            ),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
     def world_map_coordinate_dialog_follow_up(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used while opening or editing the world-map coordinate dialog."""
 
