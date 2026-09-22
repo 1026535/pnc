@@ -30,7 +30,7 @@ Create a plan that another engineer can execute and verify without prescribing w
 
 Use deterministic tests, fixtures, and saved UI/runtime artifacts first. Read [references/live-evidence.md](references/live-evidence.md) only when an unresolved current UI, selector, navigation, or emulator fact could materially change the plan and existing evidence is insufficient.
 
-Planning does not automatically require launching BlueStacks. When live evidence is justified, use one bounded, non-spending observation targeted at the decision. Stop at any mutation boundary. Read [references/implementation-live-validation.md](references/implementation-live-validation.md) only when the plan actually changes a live runtime boundary.
+Planning does not automatically require launching BlueStacks. When live evidence is justified, use one bounded, non-spending observation targeted at the decision. Stop before any state-changing action that lacks explicit authorization. Read [references/implementation-live-validation.md](references/implementation-live-validation.md) when the plan changes a live runtime boundary or includes resource-spending proof.
 
 Use multi-target matrices only when the feature contract names multiple targets or repository evidence shows meaningful target-specific variation. Do not require identical proof across interchangeable targets.
 

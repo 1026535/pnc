@@ -5,7 +5,7 @@ Use this reference only when a current BlueStacks fact could materially change a
 ## Before Running
 
 - Define the single decision and why offline evidence is insufficient.
-- Resolve the target from config. If no castle is named, observe the active castle on the configured `testing` instance; do not switch castles.
+- Resolve the target from config. A specific castle named in the request or plan authorizes switching to that castle within the selected, role-authorized account and instance. If no castle is named, observe the active castle on the configured `testing` instance; do not switch. A named castle does not authorize switching accounts or instances.
 - Follow [test-bluestacks-live](../../test-bluestacks-live/SKILL.md) and use the canonical runtime.
 - Set a small action/time budget appropriate to the question. A budget is a ceiling, not a quota.
 - Keep the observation non-spending. Stop before any state-changing action that lacks exact authorization.

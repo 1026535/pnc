@@ -11,7 +11,7 @@ Follow [write-code](../write-code/SKILL.md). This skill adds permission handling
 
 Before spending, obtain from the current request or approved plan:
 
-- exact account and active castle, including any authorized switching;
+- exact account, target castle, and instance; naming the target castle in the current request or approved plan authorizes switching to it within that account and instance, while account or instance switching requires separate explicit authorization;
 - exact action and why it is needed;
 - resource type and maximum amount or attempts;
 - observable precondition and success signal; and
