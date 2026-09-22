@@ -4,6 +4,14 @@
 
 **Kind:** Implementation packet. **Dependencies:** [PW02](PW02_RECOGNITION_CONTROLS.md), [PW04](PW04_ONE_STEP_SOLVER.md)
 
+## Correction review — turn023, 2026-09-22
+
+Current status: **awaiting final offline and live validation**, no packet acceptance/merge. Lead reviewed actuald6ac3f5 production/tests and entire ignored harness delta: R6-01–R6-04 resolved by measured Complete appearances, three Fruit5 and one chest×1 detail recognition, explicit current content capture after close and per-card Fruit5 tint evidence. Lead changed only unsupported animation-cycle wording, then cleanly rebased on acceptedmain99e768b to finalcandidate `d8cfb34e1f9400b33f12b8122ce30abcaa053b4b`; production/tests/tools identical to pre-rebase10fe73b. Existing unrelated untracked nul/egg-info preserved.
+
+Verified machine evidence:550passed/six environmental skips, source fingerprint2eea77398bc3de4d02b056f18f94132f4cb183a5dd038b61ef0e5eb736a7a2ae matches returnedd6ac3f5. Lead independently reran69harness tests. Detailed review and immutable source proof: PW05 checkout `.local-data/review/pw05/review-turn023.md`, `lead-turn023-source-proof.json`. Cedar-stealer024 now owns one read-only full integration check atd8cfb34; startup verified. Findings became native captured fixtures/recognition and harness regressions, not invented simulator transitions.
+
+Remaining: final full result review, then corrected live ready/detail/second-portrait behavior, blue Fruit5 if available, eligible two-piece lasso-not-ready and requested detail facts. Main release ended09:00Z; no further live phase under that release. Preparation remains draft_pending_lead_review with expired window/old run/candidate; lead must bind a fresh concrete assignment before any execution. Shared Growth boundary is already accepted; it need not be forced to recur. No Workshop energy spent.
+
 ## Current review — live006, 2026-09-22
 
 **Shared Growth slice accepted:** final isolated integration tested485f012 with2,838 passes/seven environmental skips; lead independently verified source fingerprint `54cb73c6e5421b83eb44a3e36fb24d2a725ae86cdcd48dbcbb0d48cdc679ea32`. Docs-only rebase produced87834fa with identical production/tests/tools. Live006 and exact native dual-publisher replay prove the final runtime boundary. Main landing includes this acceptance record; no further live repetition is justified for unchanged bytes. Whole PW05 remains fixing findings.
