@@ -19,6 +19,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.automation.engine.navigation_core import (
     NavigationCore,
     NavigationPolicy,
@@ -79,24 +80,45 @@ class CoreRuntime:
 
         return self._last_observation
 
-    def observe(self, label: str, *, include_content: bool = False) -> Observation:
+    def observe(
+        self,
+        label: str,
+        *,
+        include_content: bool = False,
+        request: ObservationRequest | None = None,
+    ) -> Observation:
         """Captures one frame, then delegates safe interruption recovery to the connected executor."""
 
+        if request is not None and not include_content:
+            raise ValueError("Explicit core observation requests require include_content=True.")
         self._last_observe_recovered = False
-        observation = self._observe_once(label, include_content=include_content)
+        observation = self._observe_once(label, include_content=include_content, request=request)
         if self._observed_action_executor is None:
             return observation
+        requested_scope = request
         recovered = self._observed_action_executor.recover_interruption_if_required(
             observation,
             label_prefix=f"core_{self._run_id}_{sanitize_artifact_segment(label)}_interruption",
             observe=lambda recovery_label, request=None: self._observe_once(
                 recovery_label,
                 include_content=include_content,
+                request=request if include_content and request is not None else requested_scope,
             ),
         )
         if recovered is None:
             return observation
         self._last_observe_recovered = True
+        if (
+            requested_scope is not None
+            and requested_scope.include_world_yolo_objects
+            and recovered.screen_type == ScreenType.PNC_WORLD_MAP
+            and not recovered.blocking_popup
+        ):
+            return self._observe_once(
+                f"{label}_after_interruption",
+                include_content=include_content,
+                request=requested_scope,
+            )
         return recovered
 
     def observe_ready(self, label: str, *, include_content: bool = False) -> Observation:
@@ -112,7 +134,13 @@ class CoreRuntime:
             started_at=started,
         )
 
-    def _observe_once(self, label: str, *, include_content: bool) -> Observation:
+    def _observe_once(
+        self,
+        label: str,
+        *,
+        include_content: bool,
+        request: ObservationRequest | None = None,
+    ) -> Observation:
         """Captures and perceives one frame without recursively entering popup recovery."""
 
         self._capture_count += 1
@@ -130,9 +158,14 @@ class CoreRuntime:
                 "event": "capture",
                 "artifact": None if screenshot.artifact_path is None else str(screenshot.artifact_path),
                 "include_content": include_content,
+                "include_world_yolo_objects": bool(request and request.include_world_yolo_objects),
             }
         )
-        observation = self._perception.build(screenshot, include_content=include_content)
+        observation = self._perception.build(
+            screenshot,
+            include_content=include_content,
+            request=request,
+        )
         self._last_observation = observation
         self.record(
             {
@@ -141,6 +174,7 @@ class CoreRuntime:
                 "blocked": observation.blocking_popup,
                 "artifact": None if observation.artifact_path is None else str(observation.artifact_path),
                 "include_content": include_content,
+                "include_world_yolo_objects": bool(request and request.include_world_yolo_objects),
             }
         )
         return observation

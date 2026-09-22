@@ -1,4 +1,4 @@
-"""Strict ONNX Runtime adapter for Ultralytics YOLO end-to-end exports."""
+"""Strict ONNX Runtime adapter for Ultralytics YOLO detection exports."""
 
 from __future__ import annotations
 
@@ -31,11 +31,12 @@ class YoloDetection:
 
 
 class YoloOnnxDetector:
-    """Runs one strict Ultralytics YOLO end-to-end ONNX detection model.
+    """Runs one strict Ultralytics YOLO detection ONNX model.
 
     The model must have one static ``float32`` input shaped ``[1, 3, H, W]``
     and one static ``float32`` output shaped ``[1, N, 6]``. Output rows are
     ``xyxy, confidence, class_id`` in the letterboxed input coordinate space.
+    Both Ultralytics end-to-end and embedded-NMS exports use this output shape.
     """
 
     __slots__ = (
@@ -46,6 +47,8 @@ class YoloOnnxDetector:
         "_output_name",
         "_output_count",
         "_confidence_threshold",
+        "_nms_iou_threshold",
+        "_apply_nms",
         "_session",
         "_source_model_path",
     )
@@ -55,6 +58,7 @@ class YoloOnnxDetector:
         model_path: Path,
         *,
         confidence_threshold: float = 0.35,
+        nms_iou_threshold: float = 0.7,
         num_threads: int = 2,
     ) -> None:
         """Load and validate one model without downloading or selecting alternatives."""
@@ -67,6 +71,10 @@ class YoloOnnxDetector:
             raise ValueError("confidence_threshold must be a finite number between 0.0 and 1.0")
         if not math.isfinite(float(confidence_threshold)) or not 0.0 <= float(confidence_threshold) <= 1.0:
             raise ValueError("confidence_threshold must be a finite number between 0.0 and 1.0")
+        if not isinstance(nms_iou_threshold, (float, int)) or isinstance(nms_iou_threshold, bool):
+            raise ValueError("nms_iou_threshold must be a finite number between 0.0 and 1.0")
+        if not math.isfinite(float(nms_iou_threshold)) or not 0.0 <= float(nms_iou_threshold) <= 1.0:
+            raise ValueError("nms_iou_threshold must be a finite number between 0.0 and 1.0")
         if not isinstance(num_threads, int) or isinstance(num_threads, bool) or num_threads <= 0:
             raise ValueError("num_threads must be a positive integer")
 
@@ -80,6 +88,7 @@ class YoloOnnxDetector:
         self._source_model_path = model_path
         self._model_sha256 = _sha256_file(model_path)
         self._confidence_threshold = float(confidence_threshold)
+        self._nms_iou_threshold = float(nms_iou_threshold)
 
         session_options = ort.SessionOptions()
         session_options.intra_op_num_threads = num_threads
@@ -89,7 +98,7 @@ class YoloOnnxDetector:
             providers=["CPUExecutionProvider"],
         )
 
-        self._class_names = _parse_model_metadata(self._session)
+        self._class_names, self._apply_nms = _parse_model_metadata(self._session)
         input_name, input_height, input_width = _validate_input_contract(self._session)
         output_name, output_count = _validate_output_contract(self._session)
         self._input_name = input_name
@@ -187,8 +196,11 @@ class YoloOnnxDetector:
                 )
             )
 
-        # Python's sort is stable, so equal-confidence rows retain model order.
-        detections.sort(key=lambda item: -item[1].confidence)
+        if self._apply_nms:
+            detections = _class_aware_nms(detections, self._nms_iou_threshold)
+        else:
+            # Preserve the original end-to-end adapter's output ordering policy.
+            detections.sort(key=lambda item: -item[1].confidence)
         return tuple(detection for _, detection in detections)
 
 
@@ -202,15 +214,69 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _parse_model_metadata(session: Any) -> tuple[str, ...]:
-    """Validate the exact metadata contract and parse names safely."""
+def _class_aware_nms(
+    detections: list[tuple[int, YoloDetection]], iou_threshold: float,
+) -> list[tuple[int, YoloDetection]]:
+    """Suppress same-class candidates in confidence order.
+
+    The trained end-to-end export emits candidate rows while the PyTorch
+    predictor returns postprocessed detections. Keeping classes independent
+    preserves adjacent game objects with different labels.
+    """
+
+    ordered = sorted(detections, key=lambda item: -item[1].confidence)
+    kept: list[tuple[int, YoloDetection]] = []
+    for candidate in ordered:
+        if any(
+            candidate[1].class_id == existing[1].class_id
+            and _bounds_iou(candidate[1].bounds, existing[1].bounds) > iou_threshold
+            for existing in kept
+        ):
+            continue
+        kept.append(candidate)
+    return kept
+
+
+def _bounds_iou(left: Bounds, right: Bounds) -> float:
+    """Return intersection-over-union for two pixel-space boxes."""
+
+    left_x2, left_y2 = left.x + left.width, left.y + left.height
+    right_x2, right_y2 = right.x + right.width, right.y + right.height
+    intersection_width = max(0, min(left_x2, right_x2) - max(left.x, right.x))
+    intersection_height = max(0, min(left_y2, right_y2) - max(left.y, right.y))
+    intersection = intersection_width * intersection_height
+    left_area = max(0, left.width) * max(0, left.height)
+    right_area = max(0, right.width) * max(0, right.height)
+    union = left_area + right_area - intersection
+    return intersection / union if union else 0.0
+
+
+def _export_args_declare_nms(metadata: dict[str, Any]) -> bool:
+    """Return whether export args safely parse to a dict declaring nms=True."""
+
+    raw_args = metadata.get("args")
+    if not isinstance(raw_args, str):
+        return False
+    try:
+        args = ast.literal_eval(raw_args)
+    except (SyntaxError, ValueError, TypeError):
+        return False
+    return isinstance(args, dict) and args.get("nms") is True
+
+
+def _parse_model_metadata(session: Any) -> tuple[tuple[str, ...], bool]:
+    """Validate metadata and return ordered names plus post-NMS mode."""
 
     model_meta = session.get_modelmeta()
     metadata = getattr(model_meta, "custom_metadata_map", None)
     if not isinstance(metadata, dict):
         raise YoloOnnxContractError("YOLO ONNX model metadata must expose custom_metadata_map")
-    if metadata.get("end2end") != "True":
-        raise YoloOnnxContractError("YOLO ONNX model metadata must declare end2end=True")
+    if metadata.get("end2end") not in {"True", "False"}:
+        raise YoloOnnxContractError("YOLO ONNX model metadata must declare end2end=True or False")
+    if metadata.get("end2end") == "False" and not _export_args_declare_nms(metadata):
+        raise YoloOnnxContractError(
+            "YOLO ONNX metadata end2end=False requires export args declaring nms=True"
+        )
     if metadata.get("task") != "detect":
         raise YoloOnnxContractError("YOLO ONNX model metadata must declare task=detect")
 
@@ -236,7 +302,7 @@ def _parse_model_metadata(session: Any) -> tuple[str, ...]:
     expected_ids = set(range(len(names)))
     if set(names) != expected_ids:
         raise YoloOnnxContractError("YOLO ONNX metadata names must use contiguous class ids starting at zero")
-    return tuple(names[class_id] for class_id in range(len(names)))
+    return tuple(names[class_id] for class_id in range(len(names))), metadata["end2end"] == "False"
 
 
 def _validate_input_contract(session: Any) -> tuple[str, int, int]:

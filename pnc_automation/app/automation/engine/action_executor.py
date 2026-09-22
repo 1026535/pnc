@@ -162,6 +162,20 @@ class ActionExecutor:
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapSpatialObjectAction):
+            if action.expected_object is not None:
+                expected = action.expected_object
+                if observation.frame_ref is None or expected.frame_ref != observation.frame_ref:
+                    raise SelectorResolutionError(
+                        "Spatial tap target belongs to a different capture frame.",
+                        object_kind=expected.kind,
+                    )
+                surface_type = None if action.query is None else action.query.surface_type
+                observation.require_spatial_surface(surface_type).require_visible_object(expected)
+                if action.target_point != expected.action_point:
+                    raise SelectorResolutionError(
+                        "Spatial tap point differs from the selected visible object.",
+                        object_kind=expected.kind,
+                    )
             target = action.target_point
             if target is None:
                 object_ = self._require_spatial_object(action, observation)

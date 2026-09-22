@@ -540,6 +540,50 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(2, trace.count('"event": "capture"'))
             self.assertEqual(2, trace.count('"event": "observation"'))
 
+    def test_world_yolo_request_reacquires_after_popup_recovery(self) -> None:
+        """Recovery uses its own scope, then reacquires YOLO on a clear World frame."""
+
+        captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
+        screenshots = [
+            CapturedScreenshot(None, Image.new("RGB", (2, 2)), "PNG", ephemeral_captured_at=captured_at)
+            for _ in range(3)
+        ]
+        screenshot_service = Mock()
+        screenshot_service.capture.side_effect = screenshots
+        popup = _frame_at(ScreenType.PNC_POPUP, captured_at, blocking_popup=True)
+        world = _frame_at(ScreenType.PNC_WORLD_MAP, captured_at + timedelta(seconds=1))
+        fresh_world = _frame_at(ScreenType.PNC_WORLD_MAP, captured_at + timedelta(seconds=2))
+        perception = Mock()
+        perception.build.side_effect = [popup, world, fresh_world]
+        executor = Mock()
+        executor.recover_interruption_if_required.side_effect = (
+            lambda observation, *, label_prefix, observe: observe(
+                "recovery", request=ObservationRequest.full_runtime_default(),
+            )
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(
+                    session=object(),
+                    observation_service=SimpleNamespace(screenshot_service=screenshot_service),
+                ),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=Path(temporary_directory) / "trace.jsonl",
+                _perception=perception,
+                _run_id="run",
+                _observed_action_executor=executor,
+            )
+            request = ObservationRequest.world_map_yolo_object_analysis()
+
+            result = runtime.observe("world", include_content=True, request=request)
+
+        self.assertIs(result, fresh_world)
+        self.assertEqual(
+            [call.kwargs["request"] for call in perception.build.call_args_list],
+            [request, ObservationRequest.full_runtime_default(), request],
+        )
+
     def test_popup_recovery_dispatches_real_fixture_close_and_stable_completion(self) -> None:
         """Carries a measured fixture close point through the public popup recovery boundary."""
 

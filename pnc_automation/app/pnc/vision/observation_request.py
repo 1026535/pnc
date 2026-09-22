@@ -33,6 +33,7 @@ class ObservationRequest:
     expected_mailbox: MailboxType | None = None
     expected_world_coordinate: tuple[int, int] | None = None
     world_map_coordinate_only: bool = False
+    include_world_yolo_objects: bool = False
     artifact_selection: ObservationArtifactSelection | None = None
 
     @classmethod
@@ -134,6 +135,18 @@ class ObservationRequest:
             candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
             ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
             expected_world_coordinate=expected_coordinate,
+        )
+
+    @classmethod
+    def world_map_yolo_object_analysis(cls) -> "ObservationRequest":
+        """Requests current-frame World object inference after normal screen proof."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+            include_world_yolo_objects=True,
         )
 
     @classmethod

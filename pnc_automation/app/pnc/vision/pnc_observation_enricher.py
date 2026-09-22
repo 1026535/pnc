@@ -132,6 +132,7 @@ from pnc_automation.app.pnc.vision.world_map_coordinates import (
     read_world_coordinate_bar_viewport,
     world_coordinate_text_matches,
 )
+from pnc_automation.app.pnc.vision.world_yolo import WorldYoloProducer
 
 _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
     TextAnchorId.LABEL_HOME: UiElementId.PNC_BOTTOM_NAV_HOME,
@@ -1728,6 +1729,7 @@ class PncObservationEnricher:
     building_producer: BuildingContentProducer = field(default_factory=BuildingContentProducer)
     workshop_producer: WorkshopContentProducer = field(default_factory=WorkshopContentProducer)
     template_matcher: OpenCvTemplateMatcher | None = None
+    world_yolo_producer: WorldYoloProducer | None = None
 
     def content_labels(
         self,
@@ -2050,6 +2052,20 @@ class PncObservationEnricher:
                 image=image, lines=(), anchors=(), selector_registry=self.selector_registry,
                 ocr_context=ocr_context, expected_coordinate=request.expected_world_coordinate,
             ) or ObservationAdditions()
+            if request.include_world_yolo_objects and world.spatial_surface is not None:
+                if self.world_yolo_producer is None:
+                    raise RuntimeError("World YOLO object inference was requested without a configured producer.")
+                result = self.world_yolo_producer.observe(
+                    image,
+                    hud_bounds=tuple(
+                        element.bounds
+                        for element in {**visible_elements, **world.visible_elements}.values()
+                    ),
+                )
+                world = replace(
+                    world,
+                    spatial_surface=replace(world.spatial_surface, objects=result.objects),
+                )
             return _with_status_banner(world, _build_status_banner_additions(
                 image=image, lines=status_lines, request=request,
             ))

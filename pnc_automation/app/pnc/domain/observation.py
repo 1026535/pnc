@@ -250,6 +250,7 @@ class SpatialObjectSourceKind(StrEnum):
     OCR = "ocr"
     GEOMETRY = "geometry"
     TEMPLATE = "template"
+    YOLO = "yolo"
 
 
 @dataclass(frozen=True, slots=True)

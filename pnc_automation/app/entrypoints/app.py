@@ -54,6 +54,7 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
+from pnc_automation.app.pnc.vision.world_yolo import WorldYoloProducer
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -378,6 +379,7 @@ def build_application_runner(
     verbose: bool = False,
     catalog_path: Path | None = None,
     observation_mode: ObservationMode | None = None,
+    world_yolo_producer: WorldYoloProducer | None = None,
 ) -> ApplicationRunner:
     """Builds the configured application runtime for the provided config and selector catalog."""
 
@@ -395,7 +397,10 @@ def build_application_runner(
         screenshot_format=app_config.defaults.screenshot_format,
     )
     selector_registry = build_default_selector_registry(catalog_path=catalog_path)
-    observation_builder = build_observation_builder(selector_registry)
+    observation_builder = build_observation_builder(
+        selector_registry,
+        world_yolo_producer=world_yolo_producer,
+    )
     script_runner = ScriptRunner(
         config=app_config,
         task_registry=build_default_task_registry(),
@@ -410,12 +415,19 @@ def build_application_runner(
         adb_client=AdbClient(adb_path=app_config.defaults.adb_path),
         instance_resolver=BlueStacksInstanceResolver(config_path=app_config.defaults.bluestacks_config_path),
         logger=logger,
-        p2_observation_builder_factory=lambda: build_observation_builder(selector_registry),
+        p2_observation_builder_factory=lambda: build_observation_builder(
+            selector_registry,
+            world_yolo_producer=world_yolo_producer,
+        ),
     )
     return ApplicationRunner(script_runner=script_runner)
 
 
-def build_observation_builder(selector_registry: SelectorRegistry) -> ObservationBuilder:
+def build_observation_builder(
+    selector_registry: SelectorRegistry,
+    *,
+    world_yolo_producer: WorldYoloProducer | None = None,
+) -> ObservationBuilder:
     """Builds one independently owned observation pipeline and OCR engine."""
 
     ocr_service = RapidOcrService()
@@ -431,6 +443,7 @@ def build_observation_builder(selector_registry: SelectorRegistry) -> Observatio
             selector_registry=selector_registry,
             home_city_camera=HomeCityCameraLocalizer(matcher=template_matcher),
             template_matcher=template_matcher,
+            world_yolo_producer=world_yolo_producer,
         ),
         debug_artifact_collector=ObservationDebugArtifactCollector(),
         visual_recognizer=load_visual_screen_recognizer(matcher=template_matcher),

@@ -7,25 +7,14 @@ from dataclasses import dataclass, field
 import hashlib
 from time import perf_counter
 from types import MappingProxyType
-from typing import Protocol
-
-from PIL import Image
 
 from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject, Observation, SpatialObjectKind, SpatialSurfaceType,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.vision.detection.protocol import ObjectDetector
 from pnc_automation.core.vision.detection.yolo_onnx import YoloDetection
-
-
-class ObjectDetector(Protocol):
-    """A loaded local model supplies pixel-space candidates and its class catalog."""
-
-    class_names: tuple[str, ...]
-    model_sha256: str
-
-    def detect(self, image: Image.Image) -> tuple[YoloDetection, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)

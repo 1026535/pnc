@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, SpatialObjectQuery
+from pnc_automation.app.pnc.domain.observation import DetectedSpatialObject, ListEntryKind, SpatialObjectQuery
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
@@ -84,6 +84,7 @@ class TapSpatialObjectAction(ActionRequest):
 
     query: SpatialObjectQuery | None = None
     target_point: tuple[int, int] | None = None
+    expected_object: DetectedSpatialObject | None = None
     use_action_point: bool = True
 
     def __post_init__(self) -> None:
@@ -91,6 +92,8 @@ class TapSpatialObjectAction(ActionRequest):
 
         if self.query is None and self.target_point is None:
             raise SelectorResolutionError("TapSpatialObjectAction requires either a query or a concrete target_point.")
+        if self.expected_object is not None and self.target_point is None:
+            raise SelectorResolutionError("Exact spatial-object taps require a concrete target_point.")
         if self.target_point is not None and (
             not isinstance(self.target_point, tuple)
             or len(self.target_point) != 2

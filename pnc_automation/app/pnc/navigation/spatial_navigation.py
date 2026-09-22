@@ -40,6 +40,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.world_yolo import world_yolo_roi_bounds
 from pnc_automation.core.vision.image.models import Bounds
 
 _WORLD_NAVIGATION_STATE_KEY = "world_map_navigation"
@@ -980,10 +981,25 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
         """Returns one canonical tap against one exact visible world-map spatial object."""
 
         self.require_surface(observation).require_visible_object(target)
+        if target.source_kind == SpatialObjectSourceKind.YOLO:
+            if target.action_point is None:
+                raise SelectorResolutionError(
+                    "World YOLO detections require a qualified inspection point before tapping.",
+                    object_kind=target.kind,
+                    model_sha256=target.metadata.get("model_sha256"),
+                )
+            roi = world_yolo_roi_bounds(observation.image_size)
+            if not roi.contains_bounds(target.bounds) or not target.bounds.contains_point(target.action_point):
+                raise SelectorResolutionError(
+                    "World YOLO inspection point must remain inside an interior object box.",
+                    object_kind=target.kind,
+                    action_point=target.action_point,
+                )
         return [
             TapSpatialObjectAction(
                 query=_query_for_target(self.surface_type, target),
                 target_point=_resolve_target_point(target=target, use_action_point=True),
+                expected_object=target if target.source_kind == SpatialObjectSourceKind.YOLO else None,
                 reason=reason,
                 observe_after=observe_after,
                 follow_up_request=follow_up_request,

@@ -66,6 +66,14 @@ class _FakeSession:
         return [self.output]
 
 
+_EMBEDDED_NMS_METADATA = {
+    "end2end": "False",
+    "task": "detect",
+    "names": "{0: 'alpha', 1: 'beta'}",
+    "args": "{'nms': True}",
+}
+
+
 class _FakeOrt(types.SimpleNamespace):
     def __init__(self, session: _FakeSession) -> None:
         super().__init__()
@@ -97,13 +105,18 @@ class YoloOnnxDetectorTests(unittest.TestCase):
         session: _FakeSession,
         *,
         confidence_threshold: float = 0.35,
+        nms_iou_threshold: float = 0.7,
     ) -> tuple[YoloOnnxDetector, _FakeOrt, tempfile.TemporaryDirectory[str]]:
         temp_dir = tempfile.TemporaryDirectory()
         model_path = Path(temp_dir.name) / "model.onnx"
         model_path.write_bytes(b"fake model")
         fake_ort = _FakeOrt(session)
         with patch.dict(sys.modules, {"onnxruntime": fake_ort}):
-            detector = YoloOnnxDetector(model_path, confidence_threshold=confidence_threshold)
+            detector = YoloOnnxDetector(
+                model_path,
+                confidence_threshold=confidence_threshold,
+                nms_iou_threshold=nms_iou_threshold,
+            )
         return detector, fake_ort, temp_dir
 
     def test_rectangular_letterbox_inverse_clips_and_stably_sorts(self) -> None:
@@ -176,9 +189,154 @@ class YoloOnnxDetectorTests(unittest.TestCase):
         self.addCleanup(temp_dir.cleanup)
         self.assertEqual(detector.detect(Image.new("RGB", (8, 8))), ())
 
+    def test_embedded_nms_export_metadata_is_accepted(self) -> None:
+        accepted = (
+            {"end2end": "True", "task": "detect", "names": "{0: 'a'}"},
+            {"end2end": "True", "task": "detect", "names": "{0: 'a'}", "args": "{'nms': False}"},
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "{'nms': True}"},
+            {
+                "end2end": "False",
+                "task": "detect",
+                "names": "{0: 'a'}",
+                "args": "{'data': None, 'batch': 1, 'nms': True, 'dynamic': False, 'simplify': False}",
+            },
+        )
+        for metadata in accepted:
+            session = _FakeSession(np.zeros((1, 1, 6), dtype=np.float32), metadata=metadata)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                model_path = Path(temp_dir) / "model.onnx"
+                model_path.write_bytes(b"fake model")
+                with patch.dict(sys.modules, {"onnxruntime": _FakeOrt(session)}):
+                    with self.subTest(metadata=metadata):
+                        detector = YoloOnnxDetector(model_path)
+                        self.assertEqual(detector.class_names, ("a",))
+
+    def test_embedded_nms_export_metadata_is_rejected_without_nms(self) -> None:
+        rejected = (
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}"},
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "not-a-literal"},
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "['nms', True]"},
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "{'nms': False}"},
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "{'batch': 1}"},
+            {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "{'nms': 1}"},
+            {"task": "detect", "names": "{0: 'a'}", "args": "{'nms': True}"},
+            {"end2end": "yes", "task": "detect", "names": "{0: 'a'}", "args": "{'nms': True}"},
+        )
+        for metadata in rejected:
+            session = _FakeSession(np.zeros((1, 1, 6), dtype=np.float32), metadata=metadata)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                model_path = Path(temp_dir) / "model.onnx"
+                model_path.write_bytes(b"fake model")
+                with patch.dict(sys.modules, {"onnxruntime": _FakeOrt(session)}):
+                    with self.subTest(metadata=metadata):
+                        with self.assertRaises(YoloOnnxContractError):
+                            YoloOnnxDetector(model_path)
+
+    def test_class_aware_nms_suppresses_only_same_class_duplicates(self) -> None:
+        output = np.array(
+            [
+                [
+                    [2.0, 1.0, 6.0, 5.0, 0.60, 0.0],
+                    [1.0, 1.0, 5.0, 5.0, 0.90, 0.0],
+                    [1.0, 1.0, 5.0, 5.0, 0.80, 0.0],
+                    [1.0, 1.0, 5.0, 5.0, 0.70, 1.0],
+                    [1.0, 1.0, 5.0, 6.0, 0.50, 0.0],
+                ]
+            ],
+            dtype=np.float32,
+        )
+        session = _FakeSession(output, metadata=_EMBEDDED_NMS_METADATA)
+        detector, _, temp_dir = self._detector(session)
+        self.addCleanup(temp_dir.cleanup)
+
+        detections = detector.detect(Image.new("RGB", (8, 8)))
+
+        self.assertEqual([d.class_id for d in detections], [0, 1, 0])
+        self.assertEqual(
+            [d.bounds for d in detections],
+            [Bounds(x=1, y=1, width=4, height=4)] * 2 + [Bounds(x=2, y=1, width=4, height=4)],
+        )
+        self.assertEqual([round(d.confidence, 2) for d in detections], [0.9, 0.7, 0.6])
+
+    def test_nms_iou_threshold_parameter_controls_suppression(self) -> None:
+        output = np.array(
+            [
+                [
+                    [1.0, 1.0, 5.0, 5.0, 0.90, 0.0],
+                    [2.0, 1.0, 6.0, 5.0, 0.60, 0.0],
+                ]
+            ],
+            dtype=np.float32,
+        )
+        kept_session = _FakeSession(output, metadata=_EMBEDDED_NMS_METADATA)
+        kept_detector, _, kept_dir = self._detector(kept_session, nms_iou_threshold=0.7)
+        self.addCleanup(kept_dir.cleanup)
+        self.assertEqual(len(kept_detector.detect(Image.new("RGB", (8, 8)))), 2)
+
+        suppressed_session = _FakeSession(output, metadata=_EMBEDDED_NMS_METADATA)
+        suppressed_detector, _, suppressed_dir = self._detector(
+            suppressed_session, nms_iou_threshold=0.5
+        )
+        self.addCleanup(suppressed_dir.cleanup)
+        detections = suppressed_detector.detect(Image.new("RGB", (8, 8)))
+        self.assertEqual(len(detections), 1)
+        self.assertAlmostEqual(detections[0].confidence, 0.9)
+
+    def test_end_to_end_export_preserves_its_original_detection_rows(self) -> None:
+        output = np.array([[[1, 1, 5, 5, 0.9, 0], [1, 1, 5, 5, 0.8, 0]]], dtype=np.float32)
+        detector, _, temp_dir = self._detector(_FakeSession(output))
+        self.addCleanup(temp_dir.cleanup)
+
+        self.assertEqual(len(detector.detect(Image.new("RGB", (8, 8)))), 2)
+
+    def test_nms_iou_threshold_is_validated(self) -> None:
+        for bad_value in (True, -0.1, 1.1, float("nan"), "0.7"):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                model_path = Path(temp_dir) / "model.onnx"
+                model_path.write_bytes(b"fake model")
+                with self.subTest(bad_value=bad_value):
+                    with self.assertRaises(ValueError):
+                        YoloOnnxDetector(model_path, nms_iou_threshold=bad_value)
+
+    def test_full_class_id_order_maps_stable_labels(self) -> None:
+        names = (
+            "{0: 'monster', 1: 'farm', 2: 'castle', 3: 'hell_fortress', 4: 'border_stone',"
+            " 5: 'castle_away_marker', 6: 'alliance_fort', 7: 'gate_of_the_abyss',"
+            " 8: 'alliance_warehouse', 9: 'alliance_infirmary', 10: 'treasure_goblin',"
+            " 11: 'lumber_camp', 12: 'iron_mine', 13: 'gold_mine', 14: 'diamond_mine',"
+            " 15: 'alliance_farm', 16: 'alliance_lumber_camp'}"
+        )
+        metadata = {
+            "end2end": "False",
+            "task": "detect",
+            "names": names,
+            "args": "{'nms': True}",
+        }
+        output = np.array(
+            [[[0.0, 0.0, 2.0, 2.0, 0.9, 16.0], [4.0, 4.0, 6.0, 6.0, 0.8, 2.0]]],
+            dtype=np.float32,
+        )
+        session = _FakeSession(output, metadata=metadata)
+        detector, _, temp_dir = self._detector(session)
+        self.addCleanup(temp_dir.cleanup)
+
+        detections = detector.detect(Image.new("RGB", (8, 8)))
+
+        self.assertEqual(len(detector.class_names), 17)
+        self.assertEqual(detector.class_names[16], "alliance_lumber_camp")
+        self.assertEqual(
+            [(d.class_id, d.label) for d in detections],
+            [(16, "alliance_lumber_camp"), (2, "castle")],
+        )
+
     def test_metadata_and_static_contract_are_strict(self) -> None:
         cases = (
             ({"end2end": "False", "task": "detect", "names": "{0: 'a'}"}, None, None),
+            (
+                {"end2end": "False", "task": "detect", "names": "{0: 'a'}", "args": "{'nms': True}"},
+                [1, 3, "dynamic", 8],
+                None,
+            ),
             ({"end2end": "True", "task": "classify", "names": "{0: 'a'}"}, None, None),
             ({"end2end": "True", "task": "detect", "names": "{1: 'a'}"}, None, None),
             ({"end2end": "True", "task": "detect", "names": "{}"}, None, None),

@@ -86,8 +86,16 @@ class NavigationPerception:
         default_factory=ObservationDebugArtifactCollector, kw_only=True,
     )
 
-    def build(self, screenshot: CapturedScreenshot, *, include_content: bool = False) -> Observation:
+    def build(
+        self,
+        screenshot: CapturedScreenshot,
+        *,
+        include_content: bool = False,
+        request: ObservationRequest | None = None,
+    ) -> Observation:
         """Return only controls actually matched on an independently identified frame."""
+        if request is not None and not include_content:
+            raise ValueError("Explicit navigation observation requests require include_content=True.")
         image = screenshot.image
         session_key = (
             None
@@ -230,7 +238,7 @@ class NavigationPerception:
             frame_fingerprint=hashlib.sha256(image.tobytes()).hexdigest(),
             frame_ref=screenshot.frame_ref,
         )
-        content_request = (
+        content_request = request or (
             ObservationRequest.chat_transcript_observation()
             if screen == ScreenType.PNC_CHAT
             else ObservationRequest.source_screen_retry(screen)
