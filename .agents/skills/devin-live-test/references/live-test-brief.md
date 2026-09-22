@@ -52,6 +52,15 @@ resume the batch when preconditions hold. Record the popup failure, recovery act
 artifact, and follow-up owner even if the feature case later passes. When an unrelated
 lease, popup, or entry failure still prevents a feature case, classify the observed
 boundary and report that feature case as not_run; do not infer its behavior.
+For an unrelated castle-identity or BlueStacks instance-management failure, the
+worker should attempt the smallest evidence-backed correction through existing
+identity, status, or readiness entry points. Host-management mutation requires
+explicit assignment scope and the role, idle-lease, and `read_only` boundaries.
+Revalidate identity and readiness before
+resuming the assigned tests. Record the incident even if recovered. Do not spend the
+assignment fixing unrelated code or investigating the host without a bound; leave
+dependent cases not_run and give the lead a separate defect follow-up if the
+precondition cannot be restored promptly.
 Do not return NEEDS_LEAD. Return BLOCKED only when a concrete user intervention is
 required, such as new authorization, credentials, an account action, an unresolved
 target choice, or a resource-budget decision. Finish every other safe check and
