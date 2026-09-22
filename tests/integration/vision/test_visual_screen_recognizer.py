@@ -123,6 +123,8 @@ class VisualScreenRecognizerTests(unittest.TestCase):
             ("savannah_hero_offer.png", "savannah_offer"),
             ("vip_daily_reset.png", "vip_daily_reset"),
             ("alliance_invitation.png", "alliance_invitation"),
+            ("king_return_welcome.png", "king_return"),
+            ("valiant_conquest.png", "valiant_conquest"),
         ):
             with self.subTest(expired=expired_name):
                 calls.clear()
@@ -226,7 +228,10 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     any(
                         marker in name
                         for name in evaluated
-                        for marker in ("savannah_offer", "vip_daily_reset", "alliance_invitation")
+                        for marker in (
+                            "savannah_offer", "vip_daily_reset", "alliance_invitation",
+                            "king_return", "valiant_conquest",
+                        )
                     )
                 )
                 self.assertTrue(any("lucifer_offer" in name for name in evaluated))
@@ -251,7 +256,10 @@ class VisualScreenRecognizerTests(unittest.TestCase):
         home_profile = next(profile for profile in recognizer.profiles if profile.id == "home_city")
         startup_profiles = tuple(
             next(profile for profile in recognizer.profiles if profile.id == profile_id)
-            for profile_id in ("savannah_hero_offer", "vip_daily_reset", "alliance_invitation")
+            for profile_id in (
+                "savannah_hero_offer", "vip_daily_reset", "alliance_invitation",
+                "king_return_welcome", "valiant_conquest",
+            )
         )
         lucifer_profile = next(
             profile for profile in recognizer.profiles if profile.id == "lucifer_special_offer"

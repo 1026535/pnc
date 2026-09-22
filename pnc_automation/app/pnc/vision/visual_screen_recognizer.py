@@ -154,6 +154,10 @@ class PopupRecognitionSessionState:
     def allow(self, profile: "VisualScreenProfile") -> bool:
         """Return whether this session may spend matcher work on one popup family."""
 
+        if self.post_login_proven and profile.screen_type in _BLOCKING_VISUAL_SCREENS:
+            # Only this delayed family has captured post-Home evidence. Keep
+            # the established expiry of every other blocking family intact.
+            return profile.id == "lucifer_special_offer"
         if profile.id == "vip_daily_reset":
             return not self.vip_consumed and not self.post_login_proven
         if profile.id == "valiant_conquest":
@@ -162,9 +166,6 @@ class PopupRecognitionSessionState:
             return not self.post_login_proven
         if profile.id.startswith("alliance_invitation"):
             return not self.post_login_proven
-        # A delayed lucifer_special_offer was observed after a briefly
-        # recognizable Home frame (2026-09-22 startup capture); it is not a
-        # startup-only family and stays eligible after post-login proof.
         return True
 
     def note_matches(
