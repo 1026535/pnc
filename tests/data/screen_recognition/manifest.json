@@ -23,6 +23,35 @@
       ]
     },
     {
+      "image": "home_city_startup_gap_20260922.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "validation",
+      "group": "2026-09-22/main/pet_workshop_pw05_recognition_20b39e3_startup",
+      "sha256": "0ec7a86723b31698bbca1dce464143f1f6786380ae2c8634d2c4d76f9dc9143e",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-22/pet_workshop_pw05_recognition_20b39e3_startup/20260922T020152Z_core_20260922T020110Z_7a4df58e_0011_preflight_settle_10.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame: the briefly recognizable Home city captured at 02:01:52Z in the PW05 startup-recognition run, first half of the chronological Home -> Lucifer pair. Installed build not recorded."
+      }
+    },
+    {
+      "image": "lucifer_special_offer_startup_gap_20260922.png",
+      "screen": "PNC_POPUP",
+      "split": "validation",
+      "group": "2026-09-22/main/pet_workshop_pw05_recognition_20b39e3_startup",
+      "sha256": "000041c347be0aa44eed1344698b060056a4750538bcee13c410c4344995209a",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-22/pet_workshop_pw05_recognition_20b39e3_startup/20260922T020240Z_core_20260922T020110Z_7a4df58e_0026_c5_final.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame: the delayed Lucifer Special Offer captured at 02:02:40Z after the briefly recognizable Home frame in the same startup session. Installed build not recorded."
+      },
+      "annotation": "Chronological pair with home_city_startup_gap_20260922.png; the regression exercises demand-driven Lucifer eligibility after post-login proof."
+    },
+    {
       "image": "king_return_welcome.png",
       "screen": "PNC_POPUP",
       "split": "reference",

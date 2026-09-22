@@ -119,10 +119,31 @@ class VisualScreenRecognizerTests(unittest.TestCase):
         self.assertTrue(base.evidence)
         self.assertFalse(any("/popup/" in path.as_posix() for path in calls))
 
+        for expired_name, marker in (
+            ("savannah_hero_offer.png", "savannah_offer"),
+            ("vip_daily_reset.png", "vip_daily_reset"),
+            ("alliance_invitation.png", "alliance_invitation"),
+        ):
+            with self.subTest(expired=expired_name):
+                calls.clear()
+                blocked = recognizer.recognize(
+                    _capture(expired_name).image,
+                    blocking_profiles_only=True,
+                    session_key=("session", 1),
+                )
+                self.assertEqual((), blocked.profile_ids)
+                self.assertFalse(any(marker in path.name for path in calls))
+
+        with Image.open(FIXTURES / "lucifer_special_offer_startup_gap_20260922.png") as source:
+            delayed_image = source.copy()
+        self.assertEqual(("RGBA", (900, 1600)), (delayed_image.mode, delayed_image.size))
         calls.clear()
-        blocked = recognizer.recognize(savannah, blocking_profiles_only=True, session_key=("session", 1))
-        self.assertNotIn("savannah_hero_offer", blocked.profile_ids)
-        self.assertFalse(any("/popup/" in path.as_posix() for path in calls))
+        delayed = recognizer.recognize(
+            delayed_image,
+            blocking_profiles_only=True,
+            session_key=("session", 1),
+        )
+        self.assertEqual(("lucifer_special_offer",), delayed.profile_ids)
 
         calls.clear()
         eligible = recognizer.recognize(savannah, blocking_profiles_only=True, session_key=("new-session", 1))
@@ -189,15 +210,26 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     "savannah_hero_offer.png", session_id=f"{path}-session", session_epoch=1,
                 )
                 production_path.build(home)
+                self.assertEqual(matcher.prepare_calls, 1)
+                self.assertFalse(any("/popup/" in path.as_posix() for path in matcher.template_paths))
                 matcher.prepare_calls = 0
                 matcher.template_paths.clear()
                 ocr.read_result_calls = 0
 
-                # The base pass still prepares its ordinary profiles, but the
-                # expired popup phase must not prepare or match popup assets.
+                # The base pass still prepares its ordinary profiles, and the
+                # post-login probe only evaluates popup families that remain
+                # eligible; expired startup-only assets are never matched.
                 production_path.build(savannah)
-                self.assertEqual(matcher.prepare_calls, 1)
-                self.assertFalse(any("/popup/" in path.as_posix() for path in matcher.template_paths))
+                self.assertEqual(matcher.prepare_calls, 2)
+                evaluated = {path.name for path in matcher.template_paths}
+                self.assertFalse(
+                    any(
+                        marker in name
+                        for name in evaluated
+                        for marker in ("savannah_offer", "vip_daily_reset", "alliance_invitation")
+                    )
+                )
+                self.assertTrue(any("lucifer_offer" in name for name in evaluated))
                 self.assertGreater(ocr.read_result_calls, 0)
 
                 # A reconnect/new epoch re-arms the conservative popup phase.
@@ -217,8 +249,12 @@ class VisualScreenRecognizerTests(unittest.TestCase):
         recognizer = load_visual_screen_recognizer()
         state = recognizer.popup_state
         home_profile = next(profile for profile in recognizer.profiles if profile.id == "home_city")
-        savannah_profile = next(
-            profile for profile in recognizer.profiles if profile.id == "savannah_hero_offer"
+        startup_profiles = tuple(
+            next(profile for profile in recognizer.profiles if profile.id == profile_id)
+            for profile_id in ("savannah_hero_offer", "vip_daily_reset", "alliance_invitation")
+        )
+        lucifer_profile = next(
+            profile for profile in recognizer.profiles if profile.id == "lucifer_special_offer"
         )
         pre_login_screens = (
             ScreenType.ANDROID_HOME,
@@ -234,18 +270,22 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     session_key=("sequence", 1),
                 )
                 self.assertFalse(state.post_login_proven)
-                self.assertTrue(state.allow(savannah_profile))
+                for profile in (*startup_profiles, lucifer_profile):
+                    self.assertTrue(state.allow(profile))
 
         state.observe_base_identity(
             (home_profile, replace(home_profile, screen_type=ScreenType.PNC_LOGIN)),
             session_key=("ambiguous-sequence", 1),
         )
         self.assertFalse(state.post_login_proven)
-        self.assertTrue(state.allow(savannah_profile))
+        for profile in (*startup_profiles, lucifer_profile):
+            self.assertTrue(state.allow(profile))
 
         state.observe_base_identity((home_profile,), session_key=("sequence", 1))
         self.assertTrue(state.post_login_proven)
-        self.assertFalse(state.allow(savannah_profile))
+        for profile in startup_profiles:
+            self.assertFalse(state.allow(profile))
+        self.assertTrue(state.allow(lucifer_profile))
 
     def test_collect_mail_profiles_expose_only_measured_controls(self) -> None:
         """Recognizes the four mail frames and keeps navigation controls template-backed."""

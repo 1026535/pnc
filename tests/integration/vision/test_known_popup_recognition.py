@@ -64,6 +64,25 @@ def _capture(name: str) -> CapturedScreenshot:
     )
 
 
+def _native_capture(name: str, *, session: str, capture_sequence: int) -> CapturedScreenshot:
+    with Image.open(FIXTURES / name) as source:
+        image = source.copy()
+    captured_at = datetime.now(UTC)
+    return CapturedScreenshot(
+        None,
+        image,
+        "PNG",
+        frame_ref=FrameRef(
+            session_id=session,
+            session_epoch=1,
+            capture_sequence=capture_sequence,
+            input_sequence=0,
+            captured_at=captured_at,
+        ),
+        ephemeral_captured_at=captured_at,
+    )
+
+
 def _wire() -> tuple[ObservationBuilder, NavigationPerception]:
     registry = build_default_selector_registry()
     matcher = OpenCvTemplateMatcher()
@@ -162,6 +181,62 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     self.assertEqual(close.frame_ref, capture.frame_ref)
                     self.assertEqual(close.source_screen, screen)
                     self.assertEqual(close.source_layout_id, layout_id)
+
+    def test_delayed_lucifer_offer_after_brief_home_frame_publishes_on_both_paths(self) -> None:
+        """The captured Home then delayed-Lucifer sequence stays demand-driven in one session."""
+
+        builder, navigation = _wire()
+        home = _native_capture(
+            "home_city_startup_gap_20260922.png", session="startup-gap:2026-09-22", capture_sequence=11
+        )
+        lucifer = _native_capture(
+            "lucifer_special_offer_startup_gap_20260922.png",
+            session="startup-gap:2026-09-22",
+            capture_sequence=26,
+        )
+        for captured in (home, lucifer):
+            self.assertEqual(("RGBA", (900, 1600)), (captured.image.mode, captured.image.size))
+
+        for observation in (builder.build(home), navigation.build(home)):
+            self.assertEqual(ScreenType.PNC_HOME_CITY, observation.screen_type)
+
+        for observation in (builder.build(lucifer), navigation.build(lucifer)):
+            self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+            self.assertEqual("blocked", observation.decision.guard.value)
+            self.assertEqual("lucifer_special_offer_full_height", observation.decision.layout_id)
+            self.assertTrue(observation.blocking_popup)
+            self.assertEqual({UiElementId.PNC_POPUP_CLOSE_BUTTON}, set(observation.visible_elements))
+            overlay = observation.popup_overlay
+            self.assertIsNotNone(overlay)
+            self.assertEqual("lucifer_special_offer_full_height", overlay.layout_id)
+            candidate = overlay.candidate(PopupControlKind.POPUP_BACK)
+            self.assertIsNotNone(candidate)
+            self.assertEqual(Bounds(30, 13, 100, 95), candidate.bounds)
+            self.assertEqual((80, 60), candidate.action_point)
+            close = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(candidate.bounds, close.bounds)
+            self.assertEqual(candidate.action_point, close.action_point)
+            self.assertEqual(close.frame_ref, lucifer.frame_ref)
+            self.assertEqual(ScreenType.PNC_POPUP, close.source_screen)
+            self.assertEqual("lucifer_special_offer_full_height", close.source_layout_id)
+            decision = decide_popup_recovery(
+                screen_type=observation.screen_type,
+                blocking_popup=observation.blocking_popup,
+                visible_selector_ids=frozenset(observation.visible_elements),
+                popup_overlay=overlay,
+            )
+            self.assertEqual(UiElementId.PNC_POPUP_CLOSE_BUTTON, decision.selector_id)
+
+        session = FakeSession()
+        observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
+        recovered = _make_observed_action_executor(session).recover_interruption_if_required(
+            builder.build(lucifer),
+            label_prefix="delayed_lucifer",
+            observe=observer.observe,
+        )
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual([(80, 60)], session.taps)
+        self.assertEqual([], session.key_events)
 
     def test_king_return_welcome_uses_one_measured_get_started_tap(self) -> None:
         """Both publishers can dismiss the exact welcome and recapture Home."""

@@ -162,6 +162,9 @@ class PopupRecognitionSessionState:
             return not self.post_login_proven
         if profile.id.startswith("alliance_invitation"):
             return not self.post_login_proven
+        # A delayed lucifer_special_offer was observed after a briefly
+        # recognizable Home frame (2026-09-22 startup capture); it is not a
+        # startup-only family and stays eligible after post-login proof.
         return True
 
     def note_matches(
@@ -268,12 +271,8 @@ class VisualScreenRecognizer:
                 if include_blocking_profiles or profile.screen_type not in _BLOCKING_VISUAL_SCREENS
             )
         if (blocking_profiles_only or include_blocking_profiles) and session_key is not None:
-            candidate_profiles = (
-                ()
-                if blocking_profiles_only and self.popup_state.post_login_proven
-                else tuple(
-                    profile for profile in candidate_profiles if self.popup_state.allow(profile)
-                )
+            candidate_profiles = tuple(
+                profile for profile in candidate_profiles if self.popup_state.allow(profile)
             )
         # Eligibility is resolved before any image preparation.  An expired
         # popup phase must be genuinely zero-work, including no full-frame

@@ -31,6 +31,29 @@ and returned Home. No price, reward, resource, account, or castle-switch action 
 Evidence is recorded in
 `.local-data/reports/popup_live_lucifer_main_20260915.json`.
 
+## Delayed Lucifer offer after a recognizable Home frame
+
+On September 22, 2026, a PW05 startup-recognition run on configured account
+`main` captured a Home city frame at 02:01:52Z followed by the full-height
+Lucifer Special Offer at 02:02:40Z in the same startup session. Both frames are
+native RGBA 900x1600 session captures under
+`artifacts/2026-09-22/pet_workshop_pw05_recognition_20b39e3_startup/` (frames
+`0011_preflight_settle_10` and `0026_c5_final`) and are preserved as the
+chronological fixture pair
+`tests/data/screen_recognition/home_city_startup_gap_20260922.png` and
+`lucifer_special_offer_startup_gap_20260922.png`. The installed build was not
+recorded for this capture. Confidence: artifact-observed; replay through the
+production publishers matches the reviewed `lucifer_special_offer` profile and
+its measured `popup_back` control at `(80, 60)` with confidence 1.0.
+
+Automation implication: post-login proof must not blanket-expire every popup
+family. Only startup-gated families (Savannah offer, VIP daily reset, alliance
+invitation) lose eligibility once a stable base identity is proven in the
+session; the Lucifer family is not startup-only and remains demand-driven on an
+`UNKNOWN` base until matched or the epoch changes. Whether the client can show
+this offer again later in the same session is unknown; no reappearance rule is
+claimed.
+
 ## King Return welcome entry
 
 On September 21, 2026, a 900×1600 capture from `157_farm` during V44 validation
