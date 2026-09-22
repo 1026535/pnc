@@ -155,9 +155,11 @@ class PopupRecognitionSessionState:
         """Return whether this session may spend matcher work on one popup family."""
 
         if self.post_login_proven and profile.screen_type in _BLOCKING_VISUAL_SCREENS:
-            # Only this delayed family has captured post-Home evidence. Keep
-            # the established expiry of every other blocking family intact.
-            return profile.id == "lucifer_special_offer"
+            # Only these delayed families have captured post-Home evidence
+            # (Lucifer after startup Home; Growth Boost Weekly Pass after a
+            # castle switch surfaced brief Home on 2026-09-22). Keep the
+            # established expiry of every other blocking family intact.
+            return profile.id in {"lucifer_special_offer", "growth_boost_weekly_pass"}
         if profile.id == "vip_daily_reset":
             return not self.vip_consumed and not self.post_login_proven
         if profile.id == "valiant_conquest":

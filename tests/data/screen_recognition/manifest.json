@@ -52,6 +52,30 @@
       "annotation": "Chronological pair with home_city_startup_gap_20260922.png; the regression exercises demand-driven Lucifer eligibility after post-login proof."
     },
     {
+      "image": "growth_boost_weekly_pass.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-09-22/main/pet_workshop_pw05_hopium_recognition_525807b",
+      "sha256": "022856910fb437ba245315f2ea5bc3f1413b776396e1a221246e590f712ec028",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "home_city_before_growth_boost_20260922.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "validation",
+      "group": "2026-09-22/main/pet_workshop_pw05_hopium_recognition_525807b",
+      "sha256": "3eb139cb1cc2219705efa76a459166a32ef1fe9f2051aea5ee1e02a7a8dffd34",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-22/pet_workshop_pw05_hopium_recognition_525807b/20260922T052945Z_core_20260922T052651Z_b8192487_0056_core_9_castle_select_after_5.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame: the Home city captured at 05:29:45Z after the canonical Hopium castle-row tap in the PW05 recognition run, first half of the chronological Home -> Growth Boost Weekly Pass pair. Installed build not recorded."
+      }
+    },
+    {
       "image": "king_return_welcome.png",
       "screen": "PNC_POPUP",
       "split": "reference",

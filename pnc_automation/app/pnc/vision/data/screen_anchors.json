@@ -962,6 +962,73 @@
       ]
     },
     {
+      "id": "growth_boost_weekly_pass",
+      "layout_id": "growth_boost_weekly_pass_full_height",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "growth_boost_weekly_pass.png",
+        "decoded_sha256": "022856910fb437ba245315f2ea5bc3f1413b776396e1a221246e590f712ec028",
+        "capture_group": "2026-09-22/main/pet_workshop_pw05_hopium_recognition_525807b"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Live-observed Growth Boost Weekly Pass identity from the title artwork and the static central offer artwork; the back arrow, purchase bar, currency, countdown, quantities, and daily reward rows are excluded from identity.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/growth_boost_title.png",
+          "search_region": [
+            95,
+            4,
+            370,
+            55
+          ],
+          "threshold": 0.98
+        },
+        {
+          "image": "screen_anchors/popup/growth_boost_center_art.png",
+          "search_region": [
+            150,
+            78,
+            320,
+            118
+          ],
+          "threshold": 0.98
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "popup_control_kind": "popup_back",
+          "anchor": {
+            "image": "screen_anchors/popup/growth_boost_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              90
+            ],
+            "threshold": 0.97
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        0,
+        0,
+        540,
+        960
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_GIFT_CENTER"
+      ]
+    },
+    {
       "id": "vip_daily_reset",
       "layout_id": "vip_daily_reset",
       "screen": "PNC_VIP_DAILY_RESET",

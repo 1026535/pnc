@@ -54,6 +54,38 @@ exception, not a general change to popup lifetimes. Whether the client can show
 this offer again later in the same session is unknown; no reappearance rule is
 claimed.
 
+## Growth Boost Weekly Pass offer after castle switching
+
+On September 22, 2026, a PW05 Hopium-recognition run on configured account
+`main` tapped the `npc_on_hopium` roster row once at 05:29:22Z; the session then
+showed loading, a briefly recognizable Home city frame at 05:29:45Z, loading
+again, and a fully rendered full-height **Growth Boost Weekly Pass** offer at
+05:30:59Z (final frame, not loading). The frames are native RGBA 900x1600
+session captures under
+`.local-data/artifacts/2026-09-22/pet_workshop_pw05_hopium_recognition_525807b/`
+(frames `0056_core_9_castle_select_after_5` and `0071_c5_final`; a second offer
+frame `0070_c5_return_observe_0` carries a different countdown value). The Home
+frame and the offer frame are preserved as the chronological fixture pair
+`tests/data/screen_recognition/home_city_before_growth_boost_20260922.png` and
+`growth_boost_weekly_pass.png`. The installed build was not recorded for this
+capture. Confidence: artifact-observed; both static identity anchors match at
+confidence 1.0 on both natural offer frames, so they are independent of the
+countdown digits.
+
+The offer identity uses two independent static regions — the title artwork and
+the central offer artwork — and excludes the back arrow, purchase bar, currency,
+countdown, quantities, and daily reward rows. Its dismiss control is a gold
+upper-left diamond arrow separately template-matched and typed `popup_back`
+(measured `(85, 55)` in the native frame, bounds `(30, 7, 110, 96)`); it is a
+measured on-screen tap, never Android Back. The purchase bar is never published
+or invoked. Automation implication: this captured Growth family joins the
+scoped post-Home exception alongside Lucifer; it is evaluated only when base
+identity is unknown, and every other popup family retains its established
+post-login expiry. Whether the client can show this offer again in the same
+session, and whether its back control returns to Home, are unverified live;
+recovery still requires a fresh observation after the measured tap. This note
+is recognition/session evidence, not a Workshop simulator rule.
+
 ## King Return welcome entry
 
 On September 21, 2026, a 900×1600 capture from `157_farm` during V44 validation

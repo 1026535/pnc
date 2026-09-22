@@ -151,6 +151,12 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                 PopupControlKind.POPUP_BACK,
                 "lucifer_special_offer_full_height",
             ),
+            "growth_boost_weekly_pass.png": (
+                ScreenType.PNC_POPUP,
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                PopupControlKind.POPUP_BACK,
+                "growth_boost_weekly_pass_full_height",
+            ),
             "vip_daily_reset.png": (
                 ScreenType.PNC_VIP_DAILY_RESET,
                 UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
@@ -237,6 +243,95 @@ class KnownPopupRecognitionTests(unittest.TestCase):
         self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
         self.assertEqual([(80, 60)], session.taps)
         self.assertEqual([], session.key_events)
+
+    def test_growth_boost_weekly_pass_after_home_frame_publishes_on_both_paths(self) -> None:
+        """The captured Home then Growth Boost Weekly Pass sequence stays demand-driven in one session."""
+
+        builder, navigation = _wire()
+        home = _native_capture(
+            "home_city_before_growth_boost_20260922.png",
+            session="hopium-gap:2026-09-22",
+            capture_sequence=56,
+        )
+        offer = _native_capture(
+            "growth_boost_weekly_pass.png", session="hopium-gap:2026-09-22", capture_sequence=71
+        )
+        for captured in (home, offer):
+            self.assertEqual(("RGBA", (900, 1600)), (captured.image.mode, captured.image.size))
+
+        for observation in (builder.build(home), navigation.build(home)):
+            self.assertEqual(ScreenType.PNC_HOME_CITY, observation.screen_type)
+
+        for observation in (builder.build(offer), navigation.build(offer)):
+            self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+            self.assertEqual("blocked", observation.decision.guard.value)
+            self.assertEqual("growth_boost_weekly_pass_full_height", observation.decision.layout_id)
+            self.assertTrue(observation.blocking_popup)
+            self.assertEqual({UiElementId.PNC_POPUP_CLOSE_BUTTON}, set(observation.visible_elements))
+            overlay = observation.popup_overlay
+            self.assertIsNotNone(overlay)
+            self.assertEqual("growth_boost_weekly_pass_full_height", overlay.layout_id)
+            candidate = overlay.candidate(PopupControlKind.POPUP_BACK)
+            self.assertIsNotNone(candidate)
+            self.assertEqual(Bounds(30, 7, 110, 96), candidate.bounds)
+            self.assertEqual((85, 55), candidate.action_point)
+            close = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(candidate.bounds, close.bounds)
+            self.assertEqual(candidate.action_point, close.action_point)
+            self.assertEqual(close.frame_ref, offer.frame_ref)
+            self.assertEqual(ScreenType.PNC_POPUP, close.source_screen)
+            self.assertEqual("growth_boost_weekly_pass_full_height", close.source_layout_id)
+            decision = decide_popup_recovery(
+                screen_type=observation.screen_type,
+                blocking_popup=observation.blocking_popup,
+                visible_selector_ids=frozenset(observation.visible_elements),
+                popup_overlay=overlay,
+            )
+            self.assertEqual(UiElementId.PNC_POPUP_CLOSE_BUTTON, decision.selector_id)
+
+        session = FakeSession()
+        observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
+        recovered = _make_observed_action_executor(session).recover_interruption_if_required(
+            builder.build(offer),
+            label_prefix="growth_boost_weekly_pass",
+            observe=observer.observe,
+        )
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual([(85, 55)], session.taps)
+        self.assertEqual([], session.key_events)
+
+    def test_growth_boost_requires_independent_identity_regions_and_measured_back(self) -> None:
+        """Each static identity region is required, and the back control alone cannot be invented."""
+
+        builder, navigation = _wire()
+        source = _capture("growth_boost_weekly_pass.png")
+
+        for missing, box in (
+            ("title", (160, 5, 775, 95)),
+            ("center_art", (260, 135, 775, 320)),
+        ):
+            with self.subTest(missing=missing):
+                missing_identity = source.image.copy()
+                ImageDraw.Draw(missing_identity).rectangle(box, fill=(18, 24, 38))
+                identity_capture = replace(source, image=missing_identity)
+                for observation in (
+                    builder.build(identity_capture),
+                    navigation.build(identity_capture),
+                ):
+                    self.assertNotEqual(
+                        "growth_boost_weekly_pass_full_height", observation.decision.layout_id
+                    )
+                    self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+        missing_control = source.image.copy()
+        ImageDraw.Draw(missing_control).rectangle((20, 0, 150, 115), fill=(10, 30, 60))
+        control_capture = replace(source, image=missing_control)
+        for observation in (builder.build(control_capture), navigation.build(control_capture)):
+            self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+            self.assertEqual("growth_boost_weekly_pass_full_height", observation.decision.layout_id)
+            self.assertTrue(observation.blocking_popup)
+            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+            self.assertEqual((), observation.popup_overlay.candidates)
 
     def test_king_return_welcome_uses_one_measured_get_started_tap(self) -> None:
         """Both publishers can dismiss the exact welcome and recapture Home."""

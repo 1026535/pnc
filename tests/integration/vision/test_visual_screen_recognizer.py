@@ -235,6 +235,7 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     )
                 )
                 self.assertTrue(any("lucifer_offer" in name for name in evaluated))
+                self.assertTrue(any("growth_boost" in name for name in evaluated))
                 self.assertGreater(ocr.read_result_calls, 0)
 
                 # A reconnect/new epoch re-arms the conservative popup phase.
@@ -261,8 +262,9 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 "king_return_welcome", "valiant_conquest",
             )
         )
-        lucifer_profile = next(
-            profile for profile in recognizer.profiles if profile.id == "lucifer_special_offer"
+        delayed_profiles = tuple(
+            next(profile for profile in recognizer.profiles if profile.id == profile_id)
+            for profile_id in ("lucifer_special_offer", "growth_boost_weekly_pass")
         )
         pre_login_screens = (
             ScreenType.ANDROID_HOME,
@@ -278,7 +280,7 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     session_key=("sequence", 1),
                 )
                 self.assertFalse(state.post_login_proven)
-                for profile in (*startup_profiles, lucifer_profile):
+                for profile in (*startup_profiles, *delayed_profiles):
                     self.assertTrue(state.allow(profile))
 
         state.observe_base_identity(
@@ -286,14 +288,15 @@ class VisualScreenRecognizerTests(unittest.TestCase):
             session_key=("ambiguous-sequence", 1),
         )
         self.assertFalse(state.post_login_proven)
-        for profile in (*startup_profiles, lucifer_profile):
+        for profile in (*startup_profiles, *delayed_profiles):
             self.assertTrue(state.allow(profile))
 
         state.observe_base_identity((home_profile,), session_key=("sequence", 1))
         self.assertTrue(state.post_login_proven)
         for profile in startup_profiles:
             self.assertFalse(state.allow(profile))
-        self.assertTrue(state.allow(lucifer_profile))
+        for profile in delayed_profiles:
+            self.assertTrue(state.allow(profile))
 
     def test_collect_mail_profiles_expose_only_measured_controls(self) -> None:
         """Recognizes the four mail frames and keeps navigation controls template-backed."""
