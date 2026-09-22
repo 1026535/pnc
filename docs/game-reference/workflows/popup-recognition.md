@@ -155,6 +155,21 @@ and single-diagonal variants must remain non-actionable. These captured checks
 do not establish live dismissal or qualify every future appearance variant;
 the current audit records the separate live acceptance status.
 
+The same capture also exposed an independent publication defect: a successful
+named identity disabled generic close measurement even when its own X failed.
+Both publishers now request the existing modal-owned X detector when an eligible
+named `PNC_POPUP` declares an X and modal bounds but has no measured dismissal. A complete
+generic modal/X proof retains the known identity and publishes the measured
+candidate with its geometric provenance; an empty named control cannot erase it.
+The regression restores the former 0.95 cutoff on this native frame and exercises
+both publishers and the ordinary recovery executor. Missing-X and single-diagonal
+negatives remain non-actionable. Recognized bases and already measured controls
+perform no extra generic probe, nor do offers whose declared control is Back or
+Get Started. Session family eligibility is unchanged.
+Exact update/reconnect and unresolved semantic interruptions retain precedence.
+Confidence: saved-frame replay and deterministic regression; live acceptance is
+recorded separately by the audit.
+
 ## King Return welcome entry
 
 On September 21, 2026, a 900×1600 capture from `157_farm` during V44 validation

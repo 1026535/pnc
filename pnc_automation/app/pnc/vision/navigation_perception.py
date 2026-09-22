@@ -176,7 +176,7 @@ class NavigationPerception:
                 ocr_context=ocr_context,
                 owned_dismiss_bounds=owned_dismiss_bounds,
                 owned_navigation_screen=owned_navigation_screen,
-                include_generic_visual_fallback=not bool(visual.evidence),
+                include_generic_visual_fallback=visual.needs_generic_popup_close,
                 require_bounded_modal_evidence=bool(base_visual.evidence),
             )
         else:

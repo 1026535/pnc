@@ -202,11 +202,32 @@ class VisualRecognition:
     dismiss_controls: tuple[VisibleElement, ...] = ()
     control_selector_ids: frozenset[UiElementId] = frozenset()
     popup_overlay: PopupOverlayObservation | None = None
+    declared_popup_control_kinds: frozenset[PopupControlKind] = frozenset()
 
     @property
     def ambiguous(self) -> bool:
         """Return whether distinct screen interpretations passed their anchor gates."""
         return len({item.screen_type for item in self.evidence}) > 1
+
+    @property
+    def needs_generic_popup_close(self) -> bool:
+        """Probe modal-owned X geometry only for unknown or unactionable popups.
+
+        Named profiles have already passed session eligibility. A missing
+        expected X must not disable independent measurement of the same modal.
+        Recognized base screens and already measured dismissals stay zero-work.
+        """
+
+        if not self.evidence:
+            return True
+        return bool(
+            all(item.screen_type == ScreenType.PNC_POPUP for item in self.evidence)
+            and PopupControlKind.CLOSE_X in self.declared_popup_control_kinds
+            and self.popup_overlay is not None
+            and self.popup_overlay.evidence_kind == PopupEvidenceKind.KNOWN_LAYOUT
+            and self.popup_overlay.modal_bounds is not None
+            and not self.popup_overlay.candidates
+        )
 
 
 def visual_controls_for_decision(
@@ -404,6 +425,12 @@ class VisualScreenRecognizer:
                 for control in profile.controls
             ),
             popup_overlay=popup_overlay,
+            declared_popup_control_kinds=frozenset(
+                control.popup_control_kind
+                for profile in blocking_profiles
+                for control in profile.controls
+                if control.dismisses_surface and control.popup_control_kind is not None
+            ),
         )
 
 
