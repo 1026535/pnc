@@ -4,6 +4,12 @@
 
 **Kind:** Implementation packet. **Dependencies:** [PW02](PW02_RECOGNITION_CONTROLS.md), [PW04](PW04_ONE_STEP_SOLVER.md), [PW06](PW06_AUTHORITY_JOURNAL.md). PW05 is a live-use gate, not an offline implementation prerequisite.
 
+## Current parallel Manor slice — 2026-09-22
+
+`apple-chokeberry` turn001 implements the independently qualified narrow Manor target from baseline fcb344b in `pet-workshop-home-entry`; startup and monitor registration verified. This baseline preserves the prior three-file draft privately on main516f6d3. Its exploratory label offset is explicitly rejected and must be replaced with current measured body/camera qualification. Worker owns exact semantic target, immutable catalog/crops, native fixtures and guarded publisher/navigation tests. Fearless009 retains Workshop graph/context/workflow corrections; only the Manor semantic key and measured-target-set wiring cross that boundary.
+
+Lead and V independently checked fixed-system provenance plus same-group owl-head/right-tower native correspondences. Frozen V44 and accepted-main diagnostic injections localize the three prior PW views; the latest view without a second independent fixed group remains insufficient, and negative Home/baseline behavior is preserved. No generic thresholds, scan, zoom, slot geometry or emulator state changed. Evidence and prepared design: root `.local-data/review/pw07-home-entry/qualification-20260922.md`, `manor-two-region-main.json`, `manor-two-region-v44.json`; actual worker brief in the Manor checkout `.local-data/devin-briefs/manor-target.md`. Data qualification is not route acceptance. Independent review and final applicable Devin live proof remain mandatory before merging this slice.
+
 ## Read before implementation
 
 - [Plan 03: lifecycle, survey and freshness](../PNC_PET_WORKSHOP_03_EXECUTION_INTEGRATION_PLAN.md#3-workflow-gestures-and-receipts)
