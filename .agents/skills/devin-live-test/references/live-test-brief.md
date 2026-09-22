@@ -45,8 +45,13 @@ the lead to choose routine test, navigation, retry, or evidence details.
 
 Completion and user blockers:
 Complete every safe authorized check and package failed, blocked, and not-run results.
-When an unrelated lease, popup, or entry failure prevents a feature case, classify the
-observed boundary and report that feature case as not_run; do not infer its behavior.
+For an unrelated popup, try canonical bounded recovery, then use a fresh screenshot
+and an unambiguous on-screen dismissal control (including a visible X) for a manual
+tap under the same lease and authority if canonical recovery fails. Reobserve and
+resume the batch when preconditions hold. Record the popup failure, recovery action,
+artifact, and follow-up owner even if the feature case later passes. When an unrelated
+lease, popup, or entry failure still prevents a feature case, classify the observed
+boundary and report that feature case as not_run; do not infer its behavior.
 Do not return NEEDS_LEAD. Return BLOCKED only when a concrete user intervention is
 required, such as new authorization, credentials, an account action, an unresolved
 target choice, or a resource-budget decision. Finish every other safe check and
@@ -105,6 +110,18 @@ Write one `evidence.json` that lets the lead evaluate assignment completeness wi
       "uncertainty": null
     }
   ],
+  "interruptions": [
+    {
+      "observed_at": "timestamp with offset",
+      "category": "popup, castle_identity, or instance_management",
+      "check_id": "affected brief check identifier",
+      "boundary": "observed failure before recovery",
+      "artifact": "absolute canonical artifact path",
+      "recovery": "action attempted and observed result",
+      "outcome": "effect on assigned checks",
+      "follow_up_owner": "owner or unknown"
+    }
+  ],
   "actual_mutations": [],
   "spending": {
     "authorized": "none",
@@ -119,6 +136,6 @@ Write one `evidence.json` that lets the lead evaluate assignment completeness wi
 }
 ```
 
-Use `passed`, `failed`, `blocked`, or `not_run` for each check and explain every non-passing result in `uncertainty`, including whether the stopping boundary was environment/lease, unrelated entry or popup, feature behavior, safety/authority, or inconclusive evidence. Reserve `blocked` for a check requiring user intervention; use `not_run` when another failed check made it unsafe or meaningless. `lease_released` means all sequential phases released their leases; describe those phases in `cleanup` when more than one process ran. `required_user_actions` must be non-empty only when the overall verdict is `BLOCKED`. Select only artifacts needed for acceptance and do not copy them into the Devin run directory. The handoff references this manifest rather than asking the lead to infer results from directory listings or full logs.
+Use `passed`, `failed`, `blocked`, or `not_run` for each check and explain every non-passing result in `uncertainty`, including whether the stopping boundary was environment/lease, unrelated entry or popup, feature behavior, safety/authority, or inconclusive evidence. Put every castle-identity, popup, and BlueStacks instance-management failure in `interruptions`, including one recovered before the affected check passed; use an empty array when none occurred. A broken canonical popup handler remains a follow-up even when manual dismissal lets the feature case pass. Reserve `blocked` for a check requiring user intervention; use `not_run` when another failed check made it unsafe or meaningless. `lease_released` means all sequential phases released their leases; describe those phases in `cleanup` when more than one process ran. `required_user_actions` must be non-empty only when the overall verdict is `BLOCKED`. Select only artifacts needed for acceptance and do not copy them into the Devin run directory. The handoff references this manifest rather than asking the lead to infer results from directory listings or full logs.
 
 For a resumed turn, send only the user-resolved blocker, changed authority or budget, newly authorized attempt when applicable, and affected checks. Reuse the same run directory and session; do not replay completed checks or broaden the assignment implicitly.
