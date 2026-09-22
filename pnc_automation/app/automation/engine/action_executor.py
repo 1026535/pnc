@@ -36,6 +36,7 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     RowRecognitionStatus,
+    SpatialObjectSourceKind,
     SpatialSurfaceType,
     VisibleElement,
     list_entry_matches,
@@ -176,14 +177,39 @@ class ActionExecutor:
                         "Spatial tap point differs from the selected visible object.",
                         object_kind=expected.kind,
                     )
+                if expected.source_kind == SpatialObjectSourceKind.YOLO:
+                    raise SelectorResolutionError(
+                        "World YOLO observations are not qualified for spatial taps.",
+                        object_kind=expected.kind,
+                    )
             target = action.target_point
             if target is None:
                 object_ = self._require_spatial_object(action, observation)
+                if object_.source_kind == SpatialObjectSourceKind.YOLO:
+                    raise SelectorResolutionError(
+                        "World YOLO observations are not qualified for spatial taps.",
+                        object_kind=object_.kind,
+                    )
                 target = (
                     object_.action_point
                     if action.use_action_point and object_.action_point is not None
                     else object_.bounds.center()
                 )
+            elif action.expected_object is None and observation.spatial_surface is not None:
+                surface = observation.spatial_surface
+                if any(
+                    object_.source_kind == SpatialObjectSourceKind.YOLO
+                    and (
+                        object_.bounds.contains_point(target)
+                        or (
+                            action.query is not None
+                            and (action.query.surface_type is None or action.query.surface_type == surface.surface_type)
+                            and object_.matches(action.query)
+                        )
+                    )
+                    for object_ in surface.objects
+                ):
+                    raise SelectorResolutionError("World YOLO observations are not qualified for spatial taps.")
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
                 self.session.tap_point(*target)

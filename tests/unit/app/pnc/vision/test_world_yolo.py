@@ -8,10 +8,12 @@ import unittest
 from PIL import Image
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     Observation,
     SpatialObjectKind,
+    SpatialObjectQuery,
     SpatialObjectRelationship,
     SpatialObjectSourceKind,
     SpatialSurfaceObservation,
@@ -215,8 +217,39 @@ class WorldYoloTests(unittest.TestCase):
         )))
         with self.assertRaisesRegex(SelectorResolutionError, "different capture frame"):
             executor.execute_action(action, fresh)
-        executor.execute_action(action, observation)
-        self.assertEqual(executor.session.taps, [targets[1].action_point])
+        with self.assertRaisesRegex(SelectorResolutionError, "not qualified for spatial taps"):
+            executor.execute_action(action, observation)
+        self.assertEqual(executor.session.taps, [])
+
+    def test_semantic_and_concrete_spatial_actions_cannot_tap_yolo_castle(self) -> None:
+        """The executor guards every spatial action path, including query fallback."""
+
+        target = WorldYoloProducer(FakeDetector((
+            YoloDetection(2, "castle", 0.95, Bounds(205, 350, 110, 105)),
+        ))).observe(Image.new("RGB", (540, 960))).objects[0]
+        base = make_observation(ScreenType.PNC_WORLD_MAP, image_size=(540, 960))
+        observation = replace(base, spatial_surface=SpatialSurfaceObservation(
+            SpatialSurfaceType.WORLD_MAP,
+            SpatialViewport(SpatialViewportAddressingKind.COORDINATE_BAR, x=485, y=73),
+            objects=(replace(target, frame_ref=base.frame_ref),),
+        ))
+        executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(), session=FakeSession(),
+            stable_click_delay_ms=0, post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0, chat_post_action_observe_delay_ms=0,
+            logger=build_logger(), sleep=lambda _: None,
+        )
+        query = SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.CASTLE)
+        for action in (
+            TapSpatialObjectAction(query=query),
+            TapSpatialObjectAction(query=query, target_point=target.bounds.center()),
+            TapSpatialObjectAction(target_point=target.bounds.center()),
+        ):
+            with self.subTest(action=action), self.assertRaisesRegex(
+                SelectorResolutionError, "not qualified for spatial taps",
+            ):
+                executor.execute_action(action, observation)
+        self.assertEqual(executor.session.taps, [])
 
 
 if __name__ == "__main__":
