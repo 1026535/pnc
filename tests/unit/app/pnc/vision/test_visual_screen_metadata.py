@@ -116,6 +116,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "alliance_invitation",
                         "savannah_hero_offer",
                         "campaign_map",
+                        "campaign_chapter_6",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",

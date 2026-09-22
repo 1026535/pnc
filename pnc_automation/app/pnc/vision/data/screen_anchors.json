@@ -3191,7 +3191,7 @@
             180,
             95
           ],
-          "threshold": 0.95
+          "threshold": 0.92
         }
       ],
       "controls": [
@@ -3209,7 +3209,7 @@
           }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_chapter_6_path.png",
         "decoded_sha256": "180e1cfea3856c7ef79fd332f9c695732a6010cd0eac54639a9e4f6b6cec2857",
@@ -3217,7 +3217,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Chapter 6 Campaign path evidence only: the title and upper-terrain anchors are bound to the observed Marsh of Tear layout on the mega_old_acc account; no all-chapters claim is made.",
+        "description": "Chapter 6 Campaign path evidence only: the title and upper-terrain anchors are bound to the observed Marsh of Tear layout; no all-chapters claim is made. Terrain threshold calibrated to 0.92 for the 2026-09-22 testing build's current appearance (native frames campaign_chapter_6_path_20260922 and _holdout_20260922, canonical confidence 0.9295/0.9295) while the 0.95 title identity and 0.85 Back control bounds are unchanged; no lower bound is authorized without new evidence.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"

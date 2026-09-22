@@ -1264,6 +1264,32 @@
       ]
     },
     {
+      "image": "campaign_chapter_6_path_20260922.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-22/testing/m1_campaign_preentry",
+      "sha256": "6f344fa3df81311a599e2344bacb02f14a52e3bfe728b5bca7915eac6d6ebe32",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260922T203549Z_core_20260922T202247Z_d3962b64_0037_core_6_campaign_chapter_after_7.png",
+      "source_sha256": "c9847cca704c6f759cd8fdcfcd7e60fdc6d5b12fc2b9055009c54d9bb723abd4",
+      "annotation": "Unmodified 900x1600 RGBA Chapter 6 Marsh of Tear path capture from the parked M1 pre-entry run; this exact frame returned UNKNOWN before the scoped 0.92 terrain calibration. No anchor assets came from this frame."
+    },
+    {
+      "image": "campaign_chapter_6_path_holdout_20260922.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "holdout",
+      "group": "2026-09-22/testing/m1_campaign_preentry_holdout",
+      "sha256": "f6132f1e6fcb41041c28cbba3024872fc98d2030230d9922ff690be529fd9d38",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
+      "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
+      "annotation": "Independent later 900x1600 RGBA Chapter 6 path holdout from the same parked M1 run, captured before the refused Back dispatch; no anchor assets came from this frame."
+    },
+    {
       "image": "campaign_chapter_10_unmasked.png",
       "screen": "PNC_CAMPAIGN_CHAPTER",
       "split": "validation",

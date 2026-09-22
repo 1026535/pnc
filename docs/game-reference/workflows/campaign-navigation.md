@@ -89,3 +89,33 @@ during animation (node score0.9249 below0.93 while scene score0.9982 passed).
 Cropping the existing reference patch to the Grandia Ruins label yields
 0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
 scene anchor and measured Home portal are unchanged. The two native map fixtures share one correlated validation group. The shared Home-to-Campaign entry and Home return passed the independently reviewed V44 turn012 route. Campaign chapter/stage parsing and formation remain separately owned.
+
+## Chapter 6 qualification, September 22
+
+**Live-observed:** on the parked `testing` M1 run, the current castle's Chapter 6
+marker opened `Ch.6 Marsh of Tear` with five numbered stage cores and four
+padlocked nodes. The live diagnostic classified that visible path as UNKNOWN
+because only the terrain anchor missed its 0.95 bound at 0.929546; the title
+(0.991448) and Back (0.863272) anchors already qualified. No stage, Challenge,
+battle, or spending action was taken, and the refused Back dispatch was correct
+while the frame stayed UNKNOWN. Sources are runtime `20260922T202247Z_d3962b64`
+captures 0037/0038 under `2026-09-22/testing`, tracked as
+`campaign_chapter_6_path_20260922.png` and
+`campaign_chapter_6_path_holdout_20260922.png`.
+
+**Scoped calibration:** the `campaign_chapter_6` terrain anchor is bound at
+0.92 — the only change; title identity stays 0.95 and Back stays 0.85. Both
+native frames now score title 0.991448/0.991899, terrain 0.929546/0.929546,
+Back 0.863272/0.863272, and the original mega_old_acc reference keeps
+0.996420/0.999439/0.875636. Other saved surfaces stay far outside: worst
+terrain 0.2764 (world map), worst title 0.3392 (Chapter 5 path), so no
+other-chapter, map, World, Home, or popup appearance reaches the profile.
+This remains a Chapter-6-only claim with no all-chapter generalization.
+
+**Offline-proven:** both publishers classify both native RGBA frames as
+`PNC_CAMPAIGN_CHAPTER` with a clear guard and the frame-bound Back control.
+RapidOCR 3.4.5 binds chapter 6 and measured stages 1-4; the pulsing current
+stage-5 node publishes no row rather than a guessed value, and the four locked
+nodes stay `no_action` with `number=None`. No completion, AP, formation, or
+battle state is inferred from the path frame. Live return acceptance and any
+formation proof remain pending with the lead.
