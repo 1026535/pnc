@@ -69,7 +69,7 @@ The lead reviews the complete stable result after implementation, local validati
 2. Have the worker address each finding and affected checks, or explain disagreement with evidence. The lead adjudicates disagreements and reviews the correction diff and newly affected contracts, reusing valid review and test evidence.
 3. When a finding recurs or progress stalls, apply the lead-reasoning boundary above before dispatching more work. Preserve finding history across any worker replacement.
 
-Package handbacks do not require a fresh full review each time. Start with the compact result, changed behavior, and exact evidence paths; inspect relevant diffs and results without reconstructing the worker's investigation. Review the integrated change once, then only corrections and newly affected contracts. Independent verification remains required; avoiding duplicate reading does not mean accepting worker claims without evidence.
+Package handbacks do not require a fresh full review each time. Start with the compact result, changed behavior, and exact evidence paths; inspect relevant diffs and machine-readable test results without reconstructing the worker's investigation. Review the integrated change once, then only corrections and newly affected contracts. Give each validation scope one owner: a passing worker run on the exact unchanged candidate can satisfy acceptance without a lead rerun. Rerun only for a changed candidate, missing evidence, or a specific uncovered risk. Independent verification means checking the evidence, not repeating the command by default.
 
 ## Accept and report
 

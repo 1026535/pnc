@@ -65,9 +65,10 @@
 ## Offline Validation
 
 - Use the repository runner instead of raw discovery; raw `unittest discover` can bypass portable inventory and resource rules.
-- For a known isolated component, start with `py tools/run_tests.py group <name>` or the specific test documented in `tests/README.md`.
-- For ordinary source changes, run `py tools/run_tests.py affected --base origin/main --explain`. Add `--dry-run` first only when the selection or fallback needs inspection.
-- Use `py tools/run_tests.py full` only for broad or cross-cutting changes, shared contracts or schemas, test infrastructure, final integration, an explicit request, or a fail-closed `affected` fallback.
+- During development, run the smallest relevant module or component group after a meaningful change. Do not rerun a passing check for unchanged code.
+- For an ordinary source change with broader consumers, run `py tools/run_tests.py affected --base origin/main --explain` once on the finished candidate. Add `--dry-run` only when selection or fallback needs inspection. Reuse a worker's passing result for the same candidate and scope instead of running it again.
+- Let `affected` expand to full for shared contracts, test infrastructure, unknown ownership, or other fail-closed cases. Do not follow a passing full fallback with a separate local `full`. CI owns the merge-candidate check; run local `full` only for an explicit request or a concrete risk the selector cannot cover.
+- Keep task worktrees free of unrelated untracked files; an unknown file can make `affected` select the full suite. Preserve unknown files rather than deleting them to change test selection.
 - Use `measure` commands only for requested timing, coverage, or scheduled dependency-learning work.
 - Keep portable tests offline and headless. Add deterministic tests for changed behavior and likely regressions; do not test implementation wording, reversible formatting, or speculative low-impact edge cases.
 - Documentation or skill-only changes need the relevant validator, if any, plus `git diff --check`; they do not require unit or live tests.

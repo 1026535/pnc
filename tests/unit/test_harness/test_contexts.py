@@ -164,6 +164,33 @@ class ContextSelectionTests(unittest.TestCase):
                 write_json(self.path, seed)
                 self.assert_full_fallback()
 
+    def test_new_test_module_is_selected_without_invalidating_base_contexts(self) -> None:
+        added_path = "tests/contract/api/test_new_api.py"
+        added_test = inventory([added_path])[0]
+        tests = (*self.tests, added_test)
+        write_json(self.path, self.seed)
+        plan = self.plan()
+        plan.changed_paths.append(added_path)
+
+        add_contexts(plan, self.path, self.sources, tests, tiers=COVERAGE_SELECTED_TIERS)
+
+        self.assertFalse(plan.fallbacks)
+        self.assertIn(added_test.module, plan.reasons)
+        self.assertIn(f"new test module: {added_path}", plan.reasons[added_test.module])
+
+    def test_unexplained_or_removed_test_module_still_runs_full(self) -> None:
+        added_test = inventory(["tests/contract/api/test_new_api.py"])[0]
+        write_json(self.path, self.seed)
+        plan = self.plan()
+        add_contexts(plan, self.path, self.sources, (*self.tests, added_test))
+        self.assertEqual(set(plan.reasons), self.known | {added_test.module})
+        self.assertTrue(plan.fallbacks)
+
+        write_json(self.path, self.seed)
+        plan = self.plan()
+        add_contexts(plan, self.path, self.sources, self.tests[:-1])
+        self.assertTrue(plan.fallbacks)
+
     def test_environment_python_platform_or_dependency_mismatch_runs_full(self) -> None:
         for key, value in (
             ("python", "3.14.0"), ("platform", "Linux-test"),

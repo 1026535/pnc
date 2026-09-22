@@ -117,7 +117,11 @@ class RunnerCliTests(unittest.TestCase):
         self.assertFalse((self.root / ".test-impact/results.json").exists())
 
     def test_affected_contexts_wires_hybrid_coverage_selection(self) -> None:
+        self.sources["tests/unit/sample/test_available.py"] = (
+            "from pnc_automation.sample import VALUE\n"
+        )
         with (
+            patch.object(run_tests, "changed_paths", return_value=["pnc_automation/sample.py"]),
             patch.object(
                 run_tests,
                 "affected_plan",
@@ -138,6 +142,34 @@ class RunnerCliTests(unittest.TestCase):
             add_coverage.call_args.kwargs["tiers"],
             COVERAGE_SELECTED_TIERS,
         )
+
+    def test_docs_only_contexts_do_not_require_a_seed_or_execute_tests(self) -> None:
+        with patch.object(run_tests, "add_contexts") as add_coverage:
+            self.assertEqual(self.invoke("affected", "--base", "base", "--contexts"), 0)
+        add_coverage.assert_not_called()
+        self.loader_factory.assert_not_called()
+        self.assertEqual(self.document("results.json")["tests"], [])
+
+    def test_full_fallback_does_not_read_an_unused_context_seed(self) -> None:
+        with (
+            patch.object(run_tests, "changed_paths", return_value=["assets/anchor.png"]),
+            patch.object(run_tests, "add_contexts") as add_coverage,
+        ):
+            self.assertEqual(self.invoke("affected", "--base", "base", "--contexts", "--dry-run"), 0)
+        self.assertTrue(self.document("selection.json")["fallbacks"])
+        add_coverage.assert_not_called()
+
+    def test_nonproduction_python_change_uses_static_selection(self) -> None:
+        self.sources["tools/facade.py"] = "pass\n"
+        self.sources["tests/unit/sample/test_available.py"] = "import tools.facade\n"
+        with (
+            patch.object(run_tests, "changed_paths", return_value=["tools/facade.py"]),
+            patch.object(run_tests, "affected_plan", wraps=run_tests.affected_plan) as build_plan,
+            patch.object(run_tests, "add_contexts") as add_coverage,
+        ):
+            self.assertEqual(self.invoke("affected", "--base", "base", "--contexts", "--dry-run"), 0)
+        self.assertEqual(build_plan.call_args.kwargs["coverage_selected_tiers"], frozenset())
+        add_coverage.assert_not_called()
 
     def test_missing_base_falls_back_and_executes_available_suite(self) -> None:
         self.base.side_effect = ValueError("missing requested base")

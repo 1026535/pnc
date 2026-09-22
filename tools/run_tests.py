@@ -97,6 +97,16 @@ def main(argv: list[str] | None = None) -> int:
                 changed = changed_paths(ROOT, base)
                 old = python_snapshot(ROOT, base)
                 rules = load_rules(ROOT / "tests/selection_rules.yaml", tests)
+                changed_tests = {test.path for test in tests}
+                coverage_tiers = (
+                    COVERAGE_SELECTED_TIERS
+                    if args.contexts and not any(
+                        path.endswith(".py")
+                        and not path.startswith("pnc_automation/")
+                        and path not in changed_tests
+                        for path in changed
+                    ) else frozenset()
+                )
                 plan = affected_plan(
                     tests,
                     rules,
@@ -105,17 +115,17 @@ def main(argv: list[str] | None = None) -> int:
                     new,
                     base,
                     head,
-                    coverage_selected_tiers=(
-                        COVERAGE_SELECTED_TIERS if args.contexts else frozenset()
-                    ),
+                    coverage_selected_tiers=coverage_tiers,
                 )
-                if args.contexts:
+                if (coverage_tiers and plan.reasons and not plan.fallbacks
+                        and any(path.startswith("pnc_automation/") and path.endswith(".py")
+                                for path in changed)):
                     add_contexts(
                         plan,
                         ROOT / ".test-impact/contexts.json",
                         old,
                         tests,
-                        tiers=COVERAGE_SELECTED_TIERS,
+                        tiers=coverage_tiers,
                     )
             except (ValueError, OSError, UnicodeError, yaml.YAMLError) as error:
                 plan = SelectionPlan("affected", args.base or "unresolved", head)

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 import unittest
+from unittest.mock import patch
 
 from tools.test_selection.models import COVERAGE_SELECTED_TIERS, inventory
 from tools.test_selection.ownership import OwnershipRules, ResourceRule
@@ -193,6 +194,36 @@ class SelectionReviewRegressionTests(unittest.TestCase):
 
 
 class AffectedPlanMatrixTests(unittest.TestCase):
+    def test_selection_skips_import_graph_when_it_cannot_change_the_plan(self) -> None:
+        old, new = sources(), sources()
+        public_change = {**new, WORKER: "def run(other=1):\n    return other + 1\n"}
+        cases = (
+            ([], new, frozenset()),
+            (["README.md"], new, frozenset()),
+            (["assets/new.yaml"], new, ALL),
+            (["pyproject.toml"], new, ALL),
+            ([WORKER], public_change, ALL),
+        )
+        with patch("tools.test_selection.planner.build_graph", side_effect=AssertionError("graph built")):
+            for changed, candidate, expected in cases:
+                with self.subTest(changed=changed):
+                    plan = affected_plan(TESTS, RULES, changed, old, candidate, "base", "head")
+                    self.assertEqual(set(plan.reasons), {MODULES[label] for label in expected})
+
+    def test_function_local_annotations_and_constants_do_not_change_public_contract(self) -> None:
+        old = {**sources(), WORKER: "def run(value=1):\n    result: int = value\n    LIMIT = 1\n    return result + LIMIT\n"}
+        new = {**old, WORKER: "def run(value=1):\n    result: int = value + 1\n    LIMIT = 2\n    return result + LIMIT\n"}
+        plan = affected_plan(TESTS, RULES, [WORKER], old, new, "base", "head")
+        self.assertEqual(set(plan.reasons), {MODULES[label] for label in ENGINE})
+        self.assertFalse(plan.fallbacks)
+
+    def test_resource_change_retains_dynamic_import_safety(self) -> None:
+        old = sources()
+        old["pnc_automation/plugins.py"] = "__import__(plugin_name)\n"
+        plan = affected_plan(TESTS, RULES, ["scripts/claim.yaml"], old, old, "base", "head")
+        self.assertEqual(set(plan.reasons), set(MODULES.values()))
+        self.assertTrue(any("unmodeled application dynamic imports" in reason for reason in plan.fallbacks))
+
     def test_realistic_and_adversarial_change_matrix(self) -> None:
         self.assertGreaterEqual(len(CASES), 30)
         self.assertEqual(len({case.name for case in CASES}), len(CASES))

@@ -51,16 +51,26 @@ def add_contexts(
         document = json.loads(path.read_text(encoding="utf-8"))
         known_tests = {test.module: test for test in tests}
         known = set(known_tests)
+        seed_inventory = document["inventory"]
+        if (not isinstance(seed_inventory, list)
+                or any(not isinstance(module, str) for module in seed_inventory)
+                or seed_inventory != sorted(set(seed_inventory))
+                or not set(seed_inventory) <= known):
+            raise ValueError("incompatible context inventory")
+        added = known - set(seed_inventory)
+        if any(known_tests[module].path not in plan.changed_paths for module in added):
+            raise ValueError("unexplained new test module")
         if (set(document) != {"version", "head", "fingerprint", "environment", "inventory", "owners"}
                 or document["version"] != POLICY_VERSION or document["head"] != plan.base
                 or document["fingerprint"] != fingerprint(old)
                 or document["environment"] != environment()
-                or document["inventory"] != sorted(known)
                 or not isinstance(document["owners"], dict)):
             raise ValueError("incompatible context seed")
         for source, modules in document["owners"].items():
-            if not isinstance(source, str) or not isinstance(modules, list) or any(m not in known for m in modules):
+            if not isinstance(source, str) or not isinstance(modules, list) or any(m not in seed_inventory for m in modules):
                 raise ValueError("malformed context ownership")
+        for module in added:
+            plan.add(module, f"new test module: {known_tests[module].path}")
         for source in plan.changed_paths:
             for module in document["owners"].get(source, []):
                 if tiers is None or known_tests[module].tier in tiers:

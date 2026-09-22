@@ -13,7 +13,7 @@ Implement the requested behavior through the smallest maintainable change and ve
 2. Establish PNC game behavior from user-confirmed facts, deterministic tests and fixtures, and saved or live UI/runtime evidence. Research official external documentation only when it can change the implementation.
 3. Choose the simplest design that fully satisfies the request. Reuse canonical interfaces and refactor only when needed to avoid real duplication or conflicting ownership.
 4. Implement a coherent slice and add focused tests for changed behavior or likely regressions.
-5. Run the narrowest relevant validation, then the repository's affected selection when the change has broader consumers.
+5. Run the narrowest relevant validation during development. Run the repository's affected selection once on the finished candidate when the change has broader consumers, unless an equivalent passing result already covers that exact candidate.
 6. For behavior that depends on live PNC or emulator state, follow the live section below.
 7. Report the result, validation, and material remaining risk.
 
@@ -30,9 +30,9 @@ Implement the requested behavior through the smallest maintainable change and ve
 
 Use the repository runner described in `AGENTS.md`:
 
-- Start with a focused component group or specific test.
-- Use `affected --explain` for ordinary source changes with downstream consumers.
-- Use the full portable suite only for broad integration, shared contracts, test infrastructure, explicit requests, or a fail-closed fallback.
+- Use a focused component group or specific test after meaningful edits.
+- Use `affected --explain` once for a finished source change with downstream consumers. A worker's passing result may satisfy this check when its candidate and scope still match.
+- Accept a full-suite fallback from `affected` as the full check. Run a separate local `full` only when explicitly requested or when a concrete remaining risk warrants it; CI runs the merge-candidate check.
 - Do not add or run redundant checks, exhaustive matrices, or live proofs when their realistic likelihood-and-impact reduction does not justify their cost.
 - Do not repeat passing checks without a new change or risk.
 - Do not add tests for implementation wording, reversible formatting, or remote low-impact branches.

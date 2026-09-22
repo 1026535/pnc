@@ -20,7 +20,9 @@ and decisions reserved for the lead.
 Name the ledger's writer when one is shared.
 
 Validation:
-Selected checks or contract-based scope, reusable passing evidence, and ownership.
+Selected checks or contract-based scope, reusable passing evidence, and one owner
+for each check. Bind passing evidence to the candidate/ref and changed-file state;
+the lead reviews it without rerunning unless that state or the required scope changes.
 Identify lead-only tools and reserved resources that affect this package.
 Read focused file ranges and summarize machine-readable test results. Leave large
 logs, observations, exports, and screenshots on disk; cite exact evidence paths.
