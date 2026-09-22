@@ -6,6 +6,8 @@
 
 ## Current review — live006, 2026-09-22
 
+**Shared Growth slice accepted:** final isolated integration tested485f012 with2,838 passes/seven environmental skips; lead independently verified source fingerprint `54cb73c6e5421b83eb44a3e36fb24d2a725ae86cdcd48dbcbb0d48cdc679ea32`. Docs-only rebase produced87834fa with identical production/tests/tools. Live006 and exact native dual-publisher replay prove the final runtime boundary. Main landing includes this acceptance record; no further live repetition is justified for unchanged bytes. Whole PW05 remains fixing findings.
+
 Status: **fixing findings**, candidate `c920dadd3c52d7e3ae538582120561516628f255`; no packet acceptance. Existing exact-source full evidence:2,850 passed/seven environmental skips. Native separate Devin live006 naturally exercised Growth after Home: both candidate publishers independently replay exact profile/typed measured dismiss, actual input ledger shows one tap(85,55), and native fresh Home proves recovery. This shared slice is isolated at `485f012f7ffcbdd0dd11719be87611786f1db38d` for final integration validation, owned by climbing-foxtrot002.
 
 Lead visually verified Hopium K157 C31 active and final Home, reviewed18 actual inputs with zero switch/spending, and confirmed all cited check artifacts exist. Main was phase-started then closed; canonical lease free and original role/full config hash restored. Cleanup record and independent evidence are in PW05 checkout `.local-data/review/pw05/main-role-restore-growth-20260922.json` and `lead-live006-proof.json`.
