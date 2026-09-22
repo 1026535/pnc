@@ -519,7 +519,7 @@ class ObservationBuilder:
                     control.bounds for control in visual.dismiss_controls
                 )
             if _accepts_keyword(self.enricher.recognize_guards, "include_generic_visual_fallback"):
-                guard_kwargs["include_generic_visual_fallback"] = not bool(visual.evidence)
+                guard_kwargs["include_generic_visual_fallback"] = visual.needs_generic_popup_close
             if supports_bounded_modal_gate:
                 guard_kwargs["require_bounded_modal_evidence"] = bool(base_visual.evidence)
             guard_additions = self.enricher.recognize_guards(
@@ -1492,6 +1492,26 @@ def reconcile_visual_modal_guard(
         # owns the frame even if a visual profile happens to overlap it.
         return guard
     if guard.guard_verdict == GuardVerdict.BLOCKED and guard_screens == screens:
+        if (
+            visual.needs_generic_popup_close
+            and visual.popup_overlay is not None
+            and guard.popup_overlay is not None
+            and guard.popup_overlay.evidence_kind == PopupEvidenceKind.GEOMETRY
+            and guard.popup_overlay.modal_bounds is not None
+            and guard.popup_overlay.candidate(PopupControlKind.CLOSE_X) is not None
+        ):
+            # Keep the independently proved identity and the guard's measured
+            # modal/X pair. Two names for this evidence must not create a layout
+            # conflict or replace a working geometric close with an empty model.
+            return replace(
+                guard,
+                screen_evidence=visual.evidence,
+                popup_overlay=replace(
+                    visual.popup_overlay,
+                    modal_bounds=guard.popup_overlay.modal_bounds,
+                    candidates=guard.popup_overlay.candidates,
+                ),
+            )
         # A known visual identity can refine the current-frame selector while
         # retaining exact semantic evidence from the same popup family. A
         # foreground guard's measured dismissal remains authoritative when a

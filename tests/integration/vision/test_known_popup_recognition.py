@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from dataclasses import replace
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
@@ -187,6 +188,134 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     self.assertEqual(close.frame_ref, capture.frame_ref)
                     self.assertEqual(close.source_screen, screen)
                     self.assertEqual(close.source_layout_id, layout_id)
+
+    def test_warm_state_hero_offer_keeps_native_close_provenance_on_both_paths(self) -> None:
+        """The observed 2026-09-22 X variation remains a measured dismiss control."""
+
+        builder, navigation = _wire()
+        source = _native_capture(
+            "savannah_hero_offer_warm_20260922.png", session="hero-warm", capture_sequence=1,
+        )
+        self.assertEqual(("RGBA", (540, 960)), (source.image.mode, source.image.size))
+        for observation in (builder.build(source), navigation.build(source)):
+            self.assertEqual("hero_offer_full_height", observation.decision.layout_id)
+            self.assertEqual({UiElementId.PNC_POPUP_CLOSE_BUTTON}, set(observation.visible_elements))
+            close = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(Bounds(480, 55, 46, 48), close.bounds)
+            self.assertEqual((503, 79), close.action_point)
+            self.assertEqual(source.frame_ref, close.frame_ref)
+            self.assertEqual(observation.decision.layout_id, close.source_layout_id)
+            candidate = observation.popup_overlay.candidate(PopupControlKind.CLOSE_X)
+            self.assertIsNotNone(candidate)
+            self.assertEqual(close.bounds, candidate.bounds)
+            self.assertEqual(close.action_point, candidate.action_point)
+
+    def test_warm_state_offer_without_complete_x_has_no_close_candidate(self) -> None:
+        """A missing or single-diagonal control cannot dismiss the recognized offer."""
+
+        builder, navigation = _wire()
+        source = _native_capture(
+            "savannah_hero_offer_warm_20260922.png", session="hero-warm-negative", capture_sequence=1,
+        )
+        for sequence, diagonal in enumerate((False, True), start=2):
+            changed = source.image.copy()
+            drawing = ImageDraw.Draw(changed)
+            drawing.rectangle((480, 55, 526, 103), fill=(18, 24, 38, 255))
+            if diagonal:
+                drawing.line((492, 68, 514, 90), fill=(255, 230, 140, 255), width=4)
+            capture = replace(
+                source, image=changed, frame_ref=replace(source.frame_ref, capture_sequence=sequence),
+            )
+            for observation in (builder.build(capture), navigation.build(capture)):
+                with self.subTest(diagonal=diagonal):
+                    self.assertEqual("hero_offer_full_height", observation.decision.layout_id)
+                    self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                    self.assertEqual((), observation.popup_overlay.candidates)
+
+    def test_named_offer_with_rejected_template_keeps_measured_generic_close(self) -> None:
+        """Replay the real 0.944 X against its former 0.95 gate, with identity intact."""
+
+        builder, navigation = _wire()
+        recognizer = builder.visual_recognizer
+        assert recognizer is not None
+        recognizer = replace(
+            recognizer,
+            profiles=tuple(
+                replace(profile, controls=tuple(
+                    replace(control, anchor=replace(control.anchor, threshold=0.95))
+                    for control in profile.controls
+                )) if profile.id == "savannah_hero_offer" else profile
+                for profile in recognizer.profiles
+            ),
+        )
+        builder.visual_recognizer = recognizer
+        navigation = replace(navigation, recognizer=recognizer)
+        capture = _native_capture(
+            "savannah_hero_offer_warm_20260922.png",
+            session="named-offer-missed-control", capture_sequence=1,
+        )
+        visual = recognizer.recognize(capture.image)
+        self.assertEqual("hero_offer_full_height", visual.popup_overlay.layout_id)
+        self.assertEqual((), visual.popup_overlay.candidates)
+
+        for observation in (builder.build(capture), navigation.build(capture)):
+            with self.subTest(path=type(observation).__name__):
+                self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+                self.assertEqual(GuardVerdict.BLOCKED, observation.decision.guard)
+                self.assertEqual("hero_offer_full_height", observation.decision.layout_id)
+                self.assertEqual({UiElementId.PNC_POPUP_CLOSE_BUTTON}, set(observation.visible_elements))
+                close = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+                candidate = observation.popup_overlay.candidate(PopupControlKind.CLOSE_X)
+                self.assertIsNotNone(candidate)
+                self.assertEqual(PopupEvidenceKind.GEOMETRY, candidate.evidence_kind)
+                self.assertEqual(close.bounds, candidate.bounds)
+                self.assertEqual(close.action_point, candidate.action_point)
+                self.assertEqual(capture.frame_ref, close.frame_ref)
+                self.assertEqual(observation.decision.layout_id, close.source_layout_id)
+                self.assertTrue(observation.popup_overlay.modal_bounds.contains_point(close.action_point))
+                self.assertLessEqual(abs(close.action_point[0] - 503), 2)
+                self.assertLessEqual(abs(close.action_point[1] - 79), 2)
+                session = FakeSession()
+                observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
+                recovered = _make_observed_action_executor(session).recover_interruption_if_required(
+                    observation, label_prefix="named_offer_fallback", observe=observer.observe,
+                )
+                self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+                self.assertEqual([close.action_point], session.taps)
+                self.assertEqual([], session.key_events)
+
+    def test_generic_close_is_not_probed_for_known_controls_or_base_screens(self) -> None:
+        """The extra measurement is demand-driven, without broadening popup work."""
+
+        builder, navigation = _wire()
+        with patch(
+            "pnc_automation.app.pnc.vision.pnc_observation_enricher._build_visual_popup_close_additions",
+            side_effect=AssertionError("Unnecessary generic popup close probe"),
+        ):
+            for name in ("savannah_hero_offer_warm_20260922.png", "home_city_popup_x_regression.png"):
+                capture = _capture(name)
+                for observation in (builder.build(capture), navigation.build(capture)):
+                    with self.subTest(name=name):
+                        self.assertNotEqual(ScreenType.UNKNOWN, observation.screen_type)
+
+    def test_missing_non_x_popup_controls_do_not_trigger_an_x_probe(self) -> None:
+        """A missing Back or Get Started does not make an X possible on that offer."""
+
+        builder, navigation = _wire()
+        for name, bounds, color in (
+            ("lucifer_special_offer.png", (20, 5, 140, 120), (93, 81, 82)),
+            ("growth_boost_weekly_pass.png", (20, 0, 150, 115), (10, 30, 60)),
+            ("king_return_welcome.png", (355, 825, 590, 920), (18, 24, 38)),
+        ):
+            capture = _capture(name)
+            ImageDraw.Draw(capture.image).rectangle(bounds, fill=color)
+            with self.subTest(name=name), patch(
+                "pnc_automation.app.pnc.vision.pnc_observation_enricher._build_visual_popup_close_additions",
+                side_effect=AssertionError("No X is declared on this popup"),
+            ):
+                for observation in (builder.build(capture), navigation.build(capture)):
+                    self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+                    self.assertEqual((), observation.popup_overlay.candidates)
 
     def test_delayed_lucifer_offer_after_brief_home_frame_publishes_on_both_paths(self) -> None:
         """The captured Home then delayed-Lucifer sequence stays demand-driven in one session."""
@@ -519,8 +648,15 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     popup_overlay=overlay,
                     guard_verdict=GuardVerdict.BLOCKED,
                 )
-                reconciled = reconcile_visual_modal_guard(visual, guard)
-                self.assertEqual(reconciled, guard)
+                for candidate_visual in (
+                    visual,
+                    replace(
+                        visual, controls=(), dismiss_controls=(),
+                        popup_overlay=replace(visual.popup_overlay, candidates=()),
+                    ),
+                ):
+                    reconciled = reconcile_visual_modal_guard(candidate_visual, guard)
+                    self.assertEqual(reconciled, guard)
 
     def test_vip_independent_holdouts_publish_blocking_close_on_both_paths(self) -> None:
         """Independent VIP captures prove static identity and current-frame Close geometry."""

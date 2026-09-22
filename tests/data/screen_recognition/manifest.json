@@ -1563,6 +1563,16 @@
         "source": "C:/Users/lebel/pnc/.local-data/worktrees/pet-workshop-pw01/.local-data/pw02/f0053.png",
         "derivative": "540x960 capture of the level-6 board with Treasure 1 selected and recycle control visible (tap-sequence frame 0053); original session archive not retained."
       }
+    },
+    {
+      "image": "savannah_hero_offer_warm_20260922.png",
+      "screen": "PNC_POPUP",
+      "split": "validation",
+      "group": "2026-09-22/serious_stuff/v08_warm002",
+      "sha256": "c3229995ba60cb2995e01e6bf2e8c1b8c805e72996390d2bb23777e3d81cff8f",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
     }
   ]
 }

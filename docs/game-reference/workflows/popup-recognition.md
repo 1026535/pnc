@@ -13,9 +13,55 @@ This note records client-source evidence from the recovered PNC **5.0.203 / vers
 
 ## Automation implication
 
-The automation cannot read the server recommendation, login reward DTO, or Conquest round flags directly. The shared visual recognizer therefore treats popup matching as demand-driven: it establishes ordinary screen identity with blocking popup profiles excluded, and only evaluates popup families when that base identity is `UNKNOWN`. A stable non-loading base identity in the same `(session_id, session_epoch)` observation session proves the startup/login window has passed and disarms the startup-only login/VIP/Conquest matcher work until the session epoch changes. The still-open popup remains matchable across repeated unknown frames before that transition.
+The automation cannot read the server recommendation, login reward DTO, or Conquest round flags directly. The shared visual recognizer therefore treats popup matching as demand-driven: it establishes ordinary screen identity with blocking popup profiles excluded, and only evaluates popup families when that base identity is `UNKNOWN`. A stable non-loading base identity in the same `(session_id, session_epoch)` observation session disarms the startup-scoped matcher work until the session epoch changes, except for the captured Lucifer and Growth families described below. This is an observation heuristic, not proof that every asynchronous login offer has finished. The still-open popup remains matchable across repeated unknown frames before that transition.
 
 This is a conservative observation gate, not a claim that a popup is eligible to open. Alliance recommendation eligibility remains unproven without the current alliance/server state; its visual profile is only considered in the same unknown-base startup scope. A caller-side event or reward hint can be added when an existing runtime owner exposes one.
+
+## Lucifer and Growth client conditions, reviewed September 22, 2026
+
+Devin's bounded source consultation and the lead's independent source review used
+the recovered **5.0.203 / version code 233** Lua and packaged base tables. The
+consultation is retained under
+`.local-data/devin-game-knowledge/20260922-155225-tool-free-follow-up-consultation-the-prior-read--e8e53f3fdc/`;
+the reviewed conclusions and limitations are in
+`.local-data/reports/popup-audit-20260922/audit.md`. Confidence is client-source
+verified for these paths; live downloaded configuration and server eligibility
+were not inspected.
+
+- Scene-load completion arms `BuyGiftData.loginOpenGiftWin`
+  (`gameluamain.lua:1502`); the charge-info response updates offer data and calls
+  `OpenGiftWin` (`commands/charge/chargecommand.lua:1989-1994`,
+  `datas/buygiftdata.lua:2199-2213`). The latter checks castle level, guide state,
+  union recommendation, transfer-area/King Return precedence, puzzle state and
+  its module-lifetime once flag (`2257-2339`). A deferred response or queue can
+  therefore be consistent with an offer appearing after a Home frame.
+- `loginOpenGiftOrder` selects the first eligible `LoginOpenGift` entry, subject
+  to `IsCanShow` and first-charge rules (`2367-2481`). The packaged list includes
+  gift **200101**, localized as **Lucifer**, but not **200001**, localized as
+  **Lucifer Special Offer**. A visual profile's name does not establish its
+  underlying gift ID. The exact automatic route for the captured Special Offer
+  remains unknown; do not infer that 200001 is selected by this priority list.
+- **Growth Boost Weekly Pass** is `GiftExclusiveWeekCardBase` **13**. The login
+  order can reach `WeekCardsData:loginWeekCardHandler`; its server-derived queue
+  contains eligible purchased cards with unclaimed rewards and unpurchased,
+  unexpired offers (`datas/weekcardsdata.lua:113-153,344-375`). Closing a card
+  opened with `isLoginOpen` invokes the handler again
+  (`uis/weekcards/weekcardswin.lua:318-323`). King Return can defer the remaining
+  queue. The similar name of the separate GrowingDiscount feature is not
+  evidence that it owns this offer.
+- `loginOpenGiftWinOpen` is initialized false and set after the login order
+  runs. The recovered Lua has no other assignments. This establishes a once
+  gate for that Lua module's lifetime, **not** a guaranteed native-process
+  lifetime. Reconnect/character-switch Lua resets and the captured offer's
+  exact server prerequisites remain unproven. A day-refresh charge-info request
+  alone does not reset this flag.
+
+Automation implication: preserve demand-driven family eligibility and skip
+checks when impossibility is established for the relevant opening path. Do not
+turn the castle/guide aborts for the automatic login path into a rule about
+manually opened windows. Neither one Home frame, one successful dismissal nor
+the observed 48/74-second delays prove queue exhaustion or a maximum delay.
+This review adds no timeout, broad post-Home matching or reconnect experiment.
 
 ## Live Lucifer evidence
 
@@ -81,10 +127,48 @@ measured on-screen tap, never Android Back. The purchase bar is never published
 or invoked. Automation implication: this captured Growth family joins the
 scoped post-Home exception alongside Lucifer; it is evaluated only when base
 identity is unknown, and every other popup family retains its established
-post-login expiry. Whether the client can show this offer again in the same
-session, and whether its back control returns to Home, are unverified live;
-recovery still requires a fresh observation after the measured tap. This note
-is recognition/session evidence, not a Workshop simulator rule.
+post-login expiry. Subsequent PW05 live006 evidence established one measured
+tap at `(85, 55)` followed by a fresh Home frame; the shared Growth correction
+was accepted at `516f6d3`, as recorded in
+`plans/themed/pet-workshop/PNC_PET_WORKSHOP_ROADMAP.md` and the PW05 checkout's
+`.local-data/review/pw05/lead-live006-proof.json`. Whether the client can show
+this offer again in the same session remains unknown. Recovery still requires
+a fresh observation after each measured tap. This note is recognition/session
+evidence, not a Workshop simulator rule.
+
+## Savannah close variation, September 22, 2026
+
+Two native RGBA 540x960 `serious_stuff` captures identified the Savannah offer
+but measured its existing X at confidence 0.9440277 and 0.9449110, below the
+prior 0.95 cutoff. The saved source frame is
+`artifacts/2026-09-22/serious_stuff/20260922T152016Z_v08_warmup_0.png`, now retained
+as `tests/data/screen_recognition/savannah_hero_offer_warm_20260922.png`; build
+unknown. Confidence: artifact-observed and independently replayed through both
+production publishers. Both use the same 540x960 reference, so missing resolution
+normalization does not explain this failure.
+
+The reviewed calibration changes only this measured X's threshold to 0.94 and
+the profile revision. Identity anchors, search region, asset, global matcher
+and eligibility policy are unchanged. Both publishers must return the native
+bounds `(480, 55, 46, 48)` and action `(503, 79)` with capture provenance. Erased-X
+and single-diagonal variants must remain non-actionable. These captured checks
+do not establish live dismissal or qualify every future appearance variant;
+the current audit records the separate live acceptance status.
+
+The same capture also exposed an independent publication defect: a successful
+named identity disabled generic close measurement even when its own X failed.
+Both publishers now request the existing modal-owned X detector when an eligible
+named `PNC_POPUP` declares an X and modal bounds but has no measured dismissal. A complete
+generic modal/X proof retains the known identity and publishes the measured
+candidate with its geometric provenance; an empty named control cannot erase it.
+The regression restores the former 0.95 cutoff on this native frame and exercises
+both publishers and the ordinary recovery executor. Missing-X and single-diagonal
+negatives remain non-actionable. Recognized bases and already measured controls
+perform no extra generic probe, nor do offers whose declared control is Back or
+Get Started. Session family eligibility is unchanged.
+Exact update/reconnect and unresolved semantic interruptions retain precedence.
+Confidence: saved-frame replay and deterministic regression; live acceptance is
+recorded separately by the audit.
 
 ## King Return welcome entry
 
