@@ -188,6 +188,49 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     self.assertEqual(close.source_screen, screen)
                     self.assertEqual(close.source_layout_id, layout_id)
 
+    def test_warm_state_hero_offer_keeps_native_close_provenance_on_both_paths(self) -> None:
+        """The observed 2026-09-22 X variation remains a measured dismiss control."""
+
+        builder, navigation = _wire()
+        source = _native_capture(
+            "savannah_hero_offer_warm_20260922.png", session="hero-warm", capture_sequence=1,
+        )
+        self.assertEqual(("RGBA", (540, 960)), (source.image.mode, source.image.size))
+        for observation in (builder.build(source), navigation.build(source)):
+            self.assertEqual("hero_offer_full_height", observation.decision.layout_id)
+            self.assertEqual({UiElementId.PNC_POPUP_CLOSE_BUTTON}, set(observation.visible_elements))
+            close = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(Bounds(480, 55, 46, 48), close.bounds)
+            self.assertEqual((503, 79), close.action_point)
+            self.assertEqual(source.frame_ref, close.frame_ref)
+            self.assertEqual(observation.decision.layout_id, close.source_layout_id)
+            candidate = observation.popup_overlay.candidate(PopupControlKind.CLOSE_X)
+            self.assertIsNotNone(candidate)
+            self.assertEqual(close.bounds, candidate.bounds)
+            self.assertEqual(close.action_point, candidate.action_point)
+
+    def test_warm_state_offer_without_complete_x_has_no_close_candidate(self) -> None:
+        """A missing or single-diagonal control cannot dismiss the recognized offer."""
+
+        builder, navigation = _wire()
+        source = _native_capture(
+            "savannah_hero_offer_warm_20260922.png", session="hero-warm-negative", capture_sequence=1,
+        )
+        for sequence, diagonal in enumerate((False, True), start=2):
+            changed = source.image.copy()
+            drawing = ImageDraw.Draw(changed)
+            drawing.rectangle((480, 55, 526, 103), fill=(18, 24, 38, 255))
+            if diagonal:
+                drawing.line((492, 68, 514, 90), fill=(255, 230, 140, 255), width=4)
+            capture = replace(
+                source, image=changed, frame_ref=replace(source.frame_ref, capture_sequence=sequence),
+            )
+            for observation in (builder.build(capture), navigation.build(capture)):
+                with self.subTest(diagonal=diagonal):
+                    self.assertEqual("hero_offer_full_height", observation.decision.layout_id)
+                    self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                    self.assertEqual((), observation.popup_overlay.candidates)
+
     def test_delayed_lucifer_offer_after_brief_home_frame_publishes_on_both_paths(self) -> None:
         """The captured Home then delayed-Lucifer sequence stays demand-driven in one session."""
 

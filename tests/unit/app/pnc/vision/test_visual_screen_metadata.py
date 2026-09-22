@@ -92,6 +92,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "institute",
                         "hero_hall",
                         "alliance_invitation",
+                        "savannah_hero_offer",
                         "world_map",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
