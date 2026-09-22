@@ -29,6 +29,30 @@ from pnc_automation.bluestacks_management.instance_shutdown import (
 )
 
 
+def _host_config(*display_names: str) -> BlueStacksHostConfig:
+    """Builds a synthetic configured inventory for CLI claim/status tests."""
+
+    return BlueStacksHostConfig(
+        config_path=Path("accounts.yaml"),
+        metadata_path=Path("bluestacks.conf"),
+        instances=tuple(
+            BlueStacksInstanceBinding(id=name.casefold().replace(" ", "-"), display_name=name)
+            for name in display_names
+        ),
+        accounts=(),
+        memory_policy=BlueStacksMemoryPolicy(enabled=True, restart_roles=frozenset()),
+    )
+
+
+def _patch_host_config(*display_names: str):
+    """Patches the CLI's host-config loader to the synthetic inventory."""
+
+    return patch(
+        "pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config",
+        return_value=_host_config(*display_names),
+    )
+
+
 class BlueStacksManagementCliTests(unittest.TestCase):
     """Keeps host coordination commands in the package-level entry point."""
 
@@ -248,6 +272,8 @@ class BlueStacksManagementCliTests(unittest.TestCase):
                         "agent-x",
                         "--duration-seconds",
                         "300",
+                        "--config",
+                        "custom.yaml",
                         "--lease-root",
                         "leases",
                     ]
@@ -258,6 +284,7 @@ class BlueStacksManagementCliTests(unittest.TestCase):
         self.assertEqual(arguments.instances, ["Instance A", "Instance B"])
         self.assertEqual(arguments.scope_id, "scope-1")
         self.assertEqual(arguments.duration_seconds, 300.0)
+        self.assertEqual(arguments.config, "custom.yaml")
         self.assertEqual(arguments.lease_root, Path("leases"))
 
         with patch(
@@ -284,7 +311,7 @@ class BlueStacksManagementCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             lease_root = Path(directory)
             stdout = StringIO()
-            with redirect_stdout(stdout):
+            with _patch_host_config("Instance A"), redirect_stdout(stdout):
                 self.assertEqual(
                     main(
                         [
@@ -347,7 +374,7 @@ class BlueStacksManagementCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             lease_root = Path(directory)
-            with redirect_stdout(StringIO()):
+            with _patch_host_config("Instance A"), redirect_stdout(StringIO()):
                 self.assertEqual(
                     main(
                         [
@@ -435,7 +462,7 @@ class BlueStacksManagementCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             lease_root = Path(directory)
-            with redirect_stdout(StringIO()):
+            with _patch_host_config("Instance A"), redirect_stdout(StringIO()):
                 main(
                     [
                         "claim-reservation",
@@ -486,6 +513,80 @@ class BlueStacksManagementCliTests(unittest.TestCase):
             self.assertFalse(entry["claimable"])
             self.assertNotIn(capability, stdout.getvalue())
             self.assertNotIn("capability", stdout.getvalue())
+
+    def test_claim_rejects_unconfigured_display_name_without_authority(self) -> None:
+        """An unknown --instance writes no receipt and no reservation record."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            lease_root = Path(directory)
+            stderr = StringIO()
+            with _patch_host_config("Instance A"), redirect_stderr(stderr):
+                self.assertEqual(
+                    main(
+                        [
+                            "claim-reservation",
+                            "--instance",
+                            "Not Configured",
+                            "--scope-id",
+                            "scope-1",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    1,
+                )
+            self.assertIn('"error_type": "ConfigurationError"', stderr.getvalue())
+            self.assertNotIn("Traceback", stderr.getvalue())
+            receipts_dir = lease_root / "long-reservation-receipts"
+            self.assertFalse(receipts_dir.exists() and any(receipts_dir.iterdir()))
+            snapshot = lease_root / "long-reservations.json"
+            self.assertFalse(snapshot.exists())
+
+    def test_claim_accepts_configured_bundle_with_canonical_names(self) -> None:
+        """A configured bundle claims all-or-none under canonical display names."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            lease_root = Path(directory)
+            stdout = StringIO()
+            with _patch_host_config("Instance A", "Instance B"), redirect_stdout(stdout):
+                self.assertEqual(
+                    main(
+                        [
+                            "claim-reservation",
+                            "--instance",
+                            "instance a",
+                            "--instance",
+                            "Instance B",
+                            "--scope-id",
+                            "scope-1",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    0,
+                )
+            claimed = json.loads(stdout.getvalue())
+            self.assertEqual(claimed["instances"], ["Instance A", "Instance B"])
+
+            stderr = StringIO()
+            with _patch_host_config("Instance A"), redirect_stderr(stderr):
+                self.assertEqual(
+                    main(
+                        [
+                            "claim-reservation",
+                            "--instance",
+                            "Instance A",
+                            "--instance",
+                            "instance A",
+                            "--scope-id",
+                            "scope-dup",
+                            "--lease-root",
+                            str(lease_root),
+                        ]
+                    ),
+                    1,
+                )
+            self.assertIn('"error_type": "ConfigurationError"', stderr.getvalue())
 
     def test_legacy_tool_paths_are_thin_compatibility_shims(self) -> None:
         """Keeps existing operator commands forwarding to the package module."""

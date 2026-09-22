@@ -107,6 +107,11 @@ class InstanceReservationTests(unittest.TestCase):
     def test_claim_survives_process_exit_and_receipt_owner_acquires(self) -> None:
         """Claim in A exits; B with the receipt acquires; unrelated C conflicts before any ADB use."""
 
+        config_path = self.root / "accounts.yaml"
+        config_path.write_text(
+            "instances:\n  - id: one\n    display_name: Instance A\n",
+            encoding="utf-8",
+        )
         claim = subprocess.run(
             [
                 sys.executable,
@@ -115,6 +120,8 @@ class InstanceReservationTests(unittest.TestCase):
                 "claim-reservation",
                 "--lease-root",
                 str(self.root),
+                "--config",
+                str(config_path),
                 "--instance",
                 "Instance A",
                 "--scope-id",
@@ -360,6 +367,50 @@ class InstanceReservationTests(unittest.TestCase):
         self.store.snapshot_path.write_bytes(b'{"version": 1, "reservations": "bogus"}')
         with self.assertRaises(ConfigurationError):
             self._registry().acquire(display_name="Instance A")
+
+    def test_snapshot_rejects_string_instances_and_bool_version(self) -> None:
+        """Persisted instances must be a list and version the exact integer 1."""
+
+        self.store.lease_root.mkdir(parents=True, exist_ok=True)
+        record = {
+            "scope_id": "foreign",
+            "owner_label": "agent",
+            "generation": "g",
+            "capability_digest": "0" * 64,
+            "instances": "Instance A",
+            "claimed_at": 100.0,
+            "expires_at": 9_999.0,
+            "pid": os.getpid(),
+        }
+        self.store.snapshot_path.write_bytes(
+            json.dumps({"version": 1, "reservations": [record]}).encode("utf-8")
+        )
+        with self.assertRaises(ConfigurationError):
+            self.store.load()
+
+        self.store.snapshot_path.write_bytes(
+            json.dumps({"version": True, "reservations": []}).encode("utf-8")
+        )
+        with self.assertRaises(ConfigurationError):
+            self.store.load()
+
+    def test_receipt_rejects_bool_version(self) -> None:
+        """A receipt must carry the exact integer schema version, not a bool."""
+
+        self.store.receipts_dir.mkdir(parents=True, exist_ok=True)
+        receipt_path = self.store.receipts_dir / "bogus.json"
+        receipt_path.write_bytes(
+            json.dumps(
+                {
+                    "version": True,
+                    "scope_id": "scope-1",
+                    "generation": "g",
+                    "capability": "c",
+                }
+            ).encode("utf-8")
+        )
+        with self.assertRaises(InstanceReservationError):
+            self.store.read_receipt(receipt_path)
 
     def test_status_reports_reservation_and_task_lock_states(self) -> None:
         """Status exposes both dimensions and derived claimability without ADB."""

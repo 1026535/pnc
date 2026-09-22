@@ -206,6 +206,8 @@ class InstanceReservationStore:
         if (
             not isinstance(payload, dict)
             or set(payload) != {"version", "reservations"}
+            or not isinstance(payload["version"], int)
+            or isinstance(payload["version"], bool)
             or payload["version"] != 1
             or not isinstance(payload["reservations"], list)
         ):
@@ -310,6 +312,8 @@ class InstanceReservationStore:
         if (
             not isinstance(payload, dict)
             or set(payload) != _RECEIPT_FIELDS
+            or not isinstance(payload["version"], int)
+            or isinstance(payload["version"], bool)
             or payload["version"] != 1
         ):
             raise InstanceReservationError("The reservation receipt schema is invalid.")
@@ -500,7 +504,11 @@ def _parse_record(item: object, *, state_file: str) -> InstanceReservation:
             state_file=state_file,
         )
 
-    if not isinstance(item, dict) or set(item) != _RECORD_FIELDS:
+    if (
+        not isinstance(item, dict)
+        or set(item) != _RECORD_FIELDS
+        or not isinstance(item["instances"], list)
+    ):
         raise fail()
     try:
         instances = tuple(item["instances"])

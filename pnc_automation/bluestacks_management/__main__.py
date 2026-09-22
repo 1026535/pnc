@@ -29,6 +29,7 @@ from pnc_automation.bluestacks_management.instance_lease import (
     InstanceLeaseRegistry,
 )
 from pnc_automation.bluestacks_management.instance_reservation import RESERVATION_RECEIPT_ENV
+from pnc_automation.core.errors import ConfigurationError
 from pnc_automation.bluestacks_management.instance_memory_monitor import BlueStacksInstanceMemoryMonitor
 from pnc_automation.bluestacks_management.instance_memory_monitor import MemoryMonitorDisposition
 from pnc_automation.bluestacks_management.instance_shutdown import (
@@ -103,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Bounded idle deadline; defaults to two hours.",
     )
+    claim_parser.add_argument("--config", default="config/accounts.yaml")
     claim_parser.add_argument("--lease-root", type=Path, default=DEFAULT_INSTANCE_LEASE_ROOT)
 
     renew_parser = subparsers.add_parser(
@@ -247,10 +249,16 @@ def _restart_open(arguments: argparse.Namespace, *, parser: argparse.ArgumentPar
 def _claim_reservation(arguments: argparse.Namespace) -> int:
     """Claims one long reservation and prints only its safe public fields."""
 
+    try:
+        config = load_bluestacks_host_config(Path(arguments.config))
+        instances = _resolve_configured_instances(config, tuple(arguments.instances))
+    except Exception as error:
+        _report_cli_failure(None, error, default_phase="configuration")
+        return 1
     registry = InstanceLeaseRegistry(root=arguments.lease_root)
     try:
         claim = registry.claim_reservation(
-            tuple(arguments.instances),
+            instances,
             scope_id=arguments.scope_id,
             owner_label=arguments.label,
             duration_seconds=arguments.duration_seconds,
@@ -357,6 +365,32 @@ def _reservation_status(arguments: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _resolve_configured_instances(
+    config: BlueStacksHostConfig, display_names: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Maps requested names onto canonical configured display names; rejects unknowns."""
+
+    configured = {instance.display_name.casefold(): instance.display_name for instance in config.instances}
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for name in display_names:
+        key = name.strip().casefold()
+        canonical = configured.get(key)
+        if canonical is None:
+            raise ConfigurationError(
+                "Unknown BlueStacks display name for a reservation claim.",
+                display_name=name.strip(),
+            )
+        if key in seen:
+            raise ConfigurationError(
+                "A reservation claim cannot repeat a configured display name.",
+                display_name=canonical,
+            )
+        seen.add(key)
+        resolved.append(canonical)
+    return tuple(resolved)
 
 
 def _receipt_argument(arguments: argparse.Namespace) -> Path | None:
