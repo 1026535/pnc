@@ -222,21 +222,36 @@ class BlueStacksSession:
         )
 
     def is_app_foregrounded(self) -> bool:
-        """Returns whether the configured P&C package is the foreground app."""
+        """Reads foreground focus after a bounded wait for Android's window service."""
 
         self._ensure_lease()
-        result = self.adb_client.shell(self.instance.device_id, "dumpsys", "window")
-        if not result.succeeded:
-            raise GameLaunchError(
-                f"Failed to determine foreground app for '{self.instance.device_id}'.",
+        attempts = max(1, self.connect_attempts)
+        for attempt_index in range(attempts):
+            result = self.adb_client.shell(self.instance.device_id, "dumpsys", "window")
+            # ADB can respond before system services start; dumpsys even exits zero.
+            # Retry that observed boot state, never malformed or ambiguous focus data.
+            if result.stderr_text.strip() == "Can't find service: window":
+                if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
+                    self.sleep(self.connect_retry_delay_seconds)
+                continue
+            if not result.succeeded:
+                raise GameLaunchError(
+                    f"Failed to determine foreground app for '{self.instance.device_id}'.",
+                    device_id=self.instance.device_id,
+                    stderr=result.stderr_text,
+                )
+            current_focus_package = _parse_current_focus_package(
+                result.stdout_text,
                 device_id=self.instance.device_id,
-                stderr=result.stderr_text,
             )
-        current_focus_package = _parse_current_focus_package(
-            result.stdout_text,
+            return current_focus_package == self.instance.app_package
+        raise GameLaunchError(
+            f"Android window service did not become ready on '{self.instance.device_id}'.",
             device_id=self.instance.device_id,
+            attempts=attempts,
+            stdout=result.stdout_text,
+            stderr=result.stderr_text,
         )
-        return current_focus_package == self.instance.app_package
 
     def ensure_app_foregrounded(self) -> bool:
         """Launches the game when needed and waits for its package to take focus."""

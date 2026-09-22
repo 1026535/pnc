@@ -117,6 +117,8 @@ Wait for a terminal record and `writers_stopped: true`. Status records whether c
 
 Existing editors, remote services, and brokered operations are outside that job. Cancel persistent editor or test runs through their canonical command and exact run ID before releasing those resources.
 
+An emulator launched by the worker's canonical resolver is an ordinary descendant too. In the 2026-09-22 `gray-generation` live diagnostic turn 004, `IsProcessInJob` confirmed the selected HD-Player belonged to the worker job; it survived session `keep_warm` cleanup but was gone after supervisor completion. A keep-warm policy cannot extend that process beyond its worker. For PNC assignments that may start an instance, use canonical `BlueStacksSessionCleanupPolicy.close_at_phase_end()` and finish cleanup before handback; its default preserves pre-existing instances. Record actual process state and do not promise cross-turn warmth for a worker-started instance. Keep the job's containment unchanged. Evidence: `.local-data/worktrees/vision-v22-blacksmith-gear/.local-data/devin-live-test/runs/v31-own-tree-76f9db5-20260922/turn-004/evidence.json` and the coordinating task's post-completion PID check. This establishes the current launcher behavior, not the cause of every historical shutdown.
+
 After supervisor interruption, use the retained state, process/job identity, `identity.jsonl`, and relevant logs to reconcile local writers and external tests. Repair a stale `running` record only after that reconciliation. If no export exists, verify the hook-recorded session ID against `devin list --format json` in the exact repository before restoring the resume identity. Preserve partial edits and evidence throughout recovery.
 
 ## Capability sources

@@ -1045,6 +1045,73 @@ class BlueStacksSessionTests(unittest.TestCase):
         )
         self.assertEqual([2.0], sleeps)
 
+    def test_foreground_check_waits_for_missing_window_service_without_relaunch(self) -> None:
+        """A zero-exit early-boot dump must settle before parsing or launching."""
+
+        adb_client = _SequencedShellAdbClient(shell_results=(
+            _command_result(
+                returncode=0,
+                stdout_text="Total number of currently running services:0\r\n",
+                stderr_text="Can't find service: window\r\n",
+            ),
+            _command_result(returncode=0, stdout_text=_game_window_dump()),
+        ))
+        sleeps: list[float] = []
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=sleeps.append,
+            connect_attempts=3,
+            lease_registry=self._lease_registry,
+        ))
+
+        self.assertFalse(session.ensure_app_foregrounded())
+        self.assertEqual([2.0], sleeps)
+        self.assertEqual([("127.0.0.1:5555", ("dumpsys", "window"))] * 2, adb_client.shell_calls)
+
+    def test_missing_window_service_then_launcher_still_launches_game_once(self) -> None:
+        """Service readiness is not confused with the game's foreground state."""
+
+        adb_client = _SequencedShellAdbClient(shell_results=(
+            _command_result(returncode=0, stderr_text="Can't find service: window\r\n"),
+            _command_result(returncode=0, stdout_text=_launcher_window_dump()),
+            _command_result(returncode=0, stdout_text="monkey: Monkeying"),
+            _command_result(returncode=0, stdout_text=_game_window_dump()),
+        ))
+        session = self._make_session(adb_client=adb_client, connect_attempts=3)
+
+        self.assertTrue(session.ensure_app_foregrounded())
+        self.assertEqual(
+            ["dumpsys", "dumpsys", "monkey", "dumpsys"],
+            [arguments[0] for _, arguments in adb_client.shell_calls],
+        )
+
+    def test_missing_window_service_stops_at_readiness_bound_without_launch(self) -> None:
+        """An unavailable Android service yields its real error without game input."""
+
+        adb_client = _SequencedShellAdbClient(shell_results=(
+            _command_result(
+                returncode=0,
+                stdout_text="Total number of currently running services:0\r\n",
+                stderr_text="Can't find service: window\r\n",
+            ),
+        ))
+        sleeps: list[float] = []
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=sleeps.append,
+            connect_attempts=2,
+            lease_registry=self._lease_registry,
+        ))
+
+        with self.assertRaisesRegex(GameLaunchError, "window service did not become ready") as caught:
+            session.ensure_app_foregrounded()
+        self.assertEqual(2, caught.exception.details["attempts"])
+        self.assertEqual("Can't find service: window\r\n", caught.exception.details["stderr"])
+        self.assertEqual([2.0], sleeps)
+        self.assertEqual([("127.0.0.1:5555", ("dumpsys", "window"))] * 2, adb_client.shell_calls)
+
     def test_ensure_app_foregrounded_fails_after_bounded_wait(self) -> None:
         """Reports a launch failure instead of sending input while the launcher remains focused."""
 
@@ -1140,6 +1207,7 @@ class BlueStacksSessionTests(unittest.TestCase):
                 session = self._make_session(adb_client=adb_client)
                 with self.assertRaisesRegex(GameLaunchError, "mCurrentFocus"):
                     session.is_app_foregrounded()
+                self.assertEqual(1, len(adb_client.shell_calls))
                 session.close()
 
     def test_launch_error_from_adb_is_still_propagated(self) -> None:
