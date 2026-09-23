@@ -404,6 +404,36 @@ class WorkshopSimulatorTests(unittest.TestCase):
         self.assertIsNone(state.order_survey.order(7))
         self.assertEqual(_cell(state, 1).occupancy, WorkshopOccupancy.EMPTY)
 
+    def test_cooldown_only_wait_preserves_observed_readiness(self) -> None:
+        """A cooldown clear moves no stock, so an observed ``ready=False`` persists.
+
+        Reproduces the review finding: a WAIT that only expires a producer's
+        cooldown must not re-derive order readiness — otherwise a rejected
+        order silently becomes submittable without any stock change.
+        """
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=MAP_1, cooldown=WorkshopCooldown.ACTIVE),
+                    fx.make_cell(1, 2, item_id=FRUIT_2),
+                    *(cell for cell in fx.make_empty_cells() if cell.cell_id > 2),
+                ),
+                order_survey=WorkshopOrderSurvey(
+                    orders=(fx.make_order(7, {FRUIT_2: 1}, ready=False),),
+                    coverage=WorkshopSurveyCoverage.COMPLETE,
+                    freshness=WorkshopSurveyFreshness.CURRENT,
+                ),
+            )
+        )
+
+        state = sim.apply(WorkshopWaitIntent(max_wait_ms=30_000))
+
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
+        self.assertEqual(state.order_survey.order(7).ready, False)
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(WorkshopSubmitOrderIntent(order_ref=7))
+
     def test_consuming_intents_reconcile_the_selection(self) -> None:
         """Merge and feed select the drop target; recycle and submit clear consumed selections."""
 

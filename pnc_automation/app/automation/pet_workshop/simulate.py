@@ -558,12 +558,46 @@ class WorkshopSimulator:
         A ``cells`` change means the piece inventory may have changed, so the
         surveyed orders' ``ready`` markers are re-derived from the resulting
         board before the new state is visible — the single canonical path for
-        readiness recomputation.
+        readiness recomputation. Cooldown-only updates do not move stock, so
+        the refresh fires only when a stock-relevant field actually changed —
+        otherwise an observed ``ready=False`` would be silently re-derived
+        into ``True`` by an unrelated cooldown expiry.
         """
 
+        previous_cells = self._state.cells
         self._state = replace(self._state, **changes)
-        if "cells" in changes:
+        if "cells" in changes and self._stock_fields_changed(
+            previous_cells, self._state.cells
+        ):
             self._refresh_order_readiness()
+
+    @staticmethod
+    def _stock_fields_changed(
+        previous: tuple[WorkshopCell, ...], current: tuple[WorkshopCell, ...]
+    ) -> bool:
+        """Returns whether any cell's stock-relevant fields differ.
+
+        Order readiness derives from which usable cells hold which pieces in
+        which status; ``cooldown`` is deliberately excluded — it never feeds
+        the stock count.
+        """
+
+        before = {cell.cell_id: cell for cell in previous}
+        if len(before) != len(current):
+            return True
+        for cell in current:
+            old = before.get(cell.cell_id)
+            if old is cell:
+                continue
+            if (
+                old is None
+                or old.access != cell.access
+                or old.occupancy != cell.occupancy
+                or old.item_id != cell.item_id
+                or old.item_status != cell.item_status
+            ):
+                return True
+        return False
 
     def _refresh_order_readiness(self) -> None:
         """Re-derives surveyed orders' ``ready`` markers from current stock.
