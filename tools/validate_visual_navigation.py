@@ -34,6 +34,7 @@ from pnc_automation.app.pnc.domain.observation import (
     Observation,
     castle_entry_identity_matches,
 )
+from pnc_automation.app.pnc.domain.popup import PopupControlKind, decide_popup_recovery
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -704,9 +705,28 @@ def run_probe(
             require_time_budget()
             if current.screen_type == ScreenType.UNKNOWN or current.decision.coordinate_only:
                 raise RuntimeError("Visual navigation cannot dispatch input from this observation.")
-            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+            recovery = (
+                decide_popup_recovery(
+                    screen_type=current.screen_type,
+                    blocking_popup=current.blocking_popup,
+                    visible_selector_ids=frozenset(current.visible_elements),
+                    popup_overlay=current.popup_overlay,
+                )
+                if isinstance(action, TapAction) and current.screen_type == ScreenType.PNC_POPUP
+                else None
+            )
+            typed_service_recovery = (
+                recovery is not None
+                and recovery.control_kind in {
+                    PopupControlKind.RECONNECT_CONFIRM,
+                    PopupControlKind.UPDATE_CONFIRM,
+                }
+                and recovery.selector_id == action.selector_id
+            )
+            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON) and not typed_service_recovery:
                 raise RuntimeError("Required update reached; the read-only probe stops before confirming.")
-            validate_probe_action(action)
+            if not typed_service_recovery:
+                validate_probe_action(action)
             action_count += 1
             action_data: dict[str, object] = {"type": type(action).__name__, "reason": action.reason}
             if isinstance(action, TapAction):

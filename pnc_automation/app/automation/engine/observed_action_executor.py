@@ -152,8 +152,9 @@ class ObservedActionExecutor:
         allowed_swipe_screens: frozenset[ScreenType] = frozenset(),
         allowed_launch_screens: frozenset[ScreenType] = frozenset(),
         max_wait_ms: int = 1000,
+        allow_system_popup_recovery: bool = True,
     ) -> None:
-        """Enables the explicit read-only action and recovery boundary for one probe."""
+        """Enables the read-only action boundary with typed service-dialog recovery."""
 
         self.policy = ObservedActionExecutionPolicy(
             max_settle_observations=self.policy.max_settle_observations,
@@ -170,6 +171,7 @@ class ObservedActionExecutor:
                 allowed_swipe_screens=allowed_swipe_screens,
                 allowed_launch_screens=allowed_launch_screens,
                 max_wait_ms=max_wait_ms,
+                allow_system_popup_recovery=allow_system_popup_recovery,
             ),
         )
         self.__post_init__()
@@ -342,7 +344,10 @@ class ObservedActionExecutor:
         )
         if decision is None or decision.control_kind != PopupControlKind.UPDATE_CONFIRM:
             return None
-        if self.policy.read_only_policy.enabled:
+        if (
+            self.policy.read_only_policy.enabled
+            and not self.policy.read_only_policy.allow_system_popup_recovery
+        ):
             raise SelectorResolutionError(
                 "Read-only probe refuses required-update recovery because Confirm would mutate the game state.",
                 selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
@@ -373,11 +378,12 @@ class ObservedActionExecutor:
             if not self._is_popup_observation(observation):
                 return _InterruptionRecoveryResult(None)
             if self.policy.read_only_policy.enabled:
-                # Read-only probes must not infer or dispatch an interruption
-                # dismissal.  An explicitly requested, allowlisted overlay
-                # control still goes through the normal low-level provenance
-                # and source policy checks below the observed executor.
-                return _InterruptionRecoveryResult(None)
+                if not (
+                    self.policy.read_only_policy.allow_system_popup_recovery
+                    and decision is not None
+                    and decision.control_kind == PopupControlKind.RECONNECT_CONFIRM
+                ):
+                    return _InterruptionRecoveryResult(None)
             return self._recover_transient_popups(
                 observation,
                 label_prefix=label_prefix,
@@ -399,7 +405,10 @@ class ObservedActionExecutor:
     ) -> Observation:
         """Confirms one detected game update and polls until typed Home is restored."""
 
-        if self.policy.read_only_policy.enabled:
+        if (
+            self.policy.read_only_policy.enabled
+            and not self.policy.read_only_policy.allow_system_popup_recovery
+        ):
             raise SelectorResolutionError(
                 "Read-only probe refuses required-update recovery because Confirm would mutate the game state.",
                 selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
@@ -554,6 +563,7 @@ class ObservedActionExecutor:
                 launched = self.action_executor.execute_action(
                     LaunchAppAction(reason="relaunch_pnc_after_required_update"),
                     current,
+                    required_update_relaunch=True,
                 )
                 if not launched:
                     raise SelectorResolutionError(
@@ -591,11 +601,6 @@ class ObservedActionExecutor:
     ) -> _InterruptionRecoveryResult:
         """Dismisses only newly fingerprinted safe transient popups in one bounded episode."""
 
-        if self.policy.read_only_policy.enabled:
-            raise SelectorResolutionError(
-                "Read-only probe refuses transient-popup recovery because dismissal would mutate the game state.",
-                screen_type=observation.screen_type,
-            )
         current = observation
         dismissed_fingerprints: set[str] = set()
         dismissed_identities: set[tuple[object, ...]] = set()
@@ -606,6 +611,18 @@ class ObservedActionExecutor:
                 visible_selector_ids=frozenset(current.visible_elements),
                 popup_overlay=current.popup_overlay,
             )
+            if self.policy.read_only_policy.enabled and not (
+                self.policy.read_only_policy.allow_system_popup_recovery
+                and decision is not None
+                and decision.control_kind in {
+                    PopupControlKind.RECONNECT_CONFIRM,
+                    PopupControlKind.UPDATE_CONFIRM,
+                }
+            ):
+                raise SelectorResolutionError(
+                    "Read-only probe refuses popup recovery without typed reconnect or required-update evidence.",
+                    screen_type=current.screen_type,
+                )
             if decision is not None and decision.control_kind == PopupControlKind.UPDATE_CONFIRM:
                 recovered = self._recover_required_update(
                     current,

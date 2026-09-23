@@ -662,6 +662,100 @@ class PopupRecoveryTests(unittest.TestCase):
         self.assertEqual(result.observation, home)
         self.assertEqual(len(self.session.taps), 1)
 
+    def test_read_only_probe_recovers_typed_reconnect_dialog(self) -> None:
+        """Clears only the measured reconnect control before a read-only route continues."""
+
+        reconnect_candidate = PopupDismissCandidate(
+            control_kind=PopupControlKind.RECONNECT_CONFIRM,
+            bounds=Bounds(230, 520, 80, 40),
+            action_point=(270, 540),
+            confidence=0.95,
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            extracted_text="Confirm",
+        )
+        reconnect = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_RECONNECT_CONFIRM_BUTTON,),
+            blocking_popup=True,
+            image_size=(480, 854),
+            frame_fingerprint="disconnect-reconnect-before",
+            popup_overlay=PopupOverlayObservation(
+                image_size=(480, 854),
+                layout_id="disconnect_reconnect",
+                candidates=(reconnect_candidate,),
+            ),
+        )
+        home = make_observation(ScreenType.PNC_HOME_CITY)
+        home = replace(
+            home,
+            frame_ref=replace(
+                home.frame_ref,
+                captured_at=reconnect.captured_at + timedelta(seconds=1),
+            ),
+        )
+        self.executor.configure_read_only_probe_mode(allowed_selectors=frozenset())
+
+        result = self.executor.execute_actions(
+            [],
+            reconnect,
+            observe=FakeObservationService([home]).observe,
+        )
+
+        self.assertEqual(result.observation, home)
+        self.assertEqual(self.session.taps, [(270, 540)])
+
+    def test_read_only_probe_recovers_typed_required_update_and_relaunches(self) -> None:
+        """Handles the exact update prompt and its Android Home restart boundary."""
+
+        update_candidate = PopupDismissCandidate(
+            control_kind=PopupControlKind.UPDATE_CONFIRM,
+            bounds=Bounds(70, 60, 60, 40),
+            action_point=(100, 80),
+            confidence=0.95,
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            extracted_text="Confirm",
+        )
+        update = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+            image_size=(480, 854),
+            frame_fingerprint="required-update-before",
+            popup_overlay=PopupOverlayObservation(
+                image_size=(480, 854),
+                layout_id="required_update",
+                candidates=(update_candidate,),
+            ),
+        )
+        android_home = make_observation(ScreenType.ANDROID_HOME)
+        home = make_observation(ScreenType.PNC_HOME_CITY)
+        android_home = replace(
+            android_home,
+            frame_ref=replace(
+                android_home.frame_ref,
+                captured_at=update.captured_at + timedelta(seconds=1),
+            ),
+        )
+        home = replace(
+            home,
+            frame_ref=replace(
+                home.frame_ref,
+                captured_at=update.captured_at + timedelta(seconds=2),
+            ),
+        )
+        self.executor.configure_read_only_probe_mode(allowed_selectors=frozenset())
+
+        result = self.executor.execute_actions(
+            [],
+            update,
+            observe=FakeObservationService([android_home, home]).observe,
+        )
+
+        self.assertEqual(result.observation, home)
+        self.assertTrue(result.update_recovered)
+        self.assertEqual(self.session.taps, [(100, 80)])
+        self.assertEqual(self.session.launches, 1)
+
     def test_read_only_background_tap_on_vip_is_rejected_without_input(self) -> None:
         """Implicit recovery suppression must not widen the explicit selector allowlist."""
 

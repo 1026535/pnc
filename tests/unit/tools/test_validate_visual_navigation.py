@@ -15,10 +15,18 @@ from tools.validate_visual_navigation import validate_probe_action
 from pnc_automation.app.pnc.domain.action_requests import (
     InputTextAction,
     KeyEventAction,
+    LaunchAppAction,
     TapAction,
     TapListEntryAction,
     TapPointAction,
     WaitAction,
+)
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+    decide_popup_recovery,
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.observation import (
@@ -102,6 +110,104 @@ class VisualNavigationSafetyTests(unittest.TestCase):
                 TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_QUEST),
                 make_observation(ScreenType.PNC_POPUP),
             )
+
+    def test_update_recovery_does_not_authorize_ordinary_app_launches(self) -> None:
+        policy = ReadOnlyProbePolicy(enabled=True, allow_system_popup_recovery=True)
+        android_home = make_observation(ScreenType.ANDROID_HOME)
+
+        with self.assertRaises(SelectorResolutionError):
+            policy.validate(LaunchAppAction(reason="ordinary_probe_launch"), android_home)
+
+        policy.validate(
+            LaunchAppAction(reason="relaunch_pnc_after_required_update"),
+            android_home,
+            required_update_relaunch=True,
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            policy.validate(
+                LaunchAppAction(reason="ordinary_probe_launch"),
+                android_home,
+                required_update_relaunch=True,
+            )
+
+    def test_probe_entry_routes_typed_service_dialogs_through_executor(self) -> None:
+        castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
+        manage = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            current_castle=castle,
+            current_castle_evidence=CurrentCastleEvidenceKind.EXACT,
+            list_entries=(
+                make_entry(
+                    ListEntryKind.CASTLE,
+                    title=castle.castle_name,
+                    metadata={"kingdom": castle.kingdom},
+                    selected=True,
+                ),
+            ),
+        )
+        home = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            current_castle=castle,
+            current_castle_evidence=CurrentCastleEvidenceKind.EXACT,
+        )
+        for control_kind, selector_id, layout_id in (
+            (
+                PopupControlKind.RECONNECT_CONFIRM,
+                UiElementId.PNC_RECONNECT_CONFIRM_BUTTON,
+                "disconnect_reconnect",
+            ),
+            (
+                PopupControlKind.UPDATE_CONFIRM,
+                UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                "required_update",
+            ),
+        ):
+            with self.subTest(control_kind=control_kind):
+                candidate = PopupDismissCandidate(
+                    control_kind=control_kind,
+                    bounds=Bounds(70, 60, 60, 40),
+                    action_point=(100, 80),
+                    confidence=0.95,
+                    evidence_kind=PopupEvidenceKind.OCR_TEXT,
+                    extracted_text="Confirm",
+                )
+                popup = make_observation(
+                    ScreenType.PNC_POPUP,
+                    visible_ids=(selector_id,),
+                    blocking_popup=True,
+                    image_size=(480, 854),
+                    frame_fingerprint=f"{layout_id}-entry",
+                    popup_overlay=PopupOverlayObservation(
+                        image_size=(480, 854),
+                        layout_id=layout_id,
+                        candidates=(candidate,),
+                    ),
+                )
+                runtime = _FakeRuntime(
+                    [popup, home, manage, home],
+                    ProbeRoute.NAVIGATION,
+                )
+                app = _FakeApplication(runtime)
+                with TemporaryDirectory() as directory, patch(
+                    "tools.validate_visual_navigation.build_application_runner",
+                    return_value=app,
+                ):
+                    summary_path = run_probe(
+                        Path("config.yaml"),
+                        "testing",
+                        Path(directory),
+                        route=ProbeRoute.NAVIGATION,
+                    )
+                    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+
+                recovery_actions = [
+                    action
+                    for action in runtime.action_executor.actions
+                    if isinstance(action, TapAction) and action.selector_id == selector_id
+                ]
+                self.assertEqual("passed", payload["status"])
+                self.assertEqual(1, len(recovery_actions))
 
     def test_all_typed_routes_have_safe_entry_declarations(self) -> None:
         self.assertEqual(set(ProbeRoute), set(ROUTE_DECLARATIONS))
@@ -1028,8 +1134,21 @@ class _FakeFlowPlanner:
         return [TapAction(selector_id=UiElementId.PNC_HOME_LORD_INFO_SHORTCUT, reason="fake_fields")]
 
     def close_blocking_popup(self, observation):
-        del observation
-        return []
+        decision = decide_popup_recovery(
+            screen_type=observation.screen_type,
+            blocking_popup=observation.blocking_popup,
+            visible_selector_ids=frozenset(observation.visible_elements),
+            popup_overlay=observation.popup_overlay,
+        )
+        if decision is None or decision.blocked or decision.selector_id is None:
+            return []
+        return [
+            TapAction(
+                selector_id=decision.selector_id,
+                reason=decision.reason,
+                observe_after=True,
+            )
+        ]
 
 
 if __name__ == "__main__":

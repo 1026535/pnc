@@ -13,6 +13,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     WaitAction,
 )
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.popup import PopupControlKind, decide_popup_recovery
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.errors import SelectorResolutionError
@@ -31,6 +32,7 @@ class ReadOnlyProbePolicy:
     allowed_swipe_screens: frozenset[ScreenType] = frozenset()
     allowed_launch_screens: frozenset[ScreenType] = frozenset()
     max_wait_ms: int = 1000
+    allow_system_popup_recovery: bool = False
 
     def __post_init__(self) -> None:
         """Rejects invalid probe wait budgets."""
@@ -46,7 +48,13 @@ class ReadOnlyProbePolicy:
             for allowed_id, screens in self.allowed_selector_screens
         )
 
-    def validate(self, action: ActionRequest, observation: Observation) -> None:
+    def validate(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        *,
+        required_update_relaunch: bool = False,
+    ) -> None:
         """Rejects any action outside this policy before input dispatch."""
 
         if not self.enabled:
@@ -55,6 +63,31 @@ class ReadOnlyProbePolicy:
             isinstance(action, TapAction)
             and action.selector_id in self.allowed_selectors
             and self.selector_allowed_on_screen(action.selector_id, observation.screen_type)
+        ):
+            return
+        if self.allow_system_popup_recovery and isinstance(action, TapAction):
+            decision = decide_popup_recovery(
+                screen_type=observation.screen_type,
+                blocking_popup=observation.blocking_popup,
+                visible_selector_ids=frozenset(observation.visible_elements),
+                popup_overlay=observation.popup_overlay,
+            )
+            if (
+                observation.screen_type == ScreenType.PNC_POPUP
+                and decision is not None
+                and decision.selector_id == action.selector_id
+                and decision.control_kind in {
+                    PopupControlKind.RECONNECT_CONFIRM,
+                    PopupControlKind.UPDATE_CONFIRM,
+                }
+            ):
+                return
+        if (
+            self.allow_system_popup_recovery
+            and required_update_relaunch
+            and isinstance(action, LaunchAppAction)
+            and action.reason == "relaunch_pnc_after_required_update"
+            and observation.screen_type == ScreenType.ANDROID_HOME
         ):
             return
         if (

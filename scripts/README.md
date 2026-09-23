@@ -185,6 +185,12 @@ controls and Android Back are never used for recovery. Popup-local Back remains
 disabled pending reviewed evidence. Task-owned confirm, claim, purchase, and
 mutation controls remain with their task.
 
+Read-only probes may also recover only these typed reconnect and required-update
+dialogs. Only the required-update recovery episode may relaunch P&C from Android
+Home, through its exact relaunch action; ordinary probe launches remain denied.
+Other popup controls and task actions remain subject to the probe's explicit
+allowlist.
+
 If an exact update interrupts an already-dispatched task action, that task fails as
 ambiguous instead of replaying the action; journaled Daily operations reconcile from
 a freshly reopened Daily or Resource screen. Transient popup dismissal does not

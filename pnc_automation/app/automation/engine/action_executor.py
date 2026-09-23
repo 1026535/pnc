@@ -126,7 +126,13 @@ class ActionExecutor:
             return observe(f"{label_prefix}_runtime_retry", ObservationRequest.full_runtime_default())
         return first_after
 
-    def execute_action(self, action: ActionRequest, observation: Observation) -> bool:
+    def execute_action(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        *,
+        required_update_relaunch: bool = False,
+    ) -> bool:
         """Executes one declarative action and returns whether it changed emulator state."""
 
         self.logger.info("Executing action.", extra={"action_type": type(action).__name__, "screen_type": observation.screen_type})
@@ -283,7 +289,11 @@ class ActionExecutor:
             self._sleep_ms(action.milliseconds)
             return True
         if isinstance(action, LaunchAppAction):
-            with self._authorized_input(action, observation):
+            with self._authorized_input(
+                action,
+                observation,
+                required_update_relaunch=required_update_relaunch,
+            ):
                 self._record_input_attempt(action, observation)
                 self.session.launch_app()
             self._sleep_ms(self._stable_delay_ms_for(action))
@@ -368,10 +378,20 @@ class ActionExecutor:
         )
 
     @contextmanager
-    def _authorized_input(self, action: ActionRequest, observation: Observation):
+    def _authorized_input(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        *,
+        required_update_relaunch: bool = False,
+    ):
         """Holds one session provenance lock through the complete logical input."""
 
-        self._validate_read_only_action(action, observation)
+        self._validate_read_only_action(
+            action,
+            observation,
+            required_update_relaunch=required_update_relaunch,
+        )
 
         if observation.decision.coordinate_only:
             if not (
@@ -536,10 +556,20 @@ class ActionExecutor:
                 entry_kind=entry.kind,
             )
 
-    def _validate_read_only_action(self, action: ActionRequest, observation: Observation) -> None:
+    def _validate_read_only_action(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        *,
+        required_update_relaunch: bool = False,
+    ) -> None:
         """Checks the explicit source-state action policy before any dispatch."""
 
-        self.read_only_policy.validate(action, observation)
+        self.read_only_policy.validate(
+            action,
+            observation,
+            required_update_relaunch=required_update_relaunch,
+        )
 
     def _record_input_attempt(self, action: ActionRequest, observation: Observation) -> None:
         """Counts one imminent low-level input and enforces a bounded probe budget."""
