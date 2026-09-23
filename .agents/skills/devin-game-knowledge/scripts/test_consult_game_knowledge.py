@@ -64,13 +64,76 @@ class ConsultantConfigTests(unittest.TestCase):
         permissions = consult.consultant_config()["permissions"]
         allow = set(permissions["allow"])
         deny = set(permissions["deny"])
-        self.assertIn("Read(**)", allow)
+        self.assertIn("Read(pnc_automation/**)", allow)
+        self.assertIn("Read(.local-data/**)", allow)
         self.assertIn("Exec(git log)", allow)
         self.assertIn("Exec(rg)", allow)
         self.assertIn("Exec(git push)", deny)
         self.assertIn("Exec(git commit)", deny)
         self.assertIn("Exec(rm)", deny)
         self.assertIn("Exec(adb)", deny)
+
+    def test_no_blanket_read_or_wildcard_exec(self) -> None:
+        """P1: unrestricted Read(**)/Exec(*) reopens local config and code exec."""
+        allow = set(consult.consultant_config()["permissions"]["allow"])
+        self.assertNotIn("Read(**)", allow)
+        for rule in allow:
+            self.assertNotIn(rule, ("Exec(*)", "Exec(**)", "Exec()"))
+
+    def test_no_exec_capable_command_is_allowed(self) -> None:
+        """P1: no interpreter, shell, or exec/write-capable tool is auto-approved."""
+        # Commands that run arbitrary code or write files despite looking like
+        # readers: interpreters/shells execute anything; find -exec/-delete and
+        # sort -o mutate; echo's only use is shell redirection probes.
+        exec_capable = {
+            "python", "py", "python3", "pythonw", "pyw", "node", "deno",
+            "bash", "sh", "zsh", "fish", "cmd", "powershell", "pwsh",
+            "perl", "ruby", "lua", "find", "sort", "echo", "xargs",
+        }
+        allow = consult.consultant_config()["permissions"]["allow"]
+        for rule in allow:
+            if not rule.startswith("Exec("):
+                continue
+            command = rule[len("Exec("):-1].split(" ", 1)[0]
+            self.assertNotIn(command, exec_capable, f"{rule} escapes the read-only boundary")
+
+    def test_interpreters_and_exec_capable_tools_are_denied(self) -> None:
+        deny = set(consult.consultant_config()["permissions"]["deny"])
+        for rule in (
+            "Exec(python)", "Exec(py)", "Exec(node)", "Exec(bash)", "Exec(sh)",
+            "Exec(cmd)", "Exec(powershell)", "Exec(pwsh)", "Exec(find)",
+            "Exec(sort)",
+        ):
+            self.assertIn(rule, deny)
+
+    def test_sensitive_read_paths_are_denied(self) -> None:
+        """P1: ignored local config, account data, and credentials stay unreadable."""
+        deny = set(consult.consultant_config()["permissions"]["deny"])
+        for rule in (
+            "Read(config/**)",
+            "Read(**/config/*.yaml)",
+            "Read(**/config/*.yml)",
+            "Read(**/accounts*.yaml)",
+            "Read(**/accounts*.yml)",
+            "Read(**/.env)",
+            "Read(**/*.env)",
+            "Read(**/*.key)",
+            "Read(**/*.pem)",
+            "Read(.git)",
+            "Read(.git/**)",
+        ):
+            self.assertIn(rule, deny)
+
+    def test_allowed_reads_stay_path_scoped(self) -> None:
+        """Every allowed Read rule names a path scope, never an unrestricted glob."""
+        allow = consult.consultant_config()["permissions"]["allow"]
+        for rule in allow:
+            if rule.startswith("Read("):
+                self.assertNotEqual(rule, "Read(**)")
+                self.assertTrue(
+                    rule.endswith("/**)") or "*" in rule[len("Read("):-1],
+                    f"{rule} is not path-scoped",
+                )
 
     def test_no_mutation_verb_is_allowed(self) -> None:
         """Every allowed Exec rule names a read-only command form."""

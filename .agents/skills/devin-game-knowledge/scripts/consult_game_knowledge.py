@@ -31,8 +31,29 @@ TOOL_REJECTION_MARKER = "rejected a tool call that requires confirmation"
 # only the read/inspection surface a consultant legitimately needs so a
 # headless run never stalls on a confirmation prompt. Deny rules always win
 # over allows, keeping the obvious mutation paths closed.
+#
+# Reads are path-scoped to source, tests, docs, plans, skills, and ignored
+# evidence under .local-data/ — never a blanket Read(**), which would expose
+# ignored local configuration and account data (denied below). No
+# interpreter, shell, or exec-capable tool is allowed: a broad grant like
+# Exec(python) would let arbitrary code escape the read-only boundary.
 CONSULTANT_ALLOW_RULES = (
-    "Read(**)",
+    # Path-scoped repository reads; sensitive paths are denied below.
+    "Read(pnc_automation/**)",
+    "Read(tests/**)",
+    "Read(docs/**)",
+    "Read(scripts/**)",
+    "Read(tools/**)",
+    "Read(instructions/**)",
+    "Read(plans/**)",
+    "Read(reviewed_plans/**)",
+    "Read(prompts/**)",
+    "Read(.agents/**)",
+    "Read(.local-data/**)",
+    "Read(*.md)",
+    "Read(*.toml)",
+    "Read(*.py)",
+    "Read(*.txt)",
     # Read-only Git plumbing only; every mutating subcommand is denied below.
     "Exec(git status)",
     "Exec(git log)",
@@ -47,28 +68,47 @@ CONSULTANT_ALLOW_RULES = (
     "Exec(git shortlog)",
     "Exec(git describe)",
     "Exec(git count-objects)",
-    # Read-only shell inspection and evidence analysis.
+    # Read-only shell inspection and evidence analysis. Tools that can
+    # execute subcommands or write output files (find -exec/-delete,
+    # sort -o) are denied below.
     "Exec(rg)",
     "Exec(grep)",
-    "Exec(find)",
     "Exec(ls)",
     "Exec(cat)",
     "Exec(head)",
     "Exec(tail)",
     "Exec(wc)",
-    "Exec(sort)",
     "Exec(uniq)",
     "Exec(file)",
     "Exec(stat)",
     "Exec(dir)",
     "Exec(type)",
     "Exec(where)",
-    "Exec(echo)",
-    "Exec(python)",
-    "Exec(py)",
 )
 
 CONSULTANT_DENY_RULES = (
+    # Ignored local configuration, account data, and credential material must
+    # stay unreadable even if an allow rule is broadened later.
+    "Read(config/**)",
+    "Read(**/config/*.yaml)",
+    "Read(**/config/*.yml)",
+    "Read(**/accounts*.yaml)",
+    "Read(**/accounts*.yml)",
+    "Read(**/.env)",
+    "Read(**/.env.*)",
+    "Read(**/*.env)",
+    "Read(**/*.key)",
+    "Read(**/*.pem)",
+    "Read(**/*.pfx)",
+    "Read(**/*.p12)",
+    "Read(**/id_rsa*)",
+    "Read(**/id_ed25519*)",
+    "Read(**/*credentials*)",
+    "Read(**/secrets.*)",
+    "Read(**/*.secret)",
+    "Read(.git)",
+    "Read(.git/**)",
+    "Read(tests/data/local_fixture_artifacts.json)",
     # Mutating Git state must stay unreachable for a read-only consultation.
     "Exec(git add)",
     "Exec(git am)",
@@ -116,6 +156,30 @@ CONSULTANT_DENY_RULES = (
     "Exec(pip)",
     "Exec(npm)",
     "Exec(adb)",
+    "Exec(robocopy)",
+    # Interpreters, shells, and exec-capable tools escape a read-only grant:
+    # an allowed interpreter runs arbitrary code (subprocess, filesystem,
+    # network) past every deny rule above.
+    "Exec(python)",
+    "Exec(py)",
+    "Exec(python3)",
+    "Exec(pythonw)",
+    "Exec(pyw)",
+    "Exec(node)",
+    "Exec(deno)",
+    "Exec(bash)",
+    "Exec(sh)",
+    "Exec(zsh)",
+    "Exec(fish)",
+    "Exec(cmd)",
+    "Exec(powershell)",
+    "Exec(pwsh)",
+    "Exec(perl)",
+    "Exec(ruby)",
+    "Exec(lua)",
+    "Exec(find)",
+    "Exec(sort)",
+    "Exec(echo)",
 )
 
 
