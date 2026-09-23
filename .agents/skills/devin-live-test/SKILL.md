@@ -45,7 +45,7 @@ The brief must tell Devin to read `AGENTS.md` and [pnc-live-testing](../pnc-live
 
 - select and run all checks needed for the assignment, preferring supported repository entry points over raw ADB commands;
 - retain one task lease for checks in the same process, or acquire and release each sequential process's own task lease; avoid repeated setup or identity discovery while instance continuity holds;
-- perform routine bounded recovery and inspect screenshots, OCR, observations, and logs when a check fails;
+- perform routine bounded recovery — for unrelated popups, the [popup recovery playbook](references/popup-recovery.md) — and inspect screenshots, OCR, observations, and logs when a check fails;
 - classify the observed stopping boundary and keep a feature case pending when an unrelated precondition prevented its execution;
 - publish each required incident at the first safe checkpoint and link it from the manifest, including preflight and recovered failures;
 - continue to remaining safe checks when one check fails, recording dependencies that make another check unsafe or meaningless;

@@ -57,10 +57,10 @@ the lead to choose routine test, navigation, retry, or evidence details.
 
 Completion and user blockers:
 Complete every safe authorized check and package failed, blocked, and not-run results.
-For an unrelated popup, try canonical bounded recovery, then use a fresh screenshot
-and an unambiguous on-screen dismissal control (including a visible X) for a manual
-tap under the same lease and authority if canonical recovery fails. Reobserve and
-resume the batch when preconditions hold. Record the popup failure, recovery action,
+For an unrelated popup, follow .agents/skills/devin-live-test/references/popup-recovery.md:
+identify the family on a fresh frame, try canonical bounded recovery, then tap the
+playbook's measured dismissal control under the same lease and authority if canonical
+recovery fails. Reobserve and resume the batch when preconditions hold. Record the popup failure, recovery action,
 artifact, and follow-up owner even if the feature case later passes. When an unrelated
 lease, popup, or entry failure still prevents a feature case, classify the observed
 boundary and report that feature case as not_run; do not infer its behavior.
