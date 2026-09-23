@@ -2565,6 +2565,22 @@ selectors:
   status: planned
   detection_kind: semantic
   materialize_relative_bounds: false
+- id: PNC_ALLIANCE_JOIN_DISMISS_MASK
+  screens:
+  - PNC_ALLIANCE_JOIN
+  status: screenshot_seeded
+  detection_kind: guarded_geometry
+  relative_bounds:
+    x_ratio: 0.0556
+    y_ratio: 0.8646
+    width_ratio: 0.2593
+    height_ratio: 0.0729
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Published only by the reviewed alliance_join_landing profile as a fixed
+    background-mask region; RECOMMEND_UNION_VIEW closes on a mask tap
+    (uis/union/recomentunionsview.lua BtnCancel -> CloseWin).
 - id: PNC_KING_RETURN_GET_STARTED_BUTTON
   screens:
   - PNC_POPUP

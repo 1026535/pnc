@@ -103,7 +103,11 @@ def decide_popup_recovery(
     execution; callers remain responsible for constructing/dispatching actions.
     """
 
-    if not blocking_popup and screen_type not in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}:
+    if not blocking_popup and screen_type not in {
+        ScreenType.PNC_POPUP,
+        ScreenType.PNC_VIP_DAILY_RESET,
+        ScreenType.PNC_ALLIANCE_JOIN,
+    }:
         return None
     if screen_type in TASK_OWNED_POPUP_SCREEN_TYPES or visible_selector_ids.intersection(TASK_OWNED_POPUP_SELECTOR_IDS):
         return PopupRecoveryDecision(
@@ -155,6 +159,15 @@ def decide_popup_recovery(
                     selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
                     control_kind=candidate.control_kind,
                     reason="close_vip_daily_reset",
+                )
+            if (
+                screen_type == ScreenType.PNC_ALLIANCE_JOIN
+                and UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK in visible_selector_ids
+            ):
+                return PopupRecoveryDecision(
+                    selector_id=UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
+                    control_kind=candidate.control_kind,
+                    reason="dismiss_alliance_join_landing_mask",
                 )
     if screen_type == ScreenType.PNC_VIP_DAILY_RESET and UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON in visible_selector_ids:
         return PopupRecoveryDecision(

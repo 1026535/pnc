@@ -668,6 +668,11 @@ class ObservationBuilder:
             # Preserve the modal's own guarded fields and controls while
             # allowing explicitly requested content enrichment to add facts.
             additions = _merge_observation_additions(guard_additions, additions)
+        elif additions.popup_overlay is None and guard_additions.popup_overlay is not None:
+            # A clear screen can still own a reviewed dismissal candidate that
+            # reconciliation attached to the guard additions (Join landing
+            # mask). Carry it so typed recovery can act on it.
+            additions = replace(additions, popup_overlay=guard_additions.popup_overlay)
         overlay_screens = {
             ScreenType.PNC_POPUP,
             ScreenType.PNC_VIP_DAILY_RESET,
@@ -1473,6 +1478,25 @@ def reconcile_visual_modal_guard(
             screen_evidence=tuple(replace(item, reason=f"weak_unproved_{item.reason}")
                                   for item in guard.screen_evidence),
             guard_verdict=GuardVerdict.UNRESOLVED,
+        )
+    if (
+        len(screens) == 1
+        and not screens.issubset(BLOCKING_SCREEN_TYPES)
+        and guard.guard_verdict == GuardVerdict.CLEAR
+        and visual.popup_overlay is not None
+        and visual.popup_overlay.candidates
+    ):
+        # A clear, non-modal screen can still own a reviewed dismissal
+        # candidate: the Join landing's background mask closes a stray
+        # recommend prompt. Publish the typed overlay so recovery can dismiss
+        # it without declaring the screen itself blocking.
+        return replace(
+            guard,
+            visible_elements={
+                **guard.visible_elements,
+                **{item.selector_id: item for item in visual.controls},
+            },
+            popup_overlay=visual.popup_overlay,
         )
     if len(screens) != 1 or not screens.issubset(BLOCKING_SCREEN_TYPES):
         return guard

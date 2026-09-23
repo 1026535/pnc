@@ -5,9 +5,16 @@ from __future__ import annotations
 import unittest
 
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.vision.image.models import Bounds
 
 from tests.support.automation.session import FakeSession
 from tests.support.pnc.observations import make_observation
@@ -168,3 +175,43 @@ class ObservedActionPopupRecoveryTests(AutomationFrameworkFixtures, unittest.Tes
                 self.assertEqual([], fake_session.key_events)
                 self.assertEqual(0, fake_session.launches)
                 self.assertEqual([ObservationRequest.full_runtime_default()], fake_observer.requests)
+
+    def test_observed_action_executor_dismisses_stray_alliance_join_landing(self) -> None:
+        """A stray Join landing dismisses through its reviewed mask region, never Android Back."""
+
+        landing = make_observation(
+            ScreenType.PNC_ALLIANCE_JOIN,
+            visible_ids=(UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,),
+            popup_overlay=PopupOverlayObservation(
+                image_size=(540, 960),
+                layout_id="alliance_join_landing",
+                candidates=(
+                    PopupDismissCandidate(
+                        control_kind=PopupControlKind.NEGATIVE_ACTION,
+                        bounds=Bounds(30, 830, 140, 70),
+                        action_point=(60, 870),
+                        confidence=1.0,
+                        evidence_kind=PopupEvidenceKind.GEOMETRY,
+                    ),
+                ),
+            ),
+            frame_fingerprint="alliance-join-landing",
+        )
+        home = make_observation(ScreenType.PNC_HOME_CITY)
+        fake_observer = FakeObservationService(observations=[home])
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        recovered = executor.recover_interruption_if_required(
+            landing,
+            label_prefix="stray_alliance_join",
+            observe=fake_observer.observe,
+        )
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual([(60, 870)], fake_session.taps)
+        self.assertEqual([], fake_session.key_events)
+        self.assertEqual(0, fake_session.launches)
+        self.assertEqual([ObservationRequest.full_runtime_default()], fake_observer.requests)

@@ -99,6 +99,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "campaign_stage_10_3",
                         "trial_challenge_live",
                         "pet_workshop_storage",
+                        "alliance_join_landing",
                     }
                     else 1
                 )
@@ -173,9 +174,38 @@ class VisualScreenMetadataTests(unittest.TestCase):
             lambda document: next(
                 profile for profile in document["profiles"] if profile["id"] == "alliance_invitation"
             )["controls"][0].update(dismisses_surface=False),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_join_landing"
+            )["controls"][0].update(popup_control_kind="cancel"),
         )
         for mutate in popup_control_mutations:
             with self.subTest(popup_control_mutation=mutate):
+                document = copy.deepcopy(original)
+                mutate(document)
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    shutil.copytree(CATALOG_PATH.parent / "screen_anchors", root / "screen_anchors")
+                    path = root / "screen_anchors.json"
+                    path.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        load_visual_screen_recognizer(path)
+
+        fixed_region_mutations = (
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_join_landing"
+            )["controls"][0].pop("fixed_region"),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_join_landing"
+            )["controls"][0].update(anchor={"path": "screen_anchors/alliance_join_landing.png", "search_region": [0, 0, 10, 10], "threshold": 0.9}),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_join_landing"
+            )["controls"][0].update(fixed_region=[30, 830]),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_join_landing"
+            )["controls"][0].update(fixed_region=[30, 830, 600, 70]),
+        )
+        for mutate in fixed_region_mutations:
+            with self.subTest(fixed_region_mutation=mutate):
                 document = copy.deepcopy(original)
                 mutate(document)
                 with tempfile.TemporaryDirectory() as directory:

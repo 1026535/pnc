@@ -5050,7 +5050,7 @@
       "id": "alliance_join_landing",
       "layout_id": "alliance_join_landing",
       "screen": "PNC_ALLIANCE_JOIN",
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "alliance_variants/alliance_join_landing.png",
         "decoded_sha256": "949922560e3607bd020fa07a23369f547ca20a4787fc107992d0810e55d78867",
@@ -5058,7 +5058,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned.",
+        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned. RECOMMEND_UNION_VIEW dismisses through its background mask (uis/union/recomentunionsview.lua BtnCancel -> CloseWin), so the dismissal control is a reviewed fixed mask region rather than a template.",
         "build": "5.2.77 / AppVersion 5.0.201.227",
         "locale": "English",
         "qualification": "guarded_reference_only"
@@ -5085,7 +5085,19 @@
           "threshold": 0.98
         }
       ],
-      "controls": [],
+      "controls": [
+        {
+          "selector": "PNC_ALLIANCE_JOIN_DISMISS_MASK",
+          "fixed_region": [
+            30,
+            830,
+            140,
+            70
+          ],
+          "dismisses_surface": true,
+          "popup_control_kind": "negative_action"
+        }
+      ],
       "occludes": [
         "PNC_HOME_CITY"
       ]

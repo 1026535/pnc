@@ -49,6 +49,7 @@ _VISUAL_DISMISS_SELECTOR_KINDS = {
     UiElementId.PNC_POPUP_CLOSE_BUTTON: _VISUAL_DISMISS_KINDS,
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: frozenset({PopupControlKind.CLOSE_TEXT}),
     UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON: frozenset({PopupControlKind.KING_RETURN_GET_STARTED}),
+    UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK: frozenset({PopupControlKind.NEGATIVE_ACTION}),
 }
 
 
@@ -79,12 +80,18 @@ class VisualScreenProfile:
 
 @dataclass(frozen=True, slots=True)
 class VisualControl:
-    """One measured control owned by a recognized visual profile."""
+    """One measured control owned by a recognized visual profile.
+
+    Anchored controls are template-matched per frame. A `fixed_region` control
+    instead carries reviewed layout geometry — used for dismissals with no
+    measurable template, such as a window's background mask.
+    """
 
     selector_id: UiElementId
-    anchor: VisualAnchor
+    anchor: VisualAnchor | None
     dismisses_surface: bool = False
     popup_control_kind: PopupControlKind | None = None
+    fixed_region: Bounds | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,24 +347,44 @@ class VisualScreenRecognizer:
         if len(matched_screens) == 1:
             for profile in matching:
                 for control in profile.controls:
-                    match = self.matcher.find_best_match(
-                        prepared_frame,
-                        control.anchor.path,
-                        threshold=control.anchor.threshold,
-                        search_region=control.anchor.search_region,
-                    )
-                    if match is None:
-                        continue
-                    element = VisibleElement(
-                        selector_id=control.selector_id,
-                        bounds=match.bounds,
-                        confidence=match.confidence,
-                        source_kind=VisibleElementSourceKind.TEMPLATE,
-                        action_point=match.bounds.center(),
-                        # The profile anchors own identity. Its controls must
-                        # not independently reclassify the accepted surface.
-                        identity_evidence=False,
-                    )
+                    if control.fixed_region is not None:
+                        # Layout-fixed controls (e.g. a window's background mask)
+                        # carry reviewed geometry, not a per-frame template match.
+                        bounds = _project_bounds(
+                            control.fixed_region,
+                            original_size=image.size,
+                            reference_size=self.reference_size,
+                        )
+                        element = VisibleElement(
+                            selector_id=control.selector_id,
+                            bounds=bounds,
+                            confidence=1.0,
+                            source_kind=VisibleElementSourceKind.GEOMETRY,
+                            action_point=bounds.center(),
+                            identity_evidence=False,
+                        )
+                    else:
+                        anchor = control.anchor
+                        if anchor is None:
+                            continue
+                        match = self.matcher.find_best_match(
+                            prepared_frame,
+                            anchor.path,
+                            threshold=anchor.threshold,
+                            search_region=anchor.search_region,
+                        )
+                        if match is None:
+                            continue
+                        element = VisibleElement(
+                            selector_id=control.selector_id,
+                            bounds=match.bounds,
+                            confidence=match.confidence,
+                            source_kind=VisibleElementSourceKind.TEMPLATE,
+                            action_point=match.bounds.center(),
+                            # The profile anchors own identity. Its controls must
+                            # not independently reclassify the accepted surface.
+                            identity_evidence=False,
+                        )
                     controls[control.selector_id] = element
                     if control.dismisses_surface:
                         dismiss_ids.add(control.selector_id)
@@ -366,6 +393,7 @@ class VisualScreenRecognizer:
             profile for profile in matching if profile.screen_type in {
                 ScreenType.PNC_POPUP,
                 ScreenType.PNC_VIP_DAILY_RESET,
+                ScreenType.PNC_ALLIANCE_JOIN,
             }
         )
         blocking_layouts = {profile.layout_id for profile in blocking_profiles}
@@ -496,8 +524,12 @@ def load_visual_screen_recognizer(
             raise ValueError(f"Visual profile {identifier} controls must be a list.")
         controls: list[VisualControl] = []
         for raw_control in raw_controls:
-            if not isinstance(raw_control, dict) or set(raw_control) - {"selector", "anchor", "dismisses_surface", "popup_control_kind"} or "selector" not in raw_control or "anchor" not in raw_control:
+            if not isinstance(raw_control, dict) or set(raw_control) - {"selector", "anchor", "dismisses_surface", "popup_control_kind", "fixed_region"} or "selector" not in raw_control:
                 raise ValueError(f"Visual profile {identifier} has malformed controls.")
+            if ("anchor" in raw_control) == ("fixed_region" in raw_control):
+                raise ValueError(
+                    f"Visual profile {identifier} controls require exactly one of anchor or fixed_region."
+                )
             try:
                 selector = UiElementId(raw_control["selector"])
             except (KeyError, TypeError, ValueError) as error:
@@ -516,24 +548,34 @@ def load_visual_screen_recognizer(
                         f"Visual profile {identifier} typed popup control {selector.value} "
                         "must dismiss its surface."
                     )
-            if screen in _BLOCKING_VISUAL_SCREENS and dismisses:
+            if screen in _BLOCKING_VISUAL_SCREENS and dismisses and popup_control_kind is None:
+                raise ValueError(
+                    f"Visual profile {identifier} dismiss control {selector.value} "
+                    "requires popup_control_kind."
+                )
+            if dismisses and popup_control_kind is not None:
                 allowed_kinds = _VISUAL_DISMISS_SELECTOR_KINDS.get(selector, frozenset())
-                if popup_control_kind is None:
-                    raise ValueError(
-                        f"Visual profile {identifier} dismiss control {selector.value} "
-                        "requires popup_control_kind."
-                    )
                 if popup_control_kind not in allowed_kinds:
                     raise ValueError(
                         f"Visual profile {identifier} has incompatible popup control kind "
                         f"{popup_control_kind.value} for {selector.value}."
                     )
+            fixed_region = raw_control.get("fixed_region")
             controls.append(
                 VisualControl(
                     selector_id=selector,
-                    anchor=_load_anchor(raw_control["anchor"], root=path.parent, reference_size=tuple(size)),
+                    anchor=(
+                        None
+                        if fixed_region is not None
+                        else _load_anchor(raw_control["anchor"], root=path.parent, reference_size=tuple(size))
+                    ),
                     dismisses_surface=dismisses,
                     popup_control_kind=popup_control_kind,
+                    fixed_region=(
+                        None
+                        if fixed_region is None
+                        else _load_reference_region(fixed_region, reference_size=tuple(size), owner=f"Visual profile {identifier} fixed_region")
+                    ),
                 )
             )
         raw_occludes = entry.get("occludes", [])
@@ -595,6 +637,22 @@ def _load_anchor(entry: object, *, root: Path, reference_size: tuple[int, int]) 
         if image.width > width or image.height > height:
             raise ValueError(f"Anchor {image_name} cannot fit inside its search region.")
     return VisualAnchor(path, Bounds(x, y, width, height), float(threshold))
+
+
+def _load_reference_region(
+    entry: object,
+    *,
+    reference_size: tuple[int, int],
+    owner: str,
+) -> Bounds:
+    """Validate one fixed `[x, y, w, h]` region inside the catalog reference frame."""
+
+    if not isinstance(entry, list) or len(entry) != 4 or any(type(v) is not int for v in entry):
+        raise ValueError(f"{owner} must contain four integers.")
+    x, y, width, height = entry
+    if min(x, y) < 0 or min(width, height) <= 0 or x + width > reference_size[0] or y + height > reference_size[1]:
+        raise ValueError(f"{owner} is outside the reference frame.")
+    return Bounds(x, y, width, height)
 
 
 def _project_bounds(
