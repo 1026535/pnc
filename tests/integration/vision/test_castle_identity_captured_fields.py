@@ -39,13 +39,16 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     OcrLine,
     OcrRequiredFieldStatus,
     OcrResult,
-    RapidOcrService,
+    OcrService,
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession, make_captured_frame
+from tests.support.pnc.capture_vision.require_rapid_ocr_service import (
+    _require_rapid_ocr_service,
+)
 
 
 FIXTURE_ROOT = TEST_DATA_ROOT / "screen_recognition" / "castle_identity_variants"
@@ -228,7 +231,7 @@ class _BottomRosterOcrService:
 class _BoundedRapidOcrService:
     """Keep optional captured RapidOCR replay from falling back to full-frame reads."""
 
-    delegate: RapidOcrService
+    delegate: OcrService
     calls: list[Bounds | None] = field(default_factory=list)
 
     def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
@@ -550,10 +553,9 @@ class CastleIdentityCapturedFieldTests(unittest.TestCase):
                 capture = _capture(image, session_id=f"castle:bottom:rapid:{size[0]}")
                 for producer in ("builder", "navigation"):
                     with self.subTest(producer=producer):
-                        try:
-                            ocr = _BoundedRapidOcrService(RapidOcrService())
-                        except Exception as exc:  # pragma: no cover - environment-dependent optional backend
-                            raise unittest.SkipTest(f"RapidOCR replay unavailable: {exc}") from exc
+                        ocr = _BoundedRapidOcrService(
+                            _require_rapid_ocr_service(self)
+                        )
                         builder, navigation = _wire(ocr)
                         observation = (
                             builder.build(

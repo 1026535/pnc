@@ -30,10 +30,9 @@ from pnc_automation.core.vision.image.models import Bounds, Region
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
-    OcrService,
     OcrRequiredFieldStatus,
     OcrResult,
-    RapidOcrService,
+    OcrService,
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -152,7 +151,7 @@ class _CropHonoringOcrService(_RecordingOcrService):
 class _CastleRapidOcrService:
     """Allow backend ``None`` only for the prepared Castle level field."""
 
-    delegate: RapidOcrService
+    delegate: OcrService
     capture_size: tuple[int, int] | None = None
     field_bounds: Bounds | None = None
     calls: list[tuple[Bounds | None, tuple[int, int]]] = field(default_factory=list)
