@@ -24,7 +24,7 @@ This skill never authorizes real-money purchases, unrelated game actions, accoun
 ## Workflow
 
 1. Implement the smallest slice and run focused offline tests.
-2. Resolve the configured instance through the canonical runtime. Validate castle identity at initial instance takeover or after an authorized castle change or instance replacement; reuse that proof while instance continuity holds. Immediately before spending, confirm the current target, screen, and relevant resource state without repeating the full castle workflow.
+2. Follow [test-bluestacks-live](../test-bluestacks-live/SKILL.md), including its shared incident-reporting contract, before target preflight. Resolve the configured instance through the canonical runtime. Validate castle identity at initial instance takeover or after an authorized castle change or instance replacement; reuse that proof while instance continuity holds. Immediately before spending, confirm the current target, screen, and relevant resource state without repeating the full castle workflow.
 3. Capture pre-action evidence, perform only the authorized action, and capture the post-action result.
 4. On failure, inspect artifacts and fix offline first. Repeat spending only when the authorization includes a retry and the diagnosis changed; otherwise stop at the remaining blocker.
 5. Return to a safe stable screen when the existing flow supports it, then run any proportionate final validation.

@@ -21,14 +21,26 @@ the exact action, target, resource type, maximum amount or attempts, preconditio
 success signal, and budget stop condition from the request or approved plan. The
 configured live role and canonical lease remain authoritative.
 
+Reporting destination:
+Absolute report_repository_root for the primary checkout whose collections the Monday
+report reads; unique run ID; and coordinating task/owner. Read
+.agents/skills/test-bluestacks-live/references/failure-reporting.md before target
+preflight. Publish required incident folders there at the first safe checkpoint,
+including preflight and recovered failures; do not wait for final handback. The
+collection owner or weekly reporting job reconciles shared indexes. Use that contract's
+pending-publication fallback when the shared destination is unavailable; do not silently
+write only to a worker worktree.
+
 Known evidence and non-goals:
 Relevant implementation refs, known passing offline checks, reusable saved evidence,
 and decisions already settled by the lead. Prohibited actions, unrelated workflows,
-and any choice that genuinely requires user input. Do not edit repository content or
-Git state.
+and any choice that genuinely requires user input. Do not edit tracked or user-owned
+repository content or Git state. Ignored runtime evidence, required shared incident
+folders, and the result package are permitted outputs.
 
 Execution ownership:
-Read AGENTS.md and .agents/skills/test-bluestacks-live/SKILL.md before ADB access.
+Read AGENTS.md and .agents/skills/pnc-live-testing/SKILL.md, including its canonical
+live policy and reporting reference, before target preflight or ADB access.
 Choose the smallest supported tests, application entry points, or authored workflows
 that prove all assigned postconditions. Verify the clean candidate SHA and production
 import root before execution. Run the smallest missing offline preflight. Prefer one
@@ -73,7 +85,8 @@ inherited plan or series reservation remains held for its owner.
 Packaged result:
 Before handback, verify the candidate SHA, clean tree, and import root still match;
 write evidence.json in DEVIN_IMPLEMENT_TURN_DIR using the contract below. Verify that
-every assigned check has a result, every cited artifact exists and belongs to this
+every assigned check has a result, every interruption links an incident ID and report
+path with explicit publication status, every cited artifact exists and belongs to this
 run, actual mutations and spending are recorded, and cleanup plus every lease release
 are explicit. Return a compact READY_FOR_REVIEW / BLOCKED / FAILED handoff
 containing only the overall result, evidence.json path, and required user actions
@@ -89,6 +102,8 @@ Write one `evidence.json` that lets the lead evaluate assignment completeness wi
 {
   "schema_version": 2,
   "assignment": "short stable assignment label",
+  "run_id": "unique run ID from the brief",
+  "report_repository_root": "absolute primary checkout from the brief",
   "verdict": "READY_FOR_REVIEW",
   "candidate": {
     "git_head": "exact tested integration commit SHA",
@@ -121,6 +136,9 @@ Write one `evidence.json` that lets the lead evaluate assignment completeness wi
   ],
   "interruptions": [
     {
+      "incident_id": "stable incident ID shared with the batch and collection",
+      "report_path": "absolute incident README.md path",
+      "report_publication": "published",
       "observed_at": "timestamp with offset",
       "category": "popup, castle_identity, or instance_management",
       "check_id": "affected brief check identifier",
@@ -145,6 +163,6 @@ Write one `evidence.json` that lets the lead evaluate assignment completeness wi
 }
 ```
 
-Use `passed`, `failed`, `blocked`, or `not_run` for each check and explain every non-passing result in `uncertainty`, including whether the stopping boundary was environment/lease, unrelated entry or popup, feature behavior, safety/authority, or inconclusive evidence. Put every castle-identity, popup, and BlueStacks instance-management failure in `interruptions`, including one recovered before the affected check passed; use an empty array when none occurred. A broken canonical popup handler remains a follow-up even when manual dismissal lets the feature case pass. Reserve `blocked` for a check requiring user intervention; use `not_run` when another failed check made it unsafe or meaningless. `lease_released` means all sequential phases released their leases; describe those phases in `cleanup` when more than one process ran. `required_user_actions` must be non-empty only when the overall verdict is `BLOCKED`. Select only artifacts needed for acceptance and do not copy them into the Devin run directory. The handoff references this manifest rather than asking the lead to infer results from directory listings or full logs.
+Use `passed`, `failed`, `blocked`, or `not_run` for each check and explain every non-passing result in `uncertainty`, including whether the stopping boundary was environment/lease, unrelated entry or popup, feature behavior, safety/authority, or inconclusive evidence. Put every castle selection/identity, popup, and BlueStacks instance-management failure in `interruptions`, including preflight and recovered failures; use an empty array when none were observed and describe any unobserved interval in `unresolved`. Follow [failure reporting](../../test-bluestacks-live/references/failure-reporting.md) for shared destinations, record fields, and publication ownership. Each interruption must link its incident ID and report path; `report_publication` is `published` only once the shared record exists, otherwise `pending` with the retained local report path and error in `unresolved`. Use null and explain missing evidence, check IDs, or target identity instead of inventing values. A broken canonical popup handler remains a follow-up even when manual dismissal lets the feature case pass. Reserve `blocked` for a check requiring user intervention; use `not_run` when another failed check made it unsafe or meaningless. `lease_released` means all sequential phases released their leases; describe those phases in `cleanup` when more than one process ran. `required_user_actions` must be non-empty only when the overall verdict is `BLOCKED`. Select only artifacts needed for acceptance and do not copy them into the Devin run directory. The handoff references this manifest rather than asking the lead to infer results from directory listings or full logs.
 
 For a resumed turn, send only the user-resolved blocker, changed authority or budget, newly authorized attempt when applicable, and affected checks. Reuse the same run directory and session; do not replay completed checks or broaden the assignment implicitly.

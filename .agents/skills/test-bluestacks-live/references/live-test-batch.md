@@ -1,6 +1,6 @@
 # Live-Test Batch Record
 
-The coordinator creates one QA-style record under `.local-data/live-test-batches/<batch>.md` when related live-dependent changes are ready for a checkpoint or acceptance. Use the same record for direct execution or a delegated live-test brief. It is a test specification before execution and a result ledger afterward; raw screenshots and traces stay in the configured artifact root.
+The coordinator creates one QA-style record under `.local-data/live-test-batches/<batch>.md` when related live-dependent changes are ready for a checkpoint or acceptance. Use the same record for direct execution or a delegated live-test brief. It is a test specification before execution and a result ledger afterward; raw screenshots and traces stay in the configured artifact root. Read [failure reporting](failure-reporting.md) before target preflight; the batch links published incident reports in the shared weekly collections.
 
 ```markdown
 # <batch name>
@@ -9,6 +9,8 @@ Purpose and gate: <development checkpoint or acceptance; what cannot advance wit
 Candidate: <worktree and exact tested tip SHA; included commits; clean tree for delegated
   acceptance, or source fingerprint for a direct uncommitted development checkpoint>
 Offline evidence: <focused commands and results; saved artifact provenance if reused>
+Reporting: <absolute report_repository_root for the primary checkout; unique run ID;
+  coordinating task that reconciles publication and owns unknown follow-ups>
 Target and authority: <configured account/active castle/instance, live role, allowed switching,
   mutations and exact spending budget if applicable; no secrets>
 Lease and cleanup: <declared bundle, one execution owner, initial instance state,
@@ -19,9 +21,11 @@ Lease and cleanup: <declared bundle, one execution owner, initial instance state
 |---|---|---|---|---|---|---|
 | C1 | ... | ... | ... | ... | pending | ... |
 
-Interruptions: <one entry per castle-identity, popup, or instance-management failure,
-  including recovered failures: timestamp, category, target, case, observed boundary,
-  artifact, recovery attempted and result, affected case disposition, follow-up owner>
+Interruptions: <one entry per castle selection/identity, popup, or instance-management
+  failure, including preflight and recovered failures: incident ID, absolute report path,
+  publication status, timestamp, category, target, case, observed boundary, artifact,
+  recovery attempted and result, affected case disposition, follow-up owner;
+  explicitly none observed when applicable, with any unobserved interval noted>
 Execution: <entry points/commands, candidate actually loaded and production import root,
   instance identity and continuity proof, initial screen, lease acquisition and release
   for each execution process>
