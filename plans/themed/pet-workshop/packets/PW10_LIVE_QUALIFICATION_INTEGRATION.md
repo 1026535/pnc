@@ -1,5 +1,7 @@
 # PW10 — Lead review, live qualification and final integration
 
+**Current September23 gate:** PW10 remains pending. User authority permits current Workshop energy across eligible configured accounts/castles including Hopeful NPC, without purchases/refills/premium or unrelated spending, only after applicable acceptance gates. Main window01:10–05:30Toronto; lead may temporarily configure live_testing and must restore its original role. Tonight's two zero-spend recognition attempts stopped before identity (Game Center takeover, then VM crash); no mechanic qualified and no energy consumed. Main is stopped/restored/released. Startup owner has the published failures; V owner still owes the accepted consumed navigation dependency. Offline canary-driver corrections continue; no shared or PW runtime merge is authorized by offline evidence alone. See the roadmap's current record.
+
 [Roadmap, status and dispatch workflow](../PNC_PET_WORKSHOP_ROADMAP.md) · [Common architecture](../PNC_PET_WORKSHOP_01_RECOGNITION_STATE_PLAN.md#common-baseline-and-architecture-requirements)
 
 **Kind:** Lead-owned qualification and integration. **Dependencies for combined acceptance:** [PW05](PW05_SCREENSHOT_PROPOSAL_MILESTONE.md), [PW08](PW08_INDEPENDENT_RUNS.md), [PW09](PW09_DAILY_MAINTENANCE.md). Live-phase prerequisites are separate below.
