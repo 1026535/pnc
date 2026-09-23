@@ -6,6 +6,9 @@ The coordinator creates one QA-style record under `.local-data/live-test-batches
 # <batch name>
 
 Purpose and gate: <development checkpoint or acceptance; what cannot advance without proof>
+Epic ledger: <stable path to the single coordinator ledger, when this batch belongs to an epic>
+Critical-path blocker: <stable blocker ID and dependent plans/cases waiting on it, plus why
+  one coordinator correction cycle is likely to reduce blocked time; otherwise none>
 Candidate: <worktree and exact tested tip SHA; included commits; clean tree for delegated
   acceptance, or source fingerprint for a direct uncommitted development checkpoint>
 Offline evidence: <focused commands and results; saved artifact provenance if reused>
@@ -16,6 +19,10 @@ Target and authority: <configured account/active castle/instance, live role, all
 Lease and cleanup: <declared bundle, one execution owner, initial instance state,
   long-reservation scope/terminal owner if declared, stable ending screen,
   preservation decision; never include a reservation receipt>
+Execution mode and owner: <ordinary direct execution | Devin assignment | coordinator correction checkpoint; current owner>
+Correction checkpoint: <finding ID and one testable hypothesis, or none; 20-minute lead
+  active-effort cap, elapsed effort, cycle state (not started/in progress/complete);
+  next owner and trigger>
 
 | ID | Behavior and production entry | Preconditions and dependencies | Action | Observable pass condition | Result | Evidence / next step |
 |---|---|---|---|---|---|---|

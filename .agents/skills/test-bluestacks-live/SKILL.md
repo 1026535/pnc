@@ -29,6 +29,23 @@ Use live validation only when its fidelity is needed. Prefer deterministic offli
 6. Change code or state only when evidence supports it. Repeat only affected checks after a relevant change or materially different diagnosis; add an offline regression for a reproducible defect when practical. Record required cases that could not run as pending, without treating them as passing.
 7. End at a stable screen when the existing flow supports it, apply the outer assignment's cleanup decision, and record every lease release and per-case result in the batch document.
 
+## Coordinator correction checkpoint
+
+The coordinator may take one short correction cycle only for a named, high-impact critical-path blocker whose unresolved result prevents dependent acceptance or work from advancing, and only when one lead-owned feedback cycle is likely to reduce blocked time. Saved evidence must support one narrow, testable hypothesis and one small source correction. Routine feature checks and ordinary failed cases remain with the assigned live-test owner. This is an exception for a short feedback loop, not the default owner for delegated live execution. All of these conditions must hold:
+
+- The current request or approved plan authorizes the lead to edit the affected source and perform the live action. Do not infer either authority from offline-test permission or from a Devin assignment.
+- The failed boundary, affected production entry, and expected postcondition are clear from saved evidence. The correction does not require a second hypothesis, broad exploration, or an unrelated architecture change.
+- The epic ledger and live-test batch name the blocker and the dependent plans or cases it holds up. If no downstream work is waiting, use the ordinary assigned live-test workflow.
+- The checkpoint is non-spending. Resource-spending work follows `write-code-live` and its exact action, target, and budget requirements; it is not eligible for this fast path.
+- Any Devin assignment that touched the source or target has returned a terminal handoff; verify its process and live resources are released before lead edits or ADB access. Do not compete with an active worker.
+- The target, role, identity, report destination, and lease or reservation ownership are resolved under this skill's normal rules. Use a task-owned checkout and record the exact candidate SHA or direct-edit source fingerprint plus production import root.
+
+Limit the checkpoint to 20 minutes of lead active effort, including evidence review, setup, one corrective candidate, one affected live-test batch, cleanup, and reporting. This is a pilot coordination budget, not a timeout for an in-flight UI action: do not interrupt an action unsafely or omit required cleanup. Do not restart the budget by renaming the attempt or creating another candidate.
+
+Use this sequence: review the existing failure artifacts; state the one hypothesis and affected cases in the existing batch; make the supported correction and add a practical offline regression when appropriate; run the smallest relevant offline check; pin the candidate and import root; acquire the normal lease and recheck identity and action preconditions; run the affected cases once; then release resources and update the batch and epic ledger. Keep the lead responsible for acceptance.
+
+Stop after a failed or inconclusive retest, when the time budget is reached, when a second hypothesis is needed, or whenever normal identity, lease, reservation, role, or mutation safeguards require stopping. Preserve evidence, keep unproven cases pending, and record the next owner and trigger. A later worker assignment must name the changed candidate, affected cases, retained proof, and unchanged or revised authority; it is not an automatic conversational retry. A passing action after manually establishing a precondition does not prove an automated entry route that the case is meant to cover. The checkpoint does not accept an epic or any cases it did not run.
+
 Run multiple castles or instances only when the contract names them, configuration differs materially, or observed behavior is target-dependent.
 
 ## Smoke Commands
