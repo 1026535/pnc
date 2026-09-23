@@ -5,12 +5,12 @@ from __future__ import annotations
 import unittest
 
 from pnc_automation.core.errors import ScreenClassificationError
-from pnc_automation.core.vision.ocr.ocr_service import RapidOcrService
+from pnc_automation.core.vision.ocr.ocr_service import OcrService
 
 from tests.support.pnc.capture_vision.shared_rapid_ocr_service import _shared_rapid_ocr_service
 
 
-def _require_rapid_ocr_service(test_case: unittest.TestCase) -> RapidOcrService:
+def _require_rapid_ocr_service(test_case: unittest.TestCase) -> OcrService:
     """Returns shared RapidOCR support or skips when the optional backend is unavailable."""
 
     try:

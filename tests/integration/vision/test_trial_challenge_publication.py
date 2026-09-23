@@ -52,7 +52,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
     OcrResult,
-    RapidOcrService,
+    OcrService,
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -104,7 +104,7 @@ _STATS_BACK_BOUNDS = Bounds(25, 11, 52, 32)
 class _BoundedRapidOcrService:
     """Use shared RapidOCR while recording calls and rejecting whole-frame reads."""
 
-    delegate: RapidOcrService
+    delegate: OcrService
     capture_size: tuple[int, int] | None = None
     calls: list[tuple[Bounds | None, tuple[int, int]]] = field(default_factory=list)
 

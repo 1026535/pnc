@@ -28,7 +28,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
     OcrResult,
-    RapidOcrService,
+    OcrService,
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -47,7 +47,7 @@ MAIL_TITLE_REGION = Bounds(97, 0, 389, 75)
 class _BoundedRapidOcrService:
     """Use shared RapidOCR while rejecting full-capture backend calls."""
 
-    delegate: RapidOcrService
+    delegate: OcrService
     capture_size: tuple[int, int] | None = None
     calls: list[tuple[Bounds | None, tuple[int, int]]] = field(default_factory=list)
 
