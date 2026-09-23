@@ -1801,6 +1801,20 @@
         "file_sha256": "2926e931aef1a9308e1dcc353cda0c97bc10e953bac36f058e801b56d371296d",
         "derivative": "Native RGBA 900x1600 session frame captured 2026-09-23T03:17:45Z at the end of the V19 live003 World Castle trial turn-003 run; only chat strip rows y=1395:1485 filled opaque black (0,0,0,255), all other pixels preserved. Same live session as the 03:12 route-source frame (run 20260923T031214Z_c43ce246); the two same-session frames are one correlated group, not independent validation. Installed build not recorded."
       }
+    },
+    {
+      "image": "campaign_stage_6_5_20260922.png",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "split": "reference",
+      "group": "2026-09-22/testing/m1_v14_stage_6_5",
+      "sha256": "6f98c42b47cfcc2529d6e4126b109f31c8b03948f087b68bd84cf8810009b43d",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_STAGE"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-22\\testing\\20260922T235029Z_core_20260922T234747Z_82d60eea_0045_c2_stage_after_0.png",
+        "derivative": "Native stage6-5 detail opened by a qualified tap, then misclassified as popup and auto-dismissed. Reference only; no independent holdout or live acceptance."
+      }
     }
   ]
 }

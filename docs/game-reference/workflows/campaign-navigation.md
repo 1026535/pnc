@@ -122,3 +122,35 @@ stage-5 node publishes no row rather than a guessed value, and the four locked
 nodes stay `no_action` with `number=None`. No completion, AP, formation, or
 battle state is inferred from the path frame. Live return acceptance and any
 formation proof remain pending with the lead.
+
+## Native stage ownership and map animation, September 22
+
+**Artifact-observed:** M1 runtime `20260922T234747Z_82d60eea`, capture0045
+(`tests/data/screen_recognition/campaign_stage_6_5_20260922.png`), shows the
+opened `[6-5] Marsh of Tear` detail, AP126/120 and Challenge cost12. The trace
+classified it as `PNC_POPUP`, then recovery tapped its Close at812,370;
+capture0046 shows the chapter after dismissal. The stage-entry tap succeeded
+visually. Missing feature identity caused the task-owned modal to be dismissed;
+the post-recovery chapter screenshot is not evidence that the tap did nothing.
+Installed build was not recorded. Confidence is high for this captured sequence,
+with no claim about other stage appearances or formation entry.
+
+The `campaign_stage_6_5` profile qualifies this captured appearance using separate
+title and Enemy lineup patches. Existing Close and Challenge controls are measured
+independently. No Chapter6 stage number, battle mode, completion or Auto-next state
+is inferred from the profile name. Stage content still comes from bounded OCR.
+Native gauge/cost crops need single-line normalization: the original900x1600
+detector split the gauge into overlapping `126/` and `5/120` reads and missed the
+cost. The gauge region now excludes the adjacent add-AP icon, and larger numeric
+strips use the canonical context's28px preprocessing with native frame/region
+provenance retained. Saved native reads are126/120 and12; reference reads remain
+150/120 and12. No resource action is authorized by this evidence.
+
+**Artifact-observed:** own157_farm runtime `20260922T232718Z_26f6cf57`, captures
+0041/0043, is a clear Campaign map that the prior broad node/terrain patch missed
+during animation (node score0.9249 below0.93 while scene score0.9982 passed).
+Cropping the existing reference patch to the Grandia Ruins label yields
+0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
+scene anchor and measured Home portal are unchanged. The two native map fixtures
+share one correlated validation group; the stage image is a reference, not a
+holdout. Corrected-candidate live stage/return acceptance remains required.

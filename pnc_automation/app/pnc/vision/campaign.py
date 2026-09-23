@@ -47,7 +47,11 @@ from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
 )
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrReadPurpose
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrReadPurpose,
+    OcrResult,
+)
 from pnc_automation.core.vision.template.template_matcher import (
     OpenCvTemplateMatcher,
     PreparedFrame,
@@ -552,12 +556,11 @@ def _stage_gauge_values(
 ) -> tuple[int | None, int | None]:
     """The ``power/maxPower`` pair only when one credible read resolves."""
 
-    result = ocr_context.read_result(
-        image,
-        scale_campaign_bounds(CAMPAIGN_STAGE_ACTION_POINTS_REGION, image.size),
-        purpose=OcrReadPurpose.CONTENT,
+    result = _read_stage_numeric_strip(
+        image=image,
+        ocr_context=ocr_context,
+        reference_region=CAMPAIGN_STAGE_ACTION_POINTS_REGION,
         detail="campaign_stage_action_points",
-        required_fact="campaign_stage_detail",
     )
     pairs = {
         (int(match.group(1)), int(match.group(2)))
@@ -574,12 +577,11 @@ def _stage_gauge_values(
 def _stage_cost_value(*, image: Image.Image, ocr_context: ObservationOcrContext) -> int | None:
     """The Challenge cost only when bounded reads prove one positive numeral."""
 
-    result = ocr_context.read_result(
-        image,
-        scale_campaign_bounds(CAMPAIGN_STAGE_CHALLENGE_COST_REGION, image.size),
-        purpose=OcrReadPurpose.CONTENT,
+    result = _read_stage_numeric_strip(
+        image=image,
+        ocr_context=ocr_context,
+        reference_region=CAMPAIGN_STAGE_CHALLENGE_COST_REGION,
         detail="campaign_stage_challenge_cost",
-        required_fact="campaign_stage_detail",
     )
     values = {
         value
@@ -591,6 +593,43 @@ def _stage_cost_value(*, image: Image.Image, ocr_context: ObservationOcrContext)
     if len(values) != 1:
         return None
     return next(iter(values))
+
+
+def _read_stage_numeric_strip(
+    *,
+    image: Image.Image,
+    ocr_context: ObservationOcrContext,
+    reference_region: Bounds,
+    detail: str,
+) -> OcrResult:
+    """Keep native-size numeric crops on the already qualified single-line OCR path.
+
+    The native900x1600 gauge was split into overlapping ``126/`` and ``5/120``
+    detections, while its Challenge cost produced no detection. Normalize only
+    these larger crops; the reference-size reads already have captured proof.
+    The canonical context preserves the original region and frame provenance.
+    """
+    region = scale_campaign_bounds(reference_region, image.size)
+    if image.height <= CAMPAIGN_REFERENCE_SIZE[1]:
+        return ocr_context.read_result(
+            image, region, purpose=OcrReadPurpose.CONTENT, detail=detail,
+            required_fact="campaign_stage_detail",
+        )
+    result = ocr_context.read_preprocessed_result(
+        image, region, preprocessing_id="campaign_stage_numeric_line_28px_v1",
+        prepare=_prepare_stage_numeric_strip, purpose=OcrReadPurpose.CONTENT,
+        detail=detail, required_fact="campaign_stage_detail",
+    )
+    assert result is not None
+    return result
+
+
+def _prepare_stage_numeric_strip(image: Image.Image, region: Bounds) -> Image.Image:
+    """Resize one bounded numeric line without including neighboring controls."""
+    crop = image.crop((region.x, region.y, region.x + region.width, region.y + region.height))
+    return crop.resize(
+        (max(1, round(crop.width * 28 / crop.height)), 28), Image.Resampling.LANCZOS
+    )
 
 
 def _to_reference_bounds(bounds: Bounds, frame: PreparedFrame) -> Bounds:

@@ -870,12 +870,22 @@
       "anchors": [
         {
           "image": "screen_anchors/popup/king_return_welcome_face.png",
-          "search_region": [78, 225, 115, 130],
+          "search_region": [
+            78,
+            225,
+            115,
+            130
+          ],
           "threshold": 0.95
         },
         {
           "image": "screen_anchors/popup/king_return_welcome_staff.png",
-          "search_region": [330, 120, 150, 145],
+          "search_region": [
+            330,
+            120,
+            150,
+            145
+          ],
           "threshold": 0.95
         }
       ],
@@ -885,14 +895,26 @@
           "popup_control_kind": "king_return_get_started",
           "anchor": {
             "image": "screen_anchors/popup/king_return_welcome_start.png",
-            "search_region": [195, 485, 160, 80],
+            "search_region": [
+              195,
+              485,
+              160,
+              80
+            ],
             "threshold": 0.9
           },
           "dismisses_surface": true
         }
       ],
-      "modal_bounds": [0, 0, 540, 960],
-      "occludes": ["PNC_HOME_CITY"]
+      "modal_bounds": [
+        0,
+        0,
+        540,
+        960
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "lucifer_special_offer",
@@ -6086,6 +6108,75 @@
       ],
       "occludes": [
         "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "campaign_stage_6_5",
+      "layout_id": "campaign_stage_6_5",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_stage_6_5_20260922.png",
+        "decoded_sha256": "6f98c42b47cfcc2529d6e4126b109f31c8b03948f087b68bd84cf8810009b43d",
+        "capture_group": "2026-09-22/testing/m1_v14_stage_6_5"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Observed6-5 Marsh of Tear stage modal: independent title and Enemy lineup anchors, normalized from native900x1600 with LANCZOS at540x960 and cropped [145,206,431,238] / [203,267,356,293]. Existing Close/Challenge templates independently score0.9898/0.9932; Close belongs to this stage surface. This qualifies only the observed6-5 appearance; no other-stage, formation, battle or live acceptance claim.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_stage_6_5_title.png",
+          "search_region": [
+            140,
+            201,
+            301,
+            42
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_stage_6_5_lineup.png",
+          "search_region": [
+            198,
+            262,
+            163,
+            36
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_close_button.png",
+            "search_region": [
+              466,
+              200,
+              46,
+              48
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_CAMPAIGN_BATTLE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_challenge_button.png",
+            "search_region": [
+              178,
+              643,
+              184,
+              54
+            ],
+            "threshold": 0.95
+          }
+        }
       ]
     }
   ]

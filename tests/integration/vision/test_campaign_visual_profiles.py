@@ -171,6 +171,75 @@ def _navigation_perception_with_backend(ocr_service: _CampaignCropOcrService) ->
 class CampaignVisualProfileTests(unittest.TestCase):
     """Require campaign identity and controls to remain evidence-backed and scoped."""
 
+    def test_native_grandia_animation_frames_keep_map_and_owned_home_control(self) -> None:
+        """The captured node animation cannot make a clear map lose its return route."""
+        for name in (
+            "campaign_map_grandia_pulse_20260922.png",
+            "campaign_map_grandia_return_20260922.png",
+        ):
+            capture = _capture(_image(name))
+            for publisher in ("builder", "navigation"):
+                with self.subTest(frame=name, publisher=publisher):
+                    observation = (
+                        _builder().build(capture)
+                        if publisher == "builder"
+                        else _navigation_perception().build(capture)
+                    )
+                    self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, observation.screen_type)
+                    self.assertEqual("clear", observation.decision.guard.value)
+                    control = observation.get(UiElementId.PNC_CAMPAIGN_HOME_PORTAL)
+                    self.assertIsNotNone(control)
+                    self.assertEqual(capture.frame_ref, control.frame_ref)
+
+    def test_native_stage_six_five_is_owned_content_and_never_generic_popup(self) -> None:
+        """The actual dialog previously auto-dismissed must publish its owned controls."""
+        capture = _capture(_image("campaign_stage_6_5_20260922.png"))
+        backend = _require_rapid_ocr_service(self)
+        for publisher in ("builder", "navigation"):
+            with self.subTest(publisher=publisher):
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if publisher == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertEqual(ScreenType.PNC_CAMPAIGN_STAGE, observation.screen_type)
+                self.assertEqual("clear", observation.decision.guard.value)
+                self.assertFalse(observation.blocking_popup)
+                self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                for selector in (
+                    UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,
+                ):
+                    control = observation.get(selector)
+                    self.assertIsNotNone(control)
+                    self.assertEqual(capture.frame_ref, control.frame_ref)
+                    self.assertEqual("campaign_stage_6_5", control.source_layout_id)
+                detail = observation.campaign_stage
+                self.assertIsNotNone(detail)
+                self.assertEqual((6, 5), (detail.chapter_number, detail.stage_number))
+                self.assertEqual((126, 120, 12), (
+                    detail.action_points, detail.max_action_points, detail.challenge_cost,
+                ))
+                self.assertEqual(capture.frame_ref, detail.frame_ref)
+                self.assertIsNone(detail.mode)
+
+    def test_native_stage_identity_requires_both_independent_anchors(self) -> None:
+        """Neither a title alone nor a generic lineup modal qualifies a stage."""
+        recognizer = load_visual_screen_recognizer()
+        image = _image("campaign_stage_6_5_20260922.png").resize(
+            (540, 960), Image.Resampling.LANCZOS
+        )
+        for region in ((140, 201, 441, 243), (198, 262, 361, 298)):
+            with self.subTest(region=region):
+                erased = image.copy()
+                ImageDraw.Draw(erased).rectangle(region, fill=(0, 0, 0))
+                result = recognizer.recognize(erased)
+                self.assertNotIn("campaign_stage_6_5", result.profile_ids)
+
     def test_persisted_southern_map_view_has_owned_home_return_on_both_paths(self) -> None:
         """The live reopened map needs its measured portal and only honest rows."""
         image = _image("campaign_map_southern_view_20260916.png")

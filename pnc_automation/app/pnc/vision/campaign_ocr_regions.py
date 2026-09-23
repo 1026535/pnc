@@ -14,8 +14,8 @@ CAMPAIGN_CHAPTER_TITLE_REGION = Bounds(x=205, y=38, width=325, height=60)
 CAMPAIGN_STAGE_TITLE_REGION = Bounds(x=120, y=201, width=300, height=49)
 """Measured stage-detail title bar; matches the reviewed title anchor search region."""
 
-CAMPAIGN_STAGE_ACTION_POINTS_REGION = Bounds(x=360, y=585, width=120, height=36)
-"""Measured stage-detail action-point gauge region carrying the ``power/maxPower`` read."""
+CAMPAIGN_STAGE_ACTION_POINTS_REGION = Bounds(x=368, y=585, width=96, height=36)
+"""Measured ``power/maxPower`` gauge, excluding the adjacent add-AP icon."""
 
 CAMPAIGN_STAGE_CHALLENGE_COST_REGION = Bounds(x=238, y=642, width=68, height=24)
 """Measured stage-detail Challenge cost numeral inside the control's top strip."""
