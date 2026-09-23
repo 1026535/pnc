@@ -38,7 +38,11 @@ py .agents/skills/devin-game-knowledge/scripts/consult_game_knowledge.py `
   --question "Determine what happens after the Daily quest claim control is tapped. Use saved evidence first; do not connect to the emulator or mutate game state."
 ```
 
-The launcher pins `swe-2-max`, uses Devin's read-only automatic permission mode, validates the exact Git root, records the pre/post worktree state, and stores the prompt, response, stderr, and result metadata under `.local-data/devin-game-knowledge/`. It must not be changed to dangerous or edit-accepting permissions for a knowledge consultation.
+The launcher pins `swe-2-max`, uses Devin's read-only automatic permission mode, validates the exact Git root, records the pre/post worktree state, and stores the prompt, response, stderr, run-scoped permission config, conversation export, and result metadata under `.local-data/devin-game-knowledge/`. It must not be changed to dangerous or edit-accepting permissions for a knowledge consultation.
+
+Each run writes a scoped `--config` that pre-approves only read and read-only inspection commands (file reads, `git log`/`diff`/`show`-class plumbing, `rg`/`find`-class searches, `python`/`py` for evidence analysis) and denies mutating Git, destructive shell, install, and `adb` verbs — this keeps a headless run from stalling on a confirmation prompt without widening the write surface.
+
+A run is `completed` only when Devin exits cleanly, the worktree is unchanged, and the response carries the `Handback:` memo line. A zero exit without that memo — including a headless tool rejection — is reported `incomplete` (exit 1), not `completed`; inspect `response.txt`, `stderr.log`, and `export.json`, then rerun or reframe the question. A memo returned after a recovered rejection still completes, with `tool_rejection: true` in `result.json` flagging the gap.
 
 For a longer question, use `--question-file` rather than putting sensitive or complex content in shell history. Do not use a second worker to duplicate the same unresolved investigation.
 

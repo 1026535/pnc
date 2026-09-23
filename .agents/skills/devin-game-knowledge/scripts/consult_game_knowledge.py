@@ -16,6 +16,108 @@ import sys
 
 MODEL = "swe-2-max"
 
+# A completed consultation must end with the memo's Handback line; a clean
+# exit code alone cannot prove Devin returned it (a headless tool rejection
+# exits 0 with a truncated response).
+# The memo may style the label (`**Handback**`) and put the token on the next
+# line, so match the label then the nearest token rather than one strict line.
+HANDBACK_RE = re.compile(
+    r"(?is)handback\b[\s*:`#-]*\*{0,2}\s*(READY_FOR_REVIEW|NEEDS_LEAD|BLOCKED|FAILED)\b"
+)
+TOOL_REJECTION_MARKER = "rejected a tool call that requires confirmation"
+
+# Permission rules for the run-scoped --config file. The launcher keeps
+# --permission-mode auto (read-only tools auto-approve); these rules widen
+# only the read/inspection surface a consultant legitimately needs so a
+# headless run never stalls on a confirmation prompt. Deny rules always win
+# over allows, keeping the obvious mutation paths closed.
+CONSULTANT_ALLOW_RULES = (
+    "Read(**)",
+    # Read-only Git plumbing only; every mutating subcommand is denied below.
+    "Exec(git status)",
+    "Exec(git log)",
+    "Exec(git show)",
+    "Exec(git diff)",
+    "Exec(git grep)",
+    "Exec(git blame)",
+    "Exec(git ls-files)",
+    "Exec(git ls-tree)",
+    "Exec(git cat-file)",
+    "Exec(git rev-parse)",
+    "Exec(git shortlog)",
+    "Exec(git describe)",
+    "Exec(git count-objects)",
+    # Read-only shell inspection and evidence analysis.
+    "Exec(rg)",
+    "Exec(grep)",
+    "Exec(find)",
+    "Exec(ls)",
+    "Exec(cat)",
+    "Exec(head)",
+    "Exec(tail)",
+    "Exec(wc)",
+    "Exec(sort)",
+    "Exec(uniq)",
+    "Exec(file)",
+    "Exec(stat)",
+    "Exec(dir)",
+    "Exec(type)",
+    "Exec(where)",
+    "Exec(echo)",
+    "Exec(python)",
+    "Exec(py)",
+)
+
+CONSULTANT_DENY_RULES = (
+    # Mutating Git state must stay unreachable for a read-only consultation.
+    "Exec(git add)",
+    "Exec(git am)",
+    "Exec(git apply)",
+    "Exec(git bisect)",
+    "Exec(git branch)",
+    "Exec(git checkout)",
+    "Exec(git cherry-pick)",
+    "Exec(git clean)",
+    "Exec(git clone)",
+    "Exec(git commit)",
+    "Exec(git config)",
+    "Exec(git fetch)",
+    "Exec(git init)",
+    "Exec(git merge)",
+    "Exec(git mv)",
+    "Exec(git pull)",
+    "Exec(git push)",
+    "Exec(git rebase)",
+    "Exec(git remote)",
+    "Exec(git reset)",
+    "Exec(git restore)",
+    "Exec(git revert)",
+    "Exec(git rm)",
+    "Exec(git stash)",
+    "Exec(git submodule)",
+    "Exec(git switch)",
+    "Exec(git tag)",
+    "Exec(git update-ref)",
+    "Exec(git worktree)",
+    # Destructive/writing shell verbs and live/install paths the contract bans.
+    "Exec(rm)",
+    "Exec(del)",
+    "Exec(rmdir)",
+    "Exec(rd)",
+    "Exec(move)",
+    "Exec(ren)",
+    "Exec(copy)",
+    "Exec(xcopy)",
+    "Exec(mkdir)",
+    "Exec(md)",
+    "Exec(touch)",
+    "Exec(tee)",
+    "Exec(sed)",
+    "Exec(pip)",
+    "Exec(npm)",
+    "Exec(adb)",
+)
+
 
 def git(repo: Path, *arguments: str) -> str:
     """Run Git without a shell and return UTF-8 output."""
@@ -103,6 +205,51 @@ def snapshot(repo: Path) -> dict[str, str]:
     }
 
 
+def consultant_config() -> dict:
+    """Build the run-scoped Devin config holding the read-only allow rules.
+
+    The consultation stays in ``auto`` permission mode; the allow list only
+    widens read/inspection commands so headless execution never waits on a
+    confirmation prompt, and the deny list keeps mutation verbs closed.
+    """
+    return {
+        "auto_update": False,
+        "notify": "never",
+        "theme_mode": "nocolor",
+        "subagents_enabled": False,
+        "read_config_from": {"claude": False, "cursor": False, "windsurf": False},
+        "permissions": {
+            "allow": list(CONSULTANT_ALLOW_RULES),
+            "deny": list(CONSULTANT_DENY_RULES),
+        },
+    }
+
+
+def consultation_status(
+    returncode: int,
+    unchanged: bool,
+    response_text: str,
+    stderr_text: str,
+) -> tuple[str, str | None, bool]:
+    """Classify the run as (status, handback, tool_rejection_seen).
+
+    ``completed`` requires a clean exit, an unchanged worktree, and the memo's
+    ``Handback:`` line — a zero exit without a returned memo, including an
+    observed headless tool rejection, is ``incomplete``, not a consultation.
+    """
+
+    handback_match = HANDBACK_RE.search(response_text)
+    handback = handback_match.group(1).upper() if handback_match else None
+    rejected = TOOL_REJECTION_MARKER in stderr_text
+    if returncode != 0:
+        return "failed", handback, rejected
+    if not unchanged:
+        return "worktree-changed", handback, rejected
+    if handback is None:
+        return "incomplete", handback, rejected
+    return "completed", handback, rejected
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse the narrow consultation interface."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -133,11 +280,16 @@ def main() -> int:
     prompt_path = run_dir / "prompt.txt"
     response_path = run_dir / "response.txt"
     stderr_path = run_dir / "stderr.log"
+    config_path = run_dir / "devin-config.json"
+    export_path = run_dir / "export.json"
     result_path = run_dir / "result.json"
     prompt_path.write_text(consultation_prompt(question), encoding="utf-8")
+    config_path.write_text(json.dumps(consultant_config(), indent=2) + "\n", encoding="utf-8")
 
     command = [
         devin_executable(),
+        "--config",
+        str(config_path),
         "--print",
         "--model",
         MODEL,
@@ -147,6 +299,8 @@ def main() -> int:
         "false",
         "--prompt-file",
         str(prompt_path),
+        "--export",
+        str(export_path),
     ]
     completed = subprocess.run(
         command,
@@ -161,17 +315,21 @@ def main() -> int:
     stderr_path.write_text(completed.stderr, encoding="utf-8")
     after = snapshot(repo)
     unchanged = before == after
-    status = "completed" if completed.returncode == 0 and unchanged else "failed"
-    if completed.returncode == 0 and not unchanged:
-        status = "worktree-changed"
+    status, handback, tool_rejection = consultation_status(
+        completed.returncode, unchanged, completed.stdout, completed.stderr
+    )
     result = {
         "status": status,
         "model": MODEL,
         "returncode": completed.returncode,
+        "handback": handback,
+        "tool_rejection": tool_rejection,
         "repo": str(repo),
         "prompt_path": str(prompt_path),
         "response_path": str(response_path),
         "stderr_path": str(stderr_path),
+        "config_path": str(config_path),
+        "export_path": str(export_path),
         "worktree_unchanged": unchanged,
         "before": before,
         "after": after,
@@ -185,6 +343,19 @@ def main() -> int:
         print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
     if completed.returncode != 0:
         print(f"Devin exited with code {completed.returncode}; see {stderr_path}.", file=sys.stderr)
+    if status == "incomplete":
+        reason = "a headless tool rejection" if tool_rejection else "no Handback memo line"
+        print(
+            f"The consultation ended without a final memo ({reason}); "
+            f"see {response_path} and {export_path}.",
+            file=sys.stderr,
+        )
+    elif tool_rejection:
+        print(
+            f"Devin returned a memo but a tool call was rejected mid-run; "
+            f"review {stderr_path} for what evidence may be missing.",
+            file=sys.stderr,
+        )
     if not unchanged:
         print(
             "The consultation changed the worktree; preserve and review the changes before any other writer starts.",
