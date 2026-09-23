@@ -19,7 +19,16 @@ checkpoints, and whether this assignment owns its terminal release; transport th
 receipt to the worker without printing its contents. If spending may occur, give
 the exact action, target, resource type, maximum amount or attempts, precondition,
 success signal, and budget stop condition from the request or approved plan. The
-configured live role and canonical lease remain authoritative.
+configured live role and canonical lease remain authoritative. The owner of an active
+long reservation may start a stopped configured target inside that reservation to
+restore the assigned work when its configured role permits instance launch. The worker
+must renew and validate the matching receipt, acquire the canonical task lease, confirm
+the target is stopped, and use the existing resolver. This permits starting that stopped
+target without a separate per-instance launch grant. It does not permit stopping or
+restarting a running target, launching outside the reservation, exceeding role or
+`read_only` limits, switching accounts or castles, or spending resources; preserve
+instances already running. Leave a recovered target running at handback; closing it
+requires separate explicit authorization.
 
 Reporting destination:
 Absolute report_repository_root for the primary checkout whose collections the Monday
@@ -67,7 +76,9 @@ boundary and report that feature case as not_run; do not infer its behavior.
 For an unrelated castle-identity or BlueStacks instance-management failure, the
 worker should attempt the smallest evidence-backed correction through existing
 identity, status, or readiness entry points. Host-management mutation requires
-explicit assignment scope and the role, idle-lease, and `read_only` boundaries.
+explicit assignment scope and the role, idle-lease, and `read_only` boundaries. A
+matching active long reservation supplies scope to start its own stopped configured
+target, as described in Target and authority above.
 Revalidate identity and readiness before
 resuming the assigned tests. Record the incident even if recovered. Do not spend the
 assignment fixing unrelated code or investigating the host without a bound; leave
