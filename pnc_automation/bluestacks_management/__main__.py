@@ -29,7 +29,11 @@ from pnc_automation.bluestacks_management.instance_lease import (
     InstanceLeaseRegistry,
 )
 from pnc_automation.bluestacks_management.instance_reservation import RESERVATION_RECEIPT_ENV
-from pnc_automation.core.errors import ConfigurationError
+from pnc_automation.bluestacks_management.reservation_runner import (
+    resolve_configured_instances,
+    run_reserved_command,
+    validate_shared_lease_root,
+)
 from pnc_automation.bluestacks_management.instance_memory_monitor import BlueStacksInstanceMemoryMonitor
 from pnc_automation.bluestacks_management.instance_memory_monitor import MemoryMonitorDisposition
 from pnc_automation.bluestacks_management.instance_shutdown import (
@@ -139,6 +143,44 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("--config", default="config/accounts.yaml")
     status_parser.add_argument("--lease-root", type=Path, default=DEFAULT_INSTANCE_LEASE_ROOT)
 
+    run_parser = subparsers.add_parser(
+        "run-reserved",
+        help="Run an existing command with an automatically renewed BlueStacks reservation.",
+        description=(
+            "Claim a reservation for this command, or resume the receipt supplied by "
+            f"--receipt / ${RESERVATION_RECEIPT_ENV}. The child inherits the receipt path; "
+            "the reservation remains active after the child exits unless --release-on-exit is set."
+        ),
+    )
+    run_parser.add_argument(
+        "--instance",
+        action="append",
+        dest="instances",
+        metavar="DISPLAY_NAME",
+        help="Configured display name; repeat for a declared multi-instance bundle.",
+    )
+    run_parser.add_argument("--scope-id", help="Required when claiming a new reservation.")
+    run_parser.add_argument("--label", default="agent", help="Safe owner label for status diagnostics.")
+    run_parser.add_argument("--duration-seconds", type=float, default=None)
+    run_parser.add_argument("--config", default="config/accounts.yaml")
+    run_parser.add_argument(
+        "--lease-root",
+        type=Path,
+        default=DEFAULT_INSTANCE_LEASE_ROOT,
+        help="Must resolve to the canonical root used by normal task admission.",
+    )
+    run_parser.add_argument("--receipt", type=Path, default=None)
+    run_parser.add_argument(
+        "--release-on-exit",
+        action="store_true",
+        help="Release a new or resumed reservation when this command finishes; use only at terminal scope completion.",
+    )
+    run_parser.add_argument(
+        "script_args",
+        nargs=argparse.REMAINDER,
+        help="Existing script or command and its arguments, introduced by --.",
+    )
+
     arguments = parser.parse_args(argv)
     if arguments.command == "monitor":
         return _run_monitor(arguments)
@@ -150,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         return _renew_reservation(arguments)
     if arguments.command == "release-reservation":
         return _release_reservation(arguments)
+    if arguments.command == "run-reserved":
+        return _run_reserved(arguments, parser=parser)
     return _reservation_status(arguments)
 
 
@@ -251,7 +295,7 @@ def _claim_reservation(arguments: argparse.Namespace) -> int:
 
     try:
         config = load_bluestacks_host_config(Path(arguments.config))
-        instances = _resolve_configured_instances(config, tuple(arguments.instances))
+        instances = resolve_configured_instances(config, tuple(arguments.instances))
     except Exception as error:
         _report_cli_failure(None, error, default_phase="configuration")
         return 1
@@ -281,6 +325,50 @@ def _claim_reservation(arguments: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _run_reserved(arguments: argparse.Namespace, *, parser: argparse.ArgumentParser) -> int:
+    """Runs an existing script under a claim or resumes the carried receipt."""
+
+    command = list(arguments.script_args)
+    if command and command[0] == "--":
+        command.pop(0)
+    if not command:
+        parser.error("run-reserved requires a command after --")
+    try:
+        validate_shared_lease_root(arguments.lease_root)
+    except ValueError as error:
+        parser.error(str(error))
+    try:
+        result = run_reserved_command(
+            command,
+            instances=tuple(arguments.instances) if arguments.instances else None,
+            scope_id=arguments.scope_id,
+            owner_label=arguments.label,
+            config_path=arguments.config,
+            lease_root=arguments.lease_root,
+            duration_seconds=arguments.duration_seconds,
+            receipt_path=arguments.receipt,
+            release_on_exit=arguments.release_on_exit,
+        )
+        if result.retained_receipt_path is not None:
+            print(
+                json.dumps(
+                    {
+                        "reservation_retained": True,
+                        "receipt_path": str(result.retained_receipt_path),
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+        return result.return_code
+    except KeyboardInterrupt:
+        return 130
+    except Exception as error:
+        _report_cli_failure(None, error, default_phase="state")
+        return 1
 
 
 def _renew_reservation(arguments: argparse.Namespace) -> int:
@@ -365,32 +453,6 @@ def _reservation_status(arguments: argparse.Namespace) -> int:
         )
     )
     return 0
-
-
-def _resolve_configured_instances(
-    config: BlueStacksHostConfig, display_names: tuple[str, ...]
-) -> tuple[str, ...]:
-    """Maps requested names onto canonical configured display names; rejects unknowns."""
-
-    configured = {instance.display_name.casefold(): instance.display_name for instance in config.instances}
-    resolved: list[str] = []
-    seen: set[str] = set()
-    for name in display_names:
-        key = name.strip().casefold()
-        canonical = configured.get(key)
-        if canonical is None:
-            raise ConfigurationError(
-                "Unknown BlueStacks display name for a reservation claim.",
-                display_name=name.strip(),
-            )
-        if key in seen:
-            raise ConfigurationError(
-                "A reservation claim cannot repeat a configured display name.",
-                display_name=canonical,
-            )
-        seen.add(key)
-        resolved.append(canonical)
-    return tuple(resolved)
 
 
 def _receipt_argument(arguments: argparse.Namespace) -> Path | None:
