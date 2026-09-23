@@ -29,7 +29,15 @@ from tools.test_selection.git_changes import base_revision, changed_paths, pytho
 from tools.test_selection.models import COVERAGE_SELECTED_TIERS, SelectionPlan, inventory
 from tools.test_selection.ownership import group_matches, load_rules
 from tools.test_selection.planner import affected_plan
-from tools.test_selection.reporting import TimingResult, describe_tests, environment, write_json, write_timings
+from tools.test_selection.reporting import (
+    TimedTestSuite,
+    TimingResult,
+    describe_tests,
+    environment,
+    summarize_run_timing,
+    write_json,
+    write_timings,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,6 +72,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--results", type=Path, default=ROOT / ".test-impact/results.json")
     parser.add_argument(
+        "--archive-report-dir",
+        type=Path,
+        help=("Archive each completed run under a UTC-stamped child directory "
+              "containing results.json, timings.csv, and summary.json"),
+    )
+    parser.add_argument(
         "--contexts",
         action="store_true",
         help=("Mode-dependent coverage evidence: affected selects contract/integration "
@@ -79,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     os.environ["PNC_TEST_FIXTURE_PROFILE"] = "portable"
     os.chdir(ROOT)
     try:
+        selection_started = time.perf_counter()
         head = resolve(ROOT, "HEAD")
         paths = working_paths(ROOT)
         tests = inventory(paths)
@@ -139,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(f"Unknown or empty group: {args.group}")
         plan.source_fingerprint = candidate_fingerprint
         plan.inventory_modules = sorted(test.module for test in tests)
+        selection_seconds = round(time.perf_counter() - selection_started, 6)
         write_json(args.json, plan.document())
         print(f"{args.mode}: {len(plan.reasons)}/{len(tests)} portable modules; {len(plan.fallbacks)} full-suite reasons", flush=True)
         if args.explain or args.dry_run:
@@ -149,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
             print("No test execution required: unchanged or explicitly documentation-only changes.")
             write_json(args.results, {"head": head, "tests": [], "succeeded": True, "no_tests_reason": "unchanged or documentation-only", "selection": plan.document()})
             return 0
+        collection_started = time.perf_counter()
         coverage = None
         if args.mode == "measure":
             from coverage import Coverage
@@ -161,13 +178,17 @@ def main(argv: list[str] | None = None) -> int:
             if args.contexts:
                 coverage.switch_context(COLLECTION_CONTEXT)
         loader = unittest.TestLoader()
-        selected = unittest.TestSuite(loader.loadTestsFromName(name) for name in sorted(plan.reasons))
+        selected = unittest.TestSuite(
+            TimedTestSuite(name, loader.loadTestsFromName(name))
+            for name in sorted(plan.reasons)
+        )
         discovered = describe_tests(flatten(selected))
         ids = [test["test_id"] for test in discovered]
         if len(ids) != len(set(ids)) or not ids:
             raise ValueError("Selected inventory contains duplicate tests or is unexpectedly empty")
         if coverage and args.contexts:
             coverage.switch_context("")
+        collection_seconds = round(time.perf_counter() - collection_started, 6)
         runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 1,
             resultclass=lambda *a, **kw: TimingResult(
                 *a,
@@ -176,7 +197,10 @@ def main(argv: list[str] | None = None) -> int:
                 switch_contexts=args.mode == "measure" and args.contexts,
                 **kw,
             ))
+        execution_started = time.perf_counter()
         result = runner.run(selected)
+        execution_seconds = round(time.perf_counter() - execution_started, 6)
+        reporting_started = time.perf_counter()
         if coverage:
             coverage.stop()
             coverage.save()
@@ -189,21 +213,55 @@ def main(argv: list[str] | None = None) -> int:
                     seed_contexts(ROOT / ".test-impact/contexts.json", coverage, ROOT, new, tests, head)
                 else:
                     (ROOT / ".test-impact/contexts.json").unlink(missing_ok=True)
-        elapsed = round(time.perf_counter() - started, 6)
         env = environment()
-        metadata = {"schema_version": 1, "run_id": uuid4().hex, "commit_sha": head,
+        records = sorted(result.records.values(), key=lambda row: row["test_id"])
+        reporting_seconds = round(time.perf_counter() - reporting_started, 6)
+        elapsed = round(time.perf_counter() - started, 6)
+        timing = summarize_run_timing(
+            records,
+            phase_seconds={
+                "selection": selection_seconds,
+                "collection": collection_seconds,
+                "execution": execution_seconds,
+                "reporting": reporting_seconds,
+            },
+            total_run_seconds=elapsed,
+            module_wall_seconds=result.module_wall_seconds,
+        )
+        phase_seconds = timing["phases"]
+        metadata = {"schema_version": 2, "run_id": uuid4().hex, "commit_sha": head,
                     "source_fingerprint": candidate_fingerprint, "utc_timestamp": datetime.now(timezone.utc).isoformat(),
                     "python": env["python"], "fixture_profile": "portable",
                     "tool_versions": json.dumps({k: v for k, v in env["packages"].items() if k in {"coverage", "pytest", "pytest-testmon"}}, sort_keys=True),
-                    "total_run_seconds": elapsed}
-        records = sorted(result.records.values(), key=lambda row: row["test_id"])
-        write_json(args.results, {"metadata": metadata, "environment": env, "selection": plan.document(),
-                   "discovered_test_ids": ids, "discovered_tests": discovered,
-                   "inventory_modules": plan.inventory_modules,
-                   "tests": records, "succeeded": result.wasSuccessful()})
+                    "total_run_seconds": elapsed,
+                    "selection_seconds": phase_seconds["selection"],
+                    "collection_seconds": phase_seconds["collection"],
+                    "execution_seconds": phase_seconds["execution"],
+                    "reporting_seconds": phase_seconds["reporting"],
+                    "test_execution_seconds": timing["test_execution_seconds"],
+                    "unattributed_seconds": timing["unattributed_seconds"]}
+        report = {"metadata": metadata, "environment": env, "selection": plan.document(),
+                  "discovered_test_ids": ids, "discovered_tests": discovered,
+                  "inventory_modules": plan.inventory_modules,
+                  "tests": records, "timing": timing,
+                  "succeeded": result.wasSuccessful()}
+        write_json(args.results, report)
         csv_path = args.csv or (local_report_root() / "test_timings.csv" if args.mode == "measure" else None)
         if csv_path:
             write_timings(csv_path, records, metadata)
+        if args.archive_report_dir:
+            archive_name = (
+                datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                + "-" + metadata["run_id"]
+            )
+            archive_dir = args.archive_report_dir / archive_name
+            write_json(archive_dir / "results.json", report)
+            write_timings(archive_dir / "timings.csv", records, metadata)
+            write_json(archive_dir / "summary.json", {
+                "metadata": metadata,
+                "timing": timing,
+                "succeeded": result.wasSuccessful(),
+            })
         print(f"Total including selection/collection/reporting: {elapsed:.3f}s", flush=True)
         return 0 if result.wasSuccessful() else 1
     except (ValueError, OSError, ImportError) as error:

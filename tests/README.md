@@ -150,19 +150,37 @@ outputs. `measure` defaults its timing CSV to
 `.local-data/reports/` for routine reports, timing CSVs, and similar outputs;
 use `.test-impact/` for test-selection scratch evidence.
 
+To retain a weekly full-run history instead of overwriting the latest evidence,
+pass `--archive-report-dir`:
+
+```powershell
+.venv/Scripts/python.exe tools/run_tests.py full --archive-report-dir .local-data/reports/test-timing-weekly
+```
+
+Each completed run creates a UTC-stamped child directory containing
+`results.json`, `timings.csv`, and `summary.json`. Archive persistence happens
+after the timing snapshot, so its write time is not included in the run phases
+or `total_run_seconds`.
+
 Results retain the complete portable module inventory, discovered test IDs and
 their module/class identities, outcomes, skip reasons, and setup-through-cleanup
-durations. Every outcome records its explicit module owner, scope, fixture phase,
-and accounted-for test IDs. Class/module setup errors or skips account for the
-discovered tests they prevented from running; teardown outcomes do not excuse
-missing execution. Fixture IDs are not parsed as ordinary test method IDs.
+durations. Result JSON also records selection, collection, execution, and
+reporting phase durations, the sum of per-test durations, unattributed wall time,
+and module-level timing/status summaries. Every outcome records its explicit
+module owner, scope, fixture phase, and accounted-for test IDs. Class/module
+setup errors or skips account for the discovered tests they prevented from
+running; teardown outcomes do not excuse missing execution. Fixture IDs are not
+parsed as ordinary test method IDs.
 
 CSV rows repeat provenance: run ID, commit SHA, source fingerprint,
 UTC timestamp, Python/tool versions, portable fixture profile, and total run
-time, alongside owner, tier/component, and per-test fields. The run/selection
-source fingerprint includes file-byte hashes for tracked files and non-ignored
-untracked files, including resource and YAML changes. It is separate from the Python-only source
-fingerprint used to validate coverage context seeds. JSON publication is atomic.
+time, alongside phase totals, owner, tier/component, and per-test fields. The
+reporting phase covers coverage finalization and report preparation; artifact
+write overhead is measured outside the timing snapshot and is not included in
+the run phases or `total_run_seconds`. The run/selection source fingerprint includes file-byte hashes for tracked
+files and non-ignored untracked files, including resource and YAML changes. It
+is separate from the Python-only source fingerprint used to validate coverage
+context seeds. JSON publication is atomic.
 Check both command status and result evidence; a selection-only artifact is
 not a passing run. Exit codes are `0` for success (including a documented empty
 selection), `1` for test failures/errors, and `2` for runner/configuration errors.

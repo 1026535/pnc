@@ -98,6 +98,14 @@ class RunnerCliTests(unittest.TestCase):
             "test_id": test_id, "module": module, "class_id": module + ".AvailableCase",
         }])
         self.assertEqual(report["tests"][0]["status"], "passed")
+        self.assertEqual(report["metadata"]["schema_version"], 2)
+        self.assertEqual(
+            set(report["timing"]["phases"]),
+            {"collection", "execution", "reporting", "selection"},
+        )
+        self.assertEqual(report["timing"]["modules"][0]["module"], module)
+        self.assertEqual(report["timing"]["modules"][0]["test_count"], 1)
+        self.assertGreaterEqual(report["timing"]["modules"][0]["wall_time_seconds"], 0.0)
         return report
 
     def test_invalid_group_returns_two_without_loading_tests(self) -> None:
@@ -213,6 +221,22 @@ class RunnerCliTests(unittest.TestCase):
         publish_seed.assert_not_called()
         coverage_factory.return_value.switch_context.assert_not_called()
         self.python_snapshot.assert_not_called()
+
+    def test_archive_report_writes_timestamped_results_and_summary(self) -> None:
+        archive_root = self.root / ".local-data" / "reports" / "weekly"
+        self.assertEqual(
+            self.invoke("full", "--archive-report-dir", str(archive_root)),
+            0,
+        )
+
+        archive_runs = list(archive_root.iterdir())
+        self.assertEqual(len(archive_runs), 1)
+        archive = archive_runs[0]
+        self.assertRegex(archive.name, r"^\d{8}T\d{6}Z-[0-9a-f]{32}$")
+        self.assertTrue((archive / "results.json").is_file())
+        self.assertTrue((archive / "timings.csv").is_file())
+        summary = json.loads((archive / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["timing"]["modules"][0]["module"], "tests.unit.sample.test_available")
 
     def test_measure_with_contexts_switches_contexts_and_publishes_seed(self) -> None:
         """Enables per-test contexts and publishes only after a complete measurement."""

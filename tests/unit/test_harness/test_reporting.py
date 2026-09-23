@@ -12,7 +12,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tools.test_selection.reporting import (
-    TimingResult, describe_tests, write_json, write_timings,
+    TimingResult, describe_tests, summarize_module_timings,
+    summarize_run_timing, write_json, write_timings,
 )
 
 
@@ -202,6 +203,55 @@ class TimingResultTests(unittest.TestCase):
             result = run_cases(case)
         self.assertEqual(result.records[case.id()]["duration_seconds"], 17.0)
 
+    def test_module_timing_summary_groups_tests_and_fixture_records(self) -> None:
+        records = [
+            {"module": "tests.unit.sample", "scope": "test", "status": "passed", "duration_seconds": 1.25},
+            {"module": "tests.unit.sample", "scope": "test", "status": "skipped", "duration_seconds": 0.0},
+            {"module": "tests.unit.sample", "scope": "class", "status": "error", "duration_seconds": 0.0},
+            {"module": "tests.integration.other", "scope": "test", "status": "failed", "duration_seconds": 2.5},
+        ]
+
+        self.assertEqual(summarize_module_timings(records, {
+            "tests.integration.other": 4.0,
+            "tests.unit.sample": 3.0,
+        }), [
+            {
+                "module": "tests.integration.other",
+                "test_count": 1,
+                "test_duration_seconds": 2.5,
+                "wall_time_seconds": 4.0,
+                "slowest_test_seconds": 2.5,
+                "test_status_counts": {"failed": 1},
+                "recorded_fixture_count": 0,
+            },
+            {
+                "module": "tests.unit.sample",
+                "test_count": 2,
+                "test_duration_seconds": 1.25,
+                "wall_time_seconds": 3.0,
+                "slowest_test_seconds": 1.25,
+                "test_status_counts": {"passed": 1, "skipped": 1},
+                "recorded_fixture_count": 1,
+            },
+        ])
+
+    def test_run_timing_exposes_phases_and_unattributed_wall_time(self) -> None:
+        records = [{
+            "module": "tests.unit.sample", "scope": "test", "status": "passed",
+            "duration_seconds": 1.5,
+        }]
+
+        timing = summarize_run_timing(
+            records,
+            phase_seconds={"execution": 2.0, "selection": 0.5},
+            total_run_seconds=4.0,
+        )
+
+        self.assertEqual(timing["phases"], {"execution": 2.0, "selection": 0.5})
+        self.assertEqual(timing["test_execution_seconds"], 1.5)
+        self.assertEqual(timing["unattributed_seconds"], 1.5)
+        self.assertEqual(timing["modules"][0]["module"], "tests.unit.sample")
+
 
 class EvidenceWriterTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -262,6 +312,12 @@ class EvidenceWriterTests(unittest.TestCase):
             "tool_versions": json.dumps({"coverage": "7.10.7"}),
             "fixture_profile": "portable",
             "total_run_seconds": 8.25,
+            "selection_seconds": 0.75,
+            "collection_seconds": 1.25,
+            "execution_seconds": 5.5,
+            "reporting_seconds": 0.5,
+            "test_execution_seconds": 5.25,
+            "unattributed_seconds": 0.25,
         }
         records = [
             {

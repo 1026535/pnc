@@ -9,7 +9,7 @@ import os
 import platform
 import time
 import unittest
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TypedDict
 from uuid import uuid4
@@ -57,6 +57,80 @@ def describe_tests(cases: Iterable[unittest.TestCase]) -> list[TestIdentity]:
          "class_id": f"{type(test).__module__}.{type(test).__qualname__}"}
         for test in cases
     ]
+
+
+def summarize_module_timings(
+    records: Iterable[dict],
+    module_wall_seconds: Mapping[str, float] | None = None,
+) -> list[dict]:
+    """Aggregate test durations and terminal outcomes by owning module."""
+    module_wall_seconds = module_wall_seconds or {}
+    modules: dict[str, dict] = {}
+    for record in records:
+        module = record["module"]
+        summary = modules.setdefault(module, {
+            "module": module,
+            "test_count": 0,
+            "test_duration_seconds": 0.0,
+            "wall_time_seconds": None,
+            "slowest_test_seconds": 0.0,
+            "test_status_counts": {},
+            "recorded_fixture_count": 0,
+        })
+        if record["scope"] != "test":
+            summary["recorded_fixture_count"] += 1
+            continue
+        duration = float(record.get("duration_seconds", 0.0))
+        summary["test_count"] += 1
+        summary["test_duration_seconds"] += duration
+        summary["slowest_test_seconds"] = max(
+            summary["slowest_test_seconds"], duration
+        )
+        status = record["status"]
+        status_counts = summary["test_status_counts"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    for summary in modules.values():
+        module = summary["module"]
+        summary["test_duration_seconds"] = round(
+            summary["test_duration_seconds"], 6
+        )
+        if module in module_wall_seconds:
+            summary["wall_time_seconds"] = round(module_wall_seconds[module], 6)
+        summary["slowest_test_seconds"] = round(
+            summary["slowest_test_seconds"], 6
+        )
+        summary["test_status_counts"] = dict(
+            sorted(summary["test_status_counts"].items())
+        )
+    return [modules[module] for module in sorted(modules)]
+
+
+def summarize_run_timing(
+    records: list[dict],
+    *,
+    phase_seconds: Mapping[str, float],
+    total_run_seconds: float,
+    module_wall_seconds: Mapping[str, float] | None = None,
+) -> dict:
+    """Return phase, test, module, and unaccounted wall-time summaries."""
+    phases = {
+        name: round(float(seconds), 6)
+        for name, seconds in sorted(phase_seconds.items())
+    }
+    test_seconds = round(sum(
+        float(record.get("duration_seconds", 0.0))
+        for record in records
+        if record.get("scope") == "test"
+    ), 6)
+    total = round(float(total_run_seconds), 6)
+    phase_total = sum(phases.values())
+    return {
+        "phases": phases,
+        "test_execution_seconds": test_seconds,
+        "unattributed_seconds": round(max(0.0, total - phase_total), 6),
+        "modules": summarize_module_timings(records, module_wall_seconds),
+    }
 
 
 def record_owners(inventory: list[TestIdentity]) -> dict[str, RecordOwner]:
@@ -107,6 +181,23 @@ def record_owners(inventory: list[TestIdentity]) -> dict[str, RecordOwner]:
     return owners
 
 
+class TimedTestSuite(unittest.TestSuite):
+    """Measure the wall time of one module suite, including shared fixtures."""
+
+    def __init__(self, module: str, tests=()):
+        super().__init__(tests)
+        self.module = module
+
+    def run(self, result, debug=False):
+        started = time.perf_counter()
+        try:
+            return super().run(result, debug)
+        finally:
+            record_timing = getattr(result, "record_module_timing", None)
+            if record_timing is not None:
+                record_timing(self.module, time.perf_counter() - started)
+
+
 class TimingResult(unittest.TextTestResult):
     """Record skips, failures, subtest failures, and per-test setup/cleanup duration."""
 
@@ -124,6 +215,13 @@ class TimingResult(unittest.TextTestResult):
         self.owners = record_owners(inventory)
         self.records: dict[str, dict] = {}
         self.started: dict[str, float] = {}
+        self.module_wall_seconds: dict[str, float] = {}
+
+    def record_module_timing(self, module: str, duration: float) -> None:
+        """Record module wall time, including class/module fixture lifecycle."""
+        self.module_wall_seconds[module] = round(
+            self.module_wall_seconds.get(module, 0.0) + duration, 6
+        )
 
     def startTest(self, test):
         self.started[test.id()] = time.perf_counter()
@@ -190,7 +288,15 @@ class TimingResult(unittest.TextTestResult):
 
 def write_timings(path: Path, records: list[dict], metadata: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ["schema_version", "run_id", "commit_sha", "source_fingerprint", "utc_timestamp", "python", "tool_versions", "fixture_profile", "total_run_seconds", "test_id", "module", "class_id", "scope", "phase", "covered_test_ids", "tier", "component", "status", "skip_reason", "duration_seconds"]
+    fields = [
+        "schema_version", "run_id", "commit_sha", "source_fingerprint",
+        "utc_timestamp", "python", "tool_versions", "fixture_profile",
+        "total_run_seconds", "selection_seconds", "collection_seconds",
+        "execution_seconds", "reporting_seconds", "test_execution_seconds",
+        "unattributed_seconds", "test_id", "module", "class_id", "scope",
+        "phase", "covered_test_ids", "tier", "component", "status",
+        "skip_reason", "duration_seconds",
+    ]
     temporary = path.with_name(path.name + "." + uuid4().hex + ".tmp")
     try:
         with temporary.open("w", newline="", encoding="utf-8") as stream:
