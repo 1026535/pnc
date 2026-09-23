@@ -13,11 +13,12 @@ Perform only the Git operations needed for the requested delivery outcome.
 - Before modifying tracked files, inspect `git status --short --branch`, the current operation, upstream, and relevant worktrees. This applies to source, tests, config, fixtures, documentation, and plans.
 - Preserve unrelated or unknown changes. Do not stash, reset, abort, commit, or move work owned by another task.
 - Never force-push a default or protected branch. Use `--force-with-lease` on a rewritten private feature branch only when authorized and after verifying the expected remote tip.
+- Prefix branches and worktrees created through this skill with `devin/` (for example `devin/workshop-submit-gates`) so Devin-authored work is distinguishable from `codex/` branches; where other repository docs prescribe a `codex/` prefix, `devin/` takes precedence for Devin-executed operations.
 
 ## Start Or Continue Work
 
 1. Identify checkout ownership, the target branch, and the remote. Fetch when remote freshness matters, such as starting from the latest base, synchronizing, or landing.
-2. Reuse an existing task-owned worktree when its changes belong to the task. Do not begin tracked edits in a shared or default-branch checkout. If unrelated changes, a conflict, an interrupted operation, or unclear ownership is present, create an isolated `codex/` branch and worktree from the requested base.
+2. Reuse an existing task-owned worktree when its changes belong to the task. Do not begin tracked edits in a shared or default-branch checkout. If unrelated changes, a conflict, an interrupted operation, or unclear ownership is present, create an isolated `devin/` branch and worktree from the requested base.
 3. Keep commits coherent and stage only task-owned source, config, tests, plans, or fixtures.
 4. Inspect generated and ignored output before staging; keep runtime products under `.local-data/` and test-selection evidence under `.test-impact/`.
 
