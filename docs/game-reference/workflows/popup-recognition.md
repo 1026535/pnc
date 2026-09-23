@@ -1,5 +1,24 @@
 # Popup recognition
 
+## Recurring popup dismissal reference
+
+Consolidated knowledge for the transient popup families that recur in live sessions. Regions are 540×960 reference `[x, y, w, h]` from `screen_anchors.json`; measured taps carry their capture's coordinate space — always re-measure the visible control's center on the current frame. Automation publishes each dismiss through `decide_popup_recovery`; Android Back is never a popup dismissal.
+
+| Family | Profile / layout | Client trigger | Identity anchors | Dismiss control | Region | Verified tap |
+|---|---|---|---|---|---|---|
+| Savannah hero offer | `savannah_hero_offer` | `OpenGiftWin` after charge-info response, login-gated (`buygiftdata.lua:2199-2339`) | offer icon `[5,85,110,100]` + lower panel `[10,780,250,150]` | `close_x` (`PNC_POPUP_CLOSE_BUTTON`) | `[470,45,65,70]` | `(503,79)` 540×960 |
+| Lucifer Special Offer | `lucifer_special_offer` | `LoginOpenGift` order; exact route for the captured Special Offer unproven | face `[200,60,175,240]` + right art `[365,60,175,245]` | `popup_back` gold arrow — **no X** | `[0,0,100,90]` | `(80,60)` 900×1600, live-verified |
+| Growth Boost Weekly Pass | `growth_boost_weekly_pass` | `GiftExclusiveWeekCardBase` 13 via `loginWeekCardHandler` queue (`weekcardsdata.lua`) | title `[95,4,370,55]` + center art `[150,78,320,118]` | `popup_back` gold diamond — **no X** | `[0,0,100,90]` | `(85,55)` 900×1600, live-verified; bounds `(30,7,110,96)` |
+| Valiant Conquest notice | `valiant_conquest` | `ConquerWarDataNotice1/2_<round>` per-round persisted | artwork `[30,130,440,330]` + event panel `[15,570,510,300]` below countdown | `close_x` | `[470,145,65,80]` | `~(502,185)` 540×960 |
+| VIP daily reset | `vip_daily_reset` (screen `PNC_VIP_DAILY_RESET`) | `playerVipDto.addExp > 0` after scene load (`vipdata.lua:162-173`) | crest wing `[160,220,220,180]` + VIP wordmark `[180,290,180,110]` | `close_text` | `[160,525,230,90]` | `~(275,570)` 540×960 |
+| King Return welcome | `king_return_welcome` | `KING_RETURN_ENTRY_WIN` on `firstLogIn` while activity active (`kingreturndata.lua:137-151`) | character face `[78,225,115,130]` + staff `[330,120,150,145]` | `king_return_get_started` — verified close-only (`kingreturnentrywin.lua:82-87`) | `[195,485,160,80]` | `~(275,525)` 540×960 |
+| Alliance invitation | `alliance_invitation` / `alliance_invitation_portrait` | server-pushed invite (`UnionData:Invite`, `uniondata.lua:1428`) | footer message `[189,388,297,49]`/`[184,378,340,64]` + portrait `[0,325,175,196]` | `cancel` | `[199,532,121,31]` / `[191,519,140,53]` | `~(260,547)` 540×960 |
+| Game disconnected | `disconnect_reconnect` (OCR layout) | client disconnect notice | OCR: "DISCONNECTED"+"RECONNECT NOW" (y 25–60%) + "CONFIRM" (y 45–80%), grouped | `reconnect_confirm` | OCR-derived padded bounds | CONFIRM center |
+| Update required | `required_game_update` (OCR layout) | version gate | OCR: "NEW VERSION DETECTED"+"CONFIRM TO UPDATE" or "UPDATE FAILED TRY AGAIN" + CONFIRM | `update_confirm` | OCR-derived padded bounds | CONFIRM center |
+| Join Alliance landing | `alliance_join_landing` (screen `PNC_ALLIANCE_JOIN`) | recommendation predicate: scene loaded, castle level, city scene, no buy-gift window, `!IsHasUnion` (`uniondata.lua:1954-1972`) | Odin portrait `[155,45,240,275]` + "Join Alliance" banner `[150,355,250,70]`, independent anchors | **none owned** — prefab `UI/UIModules/Union/RecomentUnionsView.prefab` owns `BtnCancel` (取消, 158×59, ≈(261,547) 540×960-equivalent) bound to `CloseWin`; the captured fixture's lower half is erased so the button's live rendering is unverified, and the full-screen `BgMask` node carries no click binding | — | — |
+
+Forbidden on all families: purchase bars, prices, reward rows, claim/get-gift buttons, and the landing's Join/Create controls — account mutations, never automation targets. An expected `PNC_ALLIANCE_JOIN` reached by an intentional navigation is a destination, not an interruption; the executor preserves expected follow-up screens and recovers only unrelated transient surfaces.
+
 ## Evidence
 
 This note records client-source evidence from the recovered PNC **5.0.203 / version code 233** APK. The predicate table is an offline source review; no live server response was observed.

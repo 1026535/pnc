@@ -7,9 +7,8 @@ import unittest
 
 from PIL import Image, ImageDraw
 
-from pnc_automation.app.pnc.domain.popup import PopupControlKind, decide_popup_recovery
+from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.image.models import Bounds
@@ -83,12 +82,12 @@ class AllianceJoinLandingCapturedTests(unittest.TestCase):
         )
         return observation, capture
 
-    def test_captured_join_landing_publishes_mask_dismissal_in_both_paths(self) -> None:
-        """Odin and the banner establish Join landing and own its reviewed mask dismissal.
+    def test_captured_join_landing_stays_clear_without_owned_dismissal(self) -> None:
+        """Odin and the banner establish Join landing; no dismissal control is published.
 
-        The landing remains a clear, back-navigable screen; its overlay carries a
-        typed NEGATIVE_ACTION candidate so recovery can dismiss a stray landing
-        without touching Join/Create.
+        RECOMMEND_UNION_VIEW closes on a background-mask tap in client source,
+        but retained evidence cannot establish the hit area, so the profile
+        withholds the control and recovery admits nothing for this screen.
         """
 
         for size in (REFERENCE_SIZE, NATIVE_SIZE):
@@ -103,28 +102,15 @@ class AllianceJoinLandingCapturedTests(unittest.TestCase):
                         self.assertFalse(observation.blocking_popup)
                         self.assertEqual(observation.frame_ref, capture.frame_ref)
                         self.assertFalse(observation.list_entries)
-                        mask = observation.visible_elements.get(
-                            UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK
-                        )
-                        self.assertIsNotNone(mask)
-                        overlay = observation.popup_overlay
-                        self.assertIsNotNone(overlay)
-                        self.assertEqual(overlay.layout_id, PROFILE_ID)
-                        candidate = overlay.candidate(PopupControlKind.NEGATIVE_ACTION)
-                        self.assertIsNotNone(candidate)
-                        decision = decide_popup_recovery(
-                            screen_type=observation.screen_type,
-                            blocking_popup=observation.blocking_popup,
-                            visible_selector_ids=frozenset(observation.visible_elements),
-                            popup_overlay=overlay,
-                        )
-                        self.assertIsNotNone(decision)
-                        self.assertEqual(
-                            decision.selector_id,
-                            UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
-                        )
-                        self.assertEqual(
-                            decision.control_kind, PopupControlKind.NEGATIVE_ACTION
+                        self.assertFalse(observation.visible_elements)
+                        self.assertIsNone(observation.popup_overlay)
+                        self.assertIsNone(
+                            decide_popup_recovery(
+                                screen_type=observation.screen_type,
+                                blocking_popup=observation.blocking_popup,
+                                visible_selector_ids=frozenset(observation.visible_elements),
+                                popup_overlay=observation.popup_overlay,
+                            )
                         )
 
     def test_erased_identity_anchor_abstains_in_both_paths(self) -> None:

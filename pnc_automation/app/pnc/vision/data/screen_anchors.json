@@ -5058,7 +5058,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned. RECOMMEND_UNION_VIEW dismisses through its background mask (uis/union/recomentunionsview.lua BtnCancel -> CloseWin), so the dismissal control is a reviewed fixed mask region rather than a template.",
+        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned. The extracted prefab UI/UIModules/Union/RecomentUnionsView.prefab owns a real Cancel button (BtnCancel, 158x59 logical units, bound by uis/union/recomentunionsview.lua to CloseWin) whose live rendering is unverified because the captured fixture's lower half is erased; its full-screen BgMask node carries no click binding. No dismissal control is published.",
         "build": "5.2.77 / AppVersion 5.0.201.227",
         "locale": "English",
         "qualification": "guarded_reference_only"
@@ -5085,19 +5085,7 @@
           "threshold": 0.98
         }
       ],
-      "controls": [
-        {
-          "selector": "PNC_ALLIANCE_JOIN_DISMISS_MASK",
-          "fixed_region": [
-            30,
-            830,
-            140,
-            70
-          ],
-          "dismisses_surface": true,
-          "popup_control_kind": "negative_action"
-        }
-      ],
+      "controls": [],
       "occludes": [
         "PNC_HOME_CITY"
       ]

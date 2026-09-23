@@ -45,7 +45,6 @@ _SAFE_TRANSIENT_POPUP_SELECTORS: tuple[UiElementId, ...] = (
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
     UiElementId.PNC_POPUP_CLOSE_BUTTON,
     UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON,
-    UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
 )
 
 class ObservationCallback(Protocol):
@@ -243,6 +242,10 @@ class ObservedActionExecutor:
                     current_observation,
                     label_prefix=f"post_action_{index + 1}_update",
                     observe=observe,
+                    expected_screens=(
+                        action.follow_up_request
+                        or ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
+                    ).candidate_screen_types,
                 )
                 if recovered.observation is not None:
                     return ObservedActionExecutionResult(
@@ -271,6 +274,11 @@ class ObservedActionExecutor:
                     current_observation,
                     label_prefix=f"post_action_{index + 1}_update",
                     observe=observe,
+                    expected_screens=(
+                        frozenset()
+                        if action.follow_up_request is None
+                        else action.follow_up_request.candidate_screen_types
+                    ),
                 )
                 if recovered.observation is not None:
                     return ObservedActionExecutionResult(
@@ -309,19 +317,23 @@ class ObservedActionExecutor:
         *,
         label_prefix: str,
         observe: ObservationCallback,
+        expected_screens: frozenset[ScreenType] = frozenset(),
     ) -> Observation | None:
         """Recovers one exact update or one bounded episode of safe transient popups.
 
         This is intentionally executor-owned: callers provide the current observation
         and capture callback, while this method owns the safe selector whitelist,
         fingerprint guard, and popup bound.  A ``None`` return means no interruption
-        was present in the supplied observation.
+        was present in the supplied observation. ``expected_screens`` names
+        destinations the caller explicitly requested; a matching screen is
+        preserved instead of treated as an unrelated interruption.
         """
 
         return self._recover_interruption_if_required(
             observation,
             label_prefix=label_prefix,
             observe=observe,
+            expected_screens=expected_screens,
         ).observation
 
     def recover_update_if_required(
@@ -366,6 +378,7 @@ class ObservedActionExecutor:
         *,
         label_prefix: str,
         observe: ObservationCallback,
+        expected_screens: frozenset[ScreenType] = frozenset(),
     ) -> _InterruptionRecoveryResult:
         """Returns an executor-owned interruption result for internal action-loop use."""
 
@@ -376,6 +389,11 @@ class ObservedActionExecutor:
             popup_overlay=observation.popup_overlay,
         )
         if decision is None or decision.control_kind != PopupControlKind.UPDATE_CONFIRM:
+            if observation.screen_type in expected_screens:
+                # A screen the pending action explicitly expects is a
+                # destination, not an interruption; required updates above
+                # remain recoverable because they overlay any destination.
+                return _InterruptionRecoveryResult(None)
             if not self._is_popup_observation(observation):
                 return _InterruptionRecoveryResult(None)
             if self.policy.read_only_policy.enabled:
@@ -1051,6 +1069,7 @@ class ObservedActionExecutor:
             first_after,
             label_prefix=f"{label_prefix}_interruption",
             observe=observe,
+            expected_screens=follow_up_request.candidate_screen_types,
         )
         interruption_recovered = first_recovery.observation is not None
         if first_recovery.observation is not None:
