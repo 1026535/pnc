@@ -223,6 +223,7 @@ class CampaignStageDetailProducerTests(unittest.TestCase):
             screen_type=ScreenType.PNC_CAMPAIGN_STAGE,
             ocr_context=context,
             template_matcher=None,
+            challenge_bounds=Bounds(178, 643, 184, 54),
         )
         return additions, backend
 
@@ -274,6 +275,16 @@ class CampaignStageDetailProducerTests(unittest.TestCase):
         self.assertIsNone(detail.name)
         self.assertEqual(150, detail.action_points)
         self.assertEqual(12, detail.challenge_cost)
+
+    def test_missing_measured_challenge_does_not_read_or_invent_its_cost(self) -> None:
+        context, backend = _ocr_context(self.image, self._reads())
+        detail = campaign.build_campaign_additions(
+            image=self.image, screen_type=ScreenType.PNC_CAMPAIGN_STAGE,
+            ocr_context=context, template_matcher=None,
+        ).campaign_stage
+        self.assertIsNotNone(detail)
+        self.assertIsNone(detail.challenge_cost)
+        self.assertEqual(2, len(backend.regions))
 
     def test_title_with_nonpositive_ordinals_abstains(self) -> None:
         additions, _backend = self._additions(self._reads(title="[0-0] Grandia Ruins"))

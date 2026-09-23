@@ -41,8 +41,8 @@ from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
     CAMPAIGN_CHAPTER_TITLE_REGION,
     CAMPAIGN_REFERENCE_SIZE,
     CAMPAIGN_STAGE_ACTION_POINTS_REGION,
-    CAMPAIGN_STAGE_CHALLENGE_COST_REGION,
     CAMPAIGN_STAGE_TITLE_REGION,
+    campaign_stage_challenge_cost_bounds,
     scale_campaign_bounds,
 )
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
@@ -141,12 +141,15 @@ def build_campaign_additions(
     screen_type: ScreenType,
     ocr_context: ObservationOcrContext,
     template_matcher: OpenCvTemplateMatcher | None,
+    challenge_bounds: Bounds | None = None,
 ) -> ObservationAdditions:
     """Publish typed Campaign rows and surface facts for the accepted screen."""
 
     if screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
         return ObservationAdditions(
-            campaign_stage=_stage_detail(image=image, ocr_context=ocr_context)
+            campaign_stage=_stage_detail(
+                image=image, ocr_context=ocr_context, challenge_bounds=challenge_bounds
+            )
         )
     if screen_type not in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_CHAPTER}:
         return ObservationAdditions()
@@ -490,7 +493,10 @@ def _chapter_identity(*, image: Image.Image, ocr_context: ObservationOcrContext)
     )
 
 
-def _stage_detail(*, image: Image.Image, ocr_context: ObservationOcrContext) -> CampaignStageDetail | None:
+def _stage_detail(
+    *, image: Image.Image, ocr_context: ObservationOcrContext,
+    challenge_bounds: Bounds | None,
+) -> CampaignStageDetail | None:
     """Current-frame stage-detail facts read from reviewed bounded regions."""
 
     result = ocr_context.read_result(
@@ -510,7 +516,9 @@ def _stage_detail(*, image: Image.Image, ocr_context: ObservationOcrContext) -> 
         image=image,
         ocr_context=ocr_context,
     )
-    challenge_cost = _stage_cost_value(image=image, ocr_context=ocr_context)
+    challenge_cost = _stage_cost_value(
+        image=image, ocr_context=ocr_context, challenge_bounds=challenge_bounds
+    )
     if (
         chapter_number is None
         and stage_number is None
@@ -559,7 +567,7 @@ def _stage_gauge_values(
     result = _read_stage_numeric_strip(
         image=image,
         ocr_context=ocr_context,
-        reference_region=CAMPAIGN_STAGE_ACTION_POINTS_REGION,
+        region=scale_campaign_bounds(CAMPAIGN_STAGE_ACTION_POINTS_REGION, image.size),
         detail="campaign_stage_action_points",
     )
     pairs = {
@@ -574,13 +582,18 @@ def _stage_gauge_values(
     return next(iter(pairs))
 
 
-def _stage_cost_value(*, image: Image.Image, ocr_context: ObservationOcrContext) -> int | None:
+def _stage_cost_value(
+    *, image: Image.Image, ocr_context: ObservationOcrContext,
+    challenge_bounds: Bounds | None,
+) -> int | None:
     """The Challenge cost only when bounded reads prove one positive numeral."""
 
+    if challenge_bounds is None:
+        return None
     result = _read_stage_numeric_strip(
         image=image,
         ocr_context=ocr_context,
-        reference_region=CAMPAIGN_STAGE_CHALLENGE_COST_REGION,
+        region=campaign_stage_challenge_cost_bounds(challenge_bounds),
         detail="campaign_stage_challenge_cost",
     )
     values = {
@@ -599,7 +612,7 @@ def _read_stage_numeric_strip(
     *,
     image: Image.Image,
     ocr_context: ObservationOcrContext,
-    reference_region: Bounds,
+    region: Bounds,
     detail: str,
 ) -> OcrResult:
     """Keep native-size numeric crops on the already qualified single-line OCR path.
@@ -609,7 +622,6 @@ def _read_stage_numeric_strip(
     these larger crops; the reference-size reads already have captured proof.
     The canonical context preserves the original region and frame provenance.
     """
-    region = scale_campaign_bounds(reference_region, image.size)
     if image.height <= CAMPAIGN_REFERENCE_SIZE[1]:
         return ocr_context.read_result(
             image, region, purpose=OcrReadPurpose.CONTENT, detail=detail,

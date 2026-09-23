@@ -6178,6 +6178,75 @@
           }
         }
       ]
+    },
+    {
+      "id": "campaign_stage_chapter_6",
+      "layout_id": "campaign_stage_chapter_6",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "revision": 2,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_stage_6_5_20260922.png",
+        "decoded_sha256": "6f98c42b47cfcc2529d6e4126b109f31c8b03948f087b68bd84cf8810009b43d",
+        "capture_group": "2026-09-22/testing/m1_v14_stage_6_5"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Captured Chapter6 stage modal appearances6-4 and6-5: title and Enemy lineup independently qualify identity; ordinals are OCR facts, never derived from the profile. The measured Challenge template is searched across its observed left-of-Blitz and centered positions; its current bounds own cost OCR. Native6-4 title/lineup scores0.9573/0.9999. Other chapters, formation, battle and live acceptance remain unqualified.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_stage_6_5_title.png",
+          "search_region": [
+            140,
+            201,
+            301,
+            42
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_stage_6_5_lineup.png",
+          "search_region": [
+            198,
+            262,
+            163,
+            36
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_close_button.png",
+            "search_region": [
+              466,
+              200,
+              46,
+              48
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_CAMPAIGN_BATTLE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_challenge_button.png",
+            "search_region": [
+              55,
+              643,
+              310,
+              54
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
     }
   ]
 }

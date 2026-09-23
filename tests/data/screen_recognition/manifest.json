@@ -1815,6 +1815,20 @@
         "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-22\\testing\\20260922T235029Z_core_20260922T234747Z_82d60eea_0045_c2_stage_after_0.png",
         "derivative": "Native stage6-5 detail opened by a qualified tap, then misclassified as popup and auto-dismissed. Reference only; no independent holdout or live acceptance."
       }
+    },
+    {
+      "image": "campaign_stage_6_4_20260922.png",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "split": "validation",
+      "group": "2026-09-22/testing/m1_v14_stage_6_4",
+      "sha256": "75148ad5d3066ddcd511168b0b601c92ea0d2715844770c6f873b6f520bf09ca",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_STAGE"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-22\\testing\\20260922T233600Z_core_20260922T233517Z_4ad73851_0012_c2_stage_after_1.png",
+        "derivative": "Unmodified native900x1600 frame from the earlier same-account checkpoint; Challenge left of Blitz. Distinct run, same account/build; no independent-account or all-stage qualification."
+      }
     }
   ]
 }

@@ -121,6 +121,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",
+                        "campaign_stage_chapter_6",
                         "trial_challenge_live",
                         "pet_workshop_storage",
                         "alliance_join_landing",

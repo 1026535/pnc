@@ -191,12 +191,16 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertIsNotNone(control)
                     self.assertEqual(capture.frame_ref, control.frame_ref)
 
-    def test_native_stage_six_five_is_owned_content_and_never_generic_popup(self) -> None:
-        """The actual dialog previously auto-dismissed must publish its owned controls."""
-        capture = _capture(_image("campaign_stage_6_5_20260922.png"))
+    def test_native_chapter_six_stage_details_keep_owned_challenge_and_cost(self) -> None:
+        """Challenge and its cost follow the captured left and central layouts."""
         backend = _require_rapid_ocr_service(self)
-        for publisher in ("builder", "navigation"):
-            with self.subTest(publisher=publisher):
+        for stage, publisher in (
+            (stage, publisher)
+            for stage in (4, 5)
+            for publisher in ("builder", "navigation")
+        ):
+            capture = _capture(_image(f"campaign_stage_6_{stage}_20260922.png"))
+            with self.subTest(stage=stage, publisher=publisher):
                 observation = (
                     _builder_with_backend(backend).build(
                         capture, request=ObservationRequest.campaign_map_follow_up()
@@ -217,10 +221,19 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     control = observation.get(selector)
                     self.assertIsNotNone(control)
                     self.assertEqual(capture.frame_ref, control.frame_ref)
-                    self.assertEqual("campaign_stage_6_5", control.source_layout_id)
+                    self.assertEqual("campaign_stage_chapter_6", control.source_layout_id)
+                challenge = observation.get(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON)
+                self.assertIsNotNone(challenge)
+                # Stage 4's Blitz occupies the right-hand slot; Challenge must
+                # retain the measured left target rather than the old center.
+                if stage == 4:
+                    self.assertLess(challenge.bounds.x + challenge.bounds.width, 450)
+                else:
+                    self.assertLess(challenge.bounds.x, 450)
+                    self.assertGreater(challenge.bounds.x + challenge.bounds.width, 450)
                 detail = observation.campaign_stage
                 self.assertIsNotNone(detail)
-                self.assertEqual((6, 5), (detail.chapter_number, detail.stage_number))
+                self.assertEqual((6, stage), (detail.chapter_number, detail.stage_number))
                 self.assertEqual((126, 120, 12), (
                     detail.action_points, detail.max_action_points, detail.challenge_cost,
                 ))
@@ -238,7 +251,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 erased = image.copy()
                 ImageDraw.Draw(erased).rectangle(region, fill=(0, 0, 0))
                 result = recognizer.recognize(erased)
-                self.assertNotIn("campaign_stage_6_5", result.profile_ids)
+                self.assertNotIn("campaign_stage_chapter_6", result.profile_ids)
 
     def test_persisted_southern_map_view_has_owned_home_return_on_both_paths(self) -> None:
         """The live reopened map needs its measured portal and only honest rows."""

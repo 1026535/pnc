@@ -135,16 +135,27 @@ the post-recovery chapter screenshot is not evidence that the tap did nothing.
 Installed build was not recorded. Confidence is high for this captured sequence,
 with no claim about other stage appearances or formation entry.
 
-The `campaign_stage_6_5` profile qualifies this captured appearance using separate
-title and Enemy lineup patches. Existing Close and Challenge controls are measured
-independently. No Chapter6 stage number, battle mode, completion or Auto-next state
-is inferred from the profile name. Stage content still comes from bounded OCR.
+The `campaign_stage_chapter_6` profile qualifies the observed Chapter 6 stage
+appearance using separate title and Enemy lineup patches. Existing Close and
+Challenge controls are measured independently. No Chapter 6 stage number, battle
+mode, completion or Auto-next state is inferred from the profile name. Stage
+content still comes from bounded OCR.
 Native gauge/cost crops need single-line normalization: the original900x1600
 detector split the gauge into overlapping `126/` and `5/120` reads and missed the
 cost. The gauge region now excludes the adjacent add-AP icon, and larger numeric
 strips use the canonical context's28px preprocessing with native frame/region
 provenance retained. Saved native reads are126/120 and12; reference reads remain
 150/120 and12. No resource action is authorized by this evidence.
+
+**Artifact-observed:** M1 runtime `20260922T233517Z_4ad73851`, capture0012
+(`tests/data/screen_recognition/campaign_stage_6_4_20260922.png`), shows
+`[6-4] Marsh of Tear` with the same AP and cost, but Challenge is to the left of
+Blitz. The shared Chapter 6 identity anchors qualify this frame without a new
+profile or lower threshold. Challenge is searched across the two observed
+positions, and cost OCR is derived from its matched bounds. When Challenge is
+not measured, its cost remains unknown. Blitz is not exposed as Challenge.
+The two stage captures come from distinct runs on the same account/build, not
+independent account validation. Corrected-candidate live acceptance is pending.
 
 **Artifact-observed:** own157_farm runtime `20260922T232718Z_26f6cf57`, captures
 0041/0043, is a clear Campaign map that the prior broad node/terrain patch missed

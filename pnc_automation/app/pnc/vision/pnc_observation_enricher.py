@@ -2148,11 +2148,13 @@ class PncObservationEnricher:
             ScreenType.PNC_CAMPAIGN_CHAPTER,
             ScreenType.PNC_CAMPAIGN_STAGE,
         }:
+            challenge = visible_elements.get(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON)
             return build_campaign_additions(
                 image=image,
                 screen_type=screen_type,
                 ocr_context=ocr_context,
                 template_matcher=self.template_matcher,
+                challenge_bounds=None if challenge is None else challenge.bounds,
             )
         trial_additions = self.trial_producer.additions_for_screen(
             image=image,

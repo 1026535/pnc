@@ -17,8 +17,19 @@ CAMPAIGN_STAGE_TITLE_REGION = Bounds(x=120, y=201, width=300, height=49)
 CAMPAIGN_STAGE_ACTION_POINTS_REGION = Bounds(x=368, y=585, width=96, height=36)
 """Measured ``power/maxPower`` gauge, excluding the adjacent add-AP icon."""
 
-CAMPAIGN_STAGE_CHALLENGE_COST_REGION = Bounds(x=238, y=642, width=68, height=24)
-"""Measured stage-detail Challenge cost numeral inside the control's top strip."""
+
+def campaign_stage_challenge_cost_bounds(challenge: Bounds) -> Bounds:
+    """Return the numeral strip inside the measured Challenge control.
+
+    Captured stages place Challenge either centrally or to the left of Blitz.
+    The strip follows the matched 184x54 control rather than a fixed screen point.
+    """
+    return Bounds(
+        x=challenge.x + round(challenge.width * 60 / 184),
+        y=challenge.y,
+        width=max(1, round(challenge.width * 68 / 184)),
+        height=max(1, round(challenge.height * 24 / 54)),
+    )
 
 
 def scale_campaign_bounds(bounds: Bounds, image_size: tuple[int, int]) -> Bounds:
