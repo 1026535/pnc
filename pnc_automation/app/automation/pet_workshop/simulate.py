@@ -471,12 +471,24 @@ class WorkshopSimulator:
         order's "Complete" button sends ``RequireOrderForm``; the required
         pieces leave the board, the card drops, a new order is dealt, and
         rewards grant (chest task counter +1; feed/potion rewards to the
-        knapsack, not the board). Submission costs no energy.
+        knapsack, not the board). Submission costs no energy. The control
+        only exists for a completable card, so a ``ready`` marker observed
+        ``False`` — or a card whose requirement list was only partially
+        read — rejects the intent; ``None`` (unevaluated) stays submittable.
         """
 
         order = self._state.order_survey.order(intent.order_ref)
         if order is None:
             raise WorkshopSimulationError(f"Order {intent.order_ref} is not in the survey.")
+        if order.completeness != RowRecognitionStatus.COMPLETE:
+            raise WorkshopSimulationError(
+                f"Order {intent.order_ref} is only partially read; "
+                "cannot verify its full requirements."
+            )
+        if order.ready is False:
+            raise WorkshopSimulationError(
+                f"Order {intent.order_ref} shows no completable control."
+            )
         updates: dict[int, WorkshopCell] = {}
         for item_id, quantity in order.requirements.items():
             remaining = quantity
@@ -533,7 +545,10 @@ class WorkshopSimulator:
                 energy = replace(energy, current=min(energy.current + gained, capacity))
         else:
             self._regen_progress_ms = 0
-        self._set_state(cells=self._cells_with(updates), energy=energy)
+        if updates:
+            self._set_state(cells=self._cells_with(updates), energy=energy)
+        else:
+            self._set_state(energy=energy)
 
     # --- internals -------------------------------------------------------
 

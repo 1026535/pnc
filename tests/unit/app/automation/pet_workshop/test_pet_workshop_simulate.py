@@ -366,6 +366,44 @@ class WorkshopSimulatorTests(unittest.TestCase):
         self.assertIsNotNone(sim.state.order_survey.order(3))
         self.assertEqual(_cell(sim.state, 1).item_id, FRUIT_1)
 
+    def test_submit_rejects_orders_the_client_cannot_complete(self) -> None:
+        """A ``ready=False`` marker or a clipped card has no completable control.
+
+        ``ready=None`` (the control was never evaluated) stays submittable —
+        only a marker observed False proves the game would not offer the
+        transition.
+        """
+
+        def built(ready: bool | None, completeness=RowRecognitionStatus.COMPLETE):
+            return WorkshopSimulator(
+                fx.make_state(
+                    cells=(fx.make_cell(1, 1, item_id=FRUIT_1),),
+                    order_survey=WorkshopOrderSurvey(
+                        orders=(
+                            fx.make_order(
+                                7, {FRUIT_1: 1}, ready=ready, completeness=completeness
+                            ),
+                        ),
+                        coverage=WorkshopSurveyCoverage.COMPLETE,
+                        freshness=WorkshopSurveyFreshness.CURRENT,
+                    ),
+                )
+            )
+
+        for sim in (
+            built(ready=False),
+            built(ready=True, completeness=RowRecognitionStatus.CLIPPED),
+        ):
+            with self.assertRaises(WorkshopSimulationError):
+                sim.apply(WorkshopSubmitOrderIntent(order_ref=7))
+            self.assertIsNotNone(sim.state.order_survey.order(7))
+            self.assertEqual(_cell(sim.state, 1).item_id, FRUIT_1)
+
+        unevaluated = built(ready=None)
+        state = unevaluated.apply(WorkshopSubmitOrderIntent(order_ref=7))
+        self.assertIsNone(state.order_survey.order(7))
+        self.assertEqual(_cell(state, 1).occupancy, WorkshopOccupancy.EMPTY)
+
     def test_consuming_intents_reconcile_the_selection(self) -> None:
         """Merge and feed select the drop target; recycle and submit clear consumed selections."""
 
