@@ -241,6 +241,55 @@ class PopupRecoveryTests(unittest.TestCase):
         self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
         self.assertEqual(1, len(self.session.taps))
 
+    def test_close_localizer_change_settles_same_popup_without_second_tap(self) -> None:
+        """An animated Savannah X may switch from its template to measured geometry."""
+        popup = self._typed_popup(
+            "hero_offer_full_height", "template-frame",
+            evidence_kind=PopupEvidenceKind.TEMPLATE,
+            candidate_reason="visual_anchor:savannah_hero_offer",
+        )
+        animated = self._typed_popup(
+            "hero_offer_full_height", "geometry-frame",
+            candidate_reason="visual_upper_right_close_x",
+        )
+        observer = FakeObservationService([animated, make_observation(ScreenType.PNC_HOME_CITY)])
+
+        recovered = self.executor.recover_interruption_if_required(
+            popup, label_prefix="changed-close-localizer", observe=observer.observe,
+        )
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual(1, len(self.session.taps))
+        self.assertEqual([], self.session.key_events)
+
+    def test_alternating_close_localizers_do_not_renew_dismissal_authority(self) -> None:
+        """A persistent offer fails closed even when its control evidence changes."""
+        popup = self._typed_popup(
+            "hero_offer_full_height", "template-frame",
+            evidence_kind=PopupEvidenceKind.TEMPLATE,
+            candidate_reason="visual_anchor:savannah_hero_offer",
+        )
+        localizers = (
+            (PopupEvidenceKind.GEOMETRY, "visual_upper_right_close_x"),
+            (PopupEvidenceKind.TEMPLATE, "visual_anchor:savannah_hero_offer"),
+        ) * 2
+        observer = FakeObservationService([
+            self._typed_popup(
+                "hero_offer_full_height", f"animated-{index}",
+                evidence_kind=evidence_kind,
+                candidate_reason=reason,
+            )
+            for index, (evidence_kind, reason) in enumerate(localizers, start=1)
+        ])
+
+        with self.assertRaisesRegex(SelectorResolutionError, "same typed identity"):
+            self.executor.recover_interruption_if_required(
+                popup, label_prefix="persistent-localizer-change", observe=observer.observe,
+            )
+
+        self.assertEqual(1, len(self.session.taps))
+        self.assertEqual([], self.session.key_events)
+
     def test_stale_typed_settle_observation_fails_closed_before_new_tap(self) -> None:
         popup = self._typed_popup("savannah_offer", "popup-before")
         base_time = popup.captured_at
@@ -710,6 +759,8 @@ class PopupRecoveryTests(unittest.TestCase):
         frame_fingerprint: str,
         *,
         action_point: tuple[int, int] = (160, 35),
+        evidence_kind: PopupEvidenceKind = PopupEvidenceKind.GEOMETRY,
+        candidate_reason: str | None = None,
     ) -> Observation:
         bounds = Bounds(action_point[0] - 10, action_point[1] - 10, 20, 20)
         candidate = PopupDismissCandidate(
@@ -717,8 +768,8 @@ class PopupRecoveryTests(unittest.TestCase):
             bounds=bounds,
             action_point=action_point,
             confidence=0.95,
-            evidence_kind=PopupEvidenceKind.GEOMETRY,
-            reason=layout_id,
+            evidence_kind=evidence_kind,
+            reason=layout_id if candidate_reason is None else candidate_reason,
         )
         return make_observation(
             ScreenType.PNC_POPUP,

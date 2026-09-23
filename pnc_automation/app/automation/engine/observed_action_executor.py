@@ -815,14 +815,9 @@ class ObservedActionExecutor:
         overlay = observation.popup_overlay
         if overlay is None:
             return None
-        candidates = tuple(
-            (
-                candidate.control_kind,
-                candidate.evidence_kind,
-                candidate.reason,
-            )
-            for candidate in overlay.candidates
-        )
+        # A measured fallback may replace an animated control's template match.
+        # Its localizer provenance must not authorize another tap on the same popup.
+        candidates = tuple(candidate.control_kind for candidate in overlay.candidates)
         return (
             observation.screen_type,
             overlay.layout_id,
