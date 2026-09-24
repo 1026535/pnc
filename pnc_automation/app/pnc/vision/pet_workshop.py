@@ -299,6 +299,8 @@ _BACK_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_back.png"
 _CLOSE_X_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_close_x.png"
 
 _NUMERIC_TOKEN = re.compile(r"\d+(?:,\d{3})*")
+# Upscale factor for the measured count-zone retry preprocessing variant.
+_COUNT_ZONE_UPSCALE = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -1010,6 +1012,25 @@ class WorkshopContentProducer:
                 )
             )
         }
+        if len(values) == 1:
+            return values.pop()
+        # One upscaled retry of the same measured zone: the detector can
+        # misread a badge digit on the raw crop (the 2026-09-24 order detail
+        # read the Item Chest "1" badge as "L"). The retry publishes only
+        # when it also resolves to exactly one distinct value.
+        result = ocr_context.read_preprocessed_result(
+            image,
+            _scaled_region(region, image),
+            preprocessing_id="pet-workshop-count-3x",
+            prepare=_count_zone_ocr_image,
+            purpose=OcrReadPurpose.CONTENT,
+            detail=detail,
+        )
+        if result is None:
+            return None
+        values = {
+            value for value, _bounds, _text in _numeric_tokens(result.lines)
+        }
         return values.pop() if len(values) == 1 else None
 
     def _icon_matches(
@@ -1111,11 +1132,10 @@ class WorkshopContentProducer:
         region: Bounds,
         detail: str,
     ) -> str:
-        """Read one bounded region and join its raw line text."""
+        """Read one bounded region and join its lines, deduplicating overlap."""
 
-        return " ".join(
-            line.text
-            for line in self._read_lines(
+        return _join_region_lines(
+            self._read_lines(
                 image=image, ocr_context=ocr_context, region=region, detail=detail
             )
         )
@@ -1180,6 +1200,48 @@ def _scaled_region(region: Bounds, image: Image.Image) -> Bounds:
         y=round(region.y * scale_y),
         width=round(region.width * scale_x),
         height=round(region.height * scale_y),
+    )
+
+
+def _join_region_lines(lines) -> str:
+    """Join one region's OCR lines, dropping duplicated overlap glyphs.
+
+    The detector can emit two boxes sharing edge columns when adjacent
+    glyphs split across detections — the 2026-09-24 board header returned
+    "139" and "9/200" whose boxes overlap on the shared "9". When a later
+    box starts strictly inside the previous box's span and extends past it,
+    its overlapped leading glyphs repeat already-read pixels; drop that
+    prefix so the joined text cannot bind a duplicated gauge suffix.
+    """
+
+    parts: list[str] = []
+    previous: Bounds | None = None
+    for line in lines:
+        text = line.text
+        bounds = line.bounds
+        if (
+            previous is not None
+            and previous.x < bounds.x < previous.x + previous.width
+            and bounds.x + bounds.width > previous.x + previous.width
+        ):
+            overlap = previous.x + previous.width - bounds.x
+            dropped = min(len(text), round(overlap * len(text) / bounds.width))
+            text = text[dropped:]
+        if text:
+            parts.append(text)
+        previous = bounds
+    return " ".join(parts)
+
+
+def _count_zone_ocr_image(image: Image.Image, bounds: Bounds) -> Image.Image:
+    """Crop one measured count zone and upscale it for the badge retry."""
+
+    crop = image.crop(
+        (bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height)
+    )
+    return crop.resize(
+        (crop.width * _COUNT_ZONE_UPSCALE, crop.height * _COUNT_ZONE_UPSCALE),
+        Image.LANCZOS,
     )
 
 

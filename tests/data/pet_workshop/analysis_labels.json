@@ -345,6 +345,89 @@
           "intent": {"kind": "stop", "stop_reason": "excluded_surface", "gameplay": false}
         }
       }
+    },
+    {
+      "image": "pet_workshop_board_20260924_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 board captured 2026-09-24 during the manual-board run: the energy pill clearly reads 139/200 beside Lv8 EXP 21/100, but header OCR emitted overlapping '139' and '9/200' boxes whose shared '9' duplicated into the joined text; the region join must drop the repeated glyph so the gauge stays 139/200. Two Complete controls show: order 1 holds one fulfilled Fruit 5 with an unmatched reward group, order 2 is the three-Fruit-5 card with a chest.",
+      "expected": {
+        "screen": {
+          "screen_type": "pnc_pet_workshop",
+          "layout_id": "pet_workshop_board",
+          "guard": "clear"
+        },
+        "workshop": {
+          "surface": "board",
+          "workshop_level": 8,
+          "workshop_exp": 21,
+          "energy": {"current": 139, "capacity": 200},
+          "production_mode": "ordinary",
+          "selection": {"kind": "none", "cell_id": null},
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 1},
+            "completeness": "unreadable",
+            "ready": true,
+            "source": "order_strip",
+            "assessment": {
+              "eligible": false,
+              "ineligible_reason": "card completeness is unreadable",
+              "unresolved": true
+            }
+          },
+          "2": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest", "quantity": 1}],
+            "completeness": "complete",
+            "ready": true,
+            "source": "order_strip",
+            "assessment": {
+              "eligible": false,
+              "ineligible_reason": "piece total 3 != 2",
+              "unresolved": false
+            }
+          }
+        },
+        "decision": {
+          "intent": {"kind": "inspect", "inspect_kind": "order_survey", "gameplay": false}
+        }
+      }
+    },
+    {
+      "image": "pet_workshop_order_detail_chest_20260924_native_rgba.png",
+      "source_kind": "real_screenshot",
+      "description": "LV8 order detail modal (strip order 1) captured 2026-09-24 during the manual-board run: three Fruit 5 pedestals and a framed Item Chest reward whose '1' badge the raw zone OCR misread as 'L'; the measured count zone retries once on an upscaled crop and publishes quantity 1. The modal admits no board actions and ready stays unknown.",
+      "expected": {
+        "screen": {
+          "screen_type": "pnc_pet_workshop_order_detail",
+          "layout_id": "pet_workshop_order_detail",
+          "guard": "clear"
+        },
+        "workshop": {
+          "surface": "order_detail",
+          "energy": {"current": null, "capacity": null},
+          "order_survey": {"coverage": "partial", "freshness": "current"}
+        },
+        "orders": {
+          "1": {
+            "requirements": {"20105": 3},
+            "rewards": [{"category": "chest", "quantity": 1}],
+            "completeness": "complete",
+            "ready": null,
+            "source": "order_detail",
+            "assessment": {
+              "eligible": false,
+              "ineligible_reason": "piece total 3 != 2",
+              "unresolved": false
+            }
+          }
+        },
+        "decision": {
+          "intent": {"kind": "stop", "stop_reason": "excluded_surface", "gameplay": false}
+        }
+      }
     }
   ]
 }

@@ -435,6 +435,47 @@ analyze them in separate `--out-dir` runs.
   card portrait region can resize between animation frames while the
   control's measured bounds stay fixed.
 
+## September 24 manual-board capture and recognition corrections (PW05)
+
+**Artifact-observed** on the user-preopened Main board (K157 / NPC on
+Hopium / C31, continuous instance, no restart or castle change). Native
+frames under
+`C:/Users/lebel/pnc/artifacts/2026-09-24/pet_workshop_manual_board_5d839e9e_20260924/`;
+run diagnostics under the authority checkout's
+`.local-data/devin-live-test/runs/pw05-manual-board-5d839e9e-20260924/`.
+Two frames are promoted to `tests/data/screen_recognition/` as
+`pet_workshop_board_20260924_native_rgba.png` and
+`pet_workshop_order_detail_chest_20260924_native_rgba.png`:
+
+- The board header reads **LV8, EXP 21/100, energy 139/200**. The energy
+  pill's OCR emitted overlapping tokens ("139" and "9/200" sharing the
+  trailing glyph), and the joined text made the gauge regex prefer the
+  spurious `9/200`. The canonical header read now deduplicates
+  horizontally-overlapping OCR tokens so a token's leading characters
+  already consumed by a left neighbor are dropped before parsing. Prior
+  captured energy/EXP/level cases still parse, and unreadable/black
+  frames still publish unknown.
+- The chest order detail (three Fruit 5 requirements, one Item Chest
+  reward) showed its reward quantity badge at the icon's top-right; the
+  measured count zone's normal-scale OCR read the "1" as "L". The
+  existing measured reward-count owner now retries the same zone once at
+  3x upscaling before abstaining — preserving unknown/orphan abstention,
+  per-icon ownership, and every prior count (Sep22 chest 1, feed "4,380",
+  lasso 2). No fallback quantity is inferred from the chest category or a
+  strip read.
+- The third strip swipe's post-action frame was an all-black capture
+  classified `pnc_loading`; a diagnostic capture two seconds later was a
+  fresh board again without input. **Cause unknown** — not proven
+  loading, crash or popup. The ignored corrections draft
+  `.local-data/review/pw05/manual-board-corrections-live004-20260924/`
+  (OFFLINE DRAFT, pending lead rebinding) reuses only that already-
+  captured stray as survey content for the exact loading→fresh-board
+  transition; every other surface or absent/unknown content still stops.
+- The gold statue requirement and feed reward on the first order remain
+  conservatively unknown — no catalog expansion was attempted. Natural
+  blue Fruit5 and two-piece Wood10/lasso variants were absent and stay
+  awaiting_validation.
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings

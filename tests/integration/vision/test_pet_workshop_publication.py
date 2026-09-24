@@ -890,6 +890,35 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
             _elements(observation),
         )
 
+    def test_order_detail_native_rgba_publishes_chest_quantity(self) -> None:
+        """The three-Fruit-5 detail modal proves its Item Chest badge quantity.
+
+        The 2026-09-24 manual-board capture's raw count-zone OCR misread the
+        chest's ``1`` badge as ``L``; the measured zone retries once on an
+        upscaled crop and must publish quantity 1.
+        """
+
+        _, _, workshop = self._assert_both(
+            "pet_workshop_order_detail_chest_20260924_native_rgba.png",
+            ScreenType.PNC_PET_WORKSHOP_ORDER_DETAIL,
+            _ORDER_DETAIL_LAYOUT_ID,
+            "pw05-order-detail-chest",
+            native_mode=True,
+            ocr_service=_require_rapid_ocr_service(self),
+        )
+        state = workshop.state
+        self.assertEqual(WorkshopSurfaceKind.ORDER_DETAIL, state.surface)
+        orders = state.order_survey.orders
+        self.assertEqual(1, len(orders))
+        order = orders[0]
+        self.assertEqual({20105: 3}, order.requirements)
+        self.assertEqual(
+            ((WorkshopOrderRewardCategory.CHEST, 1),),
+            tuple((reward.category, reward.quantity) for reward in order.rewards),
+        )
+        self.assertEqual("order_detail", order.source)
+        self.assertIsNone(order.ready)
+
     def test_help_surface_publishes_close_control(self) -> None:
         """The Tip rules dialog reports the help surface and its close X."""
 
@@ -994,28 +1023,65 @@ class PetWorkshopModalPublicationTests(unittest.TestCase):
 
 
 class _ScriptedEnergyOcrContext:
-    """Frame-local OCR seam that reads one scripted energy-gauge line.
+    """Frame-local OCR seam that reads scripted energy-gauge lines.
 
     Every other bounded region reads empty so level, EXP and reward-count
     fields stay unknown; only the producer's ``workshop_energy`` detail key
     returns text.
     """
 
-    def __init__(self, energy_text: str) -> None:
+    def __init__(
+        self,
+        energy_text: str | None = None,
+        *,
+        energy_lines: tuple[OcrLine, ...] | None = None,
+    ) -> None:
         self._energy_text = energy_text
+        self._energy_lines = energy_lines
 
     def read_lines(
         self, image: Image.Image, region: Bounds, **kwargs: Any
     ) -> tuple[OcrLine, ...]:
         if kwargs.get("detail") == "workshop_energy":
+            if self._energy_lines is not None:
+                return self._energy_lines
             return (
                 OcrLine(text=self._energy_text, bounds=region, confidence=1.0),
             )
         return ()
 
+    def read_preprocessed_result(
+        self, image: Image.Image, region: Bounds, **kwargs: Any
+    ) -> OcrResult | None:
+        return None
+
+
+class _ScriptedCountOcrContext:
+    """Frame-local OCR seam scripting the measured count-zone retry.
+
+    Raw reads stay empty for every detail key; ``prepared_lines`` is the
+    scripted preprocessed result for ``*_count`` regions, or ``None`` when
+    the retry variant is not applicable.
+    """
+
+    def __init__(self, prepared_lines: tuple[OcrLine, ...] | None) -> None:
+        self._prepared_lines = prepared_lines
+
+    def read_lines(
+        self, image: Image.Image, region: Bounds, **kwargs: Any
+    ) -> tuple[OcrLine, ...]:
+        return ()
+
+    def read_preprocessed_result(
+        self, image: Image.Image, region: Bounds, **kwargs: Any
+    ) -> OcrResult | None:
+        if self._prepared_lines is None:
+            return None
+        return OcrResult(lines=self._prepared_lines, words=())
+
 
 class PetWorkshopHeaderOcrTests(unittest.TestCase):
-    """RapidOCR-backed reads of the measured header counters."""
+    """Scripted and RapidOCR reads of the measured header counters."""
 
     def test_energy_gauge_requires_positive_capacity(self) -> None:
         """A nonpositive OCR denominator abstains; valid gauges are kept.
@@ -1047,6 +1113,41 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                 energy = additions.workshop.state.energy
                 self.assertEqual(expected, (energy.current, energy.capacity))
 
+    def test_energy_gauge_drops_overlap_duplicated_digit(self) -> None:
+        """Overlapping split boxes re-reading one glyph cannot rebind the gauge.
+
+        Replays the 2026-09-24 board header defect: the detector emitted
+        ``139`` and ``9/200`` boxes whose shared columns re-read the "9";
+        the joined text must keep the true gauge ``139/200`` instead of the
+        duplicated suffix ``9/200``.
+        """
+
+        producer = WorkshopContentProducer(matcher=OpenCvTemplateMatcher())
+        with Image.open(FIXTURES / "pet_workshop.png") as source:
+            image = source.convert("RGB")
+        additions = producer.additions_for_screen(
+            image=image,
+            screen_type=ScreenType.PNC_PET_WORKSHOP,
+            ocr_context=_ScriptedEnergyOcrContext(
+                energy_lines=(
+                    OcrLine(
+                        text="139",
+                        bounds=Bounds(x=699, y=10, width=68, height=30),
+                        confidence=1.0,
+                    ),
+                    OcrLine(
+                        text="9/200",
+                        bounds=Bounds(x=748, y=10, width=93, height=30),
+                        confidence=1.0,
+                    ),
+                )
+            ),
+            layout_id=_BOARD_LAYOUT_ID,
+        )
+        assert additions is not None and additions.workshop is not None
+        energy = additions.workshop.state.energy
+        self.assertEqual((139, 200), (energy.current, energy.capacity))
+
     def test_header_counters_read_on_real_ocr(self) -> None:
         """Level, EXP, energy and reward counts parse from measured regions."""
 
@@ -1076,9 +1177,24 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                     ((WorkshopOrderRewardCategory.FEED, 1634),),
                 ),
             },
+            "pet_workshop_board_20260924_native_rgba.png": {
+                "header": (8, 21, 139, 200),
+                "native": True,
+                "rewards": (
+                    (
+                        (WorkshopOrderRewardCategory.UNKNOWN, None),
+                        (WorkshopOrderRewardCategory.WORKSHOP_EXP, 2),
+                    ),
+                    ((WorkshopOrderRewardCategory.CHEST, 1),),
+                ),
+            },
         }
         for fixture, facts in expected.items():
-            capture = _capture(fixture, session_id="pw02-header")
+            capture = _capture(
+                fixture,
+                session_id="pw02-header",
+                native_mode=facts.get("native", False),
+            )
             observation = builder.build(
                 capture,
                 request=ObservationRequest.source_screen_retry(
@@ -1107,6 +1223,79 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                             for reward in order.rewards
                         ),
                     )
+
+
+class PetWorkshopRewardCountOcrTests(unittest.TestCase):
+    """Scripted reads of the measured per-group reward count zones.
+
+    The 2026-09-24 order-detail defect showed the raw zone read misclassify a
+    ``1`` badge as ``L``; the owning producer retries once on an upscaled
+    crop and publishes only a single distinct value.
+    """
+
+    def _additions(
+        self, ocr_context: _ScriptedCountOcrContext
+    ) -> Any:
+        producer = WorkshopContentProducer(matcher=OpenCvTemplateMatcher())
+        with Image.open(FIXTURES / "pet_workshop.png") as source:
+            image = source.convert("RGB")
+        additions = producer.additions_for_screen(
+            image=image,
+            screen_type=ScreenType.PNC_PET_WORKSHOP,
+            ocr_context=ocr_context,
+            layout_id=_BOARD_LAYOUT_ID,
+        )
+        assert additions is not None and additions.workshop is not None
+        return additions
+
+    def test_count_zone_retry_publishes_single_value(self) -> None:
+        """A unique numeric on the upscaled retry becomes the badge quantity."""
+
+        additions = self._additions(
+            _ScriptedCountOcrContext(
+                prepared_lines=(
+                    OcrLine(text="1", bounds=Bounds(x=0, y=0, width=8, height=8), confidence=1.0),
+                )
+            )
+        )
+        self.assertEqual(
+            ((1,), (1, 1), (1,)),
+            tuple(
+                tuple(reward.quantity for reward in order.rewards)
+                for order in additions.workshop.state.order_survey.orders
+            ),
+        )
+
+    def test_count_zone_retry_abstains_on_conflicting_values(self) -> None:
+        """Two distinct numerics on the retry keep the quantity unknown."""
+
+        additions = self._additions(
+            _ScriptedCountOcrContext(
+                prepared_lines=(
+                    OcrLine(text="12", bounds=Bounds(x=0, y=0, width=8, height=8), confidence=1.0),
+                    OcrLine(text="34", bounds=Bounds(x=12, y=0, width=8, height=8), confidence=1.0),
+                )
+            )
+        )
+        self.assertEqual(
+            ((None,), (None, None), (None,)),
+            tuple(
+                tuple(reward.quantity for reward in order.rewards)
+                for order in additions.workshop.state.order_survey.orders
+            ),
+        )
+
+    def test_count_zone_retry_abstains_when_not_applicable(self) -> None:
+        """A declined preprocessed variant keeps the quantity unknown."""
+
+        additions = self._additions(_ScriptedCountOcrContext(prepared_lines=None))
+        self.assertEqual(
+            ((None,), (None, None), (None,)),
+            tuple(
+                tuple(reward.quantity for reward in order.rewards)
+                for order in additions.workshop.state.order_survey.orders
+            ),
+        )
 
 
 if __name__ == "__main__":

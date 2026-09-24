@@ -1643,6 +1643,34 @@
         "source": "C:/Users/lebel/pnc/.local-data/artifacts/2026-09-16/pet_workshop_exploration_20260916/20260916T051131Z_explore_011_after_swipe.png",
         "derivative": "Unmodified native RGBA session frame: the LV8 order strip scrolled left, showing the complete Wood 10 + Fruit 5 card (beast lasso x2, feed 4380) with no Complete control, beside a left-clipped card and a fulfilled single-coconut card."
       }
+    },
+    {
+      "image": "pet_workshop_board_20260924_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-24/main/pet_workshop_manual_board_5d839e9e",
+      "sha256": "29dc516ab1aacbffa048713cd1b49d14bee482a174b8c1d41bbe1eeb6e280c8f",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-24/pet_workshop_manual_board_5d839e9e_20260924/20260924T062825Z_c1_board.png",
+        "derivative": "Unmodified native RGBA c1_board frame from the 2026-09-24 manual-board recognition run on Main (Hopium): energy pill clearly reads 139/200 beside Lv8 EXP 21/100; two Complete controls show on the strip."
+      }
+    },
+    {
+      "image": "pet_workshop_order_detail_chest_20260924_native_rgba.png",
+      "screen": "PNC_PET_WORKSHOP_ORDER_DETAIL",
+      "split": "validation",
+      "group": "2026-09-24/main/pet_workshop_manual_board_5d839e9e",
+      "sha256": "42569f036a068317e706ac4768be45ae28d8b9410c580d1bdbb0c8350c542879",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP_ORDER_DETAIL"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-24/pet_workshop_manual_board_5d839e9e_20260924/20260924T062959Z_c3_detail_2.png",
+        "derivative": "Unmodified native RGBA c3_detail_2 frame from the 2026-09-24 manual-board recognition run on Main (Hopium): three Fruit 5 pedestals and one framed Item Chest reward with a visible '1' badge."
+      }
     }
   ]
 }

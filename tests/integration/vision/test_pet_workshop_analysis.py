@@ -54,6 +54,8 @@ _THREE_FRUIT5 = "pet_workshop_board_three_fruit5_native_rgba.png"
 _THREE_FRUIT5_S2 = "pet_workshop_board_three_fruit5_survey_2_native_rgba.png"
 _THREE_FRUIT5_S4 = "pet_workshop_board_three_fruit5_survey_4_native_rgba.png"
 _DETAIL_CHEST = "pet_workshop_order_detail_chest_native_rgba.png"
+_BOARD_20260924 = "pet_workshop_board_20260924_native_rgba.png"
+_DETAIL_CHEST_20260924 = "pet_workshop_order_detail_chest_20260924_native_rgba.png"
 
 
 def _order(report: dict, order_ref: int) -> dict:
@@ -109,6 +111,8 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
                 _THREE_FRUIT5_S2,
                 _THREE_FRUIT5_S4,
                 _DETAIL_CHEST,
+                _BOARD_20260924,
+                _DETAIL_CHEST_20260924,
             },
             set(labels),
         )
@@ -312,7 +316,15 @@ class PetWorkshopSavedFrameAnalysisTests(unittest.TestCase):
     def test_native_rgba_input_stays_native(self) -> None:
         """Native captures report their real mode, never a conversion."""
 
-        for name in (_BOARD_LASSO, _DETAIL_LASSO, _TREE4, _PRODUCED, _MERGED):
+        for name in (
+            _BOARD_LASSO,
+            _DETAIL_LASSO,
+            _TREE4,
+            _PRODUCED,
+            _MERGED,
+            _BOARD_20260924,
+            _DETAIL_CHEST_20260924,
+        ):
             with self.subTest(image=name):
                 report = self._report(name)
                 self.assertEqual("RGBA", report["input"]["mode"])
