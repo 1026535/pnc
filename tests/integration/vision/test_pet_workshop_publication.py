@@ -47,7 +47,7 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.pet_workshop import WorkshopContentProducer
+from pnc_automation.app.pnc.vision.pet_workshop import WorkshopContentProducer, _join_region_lines
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
@@ -1064,13 +1064,17 @@ class _ScriptedCountOcrContext:
     the retry variant is not applicable.
     """
 
-    def __init__(self, prepared_lines: tuple[OcrLine, ...] | None) -> None:
+    def __init__(
+        self, prepared_lines: tuple[OcrLine, ...] | None,
+        *, raw_lines: tuple[OcrLine, ...] = (),
+    ) -> None:
         self._prepared_lines = prepared_lines
+        self._raw_lines = raw_lines
 
     def read_lines(
         self, image: Image.Image, region: Bounds, **kwargs: Any
     ) -> tuple[OcrLine, ...]:
-        return ()
+        return self._raw_lines
 
     def read_preprocessed_result(
         self, image: Image.Image, region: Bounds, **kwargs: Any
@@ -1224,6 +1228,29 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                         ),
                     )
 
+    def test_overlapping_gauge_conflict_abstains(self) -> None:
+        """Spatial overlap cannot silently replace a disagreeing OCR digit."""
+        producer = WorkshopContentProducer(matcher=OpenCvTemplateMatcher())
+        with Image.open(FIXTURES / "pet_workshop_board_20260924_native_rgba.png") as image:
+            additions = producer.additions_for_screen(
+                image=image, screen_type=ScreenType.PNC_PET_WORKSHOP,
+                layout_id=_BOARD_LAYOUT_ID,
+                ocr_context=_ScriptedEnergyOcrContext(energy_lines=(
+                    OcrLine(text="139", bounds=Bounds(x=699, y=10, width=68, height=30), confidence=1.0),
+                    OcrLine(text="8/200", bounds=Bounds(x=748, y=10, width=93, height=30), confidence=1.0),
+                )),
+            )
+        energy = additions.workshop.state.energy
+        self.assertEqual((None, None), (energy.current, energy.capacity))
+
+    def test_region_text_preserves_vertically_separate_lines(self) -> None:
+        """Overlapping x ranges on different text rows are not shared glyphs."""
+        lines = (
+            OcrLine(text="139", bounds=Bounds(x=699, y=10, width=68, height=12), confidence=1.0),
+            OcrLine(text="9/200", bounds=Bounds(x=748, y=28, width=93, height=12), confidence=1.0),
+        )
+        self.assertEqual("139 9/200", _join_region_lines(lines))
+
 
 class PetWorkshopRewardCountOcrTests(unittest.TestCase):
     """Scripted reads of the measured per-group reward count zones.
@@ -1295,6 +1322,21 @@ class PetWorkshopRewardCountOcrTests(unittest.TestCase):
                 tuple(reward.quantity for reward in order.rewards)
                 for order in additions.workshop.state.order_survey.orders
             ),
+        )
+
+    def test_count_retry_cannot_override_conflicting_raw_readings(self) -> None:
+        """A sole retry value cannot hide two different raw quantities."""
+        additions = self._additions(_ScriptedCountOcrContext(
+            prepared_lines=(OcrLine(text="1", bounds=Bounds(x=0, y=0, width=8, height=8), confidence=1.0),),
+            raw_lines=(
+                OcrLine(text="12", bounds=Bounds(x=0, y=0, width=8, height=8), confidence=1.0),
+                OcrLine(text="34", bounds=Bounds(x=12, y=0, width=8, height=8), confidence=1.0),
+            ),
+        ))
+        self.assertEqual(
+            ((None,), (None, None), (None,)),
+            tuple(tuple(reward.quantity for reward in order.rewards)
+                  for order in additions.workshop.state.order_survey.orders),
         )
 
 

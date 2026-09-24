@@ -451,15 +451,16 @@ Two frames are promoted to `tests/data/screen_recognition/` as
   pill's OCR emitted overlapping tokens ("139" and "9/200" sharing the
   trailing glyph), and the joined text made the gauge regex prefer the
   spurious `9/200`. The canonical header read now deduplicates
-  horizontally-overlapping OCR tokens so a token's leading characters
-  already consumed by a left neighbor are dropped before parsing. Prior
+  same-row overlapping OCR tokens only when the overlapping text matches;
+  conflicting overlap remains unknown. Prior
   captured energy/EXP/level cases still parse, and unreadable/black
   frames still publish unknown.
 - The chest order detail (three Fruit 5 requirements, one Item Chest
   reward) showed its reward quantity badge at the icon's top-right; the
   measured count zone's normal-scale OCR read the "1" as "L". The
   existing measured reward-count owner now retries the same zone once at
-  3x upscaling before abstaining — preserving unknown/orphan abstention,
+  3x upscaling when the raw read has no numeric value. Conflicting raw
+  values remain unknown without retry, preserving unknown/orphan abstention,
   per-icon ownership, and every prior count (Sep22 chest 1, feed "4,380",
   lasso 2). No fallback quantity is inferred from the chest category or a
   strip read.

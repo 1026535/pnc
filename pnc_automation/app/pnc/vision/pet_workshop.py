@@ -1014,6 +1014,9 @@ class WorkshopContentProducer:
         }
         if len(values) == 1:
             return values.pop()
+        if values:
+            # A preprocessing variant cannot erase conflicting raw facts.
+            return None
         # One upscaled retry of the same measured zone: the detector can
         # misread a badge digit on the raw crop (the 2026-09-24 order detail
         # read the Item Chest "1" badge as "L"). The retry publishes only
@@ -1209,13 +1212,15 @@ def _join_region_lines(lines) -> str:
     The detector can emit two boxes sharing edge columns when adjacent
     glyphs split across detections — the 2026-09-24 board header returned
     "139" and "9/200" whose boxes overlap on the shared "9". When a later
-    box starts strictly inside the previous box's span and extends past it,
-    its overlapped leading glyphs repeat already-read pixels; drop that
-    prefix so the joined text cannot bind a duplicated gauge suffix.
+    box starts inside the previous same-row box and extends past it,
+    geometry identifies a possible duplicated prefix. Drop it only when
+    its text matches the predecessor's suffix; conflicting overlapping
+    readings abstain rather than invent a gauge value.
     """
 
     parts: list[str] = []
     previous: Bounds | None = None
+    previous_text = ""
     for line in lines:
         text = line.text
         bounds = line.bounds
@@ -1223,13 +1228,18 @@ def _join_region_lines(lines) -> str:
             previous is not None
             and previous.x < bounds.x < previous.x + previous.width
             and bounds.x + bounds.width > previous.x + previous.width
+            and min(previous.y + previous.height, bounds.y + bounds.height)
+            - max(previous.y, bounds.y) >= min(previous.height, bounds.height) / 2
         ):
             overlap = previous.x + previous.width - bounds.x
             dropped = min(len(text), round(overlap * len(text) / bounds.width))
+            if dropped and not previous_text.endswith(text[:dropped]):
+                return ""
             text = text[dropped:]
         if text:
             parts.append(text)
         previous = bounds
+        previous_text = line.text
     return " ".join(parts)
 
 
