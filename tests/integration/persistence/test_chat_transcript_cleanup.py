@@ -10,17 +10,28 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 from unittest.mock import patch
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind, ObservedChatEntry
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
+    ChatTranscriptCleanupResult,
     build_chat_transcript_cleanup_patterns,
     clean_and_persist_chat_transcript,
     clean_chat_transcript_text,
 )
 from pnc_automation.app.pnc.persistence.archive_ownership import chat_scope_from_transcript_path
+
+
+class _ConcurrentCleanupOutcome(NamedTuple):
+    """Captures both workers' outcomes so the parent test can surface either worker's failure."""
+
+    cleanup_result: ChatTranscriptCleanupResult | None
+    cleanup_error: BaseException | None
+    writer_error: BaseException | None
+    transcript_text: str
 
 
 class ChatTranscriptCleanupTests(unittest.TestCase):
@@ -108,69 +119,39 @@ class ChatTranscriptCleanupTests(unittest.TestCase):
     def test_cleanup_read_modify_write_is_serialized_with_concurrent_store_writer(self) -> None:
         """A writer that arrives during cleanup cannot be erased by a stale pre-lock read."""
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            store = ChatArchiveStore(root / "chat")
-            castle = CastleIdentity("K1", "Castle", 22)
-            first_snapshot = store.build_snapshot((ObservedChatEntry(
-                ChatEntryKind.PLAYER, "Alice", "I crafted a blade! (Tap to View)", 0,
-            ),))
-            first = store.persist_heartbeat(
-                account_id="account", castle=castle, channel=ChatChannel.WORLD,
-                captured_at=datetime(2026, 3, 24, 10, tzinfo=UTC),
-                snapshot=first_snapshot, screenshot_payload=b"first",
-            )
-            entered = threading.Event()
-            continue_cleanup = threading.Event()
-            writer_done = threading.Event()
-            writer_errors: list[BaseException] = []
-            real_clean = __import__(
-                "pnc_automation.app.pnc.persistence.chat_transcript_cleanup",
-                fromlist=["clean_chat_transcript_text"],
-            ).clean_chat_transcript_text
+        outcome = self._run_cleanup_with_concurrent_writer()
+        cleanup_result = self._assert_workers_succeeded(outcome)
 
-            def delayed_clean(*args: object, **kwargs: object):
-                entered.set()
-                self.assertTrue(continue_cleanup.wait(timeout=5))
-                return real_clean(*args, **kwargs)
+        self.assertTrue(cleanup_result.changed)
+        self.assertEqual(
+            ["I crafted a blade! (Tap to View)"],
+            [removed.line.message_text for removed in cleanup_result.removed_lines],
+        )
+        self.assertEqual("[2026-03-24T10:01:00Z] Bob: kept row\n", outcome.transcript_text)
 
-            def writer() -> None:
-                try:
-                    store.persist_heartbeat(
-                        account_id="account", castle=castle, channel=ChatChannel.WORLD,
-                        captured_at=datetime(2026, 3, 24, 10, 1, tzinfo=UTC),
-                        snapshot=store.build_snapshot((
-                            ObservedChatEntry(ChatEntryKind.PLAYER, "Alice", "I crafted a blade! (Tap to View)", 0),
-                            ObservedChatEntry(ChatEntryKind.PLAYER, "Bob", "kept row", 1),
-                        )),
-                        screenshot_payload=b"second",
-                    )
-                except BaseException as error:
-                    writer_errors.append(error)
-                finally:
-                    writer_done.set()
+    def test_cleanup_worker_failure_after_the_gate_fails_the_parent_test(self) -> None:
+        """A deterministic cleanup error past the synchronization point surfaces even when the writer succeeds."""
 
-            with patch(
-                "pnc_automation.app.pnc.persistence.chat_transcript_cleanup.clean_chat_transcript_text",
-                side_effect=delayed_clean,
-            ):
-                cleanup_thread = threading.Thread(
-                    target=lambda: clean_and_persist_chat_transcript(
-                        first.transcript_path,
-                        patterns=build_chat_transcript_cleanup_patterns(),
-                    )
-                )
-                cleanup_thread.start()
-                self.assertTrue(entered.wait(timeout=5))
-                writer_thread = threading.Thread(target=writer)
-                writer_thread.start()
-                time.sleep(0.1)
-                self.assertFalse(writer_done.is_set())
-                continue_cleanup.set()
-                cleanup_thread.join(timeout=5)
-                writer_thread.join(timeout=5)
-            self.assertFalse(writer_errors, writer_errors)
-            self.assertIn("kept row", first.transcript_path.read_text(encoding="utf-8"))
+        sentinel = RuntimeError("injected cleanup failure")
+        outcome = self._run_cleanup_with_concurrent_writer(cleanup_error=sentinel)
+
+        self.assertIsNone(outcome.writer_error)
+        self.assertIn("kept row", outcome.transcript_text)
+        with self.assertRaises(AssertionError) as caught:
+            self._assert_workers_succeeded(outcome)
+        self.assertIs(sentinel, caught.exception.__cause__)
+
+    def test_writer_failure_fails_the_parent_test(self) -> None:
+        """A captured writer error surfaces as a parent-test failure even when cleanup succeeds."""
+
+        sentinel = RuntimeError("injected writer failure")
+        outcome = self._run_cleanup_with_concurrent_writer(writer_error=sentinel)
+
+        self.assertIsNone(outcome.cleanup_error)
+        self.assertIn("kept row", outcome.transcript_text)
+        with self.assertRaises(AssertionError) as caught:
+            self._assert_workers_succeeded(outcome)
+        self.assertIs(sentinel, caught.exception.__cause__)
 
     def test_cli_write_uses_locked_production_cleanup_path(self) -> None:
         """The command-line write mode exercises the same synthetic managed archive path."""
@@ -195,6 +176,113 @@ class ChatTranscriptCleanupTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertIn("mode=write", result.stdout)
             self.assertEqual("[2026-03-24T10:01:00Z] Bob: kept row\n", transcript.read_text(encoding="utf-8"))
+
+    def _run_cleanup_with_concurrent_writer(
+        self,
+        *,
+        cleanup_error: BaseException | None = None,
+        writer_error: BaseException | None = None,
+    ) -> _ConcurrentCleanupOutcome:
+        """Runs one gated cleanup against a concurrent store writer and captures both outcomes.
+
+        The cleanup worker pauses inside the stream lock until the caller releases it;
+        ``cleanup_error`` is raised after that synchronization point and ``writer_error``
+        after the writer's append, so each worker failure can be checked in the parent test.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root / "chat")
+            castle = CastleIdentity("K1", "Castle", 22)
+            first_snapshot = store.build_snapshot((ObservedChatEntry(
+                ChatEntryKind.PLAYER, "Alice", "I crafted a blade! (Tap to View)", 0,
+            ),))
+            first = store.persist_heartbeat(
+                account_id="account", castle=castle, channel=ChatChannel.WORLD,
+                captured_at=datetime(2026, 3, 24, 10, tzinfo=UTC),
+                snapshot=first_snapshot, screenshot_payload=b"first",
+            )
+            entered = threading.Event()
+            continue_cleanup = threading.Event()
+            writer_done = threading.Event()
+            cleanup_results: list[ChatTranscriptCleanupResult] = []
+            cleanup_errors: list[BaseException] = []
+            writer_errors: list[BaseException] = []
+
+            def delayed_clean(*args: object, **kwargs: object):
+                entered.set()
+                if not continue_cleanup.wait(timeout=5):
+                    raise TimeoutError("cleanup worker was not released within five seconds")
+                if cleanup_error is not None:
+                    raise cleanup_error
+                return clean_chat_transcript_text(*args, **kwargs)
+
+            def cleanup() -> None:
+                try:
+                    cleanup_results.append(clean_and_persist_chat_transcript(
+                        first.transcript_path,
+                        patterns=build_chat_transcript_cleanup_patterns(),
+                    ))
+                except BaseException as error:
+                    cleanup_errors.append(error)
+
+            def writer() -> None:
+                try:
+                    store.persist_heartbeat(
+                        account_id="account", castle=castle, channel=ChatChannel.WORLD,
+                        captured_at=datetime(2026, 3, 24, 10, 1, tzinfo=UTC),
+                        snapshot=store.build_snapshot((
+                            ObservedChatEntry(ChatEntryKind.PLAYER, "Alice", "I crafted a blade! (Tap to View)", 0),
+                            ObservedChatEntry(ChatEntryKind.PLAYER, "Bob", "kept row", 1),
+                        )),
+                        screenshot_payload=b"second",
+                    )
+                    if writer_error is not None:
+                        raise writer_error
+                except BaseException as error:
+                    writer_errors.append(error)
+                finally:
+                    writer_done.set()
+
+            with patch(
+                "pnc_automation.app.pnc.persistence.chat_transcript_cleanup.clean_chat_transcript_text",
+                side_effect=delayed_clean,
+            ):
+                cleanup_thread = threading.Thread(target=cleanup, daemon=True)
+                writer_thread = threading.Thread(target=writer, daemon=True)
+                writer_started = False
+                cleanup_thread.start()
+                try:
+                    self.assertTrue(entered.wait(timeout=5), "cleanup worker never reached the gated read")
+                    writer_thread.start()
+                    writer_started = True
+                    time.sleep(0.1)
+                    self.assertFalse(writer_done.is_set())
+                finally:
+                    continue_cleanup.set()
+                    cleanup_thread.join(timeout=5)
+                    if writer_started:
+                        writer_thread.join(timeout=5)
+                    self.assertFalse(cleanup_thread.is_alive(), "cleanup worker did not terminate")
+                    self.assertFalse(writer_thread.is_alive(), "writer worker did not terminate")
+                transcript_text = first.transcript_path.read_text(encoding="utf-8")
+            return _ConcurrentCleanupOutcome(
+                cleanup_result=cleanup_results[0] if cleanup_results else None,
+                cleanup_error=cleanup_errors[0] if cleanup_errors else None,
+                writer_error=writer_errors[0] if writer_errors else None,
+                transcript_text=transcript_text,
+            )
+
+    def _assert_workers_succeeded(self, outcome: _ConcurrentCleanupOutcome) -> ChatTranscriptCleanupResult:
+        """Surfaces either worker's captured exception as a calling-test failure; returns the cleanup result."""
+
+        if outcome.cleanup_error is not None:
+            raise self.failureException("cleanup worker raised") from outcome.cleanup_error
+        if outcome.writer_error is not None:
+            raise self.failureException("writer worker raised") from outcome.writer_error
+        if outcome.cleanup_result is None:
+            self.fail("cleanup worker produced no result")
+        return outcome.cleanup_result
 
 
 if __name__ == "__main__":
