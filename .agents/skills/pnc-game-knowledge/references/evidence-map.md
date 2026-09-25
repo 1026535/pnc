@@ -27,7 +27,7 @@ Encoding: `assets/resourcesdata/luascript/**` TextAssets XOR every byte with `0x
 
 ## Other indexes
 
-- `asset-index.json` — all 387,503 objects across the 22 `ABAsset.pkglzma_*` chunks: `{chunk, bundle_offset, bundle, path_id, type, name}`; 4,099 UnityFS bundles. `survey_bundles.py` rebuilds it (~100s). `dump_prefab2.py <chunk> <offset>` decodes an NGUI prefab hierarchy with widget sizes/colliders; `extract_textasset.py <chunk> <offset> <path_id>` pulls a single object (BaseData tables are Lua source under the same 0x2C XOR).
+- `asset-index.json` — all 387,503 objects across the 22 `ABAsset.pkglzma_*` chunks: `{chunk, bundle_offset, bundle, path_id, type, name}`; 4,099 UnityFS bundles. `survey_bundles.py` rebuilds it (~100s). `dump_prefab2.py <chunk> <offset>` decodes an NGUI prefab hierarchy with widget sizes/colliders; `extract_textasset.py <chunk> <offset> <path_id>` pulls a single object (BaseData tables are Lua source under the same 0x2C XOR). Decoded outputs already on disk include `recoment_unions_view.json`, `home_city_scene.json`, and `building_position.lua`. Running a new extraction needs an interpreter — outside this consultation's boundary; return `NEEDS_LEAD` with the exact command.
 - `lua-search/inventory.json` — 20,959 TextAsset records across all 22 `ABAsset.pkglzma_*` chunks: `{chunk, offset, name, size, header, sha256}`. Raw payloads are stored as `lua-search/<sha256>.bin`; hex header `4b45592c4368696e6573650d` = `KEY,Chinese` localization table.
 - `text-assets.json` — the 460 chunk-0 TextAssets (all localization tables); samples in `textasset-*.bin`.
 - `type-markers.json`, `lua-literals.json` — metadata marker lists used to locate the Lua storage.
