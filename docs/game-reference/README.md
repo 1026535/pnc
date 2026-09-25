@@ -21,6 +21,7 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Resource inventory](workflows/resource-inventory.md) | Recycled Bag rows, partial edge visibility, single versus bulk Use, and full-inventory proof limits |
 | [Mail sending](workflows/mail-sending.md) | Player versus alliance send branches, client eligibility checks, and correlated receipt requirements |
 | [Popup recognition](workflows/popup-recognition.md) | Recurring popup dismissal table (trigger, identity, close geometry) plus Login/VIP/Alliance/Conquest client predicates and observation-session gating |
+| [Home city layout](workflows/home-city-layout.md) | Extracted scene: 54 building-slot world anchors, district unlock zones, camera/pan model for distance and click targeting |
 | [Pet Workshop](workflows/pet-workshop.md) | Decoded 5.0.203 merge-board tables (items/producers/drops/grid/levels/energy), inheritance resolution, and order-progression checks |
 | [Provenance and reproduction](PROVENANCE.md) | Build, hashes, artifact locations, and offline reconstruction |
 

@@ -15,8 +15,9 @@ The primary source is `.local-data/apk-exploration/` under the repository root �
 
 1. Check the evidence-map digest — build facts, Lua storage location/encoding, the traced send path, packet layout, and the verified request example are already established there.
 2. For behavior questions, search the recovered sources: `gameplay-lua/commands/<feature>/` holds request wrappers and response-handler registration, `uis/<feature>/` holds screen logic, `managers/`/`datas/` hold client state, `server/`/`handler/` hold inbound handling, `task/` holds quests. Use `gameplay-lua-index.json` to map asset paths to exported files, and `lua-search/inventory.json` for TextAssets outside the gameplay bundle.
-3. For protocol questions, use `SIMPLE_INSTR_TRACE.md` (packet layout, checksum, argument semantics) and `il2cppdumper/dump.cs` (type and method signatures); `native-trace/` holds the annotated assembly.
-4. Prefer the recovered client source over inference. A question the evidence cannot settle stays open — name the smallest observation or artifact that would settle it.
+3. For layout, hit-area, position, or art questions, search `asset-index.json` (all 387,503 bundle objects by name/type); `dump_prefab2.py` decodes an NGUI prefab's widget geometry and colliders, `extract_textasset.py` pulls one object, and BaseData tables decode as Lua under the 0x2C XOR. `uis/winsprefabtype.lua` maps every window enum to its `UI/UIModules/**.prefab` path.
+4. For protocol questions, use `SIMPLE_INSTR_TRACE.md` (packet layout, checksum, argument semantics) and `il2cppdumper/dump.cs` (type and method signatures); `native-trace/` holds the annotated assembly.
+5. Prefer the recovered client source over inference. A question the evidence cannot settle stays open — name the smallest observation or artifact that would settle it.
 
 ## Evidence discipline
 
