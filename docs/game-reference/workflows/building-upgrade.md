@@ -84,6 +84,16 @@ Back from the internal upgrade panel returns the Institute's primary panel, with
 
 The prerequisite target text may remain a descriptive fact when its measured Go is absent. Its absence suppresses prerequisite actionability; neither OCR Go nor the lower equipment Go can replace that row's control.
 
+## Packaged-source re-verification — September 27, 2026
+
+Re-checked offline against a fresh reproduction of the same recorded build (5.0.203/233; repository-relative snapshot `.local-data/apk-exploration/snapshots/233-20260927-devin-verification`, accepted by the Codex lead on 2026-09-27, whose index is byte-identical to the baseline). Evidence: artifact-observed packaged client source. Confidence: high for the checked claims below.
+
+Verified claims: the `OnUpgradeHandler` predicate order and queue branches above (lines 629–717), the buff-modified `CheckResIsEnough` path (592–620), `BuildingSend.UpgradeBuilding` sending dest 4 / cmd 4 with `{id, queueId}`, nil clientData, showLoading, duration 0 (326–334), `command.UpgradeBuilding`'s `FlyErrorCode` gate, stale-level early return, state updates, and `UPGRADE_BUILDING` dispatch (744–779, registered at 1327; the fast handler dispatches it at 802), and the `GetBuildingInfo` send/handler pair (285–302, 630–661).
+
+Dependencies inspected: `BuildingData:CheckBuildPreconditionIsPass`/`ParseTaskTargetBySrc` (`buildingdata.lua` 623–657), `GetIdelCoolStatusType` status codes 1–5 (1015–1051), `GameBuffManager:GetUpgradeBuildCost`/`GetItemConsume` (`managers/gamebuffmanager.lua` 978/1332), `ItemData:ResFaseUse` (`datas/itemdata.lua` 1010), `GameRuleType.CASTLE_LVUP_NOTICE = 406` (`datas/types/gameruletype.lua` 78).
+
+Not re-examined: the September 13 recognition and September 16 live-qualification notes above and the "Still unverified" items; they keep their own evidence and dates. This check establishes nothing about downloaded script overrides or current server behavior.
+
 ## Still unverified
 
 Server-side prerequisites and spending rules; complete cost formulas; all queue-status meanings; response timing across live states; downloaded script overrides; and direct-call authentication/acceptance. Extend this note when scoped work establishes those facts, with dated evidence rather than assumed coverage.

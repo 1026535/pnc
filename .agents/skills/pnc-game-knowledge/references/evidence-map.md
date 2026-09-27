@@ -4,6 +4,8 @@ All paths below are relative to `.local-data/apk-exploration/` under the reposit
 
 This is a build-specific baseline, not a claim about today's installed or downloaded game content. For refresh triggers, new-build discovery, differential verification, and acceptance, use [the knowledge refresh procedure](../../../../docs/game-reference/MAINTENANCE.md). Preserve this baseline's provenance when accepting a successor; do not relabel its findings as newly verified.
 
+Re-verified and accepted by the Codex lead on 2026-09-27 (repository `667c3a6`): the supplied APKs re-hashed to the values in `apk-checksums.json`; gameplay Lua re-extracted to `snapshots/233-20260927-devin-verification/` with a byte-identical 6,276-file index (see its `evidence-manifest.json`, `content-delta.json`, and `review.md`); native inputs match the baseline, so the trace/checksum proof below is inherited without rerunning it. Acceptance covers this supplementary Lua reproduction and the normal building-upgrade source recheck. This map retains the baseline root above for native reports and other assets; the run does not establish the current installed build.
+
 ## Verified build facts
 
 - Package `com.global.tmslg`, versionName `5.0.203`, versionCode 233, `arm64-v8a`, minSdk 24, targetSdk 35 (`package-info.json`, `apk-checksums.json`).
@@ -59,7 +61,7 @@ Chain: `LuaManager.SimpleInstrSend` (`0x17AC41C`) → `LuaSamePropertyObjectUtil
 
 ## Verified request example
 
-`uis/building/buildingupgradewin.lua:717` calls `BuildingSend.UpgradeBuilding(id, 0)` → `commands/building/buildingcommand.lua:326` builds `{id, queueId}` → `SimpleInstrSend` at `:334` with `Destination.BUILDING = 4` (`destination.lua:18`), `BuildingCmd.UPGRADE_BUILDING = 4` (`:58`); response handlers are registered in the `LuaRegisterHandler` block starting at `:1322`. Non-spending investigation candidate: `BuildingSend.GetBuildingInfo` at `:285` (dest 4, `BuildingCmd.GET_BUILDING_INFO = 1` at `:19`, empty server-parameter table; sends at `:302`).
+`uis/building/buildingupgradewin.lua:717` calls `BuildingSend.UpgradeBuilding(id, 0)` → `commands/building/buildingcommand.lua:326` builds `{id, queueId}` → `SimpleInstrSend` at `:334` with `Destination.BUILDING = 4` (`destination.lua:18`), `BuildingCmd.UPGRADE_BUILDING = 4` (`:58`); response handlers are registered in the `LuaRegisterHandler` block starting at `:1324`. Non-spending investigation candidate: `BuildingSend.GetBuildingInfo` at `:285` (dest 4, `BuildingCmd.GET_BUILDING_INFO = 1` at `:19`, empty server-parameter table; sends at `:302`).
 
 ## Known gaps
 
