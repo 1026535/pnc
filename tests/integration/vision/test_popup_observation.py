@@ -19,9 +19,11 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ImageSelectorEngine,
 )
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
+from pnc_automation.app.pnc.domain.popup import PopupControlKind
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_reconnect_popup_additions,
+    _build_update_required_popup_additions,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
@@ -172,3 +174,80 @@ class PopupObservationTests(unittest.TestCase):
             self.assertIsNotNone(additions)
             assert additions is not None
             self.assertEqual("ocr_reconnect_popup", additions.screen_evidence[0].reason)
+
+    def test_reconnect_popup_accepts_wrapped_two_line_message(self) -> None:
+        """The ConfirmBox content label wraps; the exact phrases may split lines."""
+
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        additions = _build_reconnect_popup_additions(
+            image=image,
+            lines=(
+                _ocr_line("Disconnected.", x=60, y=382, width=160, height=35),
+                _ocr_line("Reconnect now?[-10013]", x=60, y=420, width=290, height=35),
+                _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+            ),
+        )
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        self.assertEqual("ocr_reconnect_popup", additions.screen_evidence[0].reason)
+        assert additions.popup_overlay is not None
+        candidate = additions.popup_overlay.candidate(PopupControlKind.RECONNECT_CONFIRM)
+        self.assertIsNotNone(candidate)
+        assert candidate is not None
+        self.assertEqual(candidate.action_point, (284, 550))
+
+    def test_reconnect_popup_requires_both_message_phrases(self) -> None:
+        """A bare Confirm near unrelated text is not a reconnect dialog."""
+
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        additions = _build_reconnect_popup_additions(
+            image=image,
+            lines=(
+                _ocr_line("Disconnected.", x=60, y=382, width=160, height=35),
+                _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+            ),
+        )
+        self.assertIsNone(additions)
+
+    def test_update_required_accepts_split_title_and_message_lines(self) -> None:
+        """The update dialog's title and confirm phrase may land on separate lines."""
+
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        additions = _build_update_required_popup_additions(
+            image=image,
+            lines=(
+                _ocr_line("New version detected", x=60, y=300, width=320, height=40),
+                _ocr_line("Please confirm to update", x=60, y=344, width=330, height=40),
+                _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+            ),
+        )
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        self.assertEqual("ocr_update_required_popup", additions.screen_evidence[0].reason)
+        assert additions.popup_overlay is not None
+        candidate = additions.popup_overlay.candidate(PopupControlKind.UPDATE_CONFIRM)
+        self.assertIsNotNone(candidate)
+        assert candidate is not None
+        self.assertEqual(candidate.action_point, (284, 550))
+
+    def test_update_required_still_accepts_the_single_line_failure_message(self) -> None:
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        additions = _build_update_required_popup_additions(
+            image=image,
+            lines=(
+                _ocr_line("Update failed try again", x=60, y=390, width=380, height=40),
+                _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+            ),
+        )
+        self.assertIsNotNone(additions)
+
+    def test_update_required_rejects_title_without_confirm_wording(self) -> None:
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        additions = _build_update_required_popup_additions(
+            image=image,
+            lines=(
+                _ocr_line("New version detected", x=60, y=300, width=320, height=40),
+                _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+            ),
+        )
+        self.assertIsNone(additions)

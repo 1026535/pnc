@@ -5574,11 +5574,32 @@ def _build_update_required_popup_additions(
 ) -> ObservationAdditions | None:
     """Materializes Confirm only for an exact required-update dialog message."""
 
-    update_line = _find_line_matching(
+    message_lines = _popup_message_band_lines(
+        image=image,
         lines=lines,
-        predicate=lambda line: _is_update_confirmation_message(line.text),
-        min_y=0,
-        max_y=int(image.height * 0.7),
+        min_y_ratio=0.0,
+        max_y_ratio=0.7,
+    )
+    joined_message = "".join(normalize_ocr_text(line.text) for line in message_lines)
+    if _UPDATE_FAILURE_MESSAGE_TEXT not in joined_message and not (
+        "NEWVERSIONDETECTED" in joined_message
+        and "CONFIRMTOUPDATE" in joined_message
+    ):
+        return None
+    # Prefer the line that fully carries a reviewed message; when the exact
+    # phrases wrap across the two-line ConfirmBox content label, anchor the
+    # group on the fragment-bearing line nearest the top of the message.
+    update_line = next(
+        (line for line in message_lines if _is_update_confirmation_message(line.text)),
+        next(
+            (
+                line
+                for line in message_lines
+                if "NEWVERSIONDETECTED" in normalize_ocr_text(line.text)
+                or "UPDATEFAILED" in normalize_ocr_text(line.text)
+            ),
+            message_lines[-1],
+        ),
     )
     confirm_line = _find_line_with_normalized_text(
         lines=lines,
@@ -6243,6 +6264,34 @@ def _visual_close_component_bounds(
 
 
 
+def _popup_message_band_lines(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    min_y_ratio: float,
+    max_y_ratio: float,
+) -> tuple[OcrLine, ...]:
+    """Returns non-empty modal message-band lines in reading order.
+
+    The shared ConfirmBoxPanel content label is sized for two wrapped lines
+    (w596 h62 in the 640x1136 design space), so one exact dialog message can
+    arrive split across adjacent OCR lines at other resolutions or locales.
+    """
+
+    min_y = int(image.height * min_y_ratio)
+    max_y = int(image.height * max_y_ratio)
+    return tuple(
+        sorted(
+            (
+                line
+                for line in lines
+                if min_y <= line.bounds.y <= max_y and normalize_ocr_text(line.text)
+            ),
+            key=lambda line: (line.bounds.y, line.bounds.x),
+        )
+    )
+
+
 def _build_reconnect_popup_additions(
     *,
     image: Image.Image,
@@ -6250,14 +6299,20 @@ def _build_reconnect_popup_additions(
 ) -> ObservationAdditions | None:
     """Returns the reconnect confirmation modal as the shared blocking-popup contract."""
 
-    message_line = _find_line_matching(
+    message_lines = _popup_message_band_lines(
+        image=image,
         lines=lines,
-        predicate=lambda line: (
-            "DISCONNECTED" in normalize_ocr_text(line.text)
-            and "RECONNECTNOW" in normalize_ocr_text(line.text)
-        ),
-        min_y=int(image.height * 0.25),
-        max_y=int(image.height * 0.6),
+        min_y_ratio=0.25,
+        max_y_ratio=0.6,
+    )
+    joined_message = "".join(normalize_ocr_text(line.text) for line in message_lines)
+    if "DISCONNECTED" not in joined_message or "RECONNECTNOW" not in joined_message:
+        return None
+    # Group on the line carrying the leading phrase; when the phrase itself
+    # wraps mid-word, the lowest band line still sits nearest the Confirm row.
+    message_line = next(
+        (line for line in message_lines if "DISCONNECTED" in normalize_ocr_text(line.text)),
+        message_lines[-1],
     )
     confirm_line = _find_line_with_normalized_text(
         lines=lines,
@@ -6265,7 +6320,7 @@ def _build_reconnect_popup_additions(
         min_y=int(image.height * 0.45),
         max_y=int(image.height * 0.8),
     )
-    if message_line is None or confirm_line is None or not _popup_text_lines_are_grouped(
+    if confirm_line is None or not _popup_text_lines_are_grouped(
         image=image,
         first=message_line,
         second=confirm_line,

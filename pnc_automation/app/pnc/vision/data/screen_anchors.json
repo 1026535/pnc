@@ -1040,7 +1040,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control.",
+        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -1086,9 +1086,9 @@
       ],
       "modal_bounds": [
         0,
-        300,
+        197,
         540,
-        320
+        421
       ],
       "occludes": [
         "PNC_HOME_CITY"

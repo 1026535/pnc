@@ -201,3 +201,31 @@ profile requires distinct character and staff artwork; its Get Started control
 is measured separately on the current frame. Shared popup recovery makes one tap
 and requires a fresh observation. A still-present entry, an unrecognized follow-up
 screen, or a different tutorial remains a stop, with no assumed Home transition.
+
+## Extracted prefab geometry, September 2026 audit
+
+Reviewed Devin recovery against prefab layouts decoded from the **5.0.203 /
+version code 233** asset bundles (Unity NGUI, 640×1136 design space;
+`x = screen_width / 640`, `y = screen_height / 1136` map to the 540×960
+reference). Confidence is artifact-observed for geometry and client-source
+verified for bindings; live dismissal is recorded separately.
+
+| Recovery family | Prefab | Safe control, scaled to 540×960 | Status |
+|---|---|---|---|
+| Savannah hero offer | `FirstPayNewWin` | `BtnClose` collider (468,45,68,68), tap (502,79); `CloseClickHandler` → `BackToLastWindow` | Matches profile `[470,45,65,70]` |
+| VIP daily reset | `VipLoginWin` | `BtnClose` collider (175,533,191,66), tap (270,566); panel `BottomBg` spans (0,197,540,421) | Control region `[160,525,230,90]` covers it; modal bounds corrected to the prefab panel |
+| Lucifer / Growth Boost offers | shared `CommomBg` | `btnBack` collider (0,0,91,49); Live taps (80,60) at 900×1600 agree | Matches `popup_back` profile |
+| Required update / update failed | `ConfirmBoxPanel` family | single Confirm at (270,549); message label `(Label)_content` w596 h62 wraps to two lines | OCR path keeps exact-phrase identity; wrapped two-line messages now qualify |
+| Disconnected reconnect | `ConfirmBoxPanel` via `ConfirmBoxPanelManager:OpenNoClose` | single Confirm at (270,549); the close X is hidden under `OpenNoClose` | Matches OCR + measured-geometry path |
+| Alliance invitation | `RecomentUnionsView` | `BtnCancel` collider (194,522,133,50), tap (261,547); `OnCancelHandler` → `CloseWin`. `BtnOk` (join/apply) at (418,547) and `BgMask` are never eligible | Matches cancel profile |
+| Join Alliance landing | `UnionGuide` | None — the prefab binds only `BtnAdd` (opens UnionJoin) and `BtnCreateUnion`; there is no cancel, close, or mask dismissal | Withheld dismissal is prefab-proven, not merely unverified |
+| King Return welcome | `KingReturnEntryWin` (Lua only; prefab not in decoded bundles) | `btnGo` → `OnBtnGoClick` → `CloseWin` | Lua-proven dismissal; geometry stays live-measured |
+| Valiant Conquest | `ConquerWarActivityNoticeView` | The observed top-right X is runtime chrome not present in the prefab's own tree | Keep live-measured close X |
+
+Residual gaps recorded for later work, all failing safe today: the soft
+`AppVersionUpdateTipsPanel` shows Cancel only in its non-forced variant and its
+X is unbound, so a dead-X tap is detected by the unchanged-fingerprint check;
+`VersionUpgradeWin` reuses one button for Receive and Go, which is why the
+update path stays OCR-gated; `MaintenanceView` exposes only navigation buttons;
+other `ConfirmBoxPanelManager:OpenNoClose` socket/login errors share the same
+single-Confirm geometry but have not been observed with their localized text.
