@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
+from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 from tools.benchmark_screen_recognition import _decoded_image_sha256
 from tests.support.paths import REPOSITORY_ROOT, TEST_DATA_ROOT
 
@@ -126,6 +127,48 @@ class VisualScreenMetadataTests(unittest.TestCase):
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}
         self.assertTrue(all(item.layout_revision == revisions[item.reason] for item in recognition.evidence))
+
+    def test_fixed_region_controls_publish_only_at_reviewed_viewports(self) -> None:
+        """Reviewed layout geometry must fail closed on unreviewed captures.
+
+        The alliance-join landing mask is a fixed_region control: a reviewed
+        pixel band, not a measured template. Same-aspect unreviewed captures
+        can still match the landing's anchors, so the control must be withheld
+        rather than projected to an unproven region.
+        """
+
+        class _LandingOnlyMatcher:
+            """Matches only the alliance_join_landing anchor images."""
+
+            def prepare_frame(self, image, *, reference_size):
+                del reference_size
+                return image
+
+            def find_best_match(self, image, template_path, *, threshold, search_region):
+                del image, threshold, search_region
+                if "alliance_join_landing" not in Path(template_path).name:
+                    return None
+                return TemplateMatch(bounds=Bounds(0, 0, 10, 10), confidence=0.99)
+
+        recognizer = load_visual_screen_recognizer(matcher=_LandingOnlyMatcher())
+        reviewed = recognizer.recognize(Image.new("RGB", (900, 1600)))
+        self.assertEqual({ScreenType.PNC_ALLIANCE_JOIN}, {item.screen_type for item in reviewed.evidence})
+        self.assertIn(
+            UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
+            {element.selector_id for element in reviewed.controls},
+        )
+        assert reviewed.popup_overlay is not None
+        self.assertTrue(reviewed.popup_overlay.candidates)
+
+        # 720x1280 shares the 9:16 aspect but is not a reviewed viewport.
+        withheld = recognizer.recognize(Image.new("RGB", (720, 1280)))
+        self.assertEqual({ScreenType.PNC_ALLIANCE_JOIN}, {item.screen_type for item in withheld.evidence})
+        self.assertNotIn(
+            UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
+            {element.selector_id for element in withheld.controls},
+        )
+        assert withheld.popup_overlay is not None
+        self.assertFalse(withheld.popup_overlay.candidates)
 
     def test_profile_controls_are_declared_for_their_screen(self) -> None:
         """Keep visual control publication aligned with selector ownership metadata."""

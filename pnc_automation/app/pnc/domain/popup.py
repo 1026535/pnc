@@ -145,6 +145,17 @@ def decide_popup_recovery(
                 control_kind=PopupControlKind.KING_RETURN_GET_STARTED,
                 reason="dismiss_king_return_welcome",
             )
+        alliance_mask = popup_overlay.candidate(PopupControlKind.BACKGROUND_DISMISS)
+        if (
+            screen_type == ScreenType.PNC_ALLIANCE_JOIN
+            and alliance_mask is not None
+            and UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK in visible_selector_ids
+        ):
+            return PopupRecoveryDecision(
+                selector_id=UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
+                control_kind=alliance_mask.control_kind,
+                reason="dismiss_alliance_join_landing_mask",
+            )
         candidate = preferred_transient_popup_candidate(popup_overlay)
         if candidate is not None:
             if UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_selector_ids:
@@ -161,15 +172,6 @@ def decide_popup_recovery(
                     selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
                     control_kind=candidate.control_kind,
                     reason="close_vip_daily_reset",
-                )
-            if (
-                screen_type == ScreenType.PNC_ALLIANCE_JOIN
-                and UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK in visible_selector_ids
-            ):
-                return PopupRecoveryDecision(
-                    selector_id=UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
-                    control_kind=candidate.control_kind,
-                    reason="dismiss_alliance_join_landing_mask",
                 )
     if screen_type == ScreenType.PNC_VIP_DAILY_RESET and UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON in visible_selector_ids:
         return PopupRecoveryDecision(

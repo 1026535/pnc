@@ -11,7 +11,11 @@ import string
 
 from PIL import Image
 
-from pnc_automation.app.pnc.domain.screen_decision import ScreenDecision, ScreenEvidence
+from pnc_automation.app.pnc.domain.screen_decision import (
+    ScreenDecision,
+    ScreenEvidence,
+    is_reviewed_viewport,
+)
 from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
@@ -349,7 +353,12 @@ class VisualScreenRecognizer:
                 for control in profile.controls:
                     if control.fixed_region is not None:
                         # Layout-fixed controls (e.g. a window's background mask)
-                        # carry reviewed geometry, not a per-frame template match.
+                        # carry reviewed geometry, not a per-frame template
+                        # match. Like materialize_relative_bounds, they are only
+                        # proven at reviewed viewports; any other capture size
+                        # withholds the control so recovery fails closed.
+                        if not is_reviewed_viewport(image.size):
+                            continue
                         bounds = _project_bounds(
                             control.fixed_region,
                             original_size=image.size,
