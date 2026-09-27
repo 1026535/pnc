@@ -83,6 +83,7 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_visible_elements,
     bind_workshop_observation,
     select_content_labels,
+    select_navigation_elements,
 )
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
@@ -756,14 +757,21 @@ class ObservationBuilder:
             visual, decision, candidates=visible_elements,
         )
         if visual.evidence and decision.action_eligible and guard_verdict == GuardVerdict.CLEAR:
-            # Match NavigationPerception: parsed text contributes declared labels,
-            # while current visual evidence owns controls. Content cannot repair
-            # a missing template or create an unmeasured premium action.
+            # Match NavigationPerception: parsed text contributes declared labels
+            # and measured navigation controls the profile does not own, while
+            # current visual evidence owns controls. Content cannot repair a
+            # missing template or create an unmeasured premium action.
+            content_elements = {**visible_elements, **additions.visible_elements}
             visible_elements = {
                 **visual_controls_for_decision(visual, decision),
                 **select_content_labels(
-                    {**visible_elements, **additions.visible_elements},
+                    content_elements,
                     selector_registry=self.selector_registry,
+                ),
+                **select_navigation_elements(
+                    content_elements,
+                    selector_registry=self.selector_registry,
+                    reserved_selector_ids=visual.control_selector_ids,
                 ),
             }
         return self._publish(

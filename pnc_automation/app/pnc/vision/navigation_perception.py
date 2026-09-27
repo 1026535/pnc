@@ -34,10 +34,12 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_trial_summary,
     bind_visible_elements,
     bind_workshop_observation,
+    select_navigation_elements,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     VisualRecognition,
     VisualScreenRecognizer,
@@ -65,6 +67,13 @@ class _ContentLabelPublisher(Protocol):
         self,
         additions: ObservationAdditions,
     ) -> Mapping[UiElementId, VisibleElement]: ...
+
+
+@runtime_checkable
+class _SelectorRegistryProvider(Protocol):
+    """Optional registry access for guards that own selector semantics."""
+
+    selector_registry: SelectorRegistry | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,12 +278,34 @@ class NavigationPerception:
             source_screen=screen,
             source_layout_id=decision.layout_id,
         )
+        navigation_elements = (
+            bind_visible_elements(
+                select_navigation_elements(
+                    content.visible_elements,
+                    selector_registry=(
+                        self.guard.selector_registry
+                        if isinstance(self.guard, _SelectorRegistryProvider)
+                        else None
+                    ),
+                    reserved_selector_ids=visual.control_selector_ids,
+                ),
+                frame_ref=screenshot.frame_ref,
+                source_screen=screen,
+                source_layout_id=decision.layout_id,
+            )
+            if not interrupted
+            else {}
+        )
         # Parsed content cannot create controls, replace identity, or redirect a
         # transition. Keep the existing typed content parsers during migration.
+        # Measured navigation controls the profile does not own ride alongside
+        # the visual controls (e.g. the Alliance tab, which has no stable icon
+        # template) since they are OCR-anchored on this frame and dispatch-gated
+        # by reviewed safe outcomes.
         observation = replace(
             observation,
             visible_elements=filter_building_detail_controls(
-                {**observation.visible_elements, **content_labels},
+                {**navigation_elements, **observation.visible_elements, **content_labels},
                 content.building_detail,
             ),
             list_entries=tuple(
