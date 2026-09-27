@@ -36,7 +36,7 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             (
                 ScreenType.PNC_CHAT,
                 UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}),
+                frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP, ScreenType.PNC_MORE_MENU}),
             ),
             {(edge.source, edge.selector, edge.destinations) for edge in edges},
         )
@@ -103,6 +103,60 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             observed_labels,
         )
 
+
+    def test_chat_back_replans_from_more_parent_to_home(self):
+        """Chat Back may restore More, which has a reviewed route to Home."""
+
+        now = datetime(2026, 9, 27, tzinfo=UTC)
+
+        def frame(screen, selector, offset):
+            return Observation(
+                screen_type=screen,
+                visible_elements={
+                    selector: VisibleElement(
+                        selector,
+                        Bounds(10, 20, 40, 40),
+                        1.0,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                    ),
+                },
+                image_size=(540, 960),
+                captured_at=now + timedelta(seconds=offset),
+            )
+
+        steps = (
+            (ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            (ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            (ScreenType.PNC_MORE_MENU, UiElementId.PNC_MORE_SETTINGS),
+            (ScreenType.PNC_MORE_MENU, UiElementId.PNC_MORE_SETTINGS),
+            (ScreenType.PNC_MORE_MENU, UiElementId.PNC_MORE_SETTINGS),
+            (ScreenType.PNC_SETTINGS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            (ScreenType.PNC_SETTINGS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            (ScreenType.PNC_SETTINGS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            (ScreenType.PNC_HOME_CITY, UiElementId.PNC_HOME_WORLD_SWITCH),
+            (ScreenType.PNC_HOME_CITY, UiElementId.PNC_HOME_WORLD_SWITCH),
+        )
+        frames = iter(frame(screen, selector, offset) for offset, (screen, selector) in enumerate(steps))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(
+            [action.selector_id for action in actuator.actions],
+            [
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_MORE_SETTINGS,
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            ],
+        )
 
     def test_select_chat_channel_returns_without_tap_when_requested_channel_is_active(self):
         now = datetime(2026, 9, 12, tzinfo=UTC)

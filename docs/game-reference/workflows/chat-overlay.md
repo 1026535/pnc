@@ -15,6 +15,13 @@ the owned Back, tabs, and input field. Confidence is high for this one observed
 screen. The installed client build and the Alliance-active two-tab appearance
 were not established.
 
+In a later nonspending run on the same date and candidate `12cd84f6`, the
+measured Chat Back restored `PNC_MORE_MENU`, the surface that had opened Chat.
+The shared navigation graph now accepts More as a Chat Back destination and
+replans through Settings to Home. The saved post-Back frame is in Devin run
+`m1-v14-two-tab-chat-corrected-20260927-02`, turn 002. This route was observed
+once; other invoking surfaces may restore to Home or World Map.
+
 Automation must qualify Chat from a fresh frame before using its owned Back
 control. An unrecognized full-screen overlay blocks castle identity preflight
 and Campaign navigation; do not guess Back or treat the blocked Campaign cases

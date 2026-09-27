@@ -2169,7 +2169,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(
             screen.PNC_CHAT,
             selector.PNC_BACK_BUTTON_TOP_LEFT,
-            frozenset({screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP}),
+            frozenset({screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP, screen.PNC_MORE_MENU}),
         ),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_PLAYER_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),
