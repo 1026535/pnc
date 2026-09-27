@@ -102,10 +102,11 @@ class WorldYoloQualification:
         object.__setattr__(self, "qualified_class_map", MappingProxyType(dict(self.qualified_class_map)))
 
 
-# Training-owner review permits Castle observation publication only. It does
-# not qualify a tap point, detail identity, or any other model class.
+# The user accepted corrected-v25 epoch3 after reviewing the lumber-camp
+# preservation regression. Retain the existing Castle observation scope;
+# interactions still require a separate policy bound to this exact export.
 WORLD_YOLO_QUALIFICATION = WorldYoloQualification(
-    model_sha256="225f4c6f423d887bf116cc8b637ecd49d1cf10e8249a681d0a6b76f502463552",
+    model_sha256="ad19cf8089d873e989ee864c9412989ccd7920f53697908cc51e00aee5602842",
     class_names=(
         "monster",
         "farm",
@@ -129,5 +130,5 @@ WORLD_YOLO_QUALIFICATION = WorldYoloQualification(
     nms_iou_threshold=0.7,
     roi_version="v19_center_20260922",
     qualified_class_map={"castle": SpatialObjectKind.CASTLE},
-    review_ref="v19_consultation_20260922/castle_observation_evidence_review.json",
+    review_ref="yolo_evaluation_v25/gold_mine_training_20260922/user_acceptance_20260926/ACCEPTED.md",
 )

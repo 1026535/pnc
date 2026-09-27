@@ -6,6 +6,8 @@ archives:
 
 runtime:
   observation_mode: debug
+  # Optional local export; its hash and class order must match WORLD_YOLO_QUALIFICATION.
+  # world_yolo_model_path: .local-data/models/world_yolo/v25-corrected-epoch3.onnx
   bluestacks_memory:
     enabled: true
     max_working_set_mb: 4096

@@ -66,7 +66,7 @@ def load_app_config(
     defaults = _load_defaults(raw.get("defaults"), workspace_root=workspace_root)
     artifact_root = _load_artifact_root(raw.get("artifacts"), workspace_root)
     archive_root = _load_archive_root(raw.get("archives"), workspace_root)
-    runtime = _load_runtime(raw.get("runtime"))
+    runtime = _load_runtime(raw.get("runtime"), workspace_root=workspace_root)
     instances = _load_instances(raw.get("instances"))
     accounts = _load_accounts(raw.get("accounts"), environment)
     resolved_castle_roster_path = _resolve_castle_roster_path(config_path, castle_roster_path)
@@ -165,7 +165,7 @@ def _load_archive_root(raw_archives: Any, workspace_root: Path) -> Path:
     return (workspace_root / archive_root).resolve()
 
 
-def _load_runtime(raw_runtime: Any) -> RuntimeConfig:
+def _load_runtime(raw_runtime: Any, *, workspace_root: Path) -> RuntimeConfig:
     """Loads shared runtime policy toggles."""
 
     raw = require_mapping(raw_runtime or {}, context="runtime")
@@ -173,10 +173,17 @@ def _load_runtime(raw_runtime: Any) -> RuntimeConfig:
         raw.get("observation_mode", ObservationMode.DEBUG.value),
         context="runtime.observation_mode",
     )
+    model_path = raw.get("world_yolo_model_path")
+    resolved_model_path = None
+    if model_path is not None:
+        resolved_model_path = (workspace_root / require_string(
+            model_path, context="runtime.world_yolo_model_path",
+        )).resolve()
     try:
         return RuntimeConfig(
             observation_mode=ObservationMode(observation_mode),
             bluestacks_memory=_load_bluestacks_memory_policy(raw.get("bluestacks_memory")),
+            world_yolo_model_path=resolved_model_path,
         )
     except ValueError as error:
         raise ConfigurationError(

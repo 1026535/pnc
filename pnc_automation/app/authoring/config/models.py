@@ -51,6 +51,7 @@ class RuntimeConfig:
 
     observation_mode: ObservationMode = ObservationMode.DEBUG
     bluestacks_memory: BlueStacksMemoryPolicy = field(default_factory=BlueStacksMemoryPolicy)
+    world_yolo_model_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)

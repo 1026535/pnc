@@ -58,7 +58,7 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
-from pnc_automation.app.pnc.vision.world_yolo import WorldYoloProducer
+from pnc_automation.app.pnc.vision.world_yolo import WorldYoloProducer, load_world_yolo_producer
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -428,6 +428,8 @@ def build_application_runner(
         loaded_config,
         observation_mode=observation_mode,
     )
+    if world_yolo_producer is None and app_config.runtime.world_yolo_model_path is not None:
+        world_yolo_producer = load_world_yolo_producer(app_config.runtime.world_yolo_model_path)
 
     artifact_store = ArtifactStore(root=app_config.artifact_root)
     screenshot_service = ScreenshotService(
