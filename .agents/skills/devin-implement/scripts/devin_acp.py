@@ -377,6 +377,37 @@ class Connection:
         self.reader.join(timeout=5)
 
 
+def select_pinned_model(connection: Connection, options: list[dict]) -> None:
+    """Select SWE-2 Max using the combined or split native configuration."""
+    config = {item["id"]: item for item in options}
+    model = config.get("model")
+    if model is None:
+        raise RuntimeError("Devin did not expose verifiable model selection.")
+    choices = {item["value"] for item in model.get("options", [])}
+    target = MODEL
+    # CLI 3000.11.3 exposes the SWE-2 family as swe-2-high and effort separately.
+    if MODEL not in choices and model.get("currentValue") != MODEL:
+        if MODEL != "swe-2-max" or "swe-2-high" not in choices or "thought_level" not in config:
+            raise RuntimeError("Devin did not expose SWE-2 Max selection.")
+        target = "swe-2-high"
+    if model.get("currentValue") != target:
+        changed = connection.request("session/set_config_option", {
+            "sessionId": connection.session, "configId": "model", "value": target})
+        config = {item["id"]: item for item in changed.get("configOptions", [])}
+    thought = config.get("thought_level")
+    if thought is not None and thought.get("currentValue") != "max":
+        if "max" not in {item["value"] for item in thought.get("options", [])}:
+            raise RuntimeError("Devin did not expose Max thinking.")
+        changed = connection.request("session/set_config_option", {
+            "sessionId": connection.session, "configId": "thought_level", "value": "max"})
+        config = {item["id"]: item for item in changed.get("configOptions", [])}
+    if config.get("model", {}).get("currentValue") != target or (
+        (target != MODEL or thought is not None)
+        and config.get("thought_level", {}).get("currentValue") != "max"
+    ):
+        raise RuntimeError("Devin did not select SWE-2 Max.")
+
+
 def run(command):
     """Adapt existing launcher arguments while preserving its native export checks."""
     def argument(name):
@@ -401,16 +432,7 @@ def run(command):
             params["sessionId"] = resume
         session = connection.request("session/load" if resume else "session/new", params)
         connection.session = resume or session["sessionId"]
-        options = session.get("configOptions", [])
-        model = next((item for item in options if item.get("id") == "model"), None)
-        if model is None:
-            raise RuntimeError("Devin did not expose verifiable model selection.")
-        if model.get("currentValue") != MODEL:
-            changed = connection.request("session/set_config_option", {"sessionId": connection.session,
-                                         "configId": "model", "value": MODEL})
-            if not any(item.get("id") == "model" and item.get("currentValue") == MODEL
-                       for item in changed.get("configOptions", [])):
-                raise RuntimeError("Devin did not select SWE-2 Max.")
+        select_pinned_model(connection, session.get("configOptions", []))
         connection.live = True
         write_json(turn_dir / "acp-session.json", {"session_id": connection.session, "model": MODEL,
                                                  "controls": ["steer", "cancel"]})

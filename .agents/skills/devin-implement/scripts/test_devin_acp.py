@@ -54,6 +54,59 @@ class AcpTests(unittest.TestCase):
             "update": {"sessionUpdate": kind, "content": {"type": "text", "text": text}}}})
         self.connection.receive()
 
+    def test_pinned_model_accepts_split_swe2_max_without_invalid_request(self):
+        """The new family selector plus Max effort already selects the pinned variant."""
+        options = [
+            {"id": "model", "currentValue": "swe-2-high",
+             "options": [{"value": "swe-2-high"}]},
+            {"id": "thought_level", "currentValue": "max",
+             "options": [{"value": "high"}, {"value": "max"}]},
+        ]
+        with patch.object(self.connection, "request") as request:
+            acp.select_pinned_model(self.connection, options)
+        request.assert_not_called()
+
+    def test_pinned_model_selects_family_then_max_thinking(self):
+        """A resumed session cannot retain another model or a lower effort."""
+        model = {"id": "model", "currentValue": "other",
+                 "options": [{"value": "swe-2-high"}, {"value": "other"}]}
+        thought = {"id": "thought_level", "currentValue": "high",
+                   "options": [{"value": "high"}, {"value": "max"}]}
+        selected = {**model, "currentValue": "swe-2-high"}
+        with patch.object(self.connection, "request", side_effect=[
+            {"configOptions": [selected, thought]},
+            {"configOptions": [selected, {**thought, "currentValue": "max"}]},
+        ]) as request:
+            acp.select_pinned_model(self.connection, [model, thought])
+        self.assertEqual([call.args[1] for call in request.call_args_list], [
+            {"sessionId": "test", "configId": "model", "value": "swe-2-high"},
+            {"sessionId": "test", "configId": "thought_level", "value": "max"},
+        ])
+
+    def test_pinned_model_rejects_unverified_thinking(self):
+        """Neither an absent effort nor an ignored effort change proves Max."""
+        model = {"id": "model", "currentValue": "swe-2-high",
+                 "options": [{"value": "swe-2-high"}]}
+        thought = {"id": "thought_level", "currentValue": "high",
+                   "options": [{"value": "high"}, {"value": "max"}]}
+        with self.assertRaisesRegex(RuntimeError, "selection"):
+            acp.select_pinned_model(self.connection, [model])
+        with patch.object(self.connection, "request", return_value={
+            "configOptions": [model, thought]
+        }), self.assertRaisesRegex(RuntimeError, "did not select"):
+            acp.select_pinned_model(self.connection, [model, thought])
+
+    def test_pinned_model_preserves_combined_variant_selection(self):
+        """Older sessions still select and verify the exact combined variant."""
+        model = {"id": "model", "currentValue": "other",
+                 "options": [{"value": "swe-2-max"}]}
+        with patch.object(self.connection, "request", return_value={
+            "configOptions": [{**model, "currentValue": "swe-2-max"}]
+        }) as request:
+            acp.select_pinned_model(self.connection, [model])
+        request.assert_called_once_with("session/set_config_option", {
+            "sessionId": "test", "configId": "model", "value": "swe-2-max"})
+
     def test_context_metrics_exclude_replay_side_and_other_sessions(self):
         """Preserve compact live occupancy evidence even before an RPC failure."""
         def receive(method="session/update", session="test", chain="main", **fields):
