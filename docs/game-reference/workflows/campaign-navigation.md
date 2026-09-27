@@ -191,6 +191,7 @@ stage identity, frame-bound Close and Challenge, stages 6-4/6-5, AP126/120 and
 cost12 on both September 22 and 27 native captures. Title OCR covers the
 observed reflow. Gauge OCR first uses the existing right-hand numeric strip,
 then the measured centered strip only when no credible pair was found;
-conflicting credible pairs still abstain. Cost remains tied to the measured
-Challenge bounds. No Blitz control, formation state or spending permission is
-inferred. Corrected-candidate live C2/C3 validation remains with the M1 owner.
+conflicting credible pairs within a strip still abstain. Cost remains tied to
+the measured Challenge bounds. No Blitz control, formation state or spending
+permission is inferred. Corrected-candidate live C2/C3 validation remains with
+the M1 owner.
