@@ -12,6 +12,10 @@ import unittest
 
 from pnc_automation.app.automation.pet_workshop import plan_next
 from pnc_automation.app.automation.pet_workshop.policy import default_policy
+from pnc_automation.app.automation.pet_workshop.simulate import (
+    ProduceOutcome,
+    WorkshopSimulator,
+)
 from pnc_automation.app.automation.pet_workshop.validation import validate_intent
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopActivateIntent,
@@ -961,6 +965,86 @@ class TestReplanning(PlannerCase):
         )
         second = self.plan(after)
         self.assertIsInstance(second.intent, WorkshopProduceIntent)
+
+
+class TestCanonicalSimulatorLoop(PlannerCase):
+    """Exercise planner, validator and simulator together without scripted rules."""
+
+    def test_merge_refreshes_readiness_then_delivery_preserves_energy(self) -> None:
+        state = solver_fx.observed_state(
+            fx.make_cell(1, 1, item_id=FRUIT_2),
+            fx.make_cell(1, 2, item_id=FRUIT_2),
+            fx.make_cell(1, 3, item_id=FRUIT_1),
+            orders=(lasso_order(1, {FRUIT_3: 1, FRUIT_1: 1}, ready=False),),
+        )
+        sim = WorkshopSimulator(state, catalog=self.catalog)
+
+        def transition(current: WorkshopState, decision: WorkshopDecision):
+            self.assertEqual(current, sim.state)
+            after = sim.apply(decision.intent)
+            if isinstance(decision.intent, WorkshopMergeIntent):
+                self.assertTrue(after.order_survey.order(1).ready)
+            self.assertEqual(state.energy, after.energy)
+            return after
+
+        decisions = solver_fx.run_scenario(
+            state, self.catalog, self.policy, transition
+        )
+
+        self.assertEqual(
+            [type(decision.intent) for decision in decisions],
+            [WorkshopMergeIntent, WorkshopSubmitOrderIntent, WorkshopStopIntent],
+        )
+        self.assertEqual((), sim.state.order_survey.orders)
+        self.assertEqual(WorkshopSelectionKind.NONE, sim.state.selection.kind)
+        self.assertTrue(all(
+            cell.occupancy == WorkshopOccupancy.EMPTY for cell in sim.state.cells
+        ))
+
+    def test_production_outcome_drives_delivery_or_zero_energy_stop(self) -> None:
+        # The game can make an order ready on the last energy point. User
+        # policy must still stop at zero instead of treating readiness as
+        # permission to deliver. With one point left, delivery costs none.
+        for initial_energy in (1, 2):
+            with self.subTest(initial_energy=initial_energy):
+                state = solver_fx.observed_state(
+                    fx.make_cell(1, 1, item_id=TREE_4, cooldown=WorkshopCooldown.CLEAR),
+                    fx.make_cell(1, 2, item_id=FRUIT_1),
+                    orders=(lasso_order(1, {WOOD_1: 1, FRUIT_1: 1}, ready=False),),
+                    energy=WorkshopEnergy(current=initial_energy, capacity=200),
+                    selection=WorkshopSelection(WorkshopSelectionKind.NONE),
+                )
+                sim = WorkshopSimulator(
+                    state, catalog=self.catalog, require_produce_outcome=True
+                )
+
+                def transition(current: WorkshopState, decision: WorkshopDecision):
+                    self.assertEqual(current, sim.state)
+                    if isinstance(decision.intent, WorkshopProduceIntent):
+                        after = sim.apply(
+                            decision.intent,
+                            outcome=ProduceOutcome(item_id=WOOD_1, cell_id=3),
+                        )
+                        self.assertTrue(after.order_survey.order(1).ready)
+                        return after
+                    after = sim.apply(decision.intent)
+                    self.assertEqual(current.energy, after.energy)
+                    return after
+
+                decisions = solver_fx.run_scenario(
+                    state, self.catalog, self.policy, transition
+                )
+                expected = [WorkshopSelectIntent, WorkshopProduceIntent]
+                if initial_energy == 2:
+                    expected.append(WorkshopSubmitOrderIntent)
+                expected.append(WorkshopStopIntent)
+                self.assertEqual(expected, [type(d.intent) for d in decisions])
+                self.assertEqual(initial_energy - 1, sim.state.energy.current)
+                if initial_energy == 1:
+                    self.assertTrue(sim.state.order_survey.order(1).ready)
+                    self.assertEqual(WorkshopStopReason.ZERO_ENERGY, decisions[-1].intent.reason)
+                else:
+                    self.assertEqual((), sim.state.order_survey.orders)
 
 
 class TestDecisionDiagnostics(PlannerCase):

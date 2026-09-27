@@ -225,6 +225,15 @@ For a blocked packet, record its exact missing dependency, interface or observat
 
 ## Validation and acceptance
 
+Every implementation and correction slice follows the
+[gameplay/regression alignment contract](../../../docs/PET_WORKSHOP_DESIGN.md#keep-gameplay-and-regression-coverage-aligned).
+Its handback identifies the changed behavior, game-evidence provenance,
+canonical owner and new or reused regression at the final candidate. Modeled
+gameplay changes update the logical simulator in the same slice; image and
+execution changes update their existing replay or session tests. The lead
+reviews this mapping before acceptance. A passing simulator is not live proof,
+and documented unmodeled behavior must not be reported as parity.
+
 The Workshop run operates on the board; storage operations remain excluded. Recognizing an already-open storage overlay is a passive safeguard tested against saved captures, not a reason to open storage during live qualification. Historical live assignments that included intentional storage inspection were broader than needed. Applicable board, route and gameplay validation requirements remain in force.
 
 Use these statuses: **Planned**, **In progress**, **Offline ready**, **Accepted for stated coverage**, **Integrated**, or **Blocked: exact prerequisite**. They describe delivery evidence, not a claim that every underlying repository capability is new. Record partial recognition coverage explicitly; it does not waive PW10's full release requirements.

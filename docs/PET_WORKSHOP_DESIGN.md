@@ -544,6 +544,43 @@ remain fixed, order replacements and external inventory rewards are not
 generated, and bubble generation is excluded. Saved live facts and remaining
 uncertainty are recorded in `docs/game-reference/workflows/pet-workshop.md`.
 
+The modeled feed gesture moves the ingredient onto the producer. Reverse
+feeding (which relocates the producer), swaps, reward-item Use, and automatic
+or assisted production are outside the current intent set. Recycling adds
+the authored reward without a capacity clamp; the current server's behavior
+for a reward crossing the regeneration cap is unverified. The client accepts
+server productivity directly, while passive regeneration explicitly caps it.
+Do not invent a reward clamp from the regeneration rule or use simulated
+energy arithmetic to replace the next live observation.
+
+### Keep gameplay and regression coverage aligned
+
+Every Workshop behavior correction must identify its game evidence, canonical
+code owner and corresponding regression in the same reviewed slice. If a
+modeled gameplay rule changes, update `simulate.py` and its logical tests in
+concert with affected production consumers; use the shared catalog and typed
+models rather than copying constants or policy. If existing coverage already
+proves the rule, cite that test and its unchanged scope instead of duplicating
+it. Record any remaining approximation explicitly.
+
+The simulator applies successful typed transitions, not attempted UI inputs.
+Its ability to apply an action is not automation permission. Policy scenarios
+must call the real `plan_next` and `validate_intent` before applying the chosen
+intent to `WorkshopSimulator`, then replan from the resulting state. The
+`TestCanonicalSimulatorLoop` scenarios exercise readiness after merging,
+selection and determined production, free delivery, and the zero-energy stop
+even when the final produced piece makes an order ready. `ProduceOutcome`
+fixes the observed drop and destination; these reduced scenarios do not claim
+native-image or live evidence.
+
+Recognition corrections belong in saved native-image replay through the
+existing publisher/parser. Failed inputs, unexpected surfaces and uncertain
+outcomes belong in the existing execution/session tests and journal contract;
+they must not be represented as successful simulator transitions. Update the
+relevant layer alongside the correction without adding another UI simulator
+or journal. Acceptance records must name the final combined candidate and
+separate logical/offline proof from applicable live proof and merge/push.
+
 ## Mutation authority and durable journal — implemented (PW06)
 
 Every Workshop mutation flows through the existing Daily mutation owners;
