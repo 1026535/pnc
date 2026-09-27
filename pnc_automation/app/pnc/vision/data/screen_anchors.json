@@ -2845,6 +2845,104 @@
       "layout_id": "chat_kingdom"
     },
     {
+      "id": "chat_kingdom_two_tab_20260927",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [
+            90,
+            0,
+            220,
+            52
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+          "search_region": [
+            0,
+            52,
+            275,
+            62
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [
+              0,
+              0,
+              90,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+            "search_region": [
+              0,
+              52,
+              275,
+              62
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_two_tab_alliance_inactive.png",
+            "search_region": [
+              265,
+              52,
+              275,
+              62
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_INPUT_FIELD",
+          "anchor": {
+            "image": "screen_anchors/chat_input_field.png",
+            "search_region": [
+              45,
+              890,
+              225,
+              60
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_kingdom_two_tab_20260927.png",
+        "decoded_sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+        "capture_group": "2026-09-27/testing/sanitized-chat-chrome"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Current two-tab Kingdom Chat chrome after VIP popup recovery; private messages removed from fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "chat_kingdom_two_tab_20260927"
+    },
+    {
       "id": "collect_mail_hub",
       "screen": "PNC_MAIL_HUB",
       "anchors": [

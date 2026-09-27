@@ -329,7 +329,7 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 self.assertEqual({item.screen_type for item in scaled.evidence}, {screen})
 
     def test_chat_profiles_expose_measured_back_and_channel_controls(self) -> None:
-        """Recognizes both live Chat tab variants and exposes their measured controls."""
+        """Recognizes captured Chat layouts and exposes their measured controls."""
 
         expected = {
             "chat_alliance.png": {
@@ -344,6 +344,12 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 UiElementId.PNC_CHAT_TAB_ALLIANCE,
                 UiElementId.PNC_CHAT_INPUT_FIELD,
             },
+            "chat_kingdom_two_tab_20260927.png": {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_CHAT_TAB_KINGDOM,
+                UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                UiElementId.PNC_CHAT_INPUT_FIELD,
+            },
         }
         recognizer = load_visual_screen_recognizer()
         for name, selectors in expected.items():
@@ -352,6 +358,18 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_CHAT})
                 self.assertEqual({item.selector_id for item in result.controls}, selectors)
                 self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in result.controls))
+
+    def test_two_tab_chat_is_actionable_from_cold_observation(self) -> None:
+        """The current Chat chrome must qualify its owned Back before navigation."""
+
+        observation = _builder(_RecordingOcrService(lines=())).build(
+            _capture("chat_kingdom_two_tab_20260927.png"),
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+        )
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(observation.decision.layout_id, "chat_kingdom_two_tab_20260927")
+        self.assertTrue(observation.decision.action_eligible)
+        self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
 
     def test_home_chat_shortcut_profiles_cover_both_channel_icon_variants(self) -> None:
         """Keeps Home identity anchors required while recognizing both measured shortcut icons."""

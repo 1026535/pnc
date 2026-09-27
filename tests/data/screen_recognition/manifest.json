@@ -538,6 +538,14 @@
       ]
     },
     {
+      "image": "chat_kingdom_two_tab_20260927.png",
+      "screen": "PNC_CHAT",
+      "split": "reference",
+      "group": "2026-09-27/testing/sanitized-chat-chrome",
+      "sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+      "expected_visual_screens": ["PNC_CHAT"]
+    },
+    {
       "image": "chat_kingdom_normal_empty.png",
       "screen": "PNC_CHAT",
       "split": "validation",
