@@ -2,6 +2,8 @@
 
 All paths below are relative to `.local-data/apk-exploration/` under the repository root. Evidence was acquired 2026-09-12 from the `157_farm` instance (`live_testing` role) and analyzed entirely offline.
 
+This is a build-specific baseline, not a claim about today's installed or downloaded game content. For refresh triggers, new-build discovery, differential verification, and acceptance, use [the knowledge refresh procedure](../../../../docs/game-reference/MAINTENANCE.md). Preserve this baseline's provenance when accepting a successor; do not relabel its findings as newly verified.
+
 ## Verified build facts
 
 - Package `com.global.tmslg`, versionName `5.0.203`, versionCode 233, `arm64-v8a`, minSdk 24, targetSdk 35 (`package-info.json`, `apk-checksums.json`).

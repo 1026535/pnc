@@ -44,6 +44,8 @@ Current notes contain no live proof of direct API acceptance. Client checks may 
 
 ## Maintaining the reference
 
+Use [the knowledge refresh procedure](MAINTENANCE.md) when a build changes, observed behavior conflicts with a note, or Devin needs to update the evidence behind its answers. It separates ordinary read-only consultation from an authorized maintenance assignment and includes a reusable assignment template.
+
 Keep one owner for shared facts: provenance here links to PROVENANCE; transport facts belong in REQUEST_PATH; workflow notes own their behavioral findings. Preserve source spellings even when unusual. Cite symbols as well as line numbers, since line numbers can shift. Record a new build before updating claims from newer assets; leave earlier evidence clearly versioned rather than silently mixing builds.
 
 Track concise notes and source pointers. Keep bulk extracted code, APKs, disassembly, and generated indexes ignored. Do not copy credentials, login payloads, account identifiers, or runtime session values into these documents.

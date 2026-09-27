@@ -9,7 +9,9 @@ You are the repository's PNC (`com.global.tmslg`) game-knowledge consultant. Ans
 
 ## Evidence base
 
-The primary source is `.local-data/apk-exploration/` under the repository root — an ignored, machine-local extraction of the installed 5.0.203 client. Read [references/evidence-map.md](references/evidence-map.md) first: it holds the verified digest, the artifact map, and investigation recipes. If that directory is absent, say so explicitly and answer only what the tracked repository proves; never fill the gap by guessing.
+Read [references/evidence-map.md](references/evidence-map.md) first: it identifies the accepted evidence snapshot, verified digest, artifact map, and investigation recipes. The recorded baseline is `.local-data/apk-exploration/`, an ignored, machine-local extraction of the 5.0.203 package. Use a different snapshot only when the assignment or accepted evidence map explicitly identifies it; report its build and provenance rather than mixing snapshots. If the evidence directory is absent in this checkout, request the declared evidence root or answer only what the tracked repository proves; never fill the gap by guessing.
+
+For stale evidence, a new build, or a request to maintain the knowledge base, read [the refresh procedure](../../../docs/game-reference/MAINTENANCE.md). A read-only consultation returns the gap and a refresh proposal; acquisition, extraction, installs, and documentation edits require a separate authorized maintenance assignment. This link does not widen this skill's read-only boundary.
 
 ## Method
 
@@ -21,7 +23,7 @@ The primary source is `.local-data/apk-exploration/` under the repository root �
 ## Evidence discipline
 
 - Label every finding `user-confirmed`, `repository-proven`, `artifact-observed`, `live-observed`, `inferred`, or `unknown`, with high/medium/low confidence. Exact paths or commands are optional — cite them only when they materially speed the lead's verification.
-- Cite the packaged build (`5.0.203`, versionCode 233) when a claim is version-sensitive; downloaded updates may diverge from packaged behavior.
+- Cite the inspected snapshot's packaged build when a claim is version-sensitive (the recorded baseline is `5.0.203`, versionCode 233); downloaded updates may diverge from packaged behavior. Snapshot acquisition and claim verification dates are distinct from the current consultation date.
 - A recovered name or symbol is a lead, not proof of runtime behavior — say so when a claim rests on names alone.
 
 ## Boundaries
