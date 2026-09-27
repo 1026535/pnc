@@ -15,7 +15,9 @@ LV8 board; ``pet_workshop_lv6_20260917.png`` is the LV6 board;
 ``pet_workshop_selected_{treasure,bowl}_20260917.png`` carry reviewed
 selection states; the item/order detail, help and storage fixtures cover the
 measured overlay surfaces; ``pet_workshop_energy_{162,163}_20260927.png``
-are native header bands for the September 27 energy-recognition regression.
+are native header bands for the September 27 energy-recognition regression;
+``pet_workshop_lv10_20260927.png`` is the same run's final LV10 board whose
+two-piece orders carry tinted-inlay and taller-control art variants.
 """
 
 from __future__ import annotations
@@ -119,6 +121,33 @@ _LV8_ORDERS: tuple[dict[str, Any], ...] = (
 # Reviewed LV6 order facts of pet_workshop_lv6_20260917.png; the strip's third
 # slot carries no card (plain strip background) so only two orders publish.
 _LV6_REQUIREMENTS = ({20104: 1, 10106: 1}, {10107: 1, 20104: 1})
+
+# Reviewed LV10 order facts of pet_workshop_lv10_20260927.png, the September 27
+# manual run's final board: the first card is the chest/table order (green-inlay
+# treasure variant and the Wood 9 table) with a ready Complete control rendered
+# taller than the original authored template; the second is the
+# food/pomegranate order (blue-inlay fruit variant), still not ready.
+_LV10_ORDERS: tuple[dict[str, Any], ...] = (
+    {
+        "order_ref": 1,
+        "requirements": {10106: 1, 20209: 1},
+        "rewards": (WorkshopOrderRewardCategory.CHEST,),
+        "completeness": "complete",
+        "ready": True,
+        "submit": Bounds(330, 172, 113, 53),
+    },
+    {
+        "order_ref": 2,
+        "requirements": {31109: 1, 20104: 1},
+        "rewards": (
+            WorkshopOrderRewardCategory.FEED,
+            WorkshopOrderRewardCategory.WORKSHOP_EXP,
+        ),
+        "completeness": "complete",
+        "ready": False,
+        "submit": None,
+    },
+)
 
 
 class _EmptyOcrService:
@@ -438,6 +467,56 @@ class PetWorkshopBoardPublicationTests(unittest.TestCase):
                     (WorkshopOrderRewardCategory.FEED,),
                     tuple(reward.category for reward in orders[1].rewards),
                 )
+        self.assertEqual(builder_observation.workshop, navigation_observation.workshop)
+
+    def test_lv10_board_publishes_reviewed_orders(self) -> None:
+        """The LV10 board decodes both two-piece cards and its ready control.
+
+        September 27 manual-run regression: the chest/table and
+        food/pomegranate cards read UNREADABLE because the green-inlay chest,
+        the Wood 9 table and the blue-inlay pomegranate had no matching
+        requirement template, and the visible Complete button was taller than
+        the authored control template. The tinted/variant art is covered by
+        additional native templates without lowering recognition thresholds.
+        """
+
+        builder, navigation = _wire(_EmptyOcrService())
+        capture = _capture("pet_workshop_lv10_20260927.png", session_id="pw-f1-lv10")
+
+        builder_observation, navigation_observation = _build_both(
+            builder, navigation, capture, ScreenType.PNC_PET_WORKSHOP
+        )
+
+        for name, observation in (
+            ("observation_builder", builder_observation),
+            ("navigation_perception", navigation_observation),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_board_identity(observation, capture)
+                workshop = self._assert_board_observation(observation, capture)
+                state = workshop.state
+                self.assertEqual(63, len(state.cells))
+                orders = state.order_survey.orders
+                self.assertEqual(2, len(orders))
+                self.assertEqual(2, len(workshop.view.order_views))
+                views_by_ref = {
+                    view.order_ref: view for view in workshop.view.order_views
+                }
+                for order, expected in zip(orders, _LV10_ORDERS, strict=True):
+                    self.assertEqual(expected["order_ref"], order.order_ref)
+                    self.assertEqual(expected["requirements"], order.requirements)
+                    self.assertEqual(
+                        expected["rewards"],
+                        tuple(reward.category for reward in order.rewards),
+                    )
+                    self.assertEqual(
+                        expected["completeness"], order.completeness.value
+                    )
+                    self.assertEqual(expected["ready"], order.ready)
+                    self.assertEqual("order_strip", order.source)
+                    view = views_by_ref[order.order_ref]
+                    self.assertEqual(expected["submit"], view.submit_bounds)
+                    self.assertIsNotNone(view.portrait_bounds)
         self.assertEqual(builder_observation.workshop, navigation_observation.workshop)
 
     def test_missed_requirement_hit_marks_card_unreadable(self) -> None:
@@ -1218,6 +1297,16 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                         (WorkshopOrderRewardCategory.WORKSHOP_EXP, 2),
                     ),
                     ((WorkshopOrderRewardCategory.CHEST, 1),),
+                ),
+            },
+            "pet_workshop_lv10_20260927.png": {
+                "header": (10, 64, 141, 200),
+                "rewards": (
+                    ((WorkshopOrderRewardCategory.CHEST, 1),),
+                    (
+                        (WorkshopOrderRewardCategory.FEED, 7722),
+                        (WorkshopOrderRewardCategory.WORKSHOP_EXP, 3),
+                    ),
                 ),
             },
         }

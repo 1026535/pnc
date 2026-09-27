@@ -1589,6 +1589,20 @@
       }
     },
     {
+      "image": "pet_workshop_lv10_20260927.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-27/main/pw-main-manual-20260927",
+      "sha256": "43ff599d81a540c5410b79831862e4d1619c0fa2d2c400bc37d7a56a74525443",
+      "expected_visual_screens": [
+        "PNC_PET_WORKSHOP"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/pw-main-manual-20260927/20260927T090234Z_final_board_state.png",
+        "derivative": "Unmodified native RGBA session frame (file sha256 240d090b6d66d263b3b03986d330f7a1363b2473602ca46403674517982c1bfe): the level-10 final board from the September 27 manual run whose chest/table and food/pomegranate two-piece orders read UNREADABLE because the green-inlay chest, table (Wood 9) and blue-inlay pomegranate art had no matching requirement template, and whose visible Complete button renders taller than the authored control template."
+      }
+    },
+    {
       "image": "savannah_hero_offer_warm_20260922.png",
       "screen": "PNC_POPUP",
       "split": "validation",

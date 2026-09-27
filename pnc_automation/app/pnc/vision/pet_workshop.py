@@ -137,7 +137,7 @@ _CARD_REWARD_BAND = (138, 36)
 _REWARD_PANEL_BASELINE = 167
 _REWARD_INK_BAND = (148, 164)
 _REWARD_GROUP_GAP = 8
-_CARD_COMPLETE_OFFSET = Bounds(x=80, y=90, width=96, height=44)
+_CARD_COMPLETE_OFFSET = Bounds(x=80, y=90, width=96, height=54)
 # Strip surface: the wood chrome runs along y227-238 across the whole widget;
 # the measured top is the first row where the strip span is mostly content.
 _STRIP_CHROME_BAND = (227, 242)
@@ -247,12 +247,15 @@ _BOLT_TEMPLATE = _DATA_DIR / "pet_workshop_ov_bolt.png"
 _STRIP_REQUIREMENT_TEMPLATES = (
     ("pet_workshop_req_food_9.png", 31109),
     ("pet_workshop_req_fruit_4.png", 20104),
+    ("pet_workshop_req_fruit_4_blue.png", 20104),
     ("pet_workshop_req_fruit_5.png", 20105),
     ("pet_workshop_req_fruit_5_blue.png", 20105),
     ("pet_workshop_req_statue_4.png", 10204),
     ("pet_workshop_req_treasure_6.png", 10106),
+    ("pet_workshop_req_treasure_6_green.png", 10106),
     ("pet_workshop_req_treasure_7.png", 10107),
     ("pet_workshop_req_wood_10.png", 20210),
+    ("pet_workshop_req_wood_9.png", 20209),
 )
 _STRIP_REWARD_TEMPLATES = (
     ("pet_workshop_rew_chest.png", WorkshopOrderRewardCategory.CHEST),
@@ -293,8 +296,9 @@ _COMPLETE_TEMPLATES = (
     _DATA_DIR / "pet_workshop_ctl_complete_4.png",
     _DATA_DIR / "pet_workshop_ctl_complete_5.png",
     _DATA_DIR / "pet_workshop_ctl_complete_6.png",
+    _DATA_DIR / "pet_workshop_ctl_complete_large.png",
 )
-_COMPLETE_TEMPLATE_SIZE = (72, 19)
+_COMPLETE_TEMPLATE_SIZE = (72, 32)
 _BACK_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_back.png"
 _CLOSE_X_TEMPLATE = _DATA_DIR / "pet_workshop_ctl_close_x.png"
 
