@@ -371,12 +371,32 @@ planner behavior and require no new live proof themselves. Existing
 manual-helper fixes remain locally implemented and offline-tested.
 
 The readable native energy examples must replay as 162/200 and 163/200.
-The final native chest/table two-piece card must be reproduced separately
-to identify the failing item, tile-coverage or geometry boundary; narrower
-spacing is an unsupported causal explanation until demonstrated. Preserve
-the manual fallback while automatic recognition is unqualified. The
-September 27 roadmap amendment owns these scoped corrections and the
-separate design, offline, live and merge/push milestones.
+Independent review reproduced an integration defect in PW05: overlapping
+OCR boxes contain `1` plus `162/200` or `163/200`. After removing the shared
+glyph, joining the fragments with a space produces `1 62/200` or
+`1 63/200`, allowing the gauge parser to bind the truncated value. Keep
+textually agreeing, spatially overlapping fragments contiguous; preserve
+unknown results for conflicting readings. This corrects text assembly,
+without guessing digits or smoothing values. Provenance: September 27
+manual captures `20260927T080418Z_energy_check_4.png` and
+`20260927T080655Z_delivery_test.png`, their saved OCR boxes, and the native
+header-band regressions in `test_pet_workshop_publication.py`.
+
+The final native chest/table card was separately reproduced from
+`20260927T090234Z_final_board_state.png`, retained unchanged as
+`tests/data/screen_recognition/pet_workshop_lv10_20260927.png`.
+It contains one Treasure 6 (10106) and one Wood 9 table (20209), with a
+ready Complete control. The failures were missing/tinted requirement art
+and a taller Complete control extending beyond the old search region;
+narrower spacing was not established as a cause. Add measured art variants
+and extend the existing control search, retaining the original matching
+thresholds and tile-coverage checks. The neighboring food/pomegranate
+card contains one Food 9 (31109) and one Fruit 4 (20104), and is not ready.
+These are artifact-observed facts and scoped recognition corrections;
+they do not establish final-candidate live acceptance. Preserve manual
+fallback until automatic recognition is qualified. The September 27
+roadmap amendment owns the separate design, offline, live and merge/push
+milestones. Runtime build identity was not recorded in these captures.
 
 ## Saved-screenshot analysis (PW05, 2026-09-21)
 

@@ -481,7 +481,11 @@ class PetWorkshopBoardPublicationTests(unittest.TestCase):
         """
 
         builder, navigation = _wire(_EmptyOcrService())
-        capture = _capture("pet_workshop_lv10_20260927.png", session_id="pw-f1-lv10")
+        capture = _capture(
+            "pet_workshop_lv10_20260927.png",
+            session_id="pw-f1-lv10",
+            native_mode=True,
+        )
 
         builder_observation, navigation_observation = _build_both(
             builder, navigation, capture, ScreenType.PNC_PET_WORKSHOP
@@ -1301,6 +1305,7 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
             },
             "pet_workshop_lv10_20260927.png": {
                 "header": (10, 64, 141, 200),
+                "native": True,
                 "rewards": (
                     ((WorkshopOrderRewardCategory.CHEST, 1),),
                     (
@@ -1351,8 +1356,8 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
         September 27 manual-run regression: RapidOCR reports a stray ``1``
         line overlapping the leading digit of the real ``162/200``/``163/200``
         token. The canonical header path must keep the overlapped digit; an
-        overlap dedup that removes the duplicated glyph corrupts the gauge
-        into ``62/200``/``63/200``.
+        inserting a separator after overlap dedup corrupts the gauge into
+        ``62/200``/``63/200``.
         """
 
         service = _require_rapid_ocr_service(self)
@@ -1384,6 +1389,24 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                         state.energy.capacity,
                     ),
                 )
+
+    def test_saved_energy_fragments_remain_contiguous(self) -> None:
+        """Replay the native September 27 OCR boxes without new OCR inference."""
+        cases = (
+            (162, Bounds(700, 21, 27, 33), Bounds(714, 17, 128, 42)),
+            (163, Bounds(703, 24, 23, 28), Bounds(708, 17, 134, 42)),
+        )
+        for current, prefix_bounds, gauge_bounds in cases:
+            with self.subTest(current=current):
+                lines = (
+                    OcrLine(text="1", bounds=prefix_bounds, confidence=1.0),
+                    OcrLine(
+                        text=f"{current}/200",
+                        bounds=gauge_bounds,
+                        confidence=1.0,
+                    ),
+                )
+                self.assertEqual(f"{current}/200", _join_region_lines(lines))
 
     def test_overlapping_gauge_conflict_abstains(self) -> None:
         """Spatial overlap cannot silently replace a disagreeing OCR digit."""

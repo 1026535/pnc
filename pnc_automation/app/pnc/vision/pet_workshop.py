@@ -1219,7 +1219,9 @@ def _join_region_lines(lines) -> str:
     box starts inside the previous same-row box and extends past it,
     geometry identifies a possible duplicated prefix. Drop it only when
     its text matches the predecessor's suffix; conflicting overlapping
-    readings abstain rather than invent a gauge value.
+    readings abstain rather than invent a gauge value. Matching fragments
+    remain contiguous: inserting a space between "1" and the remainder
+    of "162/200" would make the gauge parser read "62/200".
     """
 
     parts: list[str] = []
@@ -1228,6 +1230,7 @@ def _join_region_lines(lines) -> str:
     for line in lines:
         text = line.text
         bounds = line.bounds
+        shared_glyphs = False
         if (
             previous is not None
             and previous.x < bounds.x < previous.x + previous.width
@@ -1239,9 +1242,13 @@ def _join_region_lines(lines) -> str:
             dropped = min(len(text), round(overlap * len(text) / bounds.width))
             if dropped and not previous_text.endswith(text[:dropped]):
                 return ""
+            shared_glyphs = dropped > 0
             text = text[dropped:]
         if text:
-            parts.append(text)
+            if shared_glyphs:
+                parts[-1] += text
+            else:
+                parts.append(text)
         previous = bounds
         previous_text = line.text
     return " ".join(parts)
