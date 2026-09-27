@@ -92,6 +92,45 @@ class TestAssessOrder(unittest.TestCase):
         self.assertFalse(assessment.eligible)
         self.assertFalse(assessment.is_goal)
 
+    def test_run_incident_three_identical_coconuts_rejected(self) -> None:
+        # M-F01 (2026-09-27 manual diagnosis): the live-ready order carried
+        # three identical Fruit 5 requirements and three pieces were
+        # consumed. Eligibility is a quantity total — duplicates count
+        # individually — so the incident card is never a goal while its
+        # two-piece counterpart is.
+        order = fx.make_order(
+            1,
+            {FRUIT_5: 3},
+            rewards=(reward(WorkshopOrderRewardCategory.CHEST, 1),),
+            ready=True,
+        )
+        assessment = self.assess(order)
+        self.assertFalse(assessment.eligible)
+        self.assertFalse(assessment.is_goal)
+        self.assertFalse(assessment.unresolved)
+        self.assertIn("piece total", assessment.ineligible_reason)
+
+        pair = fx.make_order(
+            2,
+            {FRUIT_5: 2},
+            rewards=(reward(WorkshopOrderRewardCategory.CHEST, 1),),
+        )
+        self.assertTrue(self.assess(pair).eligible)
+
+    def test_unreadable_card_with_proven_three_total_never_inspected(self) -> None:
+        # M-F02: typed requirements are stronger evidence than the
+        # recognizer's row status — a proven three-piece total keeps the
+        # card known-ineligible, so no ORDER_CONTENTS read is scheduled.
+        order = fx.make_order(
+            1,
+            {FRUIT_5: 3},
+            completeness=RowRecognitionStatus.UNREADABLE,
+        )
+        assessment = self.assess(order)
+        self.assertFalse(assessment.eligible)
+        self.assertFalse(assessment.is_goal)
+        self.assertFalse(assessment.unresolved)
+
     def test_duplicate_two_piece_accepted(self) -> None:
         order = fx.make_order(
             1,

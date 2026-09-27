@@ -179,6 +179,54 @@ class WorkshopSimulatorTests(unittest.TestCase):
         self.assertEqual(_cell(state, 1).occupancy, WorkshopOccupancy.EMPTY)
         self.assertEqual(state.energy.current, 102)
 
+    def test_recycle_allowlisted_terminals_grant_eight_energy_each(self) -> None:
+        """Fruit 5 and Statue 5 — the policy's recyclable pair — return +8.
+
+        User-confirmed 2026-09-27, matching the authored ``recoveryReward``
+        group count; the engine-side check is the catalog ``recoverable``
+        flag, the allowlist is policy.
+        """
+
+        for item_id in (fx.FRUIT_5, fx.STATUE_5):
+            sim = WorkshopSimulator(
+                fx.make_state(
+                    cells=(fx.make_cell(1, 1, item_id=item_id),),
+                    energy=WorkshopEnergy(current=100, capacity=200),
+                )
+            )
+
+            state = sim.apply(WorkshopRecycleIntent(cell_id=1, item_id=item_id))
+
+            self.assertEqual(state.energy.current, 108)
+            self.assertEqual(_cell(state, 1).occupancy, WorkshopOccupancy.EMPTY)
+
+    def test_merge_activate_and_feed_spend_no_energy(self) -> None:
+        """Free board transitions never touch the energy bar.
+
+        This tests the logical contract; it is not evidence that each
+        transition has been qualified through the live executor.
+        """
+
+        merged = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=STATUE_1),
+                    fx.make_cell(1, 2, item_id=STATUE_1),
+                )
+            )
+        ).apply(WorkshopMergeIntent(source_cell_id=1, target_cell_id=2, item_id=STATUE_1))
+        self.assertEqual(merged.energy.current, 100)
+
+        activated = WorkshopSimulator(fx.activation_state()).apply(
+            WorkshopActivateIntent(source_cell_id=9, target_cell_id=8, item_id=FRUIT_1)
+        )
+        self.assertEqual(activated.energy.current, 100)
+
+        fed = WorkshopSimulator(fx.feed_locked_state()).apply(
+            WorkshopFeedIntent(food_cell_id=2, producer_cell_id=1, food_item_id=FOOD_3)
+        )
+        self.assertEqual(fed.energy.current, 100)
+
     def test_produce_draws_authored_item_and_spends_energy(self) -> None:
         """Map 1's drop group has a single positive outcome: Statue 1."""
 
@@ -264,6 +312,123 @@ class WorkshopSimulatorTests(unittest.TestCase):
             WorkshopSimulator(fx.make_state(cells=full)).apply(
                 WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1)
             )
+
+    def test_select_then_produce_replays_the_run_sequence(self) -> None:
+        """Selection alone mutates nothing; the follow-up produce spends.
+
+        Reduced 2026-09-27 replay of the accepted select/produce split: a
+        selected Normal Clay 4 takes the production path — the select
+        transition only marks the cell, then the produce charges the bar
+        and lands the drawn piece.
+        """
+
+        sim = WorkshopSimulator(
+            _producing_state(
+                item_id=CLAY_4,
+                energy=WorkshopEnergy(current=200, capacity=200),
+            )
+        )
+
+        state = sim.apply(WorkshopSelectIntent(cell_id=1))
+        self.assertEqual(state.selection.kind, WorkshopSelectionKind.SELECTED)
+        self.assertEqual(state.selection.cell_id, 1)
+        self.assertEqual(state.energy.current, 200)
+        self.assertEqual(_cell(state, 1).item_id, CLAY_4)
+
+        state = sim.apply(
+            WorkshopProduceIntent(cell_id=1, producer_item_id=CLAY_4),
+            outcome=ProduceOutcome(item_id=BOWL_1, cell_id=30),
+        )
+        self.assertEqual(state.energy.current, 199)
+        self.assertEqual(_cell(state, 30).item_id, BOWL_1)
+        self.assertEqual(_cell(state, 30).item_status, WorkshopItemStatus.NORMAL)
+        self.assertEqual(_cell(state, 1).item_id, CLAY_4)
+        self.assertEqual(_cell(state, 1).cooldown, WorkshopCooldown.CLEAR)
+
+    def test_produce_rejects_non_normal_producer_cells(self) -> None:
+        """Feed-locked and inactive pieces refuse RequireProduce.
+
+        The 2026-09-27 addendum separates feed-locked, inactive and cooling
+        producers from usable ones — each refusal leaves the piece and the
+        energy bar untouched.
+        """
+
+        locked = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(
+                        1, 1,
+                        item_id=TRAP,
+                        item_status=WorkshopItemStatus.FEED_LOCKED,
+                        cooldown=WorkshopCooldown.CLEAR,
+                    ),
+                    *tuple(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+                )
+            )
+        )
+        with self.assertRaises(WorkshopSimulationError):
+            locked.apply(WorkshopProduceIntent(cell_id=1, producer_item_id=TRAP))
+        self.assertEqual(_cell(locked.state, 1).item_id, TRAP)
+        self.assertEqual(locked.state.energy.current, 100)
+
+        inactive = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(
+                        1, 1,
+                        item_id=MAP_1,
+                        item_status=WorkshopItemStatus.INACTIVE,
+                        cooldown=WorkshopCooldown.CLEAR,
+                    ),
+                    *tuple(cell for cell in fx.make_empty_cells() if cell.cell_id != 1),
+                )
+            )
+        )
+        with self.assertRaises(WorkshopSimulationError):
+            inactive.apply(WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1))
+        self.assertEqual(_cell(inactive.state, 1).item_id, MAP_1)
+        self.assertEqual(inactive.state.energy.current, 100)
+
+    def test_produce_rejects_when_only_locked_cells_remain(self) -> None:
+        """Locked tiles are not spawn capacity, in either produce mode.
+
+        `IsGridFull` counts usable empties only — the 2026-09-27 addendum's
+        board-full condition — so a board whose free-looking tiles are all
+        level-gated rejects the draw and the outcome alike, spending no
+        energy.
+        """
+
+        locked_out = fx.make_state(
+            cells=(
+                fx.make_cell(1, 1, item_id=MAP_1, cooldown=WorkshopCooldown.CLEAR),
+                *(
+                    fx.make_cell(
+                        row,
+                        column,
+                        access=WorkshopCellAccess.LOCKED,
+                        occupancy=WorkshopOccupancy.EMPTY,
+                        item_status=None,
+                    )
+                    for row in range(1, 10)
+                    for column in range(1, 8)
+                    if (row, column) != (1, 1)
+                ),
+            )
+        )
+        sim = WorkshopSimulator(locked_out, rng=random.Random(5))
+
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1))
+        self.assertEqual(sim.state.energy.current, 100)
+        self.assertEqual(_cell(sim.state, 1).item_id, MAP_1)
+
+        with self.assertRaises(WorkshopSimulationError):
+            sim.apply(
+                WorkshopProduceIntent(cell_id=1, producer_item_id=MAP_1),
+                outcome=ProduceOutcome(item_id=STATUE_1, cell_id=8),
+            )
+        self.assertEqual(sim.state.energy.current, 100)
+        self.assertEqual(_cell(sim.state, 8).access, WorkshopCellAccess.LOCKED)
 
     def test_cooldown_cycle_and_exhaustion_transform(self) -> None:
         """Fishing Tool 9 cools after 10 uses, waits clear it, and 20 uses transform it."""
@@ -403,6 +568,49 @@ class WorkshopSimulatorTests(unittest.TestCase):
         state = unevaluated.apply(WorkshopSubmitOrderIntent(order_ref=7))
         self.assertIsNone(state.order_survey.order(7))
         self.assertEqual(_cell(state, 1).occupancy, WorkshopOccupancy.EMPTY)
+
+    def test_submit_consumes_by_quantity_and_reestablishes_readiness(self) -> None:
+        """Requirements consume per-unit, and leftovers re-derive readiness.
+
+        Mirrors the 2026-09-27 delivery semantics: the game gathers the
+        required quantity of matching Normal pieces, not a chosen cell —
+        so after order 7 takes one Fruit 1 from the shared three-piece
+        pool, order 8's quantity-2 requirement is re-derived satisfied
+        against the two remaining copies.
+        """
+
+        sim = WorkshopSimulator(
+            fx.make_state(
+                cells=(
+                    fx.make_cell(1, 1, item_id=FRUIT_1),
+                    fx.make_cell(1, 2, item_id=FRUIT_1),
+                    fx.make_cell(1, 3, item_id=FRUIT_1),
+                    *tuple(cell for cell in fx.make_empty_cells() if cell.cell_id > 3),
+                ),
+                order_survey=WorkshopOrderSurvey(
+                    orders=(
+                        fx.make_order(7, {FRUIT_1: 1}, ready=True),
+                        fx.make_order(8, {FRUIT_1: 2}, ready=True),
+                    ),
+                    coverage=WorkshopSurveyCoverage.COMPLETE,
+                    freshness=WorkshopSurveyFreshness.CURRENT,
+                ),
+            )
+        )
+
+        state = sim.apply(WorkshopSubmitOrderIntent(order_ref=7))
+        self.assertIsNone(state.order_survey.order(7))
+        self.assertEqual(state.energy.current, 100)
+        self.assertEqual(state.order_survey.order(8).ready, True)
+        self.assertEqual(
+            [cell.cell_id for cell in state.cells if cell.item_id == FRUIT_1],
+            [2, 3],
+        )
+
+        state = sim.apply(WorkshopSubmitOrderIntent(order_ref=8))
+        self.assertIsNone(state.order_survey.order(8))
+        self.assertEqual(state.energy.current, 100)
+        self.assertFalse(any(cell.item_id == FRUIT_1 for cell in state.cells))
 
     def test_cooldown_only_wait_preserves_observed_readiness(self) -> None:
         """A cooldown clear moves no stock, so an observed ``ready=False`` persists.

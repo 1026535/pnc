@@ -92,12 +92,13 @@ class PlannerCase(unittest.TestCase):
     def plan(self, state: WorkshopState) -> WorkshopDecision:
         return plan_next(state, self.catalog, self.policy)
 
-    def full_board(self, *items: int, orders=()) -> WorkshopState:
+    def full_board(self, *items: int, orders=(), exclude=()) -> WorkshopState:
         placed = list(items)
+        blocked = frozenset(placed) | frozenset(exclude)
         placed.extend(
             item.item_id
             for item in self.catalog.items
-            if item.item_id not in placed
+            if item.item_id not in blocked
         )
         cells = tuple(
             fx.make_cell(row, col, item_id=placed[(row - 1) * 7 + col - 1])
@@ -701,6 +702,39 @@ class TestFullBoardAndStop(PlannerCase):
             decision.intent.reason, WorkshopStopReason.BOARD_BLOCKED
         )
 
+    def test_ready_secondary_submits_on_a_full_board(self) -> None:
+        # Reduced 2026-09-27 run shape: a confirmed-full board holding a
+        # ready eligible secondary submits it before recovery — the
+        # delivery itself frees the space the primary goal needs, and its
+        # two Statue 5 requirements consume nothing reserved on the
+        # primary's Fruit 5 / Wood 10 chains.
+        state = self.full_board(
+            STATUE_5,
+            STATUE_5,
+            orders=(
+                lasso_order(1, {FRUIT_5: 1, WOOD_10: 1}, ready=False),
+                chest_order(2, {STATUE_5: 2}, ready=True),
+            ),
+            exclude=(FRUIT_5, WOOD_10),
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopSubmitOrderIntent)
+        self.assertEqual(decision.intent.order_ref, 2)
+        self.assertEqual(decision.goal_order_ref, 1)
+
+    def test_full_board_recycles_only_the_unreserved_terminal(self) -> None:
+        # The demanded Fruit 5 stays reservation-protected; the surplus
+        # Statue 5 is the allowlisted piece free to leave.
+        state = self.full_board(
+            FRUIT_5,
+            STATUE_5,
+            orders=(lasso_order(1, {FRUIT_5: 1, WOOD_10: 1}, ready=False),),
+            exclude=(WOOD_10,),
+        )
+        decision = self.plan(state)
+        self.assertIsInstance(decision.intent, WorkshopRecycleIntent)
+        self.assertEqual(decision.intent.item_id, STATUE_5)
+
     def test_no_supported_path_stops_unresolved(self) -> None:
         # The Trap itself is demanded but nothing produces it and none is on
         # the board to feed — no action remains.
@@ -833,6 +867,55 @@ class TestReplanning(PlannerCase):
             if isinstance(decision.intent, WorkshopProduceIntent)
         )
         self.assertEqual(produce.intent.producer_item_id, TRAP)
+
+    def test_submit_frees_space_then_production_replans(self) -> None:
+        # Reduced 2026-09-27 run shape: submitting the ready secondary on a
+        # confirmed-full board frees the space, and each later decision is
+        # replanned from the fresh state — inspect an unread producer,
+        # select it, produce it — instead of replaying a queued plan.
+        state = self.full_board(
+            STATUE_5,
+            STATUE_5,
+            orders=(
+                lasso_order(1, {FRUIT_5: 1, WOOD_10: 1}, ready=False),
+                chest_order(2, {STATUE_5: 2}, ready=True),
+            ),
+            exclude=(FRUIT_5, WOOD_10),
+        )
+
+        def transition(current: WorkshopState, decision: WorkshopDecision):
+            if isinstance(decision.intent, WorkshopSubmitOrderIntent):
+                return solver_fx.apply_submit(current, decision.intent)
+            if isinstance(decision.intent, WorkshopInspectIntent):
+                self.assertEqual(
+                    decision.intent.need, WorkshopInspectKind.CELL_STATE
+                )
+                return solver_fx.set_cell(
+                    current,
+                    decision.intent.cell_id,
+                    cooldown=WorkshopCooldown.CLEAR,
+                )
+            if isinstance(decision.intent, WorkshopSelectIntent):
+                return solver_fx.set_selection(
+                    current, decision.intent.cell_id
+                )
+            return None
+
+        decisions = solver_fx.run_scenario(
+            state, self.catalog, self.policy, transition
+        )
+        self.assertEqual(len(decisions), 4)
+        self.assertIsInstance(decisions[0].intent, WorkshopSubmitOrderIntent)
+        self.assertEqual(decisions[0].intent.order_ref, 2)
+        inspect = decisions[1].intent
+        self.assertIsInstance(inspect, WorkshopInspectIntent)
+        self.assertEqual(inspect.need, WorkshopInspectKind.CELL_STATE)
+        self.assertEqual(
+            decisions[2].intent, WorkshopSelectIntent(inspect.cell_id)
+        )
+        produce = decisions[3].intent
+        self.assertIsInstance(produce, WorkshopProduceIntent)
+        self.assertEqual(produce.cell_id, inspect.cell_id)
 
     def test_replan_after_finite_producer_exhausts(self) -> None:
         # The Fishing Tool produced, then its authored outcome is the

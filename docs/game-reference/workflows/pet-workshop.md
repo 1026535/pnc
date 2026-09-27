@@ -36,8 +36,9 @@ its consumer is unverified).
 
 - `recoveryReward` shared tables `__rt_2`–`__rt_9` are counts 2–256 of
   energy-related item `44009010`, `type=9`. Fruit 5 (20105) and Statue 5
-  (10205) map to `__rt_4` = count 8, matching the reviewed recycling finding;
-  treat the live energy delta as unproven until a receipt is observed.
+  (10205) map to `__rt_4` = count 8; **user-confirmed 2026-09-27** that the
+  recycling receipt is +8 energy each, settling the earlier live-receipt
+  caveat.
 - Every producer item has `type=1`; ordinary mergeable pieces are `type=2`;
   the Omni Card (100001) is `type=0`. Producer-ness is defined by the worker
   table, not inferred from `type` — keep the raw field.
@@ -283,16 +284,103 @@ parser is `pnc_automation/app/pnc/vision/pet_workshop.py`:
   rather than a zero-capacity gauge; zero-current and over-capacity reads
   remain valid.
 
+## September 27 manual-run diagnosis and offline regressions
+
+**Saved-evidence / offline diagnosis:** the reviewed report and
+game-knowledge addendum
+(`C:/Users/lebel/pnc/.local-data/review/pw-main-manual-diagnosis-20260927/REPORT.md`,
+`GAME-KNOWLEDGE-ADDENDUM.md`) plus the simulator findings
+(`pet-workshop-pw01` worktree, `.local-data/review/pw-main-manual-20260927/SIMULATOR-FINDINGS.json`)
+replayed a manual run against saved captures and offline fakes — no
+daytime emulator or account access was used. Accepted facts:
+
+- **Submit consumes by quantity (verified):** the reviewed run delivered a
+  ready order requiring three identical Fruit 5/coconut pieces; all three
+  were consumed. `RequireOrderForm` gathers the required *quantity* of
+  matching Normal pieces — the game does not consume a pre-chosen cell —
+  so stock and order readiness must be re-derived after every delivery.
+- **Exactly-two-piece policy (policy, not game):** the game accepts orders
+  of any piece total, including three-duplicate; the solver policy admits
+  only orders whose required units total exactly two, counting duplicates.
+  A native green **Complete** on a three-piece order is correct game UI,
+  not policy approval — such orders are known-ineligible, never submitted.
+- **Recognition boundary (verified):** an unreadable or clipped order card
+  is not evidence the order is absent. Proven typed requirements stay
+  known-ineligible even when the row's recognition status is UNREADABLE;
+  partial/clipped requirement lists are never submittable. In the logical
+  simulator, `ready=None` permits a transition with confirmed stock;
+  live execution still requires a fresh measured ready control.
+  `ready=False` proves no completable control.
+- **Distinct producer/board conditions (verified):** selection marks the
+  piece (border + detail bar); Use/Produce is the second tap — separate
+  typed intents. A refused produce tap is not proof of a `cdTime`
+  cooldown: `IsGridFull` (no usable empty cell), feed-locked producers
+  (`unlockItemId`), inactive pieces and cooldown windows are independent
+  gates. Level-gated locked tiles are not spawn capacity.
+- **Grey activation (user-confirmed September 27; client-source supported):**
+  merging Normal onto an identical grey/inactive piece produces the
+  next-tier item. This uses `MergeGrid(..., true)`; it is distinct from
+  reverse feeding through `MergeGridUnLock(..., true)`. User confirmation
+  establishes the rule; it does not live-accept an executor implementation.
+- **Energy accounting (repository-proven + user-confirmed):** ordinary production spends 1
+  energy; merges, activations, feeds and order submission spend none;
+  recycling Fruit 5 or Statue 5 returns +8 each (user-confirmed, matching
+  `recoveryReward __rt_4`). The reviewed run's unexplained 154→153 delta
+  stays recorded as-is. Order delivery costs no energy, user-confirmed
+  September 27; the cause of that historical delta remains unknown.
+- **Green/blue board marks (verified):** green marks Normal pieces whose
+  item ID is needed by a fully satisfiable displayed order; blue marks
+  partially satisfied order needs (`VerifyOrderTarget`,
+  `ProcessOrderMarkGrid`; Finish takes precedence over HalfFinish). Marks
+  are game signals spanning all displayed orders — including
+  policy-ineligible three-piece orders — not policy permission, and they
+  do not reserve pieces for the solver's selected goal. Reservations are
+  recomputed from typed demands on every replan.
+
+**Simulator/planner regressions added** (reduced deterministic scenarios,
+not native board replay): the incident-shaped `{Fruit 5: 3}` rejection and
+its UNREADABLE-completeness variant; full-board submission of a ready
+reservation-safe secondary; recycling restricted to unreserved allowlisted
+terminals while goal-protected pieces stay; sequential
+submit → inspect → select → produce replanning; select-vs-produce split on
+a Clay 4 producer; production refusals for feed-locked/inactive producers
+and for boards whose only empty cells are level-locked; zero-energy-cost
+merge/activate/feed; +8 recycling on both allowlisted terminals; and
+quantity-based submit consumption with readiness re-derivation. Existing
+coverage already proved three-distinct-piece rejection, quantity
+consumption, unreadable/clipped readiness gating, cooldown waits
+preserving readiness, and green-marked three-piece orders earning no
+submission — those were cited, not duplicated.
+
+**Outside the simulator boundary — assigned to their existing owners:** green-mark
+recognition and raw tap/UI emulation; refill and speedup-modal
+interruption; asynchronous server delivery and manual command-file
+buffering; native energy and order recognition (one serialized recognition
+worker, with no numeric repair/smoothing); and applicable final-candidate
+live validation of runtime corrections. These tests change no production
+planner behavior and require no new live proof themselves. Existing
+manual-helper fixes remain locally implemented and offline-tested.
+
+The readable native energy examples must replay as 162/200 and 163/200.
+The final native chest/table two-piece card must be reproduced separately
+to identify the failing item, tile-coverage or geometry boundary; narrower
+spacing is an unsupported causal explanation until demonstrated. Preserve
+the manual fallback while automatic recognition is unqualified. The
+September 27 roadmap amendment owns these scoped corrections and the
+separate design, offline, live and merge/push milestones.
+
 ## Remaining uncertainty
 
 - `unlockType`/`type`/`getType`/`sort`/`assist`/`num`/`itemLimit` encodings
   are preserved raw; their consumers were not all traced.
 - Generator `max_num` exhaustion/transform, feed-unlock, piece activation,
-  and recycling's live energy receipt remain unobserved — no eligible
+  and the live modal flow around recycling remain unobserved — no eligible
   board state appeared in three passes; see the PW10 live-qualification
-  ledger. True server-side drop weights are not observable without many
-  controlled samples; the simulator samples authored group weights and
-  replays captured `ProduceOutcome`s for determined tests.
+  ledger. The +8 Fruit 5/Statue 5 recycle reward is now user-confirmed
+  against `recoveryReward`. True server-side drop weights are not
+  observable without many controlled samples; the simulator samples
+  authored group weights and replays captured `ProduceOutcome`s for
+  determined tests.
 - The PW02 parser's qualified fixture coverage remains narrower than the
   simulator exploration record above. Those raw transition captures alone
   do not qualify cooldown, feeding, depletion, recycle confirmation or
