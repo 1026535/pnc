@@ -14,7 +14,8 @@ Fixture provenance (``tests/data/screen_recognition/manifest.json``):
 LV8 board; ``pet_workshop_lv6_20260917.png`` is the LV6 board;
 ``pet_workshop_selected_{treasure,bowl}_20260917.png`` carry reviewed
 selection states; the item/order detail, help and storage fixtures cover the
-measured overlay surfaces.
+measured overlay surfaces; ``pet_workshop_energy_{162,163}_20260927.png``
+are native header bands for the September 27 energy-recognition regression.
 """
 
 from __future__ import annotations
@@ -149,6 +150,33 @@ def _capture(
             session_id=session_id,
             session_epoch=1,
             capture_sequence=capture_sequence,
+            input_sequence=0,
+            captured_at=captured_at,
+        ),
+        ephemeral_captured_at=captured_at,
+    )
+
+
+def _header_frame(name: str, *, session_id: str) -> CapturedScreenshot:
+    """Compose a tracked native header band onto a blank native-size canvas.
+
+    The header OCR regions only read the top ~70 image rows, so each 900x96
+    RGBA crop is pasted at its native offset over a flat fill instead of
+    duplicating a whole board capture per energy case.
+    """
+
+    with Image.open(FIXTURES / name) as band:
+        image = Image.new("RGBA", (900, 1600), (20, 26, 38, 255))
+        image.paste(band.copy(), (0, 0))
+    captured_at = datetime.now(UTC)
+    return CapturedScreenshot(
+        None,
+        image,
+        "PNG",
+        frame_ref=FrameRef(
+            session_id=session_id,
+            session_epoch=1,
+            capture_sequence=1,
             input_sequence=0,
             captured_at=captured_at,
         ),
@@ -1227,6 +1255,46 @@ class PetWorkshopHeaderOcrTests(unittest.TestCase):
                             for reward in order.rewards
                         ),
                     )
+
+    def test_native_energy_gauge_keeps_overlapped_leading_digit(self) -> None:
+        """The native energy pill reads 162/200 and 163/200 despite a ghost '1'.
+
+        September 27 manual-run regression: RapidOCR reports a stray ``1``
+        line overlapping the leading digit of the real ``162/200``/``163/200``
+        token. The canonical header path must keep the overlapped digit; an
+        overlap dedup that removes the duplicated glyph corrupts the gauge
+        into ``62/200``/``63/200``.
+        """
+
+        service = _require_rapid_ocr_service(self)
+        builder, _navigation = _wire(service)
+        del _navigation
+        producer = WorkshopContentProducer(matcher=OpenCvTemplateMatcher())
+        cases = {
+            "pet_workshop_energy_162_20260927.png": (10, 64, 162, 200),
+            "pet_workshop_energy_163_20260927.png": (10, 64, 163, 200),
+        }
+        for fixture, header in cases.items():
+            capture = _header_frame(fixture, session_id="pw-f1-energy")
+            additions = producer.additions_for_screen(
+                image=capture.image,
+                screen_type=ScreenType.PNC_PET_WORKSHOP,
+                ocr_context=builder.create_ocr_context(capture),
+                layout_id=_BOARD_LAYOUT_ID,
+            )
+            self.assertIsNotNone(additions)
+            assert additions is not None and additions.workshop is not None
+            state = additions.workshop.state
+            with self.subTest(fixture=fixture):
+                self.assertEqual(
+                    header,
+                    (
+                        state.workshop_level,
+                        state.workshop_exp,
+                        state.energy.current,
+                        state.energy.capacity,
+                    ),
+                )
 
     def test_overlapping_gauge_conflict_abstains(self) -> None:
         """Spatial overlap cannot silently replace a disagreeing OCR digit."""

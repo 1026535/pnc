@@ -1565,6 +1565,30 @@
       }
     },
     {
+      "image": "pet_workshop_energy_162_20260927.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-27/main/pw-main-manual-20260927",
+      "sha256": "ac1e120a64e2deab96fc559faf027f6c4ee680d46e69d2ba229e6903f8da4744",
+      "expected_visual_screens": [],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/pw-main-manual-20260927/20260927T080418Z_energy_check_4.png",
+        "derivative": "900x96 RGBA crop of rows 0-95 from the unmodified native frame (file sha256 429d2d63c64a0c83e13b7ccab4fdd9761178f569087c82dde496deea52799e2f): the header band carrying the level pill, EXP gauge and energy pill that RapidOCR reads as a stray '1' overlapping the true '162/200' token. Header-region regression fixture recomposed onto a 900x1600 canvas by the focused publication test; not a standalone screen, so no visual screens are expected."
+      }
+    },
+    {
+      "image": "pet_workshop_energy_163_20260927.png",
+      "screen": "PNC_PET_WORKSHOP",
+      "split": "validation",
+      "group": "2026-09-27/main/pw-main-manual-20260927",
+      "sha256": "2a1a970db358d17b5fec8e3177b9dddd8294680e5d2d63eab30739c4b6c3c4b1",
+      "expected_visual_screens": [],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/pw-main-manual-20260927/20260927T080655Z_delivery_test.png",
+        "derivative": "900x96 RGBA crop of rows 0-95 from the unmodified native frame (file sha256 ebfdd00679df51aae24209156767e1205b9958f907bb0152df36eb213ada5a85): the header band carrying the level pill, EXP gauge and energy pill that RapidOCR reads as a stray '1' overlapping the true '163/200' token. Header-region regression fixture recomposed onto a 900x1600 canvas by the focused publication test; not a standalone screen, so no visual screens are expected."
+      }
+    },
+    {
       "image": "savannah_hero_offer_warm_20260922.png",
       "screen": "PNC_POPUP",
       "split": "validation",
