@@ -5,10 +5,17 @@ from __future__ import annotations
 import unittest
 
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.vision.image.models import Bounds
 
 from tests.support.automation.session import FakeSession
 from tests.support.pnc.observations import make_observation
@@ -19,6 +26,28 @@ from tests.support.automation.engine.automation_framework_fixtures import (
 from tests.support.automation.engine.make_observed_action_executor import (
     _make_observed_action_executor,
 )
+
+
+def _join_landing_overlay() -> PopupOverlayObservation:
+    """The typed overlay the reviewed alliance_join_landing profile publishes."""
+
+    return PopupOverlayObservation(
+        image_size=(540, 960),
+        layout_id="alliance_join_landing",
+        candidates=(
+            PopupDismissCandidate(
+                control_kind=PopupControlKind.BACKGROUND_DISMISS,
+                bounds=Bounds(30, 830, 140, 70),
+                action_point=(100, 865),
+                confidence=1.0,
+                evidence_kind=PopupEvidenceKind.GEOMETRY,
+                reason="visual_anchor:alliance_join_landing",
+            ),
+        ),
+        confidence=1.0,
+        evidence_kind=PopupEvidenceKind.KNOWN_LAYOUT,
+        reason="visual_anchor:alliance_join_landing",
+    )
 
 
 class ObservedActionPopupRecoveryTests(AutomationFrameworkFixtures, unittest.TestCase):
@@ -180,8 +209,13 @@ class ObservedActionPopupRecoveryTests(AutomationFrameworkFixtures, unittest.Tes
         )
         # blocking_popup marks a destination screen that also carries
         # interruption evidence; expected-screen scoping must still preserve it.
+        # The published mask element and typed overlay make this the production
+        # landing shape — the expected gate, not dismissal absence, preserves it.
         landing = make_observation(
             ScreenType.PNC_ALLIANCE_JOIN,
+            visible_ids=(UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,),
+            source_kinds={UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK: VisibleElementSourceKind.GEOMETRY},
+            popup_overlay=_join_landing_overlay(),
             blocking_popup=True,
             frame_fingerprint="alliance-join-landing",
         )
@@ -224,21 +258,68 @@ class ObservedActionPopupRecoveryTests(AutomationFrameworkFixtures, unittest.Tes
         self.assertEqual([(5, 5)], popup_session.taps)
 
         # The same landing screen, when it is not an expected destination,
-        # owns no dismissal control: bounded recovery fails closed rather
-        # than improvising a tap or Android Back.
+        # dismisses through its reviewed mask region: UnionGuide's embedded
+        # CommonModelWin binds ScreenShotMask to OnBgClickHandler ->
+        # BackToLastWindow -> CloseWin (isClickBgClose defaults true). The
+        # stray landing stays CLEAR yet recovers because the mask selector is a
+        # safe transient selector. Join/Create remain unowned and untouched.
         stray_session = FakeSession()
         stray_executor = _make_observed_action_executor(stray_session)
         stray = make_observation(
             ScreenType.PNC_ALLIANCE_JOIN,
-            blocking_popup=True,
+            visible_ids=(UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,),
+            source_kinds={UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK: VisibleElementSourceKind.GEOMETRY},
+            popup_overlay=_join_landing_overlay(),
             frame_fingerprint="stray-join-landing",
         )
+        stray_home = make_observation(ScreenType.PNC_HOME_CITY)
+        stray_observer = FakeObservationService(observations=[stray_home])
+
+        stray_recovered = stray_executor.recover_interruption_if_required(
+            stray,
+            label_prefix="stray_join_landing",
+            observe=stray_observer.observe,
+            expected_screens=frozenset({ScreenType.PNC_HOME_CITY}),
+        )
+
+        self.assertIsNotNone(stray_recovered)
+        assert stray_recovered is not None
+        self.assertEqual(ScreenType.PNC_HOME_CITY, stray_recovered.screen_type)
+        self.assertEqual([(100, 865)], stray_session.taps)
+        self.assertEqual([], stray_session.key_events)
+
+        # Without the published dismissal element the same landing fails closed:
+        # a blocking observation errors, and a clear OCR-only landing (profile
+        # anchors unmatched, so the reviewed mask geometry is not owned) is
+        # preserved untouched rather than guessed at.
+        no_element_session = FakeSession()
+        no_element_executor = _make_observed_action_executor(no_element_session)
+        no_element = make_observation(
+            ScreenType.PNC_ALLIANCE_JOIN,
+            blocking_popup=True,
+            frame_fingerprint="stray-join-landing-no-element",
+        )
         with self.assertRaises(SelectorResolutionError):
-            stray_executor.recover_interruption_if_required(
-                stray,
-                label_prefix="stray_join_landing",
-                observe=popup_observer.observe,
+            no_element_executor.recover_interruption_if_required(
+                no_element,
+                label_prefix="stray_join_landing_no_element",
+                observe=stray_observer.observe,
                 expected_screens=frozenset({ScreenType.PNC_HOME_CITY}),
             )
-        self.assertEqual([], stray_session.taps)
-        self.assertEqual([], stray_session.key_events)
+        self.assertEqual([], no_element_session.taps)
+        self.assertEqual([], no_element_session.key_events)
+
+        unqualified = make_observation(
+            ScreenType.PNC_ALLIANCE_JOIN,
+            frame_fingerprint="stray-join-landing-unqualified",
+        )
+        self.assertIsNone(
+            no_element_executor.recover_interruption_if_required(
+                unqualified,
+                label_prefix="stray_join_landing_unqualified",
+                observe=stray_observer.observe,
+                expected_screens=frozenset({ScreenType.PNC_HOME_CITY}),
+            )
+        )
+        self.assertEqual([], no_element_session.taps)
+        self.assertEqual([], no_element_session.key_events)

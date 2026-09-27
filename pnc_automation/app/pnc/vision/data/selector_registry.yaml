@@ -1579,6 +1579,27 @@ selectors:
       - PNC_PLAYER_PROFILE_HEADER
       - PNC_PLAYER_PROFILE_NAME_LABEL
   materialize_relative_bounds: false
+- id: PNC_ALLIANCE_JOIN_DISMISS_MASK
+  screens:
+  - PNC_ALLIANCE_JOIN
+  status: screenshot_seeded
+  detection_kind: guarded_geometry
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.0556
+    y_ratio: 0.8646
+    width_ratio: 0.2593
+    height_ratio: 0.0729
+  materialize_relative_bounds: false
+  notes:
+  - 'Published only by the reviewed alliance_join_landing profile as a fixed
+    background-mask region ([30,830,140,70] at 540x960, tap center (100,865)):
+    UnionGuide embeds CommonModelWin, whose Awake binds ScreenShotMask to
+    OnBgClickHandler with isClickBgClose defaulting true
+    (uis/common/commonwin/commonmodelwin.lua), closing via BackToLastWindow ->
+    CloseWin. The region sits below the Join/Create row (~y777) and outside
+    the union list, so the tap cannot reach a mutating control. Join and
+    Create remain task-owned and are never published here.'
 - id: PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON
   screens:
   - PNC_CHAT_PLAYER_ACTION_POPUP

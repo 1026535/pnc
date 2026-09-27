@@ -7,7 +7,7 @@ Worker playbook for unrelated blocking popups that interrupt a live-test assignm
 Before recovering, check the assignment's expected screens:
 
 - A dialog the assigned workflow produces (a confirmation the feature under test raises, an expected detail panel) is **task-owned**, not a popup — do not dismiss it.
-- `alliance_join_landing` (`PNC_ALLIANCE_JOIN`) is the Join Alliance **landing** shown to an alliance-less account: it occludes Home City and deliberately owns no action (Join/Create are account mutations, never automation targets) and no owned dismissal — the prefab (`RecomentUnionsView.prefab`) defines a real Cancel button (取消, 158×59, ≈(261,547) reference-space) bound to `CloseWin`, but the captured fixture's lower half is erased so its live rendering is unverified, and the full-screen `BgMask` node has no click binding. If it blocks an unrelated check, publish the incident and mark the check `not_run`; a manual dismissal is permitted only through a fresh frame's unambiguous control — never a guessed region, never Join/Create.
+- `alliance_join_landing` (`PNC_ALLIANCE_JOIN`) is the Join Alliance **landing** shown to an alliance-less account: it occludes Home City and owns no action besides the reviewed mask dismissal (Join/Create are account mutations, never automation targets). The extracted prefab `UI/UIModules/Union/UnionGuide.prefab` binds only those two buttons, but its embedded `ModelWinBg2` chrome (`CommonModelWin`) binds the `ScreenShotMask` dimmer to `BackToLastWindow`/`CloseWin` via `isClickBgClose` (default true — `uis/common/commonwin/commonmodelwin.lua`). Canonical recovery owns that dismissal through `PNC_ALLIANCE_JOIN_DISMISS_MASK`: the reviewed `fixed_region` band `[30,830,140,70]` at 540×960 (tap center ≈(100,865)), below the Join/Create row (~y≈777) and the panel edge (~y≈854), outside the scroll list. When the landing is an action's expected destination it is preserved; only an unrelated stray landing is dismissed. If canonical recovery does not fire and the band tap fails on a fresh frame, publish the incident and mark the check `not_run` — never tap Join/Create or an unverified region.
 - A popup that is itself a check's subject is the feature under test, not an interruption.
 
 ## Step 1 — Interpret the screenshot
@@ -54,7 +54,7 @@ Dismiss controls measured on captured frames; regions are 540×960 reference `[x
 | King Return welcome | `king_return_welcome` | greeting text + one button | `king_return_get_started` | `[195, 485, 160, 80]` | ~(275, 525) 540×960 |
 | Game disconnected | `disconnect_reconnect` (OCR layout) | exact disconnect message + CONFIRM | `reconnect_confirm` | OCR-detected | CONFIRM center |
 | Update required | `required_game_update` (OCR layout) | "new version detected / confirm to update" + CONFIRM | `update_confirm` | OCR-detected | CONFIRM center |
-| Join Alliance landing | `alliance_join_landing` (screen `PNC_ALLIANCE_JOIN`) | Odin portrait + "Join Alliance" banner, occludes Home | **none owned** — report + `not_run` | prefab owns Cancel (取消) ≈(261,547) but rendering unverified in captured variant | — |
+| Join Alliance landing | `alliance_join_landing` (screen `PNC_ALLIANCE_JOIN`) | Odin portrait + "Join Alliance" banner, occludes Home | `background_dismiss` — `ScreenShotMask` → `BackToLastWindow` (UnionGuide/CommonModelWin binding) | reviewed `fixed_region` band `[30,830,140,70]` | ≈(100,865) 540×960 |
 
 Notes:
 
@@ -62,7 +62,7 @@ Notes:
 - **King Return Get Started** is the dismissal: client source verifies it closes the entry window with no purchase, claim, or request.
 - **Update required** — CONFIRM may route to a store/updater flow the worker cannot complete. If the game does not return to a usable screen after confirmation, that is not a transient popup: mark dependent checks `not_run`, publish the incident, and finish remaining safe checks.
 - **Reconnect confirm** returns through a loading transition; wait for a stable post-reconnect frame before resuming.
-- `alliance_join_landing` — no owned dismissal; its Join/Create controls remain forbidden. See Step 0.
+- `alliance_join_landing` — dismissal is the dimmed background band (bound to `BackToLastWindow` in client source); its Join/Create controls remain forbidden. See Step 0.
 
 ## Stop conditions
 

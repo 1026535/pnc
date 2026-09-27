@@ -45,6 +45,7 @@ _SAFE_TRANSIENT_POPUP_SELECTORS: tuple[UiElementId, ...] = (
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
     UiElementId.PNC_POPUP_CLOSE_BUTTON,
     UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON,
+    UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
 )
 
 class ObservationCallback(Protocol):
