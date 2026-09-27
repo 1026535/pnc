@@ -295,7 +295,7 @@ class CampaignStageDetailProducerTests(unittest.TestCase):
         self.assertIsNone(detail.stage_number)
 
     def test_conflicting_gauge_reads_abstain(self) -> None:
-        additions, _backend = self._additions(
+        additions, backend = self._additions(
             self._reads()[:1]
             + [
                 _line_result(
@@ -310,6 +310,28 @@ class CampaignStageDetailProducerTests(unittest.TestCase):
         assert detail is not None
         self.assertIsNone(detail.action_points)
         self.assertIsNone(detail.max_action_points)
+        self.assertEqual(3, len(backend.regions))
+
+    def test_centered_gauge_fallback_preserves_cost_and_bounded_reads(self) -> None:
+        reads = self._reads(gauge="126/120")
+        additions, backend = self._additions(
+            reads[:1] + [_line_result()] + reads[1:]
+        )
+
+        detail = additions.campaign_stage
+        assert detail is not None
+        self.assertEqual(126, detail.action_points)
+        self.assertEqual(120, detail.max_action_points)
+        self.assertEqual(12, detail.challenge_cost)
+        self.assertEqual(
+            [
+                campaign.CAMPAIGN_STAGE_TITLE_REGION,
+                campaign.CAMPAIGN_STAGE_ACTION_POINTS_REGION,
+                campaign.CAMPAIGN_STAGE_CENTER_ACTION_POINTS_REGION,
+                campaign.campaign_stage_challenge_cost_bounds(Bounds(178, 643, 184, 54)),
+            ],
+            backend.regions,
+        )
 
     def test_low_confidence_or_conflicting_title_does_not_publish_identity(self) -> None:
         for lines in (
@@ -376,7 +398,7 @@ class CampaignStageDetailProducerTests(unittest.TestCase):
         additions, backend = self._additions(self._reads(title=None, gauge=None, cost=None))
 
         self.assertIsNone(additions.campaign_stage)
-        self.assertEqual(3, len(backend.regions))
+        self.assertEqual(4, len(backend.regions))
 
     def test_non_campaign_screens_publish_no_stage_detail(self) -> None:
         context, _backend = _ocr_context(self.image, [])

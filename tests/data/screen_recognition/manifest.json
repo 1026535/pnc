@@ -1837,6 +1837,46 @@
         "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-22\\testing\\20260922T233600Z_core_20260922T233517Z_4ad73851_0012_c2_stage_after_1.png",
         "derivative": "Unmodified native900x1600 frame from the earlier same-account checkpoint; Challenge left of Blitz. Distinct run, same account/build; no independent-account or all-stage qualification."
       }
+    },
+    {
+      "image": "campaign_stage_6_4_20260927.png",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "split": "validation",
+      "group": "2026-09-27/testing/m1_v14_stage_reflow",
+      "sha256": "90803dd72e141e41eca501f4be8b6d7baf2a03edd44b5c71effbe67fbdad5d95",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_STAGE"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/testing/20260927T161532Z_core_20260927T161139Z_cb7d3149_0057_c2_64_stage_after_0.png",
+        "source_file_sha256": "762a6842017e541dee49c64dcf80c6645cb1bea4b81136ce1513981275b6a3ea",
+        "candidate": "d07b2d8f",
+        "native_size": [
+          900,
+          1600
+        ],
+        "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
+      }
+    },
+    {
+      "image": "campaign_stage_6_5_20260927.png",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "split": "validation",
+      "group": "2026-09-27/testing/m1_v14_stage_reflow",
+      "sha256": "4dbf57ae7456a23432bdfb1eebdfd4e37955e72ef80e1f717bdf43a183e740aa",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_STAGE"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/testing/20260927T161557Z_core_20260927T161139Z_cb7d3149_0069_c2_65_stage_after_0.png",
+        "source_file_sha256": "bb48af090876a9db53baa926f402b2862fe9a09c6101a84683f70b86f5e3e137",
+        "candidate": "d07b2d8f",
+        "native_size": [
+          900,
+          1600
+        ],
+        "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
+      }
     }
   ]
 }

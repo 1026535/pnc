@@ -194,13 +194,14 @@ class CampaignVisualProfileTests(unittest.TestCase):
     def test_native_chapter_six_stage_details_keep_owned_challenge_and_cost(self) -> None:
         """Challenge and its cost follow the captured left and central layouts."""
         backend = _require_rapid_ocr_service(self)
-        for stage, publisher in (
-            (stage, publisher)
+        for date, stage, publisher in (
+            (date, stage, publisher)
+            for date in ("20260922", "20260927")
             for stage in (4, 5)
             for publisher in ("builder", "navigation")
         ):
-            capture = _capture(_image(f"campaign_stage_6_{stage}_20260922.png"))
-            with self.subTest(stage=stage, publisher=publisher):
+            capture = _capture(_image(f"campaign_stage_6_{stage}_{date}.png"))
+            with self.subTest(date=date, stage=stage, publisher=publisher):
                 observation = (
                     _builder_with_backend(backend).build(
                         capture, request=ObservationRequest.campaign_map_follow_up()
@@ -243,15 +244,16 @@ class CampaignVisualProfileTests(unittest.TestCase):
     def test_native_stage_identity_requires_both_independent_anchors(self) -> None:
         """Neither a title alone nor a generic lineup modal qualifies a stage."""
         recognizer = load_visual_screen_recognizer()
-        image = _image("campaign_stage_6_5_20260922.png").resize(
-            (540, 960), Image.Resampling.LANCZOS
-        )
-        for region in ((140, 201, 441, 243), (198, 262, 361, 298)):
-            with self.subTest(region=region):
-                erased = image.copy()
-                ImageDraw.Draw(erased).rectangle(region, fill=(0, 0, 0))
-                result = recognizer.recognize(erased)
-                self.assertNotIn("campaign_stage_chapter_6", result.profile_ids)
+        for date in ("20260922", "20260927"):
+            image = _image(f"campaign_stage_6_5_{date}.png").resize(
+                (540, 960), Image.Resampling.LANCZOS
+            )
+            for region in ((210, 190, 440, 250), (198, 235, 361, 300)):
+                with self.subTest(date=date, region=region):
+                    erased = image.copy()
+                    ImageDraw.Draw(erased).rectangle(region, fill=(0, 0, 0))
+                    result = recognizer.recognize(erased)
+                    self.assertNotIn("campaign_stage_chapter_6", result.profile_ids)
 
     def test_persisted_southern_map_view_has_owned_home_return_on_both_paths(self) -> None:
         """The live reopened map needs its measured portal and only honest rows."""
@@ -319,7 +321,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertTrue(observation.has(selector))
                     self.assertEqual(observation.visible_elements[selector].frame_ref, capture.frame_ref)
                 self.assertFalse(observation.list_entries)
-                self.assertEqual(3, len(backend.regions))
+                self.assertEqual(4, len(backend.regions))
                 self.assertTrue(all(region is not None for region in backend.regions))
 
     def test_stage_detail_facts_publish_through_both_publishers_with_provenance(self) -> None:

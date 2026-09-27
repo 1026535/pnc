@@ -41,6 +41,7 @@ from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
     CAMPAIGN_CHAPTER_TITLE_REGION,
     CAMPAIGN_REFERENCE_SIZE,
     CAMPAIGN_STAGE_ACTION_POINTS_REGION,
+    CAMPAIGN_STAGE_CENTER_ACTION_POINTS_REGION,
     CAMPAIGN_STAGE_TITLE_REGION,
     campaign_stage_challenge_cost_bounds,
     scale_campaign_bounds,
@@ -564,22 +565,30 @@ def _stage_gauge_values(
 ) -> tuple[int | None, int | None]:
     """The ``power/maxPower`` pair only when one credible read resolves."""
 
-    result = _read_stage_numeric_strip(
-        image=image,
-        ocr_context=ocr_context,
-        region=scale_campaign_bounds(CAMPAIGN_STAGE_ACTION_POINTS_REGION, image.size),
-        detail="campaign_stage_action_points",
-    )
-    pairs = {
-        (int(match.group(1)), int(match.group(2)))
-        for line in result.lines
-        if line.confidence >= _NUMERIC_CONFIDENCE_MIN
-        for match in _STAGE_GAUGE_PATTERN.finditer(line.text)
-        if int(match.group(2)) > 0
-    }
-    if len(pairs) != 1:
-        return None, None
-    return next(iter(pairs))
+    # The stage footer has two observed layouts. Keep each read on its numeric
+    # line; a broad union would include unrelated controls and break line OCR.
+    for region in (
+        CAMPAIGN_STAGE_ACTION_POINTS_REGION,
+        CAMPAIGN_STAGE_CENTER_ACTION_POINTS_REGION,
+    ):
+        result = _read_stage_numeric_strip(
+            image=image,
+            ocr_context=ocr_context,
+            region=scale_campaign_bounds(region, image.size),
+            detail="campaign_stage_action_points",
+        )
+        pairs = {
+            (int(match.group(1)), int(match.group(2)))
+            for line in result.lines
+            if line.confidence >= _NUMERIC_CONFIDENCE_MIN
+            for match in _STAGE_GAUGE_PATTERN.finditer(line.text)
+            if int(match.group(2)) > 0
+        }
+        if len(pairs) > 1:
+            return None, None
+        if pairs:
+            return next(iter(pairs))
+    return None, None
 
 
 def _stage_cost_value(

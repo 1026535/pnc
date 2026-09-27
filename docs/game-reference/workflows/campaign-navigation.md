@@ -165,3 +165,32 @@ Cropping the existing reference patch to the Grandia Ruins label yields
 scene anchor and measured Home portal are unchanged. The two native map fixtures
 share one correlated validation group; the stage image is a reference, not a
 holdout. Corrected-candidate live stage/return acceptance remains required.
+
+## Chapter 6 stage reflow, September 27
+
+**Artifact-observed:** M1 runtime `20260927T161139Z_cb7d3149` on `testing`,
+candidate `d07b2d8f`, captured stages 6-4 and 6-5 in frames 0057 and 0069.
+The native 900x1600 captures are retained unchanged as
+`tests/data/screen_recognition/campaign_stage_6_4_20260927.png` and
+`campaign_stage_6_5_20260927.png`; their manifest records original paths and
+hashes. The title, lineup and Close moved upward while the footer moved down;
+Challenge is still left of Blitz for 6-4 and centered for 6-5. AP126/120 is
+centered above the footer. Installed build was not recorded. These two frames
+share one session and are regression examples, not independent holdouts.
+
+The Chapter 6 profile retains two independent identity anchors at 0.95.
+Its existing title artwork is cropped to the invariant `Marsh of Tear` words,
+excluding the bracketed ordinal. Title and lineup search bounds cover their
+two observed positions; controls are still measured on the current frame.
+The new captures score title 0.9670, lineup 0.9801, Close 0.9784 and Challenge
+0.9813/0.9832. Neither anchor alone qualifies the stage. Ordinals remain
+bounded OCR facts, with no stage number inferred from the profile.
+
+**Offline-proven:** replay through both observation publishers retains clear
+stage identity, frame-bound Close and Challenge, stages 6-4/6-5, AP126/120 and
+cost12 on both September 22 and 27 native captures. Title OCR covers the
+observed reflow. Gauge OCR first uses the existing right-hand numeric strip,
+then the measured centered strip only when no credible pair was found;
+conflicting credible pairs still abstain. Cost remains tied to the measured
+Challenge bounds. No Blitz control, formation state or spending permission is
+inferred. Corrected-candidate live C2/C3 validation remains with the M1 owner.

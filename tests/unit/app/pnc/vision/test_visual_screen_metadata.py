@@ -109,6 +109,8 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 expected_revision = (
                     4
                     if profile["id"] in {"bag", "world_map"}
+                    else 3
+                    if profile["id"] == "campaign_stage_chapter_6"
                     else 2
                     if profile["id"] in {
                         "institute",
@@ -117,11 +119,9 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "savannah_hero_offer",
                         "campaign_map",
                         "campaign_chapter_6",
-                        "campaign_map",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",
-                        "campaign_stage_chapter_6",
                         "trial_challenge_live",
                         "pet_workshop_storage",
                         "alliance_join_landing",

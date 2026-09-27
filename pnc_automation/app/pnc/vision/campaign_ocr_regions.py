@@ -11,11 +11,14 @@ CAMPAIGN_REFERENCE_SIZE: tuple[int, int] = (540, 960)
 CAMPAIGN_CHAPTER_TITLE_REGION = Bounds(x=205, y=38, width=325, height=60)
 """Measured chapter title header region on the Campaign chapter screen."""
 
-CAMPAIGN_STAGE_TITLE_REGION = Bounds(x=120, y=201, width=300, height=49)
+CAMPAIGN_STAGE_TITLE_REGION = Bounds(x=120, y=190, width=300, height=60)
 """Measured stage-detail title bar; matches the reviewed title anchor search region."""
 
 CAMPAIGN_STAGE_ACTION_POINTS_REGION = Bounds(x=368, y=585, width=96, height=36)
 """Measured ``power/maxPower`` gauge, excluding the adjacent add-AP icon."""
+
+CAMPAIGN_STAGE_CENTER_ACTION_POINTS_REGION = Bounds(x=212, y=615, width=83, height=30)
+"""Centered gauge in the September 27 stage reflow, before its add-AP icon."""
 
 
 def campaign_stage_challenge_cost_bounds(challenge: Bounds) -> Bounds:
