@@ -9,14 +9,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from pnc_automation.core.infra.diagnostics.async_diagnostic_writer import AsyncDiagnosticWriterError
 from tests.support.paths import REPOSITORY_ROOT
 
 
 class PreviewWorldMapSearchRouteTests(unittest.TestCase):
     """Validates the live route-preview tool's bounded execution behavior."""
 
-    def test_main_flushes_buffered_diagnostics_when_execution_fails(self) -> None:
-        """Flushes shared buffered traversal logs even when the optional execution phase raises."""
+    def test_main_propagates_execution_failure_without_traversal_flush_api(self) -> None:
+        """Propagates an optional execution failure without relying on traversal-owned log flushing."""
 
         module = _load_preview_tool_module()
         service = _FakeSearchService(raise_on_move=True)
@@ -46,9 +47,34 @@ class PreviewWorldMapSearchRouteTests(unittest.TestCase):
         ), patch.object(module, "print"):
             with self.assertRaisesRegex(RuntimeError, "preview move failed"):
                 module.main()
+        self.assertEqual(service.move_calls, 1)
 
-        self.assertEqual(len(service.flush_runtime_states), 1)
-        self.assertEqual(service.flush_runtime_states[0], {"buffered": True})
+    def test_main_reports_final_sink_failure_instead_of_returning_success(self) -> None:
+        """Turns a final-batch logging failure into a failed command result."""
+
+        module = _load_preview_tool_module()
+        service = _FakeSearchService(raise_on_move=False)
+        connected = SimpleNamespace(
+            runner=SimpleNamespace(prove_preflight_state=lambda *args, **kwargs: object()),
+            runtime=SimpleNamespace(world_map_search_service=service),
+        )
+        application = SimpleNamespace(
+            script_runner=SimpleNamespace(
+                config=SimpleNamespace(require_account=lambda account_id: account_id),
+                build_connected_runtime_bundle=lambda account, required_role=None: connected,
+            )
+        )
+
+        with patch.object(module, "build_application_runner", return_value=application), patch.object(
+            sys,
+            "argv",
+            ["preview_world_map_search_route.py", "--account", "testing", "--radius", "10"],
+        ), patch.object(module, "print"), patch(
+            "pnc_automation.core.infra.diagnostics.logging_setup.shutdown_logging",
+            side_effect=AsyncDiagnosticWriterError("final sink failure"),
+        ):
+            with self.assertRaisesRegex(AsyncDiagnosticWriterError, "final sink failure"):
+                module.main()
 
 
 class _FakeSearchService:
@@ -58,7 +84,7 @@ class _FakeSearchService:
         """Stores whether the fake movement call should fail after touching runtime state."""
 
         self.raise_on_move = raise_on_move
-        self.flush_runtime_states: list[dict[str, object]] = []
+        self.move_calls = 0
 
     def preview_route(self, request: object, observation: object, *, head: int, tail: int) -> dict[str, object]:
         """Returns one minimal preview document without depending on the real planner."""
@@ -89,21 +115,14 @@ class _FakeSearchService:
         plan: object,
         step: object,
         label_prefix: str,
-        runtime_state: dict[str, object],
     ) -> object:
-        """Touches the shared runtime state and then raises to exercise the tool's finally block."""
+        """Records the movement call and optionally raises to exercise failure propagation."""
 
         del observation, plan, step, label_prefix
-        runtime_state["buffered"] = True
+        self.move_calls += 1
         if self.raise_on_move:
             raise RuntimeError("preview move failed")
         return object()
-
-    def flush_runtime_diagnostics(self, *, runtime_state: dict[str, object] | None) -> None:
-        """Records the shared runtime state the preview tool flushed."""
-
-        assert runtime_state is not None
-        self.flush_runtime_states.append(dict(runtime_state))
 
 
 def _load_preview_tool_module() -> object:

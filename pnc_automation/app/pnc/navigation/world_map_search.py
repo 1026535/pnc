@@ -115,7 +115,6 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.diagnostics.buffered_logging import (
     DiagnosticLogMode,
     emit_diagnostic_log,
-    flush_buffered_diagnostic_logs,
 )
 
 if TYPE_CHECKING:
@@ -1619,7 +1618,6 @@ class WorldMapCoordinateMover:
                     prove_elapsed_ms=prove_elapsed_ms,
                     total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
                     classification=classification,
-                    runtime_state=runtime_state,
                     logging_mode=logging_mode,
                 )
                 _record_movement_step_trace(
@@ -1699,7 +1697,6 @@ class WorldMapCoordinateMover:
                     action_family=movement_family,
                     movement_mode=movement_mode,
                     max_axis_delta_per_leg=active_max_axis_delta_per_leg,
-                    runtime_state=runtime_state,
                     logging_mode=logging_mode,
                     label_prefix=label_prefix,
                 )
@@ -1723,7 +1720,6 @@ class WorldMapCoordinateMover:
         action_family: WorldMapTraversalActionFamily,
         movement_mode: WorldMapMovementMode,
         max_axis_delta_per_leg: int | None,
-        runtime_state: dict[str, Any] | None,
         logging_mode: DiagnosticLogMode,
         label_prefix: str,
     ) -> None:
@@ -1734,19 +1730,21 @@ class WorldMapCoordinateMover:
             label=f"{label_prefix}_failure_{step_index}",
             error=error,
         )
-        self._log_step_failure(
-            error=error,
-            step_index=step_index,
-            before_coordinate=before_coordinate,
-            leg_target=leg_target,
-            requested_coordinate=requested_coordinate,
-            normalized_target_coordinate=normalized_target_coordinate,
-            action_family=action_family,
-            movement_mode=movement_mode,
-            max_axis_delta_per_leg=max_axis_delta_per_leg,
-            runtime_state=runtime_state,
-            logging_mode=logging_mode,
-        )
+        try:
+            self._log_step_failure(
+                error=error,
+                step_index=step_index,
+                before_coordinate=before_coordinate,
+                leg_target=leg_target,
+                requested_coordinate=requested_coordinate,
+                normalized_target_coordinate=normalized_target_coordinate,
+                action_family=action_family,
+                movement_mode=movement_mode,
+                max_axis_delta_per_leg=max_axis_delta_per_leg,
+                logging_mode=logging_mode,
+            )
+        except Exception as diagnostic_error:
+            error.add_note(f"Movement failure diagnostic logging also failed: {diagnostic_error!r}")
 
     def persist_failure_observation(
         self,
@@ -1791,7 +1789,6 @@ class WorldMapCoordinateMover:
         action_family: WorldMapTraversalActionFamily,
         movement_mode: WorldMapMovementMode,
         max_axis_delta_per_leg: int | None,
-        runtime_state: dict[str, Any] | None,
         logging_mode: DiagnosticLogMode,
     ) -> None:
         """Emits one explicit failed-leg diagnostic event before the error is re-raised."""
@@ -1799,7 +1796,6 @@ class WorldMapCoordinateMover:
         error_details = error.details if isinstance(error, SelectorResolutionError) else None
         emit_diagnostic_log(
             logger=self.logger,
-            runtime_state=runtime_state,
             mode=logging_mode,
             level=logging.ERROR,
             message="World-map movement step failed.",
@@ -1839,14 +1835,12 @@ class WorldMapCoordinateMover:
         prove_elapsed_ms: float,
         total_elapsed_ms: float,
         classification: "WorldMapCardinalMovementClassification",
-        runtime_state: dict[str, Any] | None,
         logging_mode: DiagnosticLogMode,
     ) -> None:
         """Logs one timing breakdown for the completed movement leg when a runtime logger is available."""
 
         emit_diagnostic_log(
             logger=self.logger,
-            runtime_state=runtime_state,
             mode=logging_mode,
             level=logging.INFO,
             message="World-map movement step completed.",
@@ -2912,7 +2906,6 @@ class WorldMapSearchService:
             )
         finally:
             profile_state.setdefault("total_elapsed_ms", (time.perf_counter() - search_started_at) * 1000.0)
-            self.flush_runtime_diagnostics(runtime_state=active_runtime_state)
 
     def _execute_production_segment_search(
         self,
@@ -3094,7 +3087,6 @@ class WorldMapSearchService:
         finally:
             p2_queue.close()
             profile_state.setdefault("total_elapsed_ms", (time.perf_counter() - search_started_at) * 1000.0)
-            self.flush_runtime_diagnostics(runtime_state=runtime_state)
 
     def _move_to_segment_start_work_item(
         self,
@@ -3383,7 +3375,7 @@ class WorldMapSearchService:
             movement_proof_artifact_selection=self._routine_artifact_selection(
                 ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
             ),
-            logging_mode=DiagnosticLogMode.BUFFERED_SEQUENCE,
+            logging_mode=DiagnosticLogMode.ASYNC_QUEUE,
             p1_capture_sink=p1_capture_sink,
         )
 
@@ -3811,14 +3803,6 @@ class WorldMapSearchService:
             return None
         return resolve_routine_artifact_selection(mode=self.observation_service.mode, routine=routine)
 
-    def flush_runtime_diagnostics(self, *, runtime_state: dict[str, Any] | None) -> None:
-        """Flushes any buffered traversal diagnostics for the provided shared runtime state."""
-
-        flush_buffered_diagnostic_logs(
-            logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
-            runtime_state=runtime_state,
-        )
-
     def _record_checkpoint_movement_failure(
         self,
         *,
@@ -3849,7 +3833,6 @@ class WorldMapSearchService:
                 error.add_note(f"Failure observation persistence also failed: {persist_error!r}")
         emit_diagnostic_log(
             logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
-            runtime_state=None,
             mode=DiagnosticLogMode.IMMEDIATE,
             level=logging.ERROR,
             message="World-map checkpoint movement failed.",

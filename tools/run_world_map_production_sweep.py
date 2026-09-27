@@ -28,9 +28,16 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchStopPolicy,
 )
 from pnc_automation.app.pnc.navigation.world_map_sweep import WorldMapSweepPolicy
+from pnc_automation.core.infra.diagnostics import run_with_logging_shutdown
 
 
 def main() -> None:
+    """Runs the live sweep and reports final asynchronous sink failures before returning."""
+
+    run_with_logging_shutdown(_run_sweep)
+
+
+def _run_sweep() -> None:
     """Executes one bounded canonical production sweep against the selected live account."""
 
     parser = argparse.ArgumentParser(description=__doc__)

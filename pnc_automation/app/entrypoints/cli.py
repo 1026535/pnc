@@ -36,9 +36,16 @@ from pnc_automation.app.authoring.config.yaml_helpers import build_castle_identi
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
 from pnc_automation.app.pnc.domain.mail import parse_send_mail_params, route_requires_player_name
 from pnc_automation.app.pnc.enums.mail import PlayerProfileRouteKind
+from pnc_automation.core.infra.diagnostics import run_with_logging_shutdown
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Runs one CLI operation and reports final asynchronous sink failures before returning."""
+
+    return run_with_logging_shutdown(lambda: _run_cli(argv))
+
+
+def _run_cli(argv: Sequence[str] | None = None) -> int:
     """Parses CLI arguments, runs automation, and prints a summary."""
 
     arguments = list(sys.argv[1:] if argv is None else argv)

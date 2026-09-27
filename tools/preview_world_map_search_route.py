@@ -26,11 +26,18 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapTraversalCorner,
 )
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics import run_with_logging_shutdown
 
 _WORLD_MAP_PREFLIGHT_MAX_STEPS = 8
 
 
 def main() -> int:
+    """Runs the preview command and reports final asynchronous sink failures before returning."""
+
+    return run_with_logging_shutdown(_run_preview)
+
+
+def _run_preview() -> int:
     """Parses arguments, previews one route, and optionally executes the first bounded portion live."""
 
     parser = argparse.ArgumentParser(description="Preview and optionally execute a world-map traversal route.")
@@ -110,26 +117,21 @@ def main() -> int:
         return 0
     plan = connected.runtime.world_map_search_service.resolve_plan(request, observation)
     current = observation
-    runtime_state: dict[str, object] = {}
     executed = []
-    try:
-        for step in plan.execution_plan.steps[: arguments.execute_first]:
-            current = connected.runtime.world_map_search_service.move_to_checkpoint(
-                current,
-                plan=plan,
-                step=step,
-                label_prefix=f"preview_execute_{step.step_index}",
-                runtime_state=runtime_state,
-            )
-            executed.append(
-                {
-                    "step_index": step.step_index,
-                    "coordinate": [step.checkpoint.coordinate[0], step.checkpoint.coordinate[1]],
-                    "intent": step.traversal_segment_intent.value,
-                }
-            )
-    finally:
-        connected.runtime.world_map_search_service.flush_runtime_diagnostics(runtime_state=runtime_state)
+    for step in plan.execution_plan.steps[: arguments.execute_first]:
+        current = connected.runtime.world_map_search_service.move_to_checkpoint(
+            current,
+            plan=plan,
+            step=step,
+            label_prefix=f"preview_execute_{step.step_index}",
+        )
+        executed.append(
+            {
+                "step_index": step.step_index,
+                "coordinate": [step.checkpoint.coordinate[0], step.checkpoint.coordinate[1]],
+                "intent": step.traversal_segment_intent.value,
+            }
+        )
     print(json.dumps({"executed_steps": executed}, indent=2, sort_keys=True))
     return 0
 

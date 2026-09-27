@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectKind,
@@ -26,6 +27,8 @@ from pnc_automation.app.pnc.domain.observation_policy import (
     observation_artifact_selection,
 )
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.async_diagnostic_writer import AsyncDiagnosticWriterError
+from pnc_automation.core.infra.diagnostics.logging_setup import shutdown_logging
 
 from tests.support.pnc.observations import make_observation
 from tests.support.pnc.world_search.world_map_runtime_fixtures import WorldMapRuntimeFixtures
@@ -200,7 +203,7 @@ class WorldSearchMovementProofTests(WorldMapRuntimeFixtures, unittest.TestCase):
                 label_prefix="checkpoint_failure",
                 runtime_state=runtime_state,
             )
-        service.flush_runtime_diagnostics(runtime_state=runtime_state)
+        shutdown_logging()
 
         screenshot_selection = observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
         self.assertEqual(observer.artifact_selections[0], frozenset())
@@ -209,3 +212,45 @@ class WorldSearchMovementProofTests(WorldMapRuntimeFixtures, unittest.TestCase):
         failure_records = [record for record in records if record.msg == "World-map movement step failed."]
         self.assertEqual(len(failure_records), 1)
         self.assertEqual(failure_records[0].step_index, 0)
+
+    def test_move_to_checkpoint_preserves_movement_error_when_failure_logging_raises(self) -> None:
+        """Keeps the navigation error primary when async diagnostic admission or sink reporting fails."""
+
+        logger, _records = _build_recording_logger("world_map_search_failed_leg_logging_error")
+        service, _observer, _session = self._build_runtime_service_bundle(
+            observations=[
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                _make_world_map_observation(0, 0),
+            ],
+            logger=logger,
+        )
+        start = _make_world_map_observation(0, 0)
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            start,
+        )
+
+        with patch(
+            "pnc_automation.app.pnc.navigation.world_map_search.emit_diagnostic_log",
+            side_effect=AsyncDiagnosticWriterError("diagnostic writer failed"),
+        ):
+            with self.assertRaises(SelectorResolutionError) as raised:
+                service.move_to_checkpoint(
+                    start,
+                    plan=plan,
+                    step=plan.execution_plan.steps[0],
+                    label_prefix="checkpoint_failure",
+                    runtime_state={},
+                )
+
+        self.assertTrue(
+            any("Movement failure diagnostic logging also failed" in note for note in raised.exception.__notes__)
+        )

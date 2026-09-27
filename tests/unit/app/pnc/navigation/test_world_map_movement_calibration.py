@@ -31,6 +31,7 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging, shutdown_logging
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
@@ -48,6 +49,8 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
         self.flows = ScreenFlowPlanner()
         self.temp_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_directory.cleanup)
+        configure_logging()
+        self.addCleanup(shutdown_logging)
 
     def test_probe_swipe_records_exact_swipe_points_and_delta(self) -> None:
         """Records one exact swipe probe with coordinate deltas, OCR evidence, and exact emitted swipe points."""
@@ -272,8 +275,8 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
         self.assertEqual([checkpoint.delta_from_checkpoint for checkpoint in result.checkpoint_results], [(0, 0), (0, 0)])
         self.assertEqual(len(observer.labels), 2)
 
-    def test_validate_sweep_uses_shared_search_checkpoint_mover_runtime_state(self) -> None:
-        """Routes sweep validation through the search service mover with one shared runtime state across checkpoints."""
+    def test_validate_sweep_uses_shared_search_checkpoint_mover(self) -> None:
+        """Routes sweep validation through the search service mover across checkpoints."""
 
         observer = FakeObservationService(observations=[])
         recorder = WorldMapSurveyRecorder(
@@ -310,10 +313,10 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
 
         self.assertEqual([checkpoint.checkpoint.coordinate for checkpoint in result.checkpoint_results], [(10, 0), (20, 0)])
         self.assertEqual(mover.target_coordinates, [(10, 0), (20, 0)])
-        self.assertEqual(len({id(runtime_state) for runtime_state in mover.runtime_states}), 1)
+        self.assertEqual(mover.runtime_states, [None, None])
 
-    def test_validate_sweep_flushes_buffered_logs_when_a_later_checkpoint_fails(self) -> None:
-        """Flushes already-buffered checkpoint movement logs even when sweep validation fails mid-route."""
+    def test_validate_sweep_async_logs_drain_after_a_later_checkpoint_fails(self) -> None:
+        """Accepted checkpoint movement logs drain at logging shutdown after sweep validation fails."""
 
         logger, records = _build_recording_logger("world_map_sweep_flush")
         service, _observer, _session = self._build_service(
@@ -336,6 +339,7 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
                 label_prefix="flush_on_failure",
             )
 
+        shutdown_logging()
         self.assertTrue(any(record.msg == "World-map movement step completed." for record in records))
 
     def _build_service(

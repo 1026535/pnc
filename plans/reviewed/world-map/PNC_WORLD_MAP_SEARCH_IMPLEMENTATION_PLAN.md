@@ -876,7 +876,7 @@ The search stack should explicitly distinguish between:
 Likewise, logging should explicitly distinguish between:
 
 - immediate write-through mode for live interactive debugging,
-- buffered mode for sequence-scoped flush.
+- asynchronous queue mode for routine traversal diagnostics.
 
 This should not be handled by ad hoc tool logic. It should be one canonical shared diagnostics policy concept that world-map modules consume through defaults and call-site policy.
 
@@ -1104,7 +1104,7 @@ Responsibilities:
 - immediate vs buffered logging mode,
 - selective vs routine screenshot persistence behavior,
 - guaranteed immediate failure persistence,
-- sequence-boundary flush semantics,
+- process-owned asynchronous drain and shutdown semantics,
 - exposing clean defaults that world-map observation and runner flows can adopt without inventing local buffering logic.
 
 ## Detailed Implementation Plan
@@ -1467,7 +1467,7 @@ Practical exception:
   - `LIGHT` remains unchanged,
   - routine persisted sweep mode is selective,
   - failures remain immediate,
-  - logs support immediate and buffered sequence modes,
+  - logs support immediate and asynchronous queue modes,
 - broad traversal and fine correction are explicit policy concepts,
 - checkpoint spacing clearly means analyzed viewport stride,
 - default search progression is one horizontal or vertical viewport unless the caller overrides it,

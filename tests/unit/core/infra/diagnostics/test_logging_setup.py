@@ -5,14 +5,25 @@ from __future__ import annotations
 import io
 import json
 import logging
+import subprocess
 import sys
+import tempfile
+import threading
 import unittest
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from pnc_automation.core.infra.diagnostics.logging_setup import JsonLogFormatter, configure_logging
+from pnc_automation.core.infra.diagnostics.buffered_logging import DiagnosticLogMode, emit_diagnostic_log
+from pnc_automation.core.infra.diagnostics.logging_setup import (
+    JsonLogFormatter,
+    configure_logging,
+    run_with_logging_shutdown,
+    shutdown_logging,
+)
+
+from tests.support.paths import REPOSITORY_ROOT
 
 SECRET_MESSAGE = "SECRET-MESSAGE-SENTINEL-9f4b"
 SECRET_LOCAL = "SECRET-LOCAL-SENTINEL-71ac"
@@ -343,6 +354,327 @@ class JsonLogFormatterTests(unittest.TestCase):
         self.assertEqual("_raise_secret_error", payload["_exception"]["frames"][-1]["function"])
         self.assertNotIn(SECRET_MESSAGE, output)
         self.assertNotIn(SECRET_LOCAL, output)
+        self.addCleanup(shutdown_logging)
+
+
+class LoggingLifecycleTests(unittest.TestCase):
+    """Validates the configured writer's sink ownership and shutdown contract."""
+
+    def setUp(self) -> None:
+        shutdown_logging()
+        self.temp_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_directory.cleanup)
+        self.addCleanup(shutdown_logging)
+
+    def test_identical_configuration_reuses_writer_and_reconfiguration_drains_old_sinks(self) -> None:
+        """Reuses one healthy owner and finishes its accepted records before replacing sinks."""
+
+        import pnc_automation.core.infra.diagnostics.logging_setup as logging_setup
+
+        old_root = Path(self.temp_directory.name) / "old"
+        new_root = Path(self.temp_directory.name) / "new"
+        logger = configure_logging(log_file_root=old_root)
+        old_owner = logging_setup._OWNER
+        self.assertIsNotNone(old_owner)
+        old_writer = old_owner.writer
+        stream = io.StringIO()
+        old_owner.handlers[0].stream = stream
+
+        same_logger = configure_logging(log_file_root=Path(str(old_root)))
+        self.assertIs(same_logger, logger)
+        self.assertIs(logging_setup._OWNER.writer, old_writer)
+
+        emit_diagnostic_log(
+            logger=logging.LoggerAdapter(logger, extra={}),
+            mode=DiagnosticLogMode.ASYNC_QUEUE,
+            level=logging.INFO,
+            message="old_sink_record",
+        )
+        new_logger = configure_logging(log_file_root=new_root)
+        new_owner = logging_setup._OWNER
+
+        self.assertIs(new_logger, logger)
+        self.assertIsNotNone(new_owner)
+        self.assertIsNot(new_owner.writer, old_writer)
+        self.assertTrue(old_writer.closed)
+        self.assertEqual(1, len(stream.getvalue().splitlines()))
+        old_file_lines = (old_root / "bluestacks_management.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual("old_sink_record", json.loads(old_file_lines[0])["message"])
+
+        new_stream = io.StringIO()
+        new_owner.handlers[0].stream = new_stream
+        emit_diagnostic_log(
+            logger=logging.LoggerAdapter(new_logger, extra={}),
+            mode=DiagnosticLogMode.ASYNC_QUEUE,
+            level=logging.INFO,
+            message="new_sink_record",
+        )
+        shutdown_logging()
+        self.assertEqual("new_sink_record", json.loads(new_stream.getvalue())["message"])
+
+    def test_producers_do_not_wait_for_sink_drain_under_the_owner_lock(self) -> None:
+        """Allows a producer to observe closed admission while shutdown waits on a blocked sink."""
+
+        import pnc_automation.core.infra.diagnostics.logging_setup as logging_setup
+
+        from pnc_automation.core.infra.diagnostics.async_diagnostic_writer import AsyncDiagnosticWriterClosedError
+
+        sink_entered = threading.Event()
+        release_sink = threading.Event()
+        close_entered = threading.Event()
+        shutdown_errors: list[BaseException] = []
+        producer_errors: list[BaseException] = []
+        producer_finished = threading.Event()
+
+        class GatedStream:
+            def write(self, _value: str) -> None:
+                sink_entered.set()
+                if not release_sink.wait(timeout=3):
+                    raise TimeoutError("test sink was not released")
+
+            def flush(self) -> None:
+                pass
+
+        with (
+            mock.patch.object(logging_setup, "_QUEUE_CAPACITY", 1),
+            mock.patch.object(logging_setup, "_MAX_BATCH_SIZE", 1),
+            mock.patch.object(logging_setup, "_ADMISSION_TIMEOUT_SECONDS", 0.1),
+        ):
+            logger = configure_logging()
+            owner = logging_setup._OWNER
+            self.assertIsNotNone(owner)
+            writer = owner.writer
+            owner.handlers[0].stream = GatedStream()
+
+            class CloseSignalingWriter:
+                def submit(self, record: Any) -> None:
+                    writer.submit(record)
+
+                def close(self) -> None:
+                    try:
+                        writer.close(timeout=0)
+                    except TimeoutError:
+                        pass
+                    close_entered.set()
+                    writer.close()
+
+                @property
+                def failure(self) -> BaseException | None:
+                    return writer.failure
+
+                @property
+                def closed(self) -> bool:
+                    return writer.closed
+
+            owner.writer = CloseSignalingWriter()
+            adapter = logging.LoggerAdapter(logger, extra={})
+
+            def submit(message: str) -> None:
+                emit_diagnostic_log(
+                    logger=adapter,
+                    mode=DiagnosticLogMode.ASYNC_QUEUE,
+                    level=logging.INFO,
+                    message=message,
+                )
+
+            submit("blocked_sink_record")
+            self.assertTrue(sink_entered.wait(timeout=2))
+            submit("queued_record")
+
+            def shutdown() -> None:
+                try:
+                    shutdown_logging()
+                except BaseException as error:
+                    shutdown_errors.append(error)
+
+            shutdown_thread = threading.Thread(target=shutdown, daemon=True)
+            shutdown_thread.start()
+            self.assertTrue(close_entered.wait(timeout=2))
+
+            def submit_after_close() -> None:
+                try:
+                    submit("rejected_record")
+                except BaseException as error:
+                    producer_errors.append(error)
+                finally:
+                    producer_finished.set()
+
+            producer_thread = threading.Thread(target=submit_after_close, daemon=True)
+            producer_thread.start()
+            try:
+                self.assertTrue(
+                    producer_finished.wait(timeout=0.5),
+                    "producer waited for the sink drain instead of observing closed admission",
+                )
+                self.assertEqual(1, len(producer_errors))
+                self.assertIsInstance(producer_errors[0], AsyncDiagnosticWriterClosedError)
+            finally:
+                release_sink.set()
+                shutdown_thread.join(timeout=2)
+                producer_thread.join(timeout=2)
+
+            self.assertFalse(shutdown_thread.is_alive())
+            self.assertFalse(producer_thread.is_alive())
+            self.assertEqual([], shutdown_errors)
+
+    def test_process_boundary_propagates_a_final_batch_sink_failure(self) -> None:
+        """Returns a failing process status when the final queued record fails during explicit shutdown."""
+
+        result = subprocess.run(
+            [sys.executable, "-c", _PROCESS_EXIT_FAILURE_CHECK],
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("AsyncDiagnosticWriterError", result.stderr)
+
+    def test_process_boundary_preserves_the_application_error_when_shutdown_fails(self) -> None:
+        """Keeps an active application error primary when explicit logging shutdown also fails."""
+
+        from pnc_automation.core.infra.diagnostics.async_diagnostic_writer import AsyncDiagnosticWriterError
+
+        application_error = RuntimeError("movement failed")
+        shutdown_error = AsyncDiagnosticWriterError("sink failed")
+
+        def fail_application() -> int:
+            raise application_error
+
+        with mock.patch(
+            "pnc_automation.core.infra.diagnostics.logging_setup.shutdown_logging",
+            side_effect=shutdown_error,
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                run_with_logging_shutdown(fail_application)
+
+        self.assertIs(raised.exception, application_error)
+        self.assertTrue(any("Logging shutdown also failed" in note for note in application_error.__notes__))
+
+    def test_async_record_reaches_each_configured_sink_once(self) -> None:
+        """Routes a queued record once to both the owned stream and JSONL file handlers."""
+
+        root = Path(self.temp_directory.name) / "sinks"
+        logger = configure_logging(log_file_root=root)
+        import pnc_automation.core.infra.diagnostics.logging_setup as logging_setup
+
+        owner = logging_setup._OWNER
+        stream = io.StringIO()
+        owner.handlers[0].stream = stream
+
+        emit_diagnostic_log(
+            logger=logging.LoggerAdapter(logger, extra={}),
+            mode=DiagnosticLogMode.ASYNC_QUEUE,
+            level=logging.INFO,
+            message="once_per_sink",
+            extra={"step_index": 3},
+        )
+        shutdown_logging()
+
+        stream_lines = stream.getvalue().splitlines()
+        file_lines = (root / "bluestacks_management.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(1, len(stream_lines))
+        self.assertEqual(1, len(file_lines))
+        self.assertEqual("once_per_sink", json.loads(stream_lines[0])["message"])
+        self.assertEqual("once_per_sink", json.loads(file_lines[0])["message"])
+
+    def test_handler_failure_is_reported_and_latched_when_raise_exceptions_is_false(self) -> None:
+        """Ensures a real handler failure reaches shutdown and rejects later submissions."""
+
+        result = subprocess.run(
+            [sys.executable, "-c", _HANDLER_FAILURE_CHECK],
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_process_exit_drains_partial_batch_before_standard_logging_shutdown(self) -> None:
+        """Uses the atexit owner to persist a partial batch before stdlib closes its handlers."""
+
+        root = Path(self.temp_directory.name) / "process_exit"
+        result = subprocess.run(
+            [sys.executable, "-c", _PROCESS_EXIT_CHECK, str(root)],
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        lines = (root / "bluestacks_management.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(1, len(lines))
+        self.assertEqual("process_exit_record", json.loads(lines[0])["message"])
+
+
+_HANDLER_FAILURE_CHECK = """
+import logging
+from pnc_automation.core.infra.diagnostics.async_diagnostic_writer import AsyncDiagnosticWriterError
+from pnc_automation.core.infra.diagnostics.buffered_logging import DiagnosticLogMode, emit_diagnostic_log
+from pnc_automation.core.infra.diagnostics import logging_setup
+
+class FailingStream:
+    def write(self, _value):
+        raise OSError('expected sink failure')
+    def flush(self):
+        pass
+
+logger = logging_setup.configure_logging()
+owner = logging_setup._OWNER
+owner.handlers[0].stream = FailingStream()
+logging.raiseExceptions = False
+emit_diagnostic_log(logger=logging.LoggerAdapter(logger, extra={}), mode=DiagnosticLogMode.ASYNC_QUEUE, level=logging.INFO, message='fails at sink')
+try:
+    logging_setup.shutdown_logging()
+except AsyncDiagnosticWriterError as error:
+    assert isinstance(error.__cause__, OSError)
+else:
+    raise AssertionError('shutdown did not report the asynchronous sink failure')
+try:
+    emit_diagnostic_log(logger=logging.LoggerAdapter(logger, extra={}), mode=DiagnosticLogMode.ASYNC_QUEUE, level=logging.INFO, message='later submit')
+except AsyncDiagnosticWriterError:
+    pass
+else:
+    raise AssertionError('later submission did not report the latched failure')
+logging_setup._OWNER = None
+"""
+
+
+_PROCESS_EXIT_CHECK = """
+import logging
+from pathlib import Path
+import sys
+from pnc_automation.core.infra.diagnostics import logging_setup
+from pnc_automation.core.infra.diagnostics.buffered_logging import DiagnosticLogMode, emit_diagnostic_log
+
+logging_setup._BATCH_INTERVAL_SECONDS = 60
+logger = logging_setup.configure_logging(log_file_root=Path(sys.argv[1]))
+emit_diagnostic_log(logger=logging.LoggerAdapter(logger, extra={}), mode=DiagnosticLogMode.ASYNC_QUEUE, level=logging.INFO, message='process_exit_record')
+"""
+
+
+_PROCESS_EXIT_FAILURE_CHECK = """
+import logging
+from pnc_automation.core.infra.diagnostics import logging_setup
+from pnc_automation.core.infra.diagnostics.buffered_logging import DiagnosticLogMode, emit_diagnostic_log
+
+class FailingStream:
+    def write(self, _value):
+        raise OSError('expected final-batch sink failure')
+    def flush(self):
+        pass
+
+logging_setup._BATCH_INTERVAL_SECONDS = 60
+logger = logging_setup.configure_logging()
+logging_setup._OWNER.handlers[0].stream = FailingStream()
+emit_diagnostic_log(logger=logging.LoggerAdapter(logger, extra={}), mode=DiagnosticLogMode.ASYNC_QUEUE, level=logging.INFO, message='final_batch_record')
+logging_setup.run_with_logging_shutdown(lambda: 0)
+"""
 
 
 if __name__ == "__main__":

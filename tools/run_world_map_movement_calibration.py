@@ -35,11 +35,18 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchPattern,
     WorldMapTraversalCorner,
 )
+from pnc_automation.core.infra.diagnostics import run_with_logging_shutdown
 
 _WORLD_MAP_PREFLIGHT_MAX_STEPS = 20
 
 
 def main() -> None:
+    """Runs the live calibration and reports final asynchronous sink failures before returning."""
+
+    run_with_logging_shutdown(_run_calibration)
+
+
+def _run_calibration() -> None:
     """Executes the requested live calibration run and prints the persisted report path."""
 
     parser = argparse.ArgumentParser(description=__doc__)
