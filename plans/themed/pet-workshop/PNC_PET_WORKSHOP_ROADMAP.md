@@ -1,5 +1,11 @@
 # Pet Workshop roadmap — separate delivery packets
 
+## September 28 delivery-order amendment
+
+The user explicitly requested publishing the pending reviewed PW changeset to `origin/main` **before** Devin retries opening Workshop on Main. For this changeset, the lead completes independent review and the final applicable offline check, then pushes; applicable live acceptance remains a separate, pending milestone. This supersedes the earlier pre-merge live requirement for this delivery only and does not mark PW05/PW07 accepted or resume the broader queue.
+
+The prepared changeset contains PW05 saved-image analysis, recognition corrections and simulator/planner regression coverage. It excludes the private PW07/shared-navigation chain. The subsequent opening check must identify the actual published source and available route; a missing shared route remains a dependency, not permission to import unaccepted navigation work. The user also authorized switching Main to a C24+ castle; the selected configured target is NPC on Hopium (C31), subject to fresh identity and level verification. This one current-time opening check is non-spending and leaves the selected castle in place. Existing lease, role-restoration and instance-preservation rules remain binding, and the recurring overnight window is unchanged.
+
 ## September 27 interview amendment: scoped run corrections
 
 The user approved these correction slices after the interview. This amendment changes the active repair briefs; it does not reopen the broader PW01–PW10 queue. PW08/PW09 still require accepted PW07. Accepted behavior and dated historical evidence below remain intact. Exact candidates, owners, test evidence and continuation triggers live in root `.local-data/devin-monitor/pw-queue/nightly-handoff-20260923.json`.
