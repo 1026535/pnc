@@ -538,14 +538,6 @@
       ]
     },
     {
-      "image": "chat_kingdom_two_tab_20260927.png",
-      "screen": "PNC_CHAT",
-      "split": "reference",
-      "group": "2026-09-27/testing/sanitized-chat-chrome",
-      "sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
-      "expected_visual_screens": ["PNC_CHAT"]
-    },
-    {
       "image": "chat_kingdom_normal_empty.png",
       "screen": "PNC_CHAT",
       "split": "validation",
@@ -1272,32 +1264,6 @@
       ]
     },
     {
-      "image": "campaign_chapter_6_path_20260922.png",
-      "screen": "PNC_CAMPAIGN_CHAPTER",
-      "split": "validation",
-      "group": "2026-09-22/testing/m1_campaign_preentry",
-      "sha256": "6f344fa3df81311a599e2344bacb02f14a52e3bfe728b5bca7915eac6d6ebe32",
-      "expected_visual_screens": [
-        "PNC_CAMPAIGN_CHAPTER"
-      ],
-      "source_artifact": "20260922T203549Z_core_20260922T202247Z_d3962b64_0037_core_6_campaign_chapter_after_7.png",
-      "source_sha256": "c9847cca704c6f759cd8fdcfcd7e60fdc6d5b12fc2b9055009c54d9bb723abd4",
-      "annotation": "Unmodified 900x1600 RGBA Chapter 6 Marsh of Tear path capture from the parked M1 pre-entry run; this exact frame returned UNKNOWN before the scoped 0.92 terrain calibration. No anchor assets came from this frame."
-    },
-    {
-      "image": "campaign_chapter_6_path_holdout_20260922.png",
-      "screen": "PNC_CAMPAIGN_CHAPTER",
-      "split": "validation",
-      "group": "2026-09-22/testing/m1_campaign_preentry",
-      "sha256": "f6132f1e6fcb41041c28cbba3024872fc98d2030230d9922ff690be529fd9d38",
-      "expected_visual_screens": [
-        "PNC_CAMPAIGN_CHAPTER"
-      ],
-      "source_artifact": "20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
-      "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
-      "annotation": "Later correlated 900x1600 RGBA Chapter 6 path frame from the same parked M1 run, captured seconds later before the refused Back dispatch. It checks temporal consistency, not independent-session generalization; no anchor assets came from this frame."
-    },
-    {
       "image": "campaign_chapter_10_unmasked.png",
       "screen": "PNC_CAMPAIGN_CHAPTER",
       "split": "validation",
@@ -1809,6 +1775,41 @@
         "file_sha256": "2926e931aef1a9308e1dcc353cda0c97bc10e953bac36f058e801b56d371296d",
         "derivative": "Native RGBA 900x1600 session frame captured 2026-09-23T03:17:45Z at the end of the V19 live003 World Castle trial turn-003 run; only chat strip rows y=1395:1485 filled opaque black (0,0,0,255), all other pixels preserved. Same live session as the 03:12 route-source frame (run 20260923T031214Z_c43ce246); the two same-session frames are one correlated group, not independent validation. Installed build not recorded."
       }
+    }
+  ,
+    {
+      "image": "chat_kingdom_two_tab_20260927.png",
+      "screen": "PNC_CHAT",
+      "split": "reference",
+      "group": "2026-09-27/testing/sanitized-chat-chrome",
+      "sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+      "expected_visual_screens": ["PNC_CHAT"]
+    },
+    {
+      "image": "campaign_chapter_6_path_20260922.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-22/testing/m1_campaign_preentry",
+      "sha256": "6f344fa3df81311a599e2344bacb02f14a52e3bfe728b5bca7915eac6d6ebe32",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260922T203549Z_core_20260922T202247Z_d3962b64_0037_core_6_campaign_chapter_after_7.png",
+      "source_sha256": "c9847cca704c6f759cd8fdcfcd7e60fdc6d5b12fc2b9055009c54d9bb723abd4",
+      "annotation": "Unmodified 900x1600 RGBA Chapter 6 Marsh of Tear path capture from the parked M1 pre-entry run; this exact frame returned UNKNOWN before the scoped 0.92 terrain calibration. No anchor assets came from this frame."
+    },
+    {
+      "image": "campaign_chapter_6_path_holdout_20260922.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-22/testing/m1_campaign_preentry",
+      "sha256": "f6132f1e6fcb41041c28cbba3024872fc98d2030230d9922ff690be529fd9d38",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
+      "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
+      "annotation": "Later correlated 900x1600 RGBA Chapter 6 path frame from the same parked M1 run, captured seconds later before the refused Back dispatch. It checks temporal consistency, not independent-session generalization; no anchor assets came from this frame."
     },
     {
       "image": "campaign_stage_6_5_20260922.png",
