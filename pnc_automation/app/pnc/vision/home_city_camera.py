@@ -737,6 +737,19 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 max_projection_error=12,
                 reference_slot=HomeCitySlotSelector(15),
             ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.CASTLE,
+                landmark_id="castle_tower",
+                file_name="castle_tower.png",
+                reference_bounds=Bounds(543, 667, 62, 157),
+                # Interior stonework on the two native Castle views from
+                # 2026-09-21; destination qualification remains a live gate.
+                reference_action_bounds=Bounds(560, 742, 28, 24),
+                reference_action_point=(574, 754),
+                min_score=0.90,
+                max_projection_error=8,
+                reference_slot=HomeCitySlotSelector(1),
+            ),
         ),
         reference_size=HOME_CITY_CAMERA_REFERENCE_SIZE,
         atlas_to_reference_offset=HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,

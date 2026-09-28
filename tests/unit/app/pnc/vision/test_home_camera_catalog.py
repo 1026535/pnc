@@ -25,7 +25,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             catalog.anchor_object_ids,
         )
         self.assertEqual(30, len(catalog.landmarks))
-        self.assertEqual(7, len(catalog.targets))
+        self.assertEqual(8, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
             {
@@ -125,7 +125,9 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
         # The Manor is a fixed camera target: it publishes no slot candidate.
         self.assertIsNone(manor.reference_slot)
         self.assertEqual((1032, 2068), manor.atlas_action_point())
-        self.assertIsNone(catalog.target_for(HomeCityObjectId.CASTLE))
+        castle = catalog.target_for(HomeCityObjectId.CASTLE)
+        self.assertIsNotNone(castle)
+        self.assertEqual(HomeCitySlotSelector(1), castle.reference_slot)
         # An unrelated nearby "Manor" label is not the Illusory Beast Manor and
         # must never resolve to it.
         self.assertIsNone(home_city_object_definition_for_label("Manor"))

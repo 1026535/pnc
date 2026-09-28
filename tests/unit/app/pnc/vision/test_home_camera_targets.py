@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraProof,
     HomeCityCameraStatus,
 )
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.vision.home_city_camera import load_home_city_camera_catalog
 
 from tests.support.pnc.capture_vision.home_camera_fixtures import (
@@ -21,6 +23,39 @@ from tests.support.pnc.capture_vision.home_camera_fixtures import (
 
 class HomeCityCameraTargetTests(unittest.TestCase):
     """Body targets only publish when they agree with the localized projection."""
+
+    def test_castle_body_matches_native_source_and_distinct_holdout(self) -> None:
+        """Reuses measured poses; localization has its own native-view tests."""
+
+        localizer = _localizer()
+        target = load_home_city_camera_catalog().target_for(HomeCityObjectId.CASTLE)
+        for name, translation in (
+            ("home_city_castle_default_20260921.png", (-532, 222)),
+            ("home_city_castle_holdout_20260921.png", (-545, 149)),
+        ):
+            with self.subTest(fixture=name):
+                image = _fixture(_CAMERA_FIXTURES / name)
+                frame = localizer.prepare_frame(image)
+                proof = HomeCityCameraProof(
+                    status=HomeCityCameraStatus.LOCALIZED,
+                    reason="pose verified by native Castle localization regression",
+                    translation=translation,
+                    zoom=1.0,
+                    frame_size=image.size,
+                )
+
+                match = localizer.match_target(frame, target, proof=proof)
+
+                self.assertIsNotNone(match)
+                self.assertEqual(HomeCitySlotSelector(1), match.home_city_slot)
+                self.assertGreaterEqual(match.score, target.min_score)
+                self.assertLessEqual(match.projection_error, target.max_projection_error)
+                self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+                self.assertTrue(match.action_bounds.contains_point(match.action_point))
+                wrong_pose = replace(
+                    proof, translation=(translation[0] + 300, translation[1])
+                )
+                self.assertIsNone(localizer.match_target(frame, target, proof=wrong_pose))
 
     def test_institute_body_matches_pan_view_with_verified_action_geometry(self) -> None:
         localizer = _localizer()
