@@ -35,6 +35,38 @@ class LazyExportGraphTests(unittest.TestCase):
         graph = build_graph(export_sources("import pkg\n"))
         self.assertNotIn("tests.unit.test_caller", graph.consumers({"pkg.impl"}))
 
+    def test_quoted_annotations_and_aliases_request_only_the_named_export(self) -> None:
+        declarations = (
+            'def consume(value: "facade.Thing"): pass\n',
+            'def consume() -> "facade.Thing": pass\n',
+            'class Consumer:\n    value: list["facade.Thing"]\n',
+            'Alias = "facade.Thing"\n',
+            'from typing import TypeAlias as TA\nAlias: TA = "facade.Thing"\n',
+            'type Alias = list["facade.Thing"]\n',
+            'class Consumer[T: "facade.Thing"]: pass\n',
+            'def consume[T = "facade.Thing"](): pass\n',
+        )
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                caller = "import pkg as facade\n" + declaration
+                self.assert_requested_export(caller)
+                self.assertNotIn("tests.unit.test_caller", build_graph(export_sources(caller)).consumers({"pkg.other"}))
+
+    def test_literal_and_annotated_metadata_are_not_type_references(self) -> None:
+        caller = (
+            "import pkg as facade\nfrom typing import Annotated, Literal as L\n"
+            'value: Annotated[int, "facade.Thing"]\n'
+            'other: L["facade.Thing", "__import__(plugin_name)"]\n'
+            'example = "importlib.import_module(plugin_name)"\n'
+        )
+        graph = build_graph(export_sources(caller))
+        self.assertFalse(graph.uncertain)
+        self.assertNotIn("tests.unit.test_caller", graph.consumers({"pkg.impl"}))
+
+    def test_reflective_quoted_annotation_uses_existing_uncertainty_path(self) -> None:
+        graph = build_graph(export_sources('def consume(value: "__import__(plugin_name).Thing"): pass\n'))
+        self.assertIn("tests.unit.test_caller", graph.uncertain)
+
     def test_from_package_import_named_export(self) -> None:
         self.assert_requested_export("from pkg import Thing\n")
 

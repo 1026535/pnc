@@ -12,7 +12,6 @@ full:
   - tests/__init__.py
   - tests/support/paths.py
   - tests/support/python_sources.py
-  - tests/support/fixture_profile.py
   - tests/*/__init__.py
   - tests/data/*
   - tests/local_fixture_artifacts.py

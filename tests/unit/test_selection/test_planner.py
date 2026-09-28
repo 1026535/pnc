@@ -25,8 +25,8 @@ TEST_PATHS = {
 }
 TESTS = inventory(list(TEST_PATHS.values()))
 MODULES = {label: path.removesuffix(".py").replace("/", ".") for label, path in TEST_PATHS.items()}
-MANDATORY = frozenset({"api", "architecture"})
-ENGINE = MANDATORY | {"engine", "sibling", "runner"}
+MANDATORY = frozenset({"architecture"})
+ENGINE = MANDATORY | {"engine", "sibling", "runner", "api"}
 ALL = frozenset(TEST_PATHS)
 RULES = OwnershipRules(
     ("pyproject.toml", "requirements*", "tests/support/*", "tests/selection_rules.yaml",
@@ -45,6 +45,7 @@ def sources() -> dict[str, str]:
         WORKER: BODY, MATCHER: BODY, GATEWAY: "from pnc_automation.app.automation.engine.worker import run\n",
         TEST_PATHS["engine"]: "from pnc_automation.app.automation.engine.worker import run\n",
         TEST_PATHS["runner"]: "import tools.gateway\n",
+        TEST_PATHS["api"]: "import tools.gateway\n",
         TEST_PATHS["vision"]: "from pnc_automation.core.vision.matcher import run\n",
     })
     return result
@@ -65,7 +66,7 @@ class ChangeCase:
 CASES = (
     ChangeCase("private worker body", (WORKER,), ENGINE, new_updates={WORKER: PRIVATE_EDIT}),
     ChangeCase("private vision body", (MATCHER,), MANDATORY | {"vision"}, new_updates={MATCHER: PRIVATE_EDIT}),
-    ChangeCase("tools facade body", (GATEWAY,), MANDATORY | {"runner"}, new_updates={GATEWAY: "from pnc_automation.app.automation.engine.worker import run\n# new comment\n"}),
+    ChangeCase("tools facade body", (GATEWAY,), MANDATORY | {"runner", "api"}, new_updates={GATEWAY: "from pnc_automation.app.automation.engine.worker import run\n# new comment\n"}),
     ChangeCase("changed test selects itself", (TEST_PATHS["engine"],), MANDATORY | {"engine"}),
     ChangeCase("new test selects itself", (TEST_PATHS["engine"],), MANDATORY | {"engine"}, removed_old=(TEST_PATHS["engine"],)),
     ChangeCase("removed consumer import still selected", (WORKER, TEST_PATHS["runner"]), ENGINE, new_updates={WORKER: PRIVATE_EDIT, TEST_PATHS["runner"]: "pass\n"}),
@@ -73,12 +74,12 @@ CASES = (
     ChangeCase("deleted production module", (WORKER,), ALL, "added/deleted production module", removed_new=(WORKER,)),
     ChangeCase("added production module", (WORKER,), ALL, "added/deleted production module", removed_old=(WORKER,)),
     ChangeCase("renamed production module", (WORKER, "pnc_automation/app/automation/engine/renamed.py"), ALL, "added/deleted production module", removed_new=(WORKER,), new_updates={"pnc_automation/app/automation/engine/renamed.py": BODY}),
-    ChangeCase("public parameter rename", (WORKER,), ALL, "public declaration changed", new_updates={WORKER: "def run(other=1):\n    return other + 1\n"}),
-    ChangeCase("public default change", (WORKER,), ALL, "public declaration changed", new_updates={WORKER: "def run(value=2):\n    return value + 1\n"}),
-    ChangeCase("public return annotation", (WORKER,), ALL, "public declaration changed", new_updates={WORKER: "def run(value=1) -> int:\n    return value + 1\n"}),
-    ChangeCase("public decorator", (WORKER,), ALL, "public declaration changed", new_updates={WORKER: "@cached\n" + BODY}),
-    ChangeCase("serialized field change", (WORKER,), ALL, "public declaration changed", old_updates={WORKER: "class Record:\n    count: int = 1\n"}, new_updates={WORKER: "class Record:\n    count: str = '1'\n"}),
-    ChangeCase("public constant change", (WORKER,), ALL, "public declaration changed", old_updates={WORKER: "MODE = 'safe'\n"}, new_updates={WORKER: "MODE = 'unsafe'\n"}),
+    ChangeCase("public parameter rename", (WORKER,), ENGINE, new_updates={WORKER: "def run(other=1):\n    return other + 1\n"}),
+    ChangeCase("public default change", (WORKER,), ENGINE, new_updates={WORKER: "def run(value=2):\n    return value + 1\n"}),
+    ChangeCase("public return annotation", (WORKER,), ENGINE, new_updates={WORKER: "def run(value=1) -> int:\n    return value + 1\n"}),
+    ChangeCase("public decorator", (WORKER,), ENGINE, new_updates={WORKER: "@cached\n" + BODY}),
+    ChangeCase("serialized field change", (WORKER,), ENGINE, old_updates={WORKER: "class Record:\n    count: int = 1\n"}, new_updates={WORKER: "class Record:\n    count: str = '1'\n"}),
+    ChangeCase("public constant change", (WORKER,), ENGINE, old_updates={WORKER: "MODE = 'safe'\n"}, new_updates={WORKER: "MODE = 'unsafe'\n"}),
     ChangeCase("syntax error in changed production", (WORKER,), ALL, "cannot parse changed source", new_updates={WORKER: "def run(:"}),
     ChangeCase("syntax error in changed test", (TEST_PATHS["engine"],), ALL, "unmodeled changed source", new_updates={TEST_PATHS["engine"]: "def test_bad(:"}),
     ChangeCase("unknown YAML resource", ("assets/new.yaml",), ALL, "unknown non-Python dependency"),
@@ -87,7 +88,7 @@ CASES = (
     ChangeCase("unknown SQL resource", ("schema/migration.sql",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown extensionless resource", ("runtime/CATALOG",), ALL, "unknown non-Python dependency"),
     ChangeCase("owned nested PNG resource", ("pnc_automation/templates/home/button.png",), MANDATORY | {"vision"}),
-    ChangeCase("owned authored YAML", ("scripts/claim.yaml",), MANDATORY | {"runner", "workflow"}),
+    ChangeCase("owned authored YAML", ("scripts/claim.yaml",), MANDATORY | {"runner", "workflow", "api"}),
     ChangeCase("owned config JSON", ("config/anchors.json",), MANDATORY | {"vision", "runner", "workflow"}),
     ChangeCase("unknown Python root", ("plugins/new.py",), ALL, "unknown Python owner", new_updates={"plugins/new.py": "pass\n"}),
     ChangeCase("unmapped tool", ("tools/orphan.py",), ALL, "no test dependency established", old_updates={"tools/orphan.py": BODY}, new_updates={"tools/orphan.py": PRIVATE_EDIT}),
@@ -158,14 +159,14 @@ class SelectionReviewRegressionTests(unittest.TestCase):
                     self.assertTrue(plan.fallbacks)
                     self.assertNotIn("no_test_reason", plan.document())
 
-    def test_constructor_signature_change_requires_full_tests(self) -> None:
+    def test_constructor_signature_change_selects_owner_and_consumers(self) -> None:
         old = {**sources(), WORKER: "class Worker:\n    def __init__(self, value): pass\n"}
         new = {**old, WORKER: "class Worker:\n    def __init__(self, value, required): pass\n"}
         plan = affected_plan(TESTS, RULES, [WORKER], old, new, "base", "head")
-        self.assertEqual(set(plan.reasons), set(MODULES.values()))
-        self.assertIn(f"public declaration changed: {WORKER}", plan.fallbacks)
+        self.assertEqual(set(plan.reasons), {MODULES[label] for label in ENGINE})
+        self.assertFalse(plan.fallbacks)
 
-    def test_public_dunder_contract_changes_require_full_tests(self) -> None:
+    def test_public_dunder_contract_changes_select_owner_and_consumers(self) -> None:
         declarations = (
             ("def __call__(self, value=1): pass", "def __call__(self, value=2): pass"),
             ("def __iter__(self): pass", "def __iter__(self) -> Iterator[int]: pass"),
@@ -176,10 +177,10 @@ class SelectionReviewRegressionTests(unittest.TestCase):
                 old = {**sources(), WORKER: f"class Worker:\n    {before}\n"}
                 new = {**old, WORKER: f"class Worker:\n    {after}\n"}
                 plan = affected_plan(TESTS, RULES, [WORKER], old, new, "base", "head")
-                self.assertEqual(set(plan.reasons), set(MODULES.values()))
-                self.assertIn(f"public declaration changed: {WORKER}", plan.fallbacks)
+                self.assertEqual(set(plan.reasons), {MODULES[label] for label in ENGINE})
+                self.assertFalse(plan.fallbacks)
 
-    def test_public_type_alias_change_requires_full_tests(self) -> None:
+    def test_public_type_alias_change_selects_owner_and_consumers(self) -> None:
         declarations = (
             ("type Value = int\n", "type Value = str\n"),
             ("type Values[T] = list[T]\n", "type Values[T] = tuple[T, ...]\n"),
@@ -189,20 +190,18 @@ class SelectionReviewRegressionTests(unittest.TestCase):
                 old = {**sources(), WORKER: before}
                 new = {**old, WORKER: after}
                 plan = affected_plan(TESTS, RULES, [WORKER], old, new, "base", "head")
-                self.assertEqual(set(plan.reasons), set(MODULES.values()))
-                self.assertIn(f"public declaration changed: {WORKER}", plan.fallbacks)
+                self.assertEqual(set(plan.reasons), {MODULES[label] for label in ENGINE})
+                self.assertFalse(plan.fallbacks)
 
 
 class AffectedPlanMatrixTests(unittest.TestCase):
     def test_selection_skips_import_graph_when_it_cannot_change_the_plan(self) -> None:
         old, new = sources(), sources()
-        public_change = {**new, WORKER: "def run(other=1):\n    return other + 1\n"}
         cases = (
             ([], new, frozenset()),
             (["README.md"], new, frozenset()),
             (["assets/new.yaml"], new, ALL),
             (["pyproject.toml"], new, ALL),
-            ([WORKER], public_change, ALL),
         )
         with patch("tools.test_selection.planner.build_graph", side_effect=AssertionError("graph built")):
             for changed, candidate, expected in cases:

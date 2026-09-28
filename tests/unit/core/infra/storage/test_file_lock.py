@@ -90,8 +90,8 @@ class NativePathLockTests(unittest.TestCase):
             def close(self) -> None:
                 raise OSError("close failure")
 
-        path = Path(tempfile.gettempdir()) / "native-path-lock-dual-failure.lock"
-        key = str(path.expanduser().resolve())
+        path = (Path(tempfile.gettempdir()) / "native-path-lock-dual-failure.lock").resolve()
+        key = str(path)
         _HELD_PATHS[key] = threading.get_ident()
         lock = NativePathLock(path=path, handle=FailingHandle())  # type: ignore[arg-type]
         try:

@@ -260,7 +260,7 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
 
         captured_at = datetime(2026, 1, 2, 0, 30, tzinfo=timezone(timedelta(hours=14)))
         with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
+            root = Path(temporary_directory).resolve()
             store = ChatArchiveStore(root)
             update = store.persist_heartbeat(
                 account_id="account", castle=self.castle, channel=ChatChannel.WORLD,

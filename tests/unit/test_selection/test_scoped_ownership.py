@@ -28,14 +28,15 @@ class ScopedOwnershipTests(unittest.TestCase):
             self.domain: "def value():\n    return 1\n",
             "tests/unit/app/pnc/vision/test_sample.py": "from tests.support.pnc.capture_vision.feature import make_frame\n",
             "tests/unit/app/pnc/domain/test_sample.py": "from pnc_automation.app.pnc.domain.sample import value\n",
+            "tests/contract/sample/test_api.py": "from pnc_automation.app.pnc.domain.sample import value\n",
         })
 
-    def test_scoped_helper_selects_consumers_and_mandatory_contracts(self) -> None:
+    def test_scoped_helper_selects_consumers_and_architecture(self) -> None:
         plan = affected_plan(self.tests, self.rules, [self.helper], self.sources, self.sources, "base", "head")
         self.assertFalse(plan.fallbacks)
         self.assertEqual(set(plan.reasons), {
             "tests.unit.app.pnc.vision.test_sample",
-            "tests.contract.sample.test_api", "tests.architecture.test_imports",
+            "tests.architecture.test_imports",
         })
 
     def test_domain_body_edit_does_not_select_unrelated_vision(self) -> None:
@@ -45,8 +46,11 @@ class ScopedOwnershipTests(unittest.TestCase):
         self.assertNotIn("tests.unit.app.pnc.vision.test_sample", plan.reasons)
         self.assertIn("tests.unit.app.pnc.domain.test_sample", plan.reasons)
 
-    def test_public_domain_signature_change_still_requires_full_inventory(self) -> None:
+    def test_public_domain_signature_change_selects_its_contract_and_owner(self) -> None:
         updated = {**self.sources, self.domain: "def value(arg):\n    return arg\n"}
         plan = affected_plan(self.tests, self.rules, [self.domain], self.sources, updated, "base", "head")
-        self.assertTrue(plan.fallbacks)
-        self.assertEqual(len(plan.reasons), len(self.tests))
+        self.assertFalse(plan.fallbacks)
+        self.assertEqual(set(plan.reasons), {
+            "tests.unit.app.pnc.domain.test_sample", "tests.contract.sample.test_api",
+            "tests.architecture.test_imports",
+        })

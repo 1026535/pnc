@@ -82,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         "--contexts",
         action="store_true",
         help=("Mode-dependent coverage evidence: affected selects contract/integration "
-              "tests by measured production coverage while retaining component-owned "
-              "unit and architecture tests; measure produces the seed"),
+              "tests by measured production coverage, retaining static owners and "
+              "consumers for declaration/import changes; measure produces the seed"),
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--shard-index", type=int, default=0, help="Zero-based execution shard")

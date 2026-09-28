@@ -50,6 +50,77 @@ class ImportGraph:
         return seen
 
 
+def _quoted_declaration_nodes(tree: ast.Module) -> list[ast.AST]:
+    """Parse quoted annotations and possible alias bindings without evaluation."""
+    result = []
+    markers = {name: {name} for name in ("TypeAlias", "Literal", "Annotated")}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in {"typing", "typing_extensions"}:
+            for alias in node.names:
+                if alias.name in markers:
+                    markers[alias.name].add(alias.asname or alias.name)
+
+    def marker(expression: ast.expr) -> str | None:
+        if isinstance(expression, ast.Name):
+            name = expression.id
+        elif isinstance(expression, ast.Attribute):
+            name = expression.attr
+        else:
+            return None
+        return next((kind for kind, names in markers.items() if name in names), None)
+
+    for node in ast.walk(tree):
+        expressions = []
+        if isinstance(node, (ast.arg, ast.AnnAssign)) and node.annotation is not None:
+            expressions.append(node.annotation)
+        if isinstance(node, ast.TypeAlias):
+            expressions.append(node.value)
+        if isinstance(node, (ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple)):
+            if isinstance(node, ast.TypeVar) and node.bound is not None:
+                expressions.append(node.bound)
+            if node.default_value is not None:
+                expressions.append(node.default_value)
+        if (isinstance(node, ast.AnnAssign)
+                and marker(node.annotation) == "TypeAlias" and node.value is not None):
+            expressions.append(node.value)
+        if (isinstance(node, (ast.Assign, ast.AnnAssign))
+                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+            try:
+                binding = ast.parse(node.value.value, mode="eval")
+            except SyntaxError:
+                pass
+            else:
+                reference = binding.body
+                while isinstance(reference, ast.Attribute):
+                    reference = reference.value
+                # An ordinary string is not executable annotation code. Retain
+                # only qualified-name bindings that may be plain type aliases.
+                if (isinstance(binding.body, ast.Attribute)
+                        and isinstance(reference, ast.Name)):
+                    result.extend(ast.walk(binding))
+        if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.returns is not None):
+            expressions.append(node.returns)
+        while expressions:
+            value = expressions.pop()
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                try:
+                    quoted = ast.parse(value.value, mode="eval")
+                except SyntaxError:
+                    # Literal metadata need not be a Python type expression.
+                    continue
+                result.extend(ast.walk(quoted))
+                expressions.append(quoted.body)
+            elif isinstance(value, ast.Subscript) and marker(value.value) == "Literal":
+                continue
+            elif isinstance(value, ast.Subscript) and marker(value.value) == "Annotated":
+                arguments = value.slice.elts if isinstance(value.slice, ast.Tuple) else [value.slice]
+                expressions.extend(arguments[:1])
+            else:
+                expressions.extend(ast.iter_child_nodes(value))
+    return result
+
+
 def build_graph(*snapshots: dict[str, str]) -> ImportGraph:
     """Union base and candidate edges, including imports removed in the candidate."""
     reverse: dict[str, set[str]] = defaultdict(set)
@@ -84,9 +155,10 @@ def build_graph(*snapshots: dict[str, str]) -> ImportGraph:
                 continue
             package = owner if path.endswith("/__init__.py") else owner.rpartition(".")[0]
             known_lazy_calls = _known_lazy_calls(tree) if owner in lazy_exports else set()
+            nodes = [*ast.walk(tree), *_quoted_declaration_nodes(tree)]
             targets = set()
             aliases: dict[str, str] = {}
-            for node in ast.walk(tree):
+            for node in nodes:
                 if isinstance(node, ast.Import):
                     targets.update(alias.name for alias in node.names)
                     for alias in node.names:
@@ -133,7 +205,7 @@ def build_graph(*snapshots: dict[str, str]) -> ImportGraph:
                             uncertain.add(owner)
                     elif name in {"exec", "eval", "spec_from_file_location", "run_path", "run_module"}:
                         uncertain.add(owner)
-            for node in ast.walk(tree):
+            for node in nodes:
                 if isinstance(node, ast.Attribute):
                     chain = []
                     value = node

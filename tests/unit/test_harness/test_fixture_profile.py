@@ -49,7 +49,7 @@ class PortableFixtureProfileTests(unittest.TestCase):
         actual = require_local_fixture_artifact(
             "screenshot", default_repo_relative_path="tests/data/portable.png"
         )
-        self.assertEqual(actual, default)
+        self.assertEqual(actual, default.resolve())
         self.assertTrue(actual.is_file())
         self.local_loader.assert_not_called()
 

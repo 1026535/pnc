@@ -48,7 +48,7 @@ missing defaults skip without reading machine-local fixture configuration.
 # Full measurement with opt-in per-test contexts and empirical seed publication.
 .venv/Scripts/python.exe tools/run_tests.py measure --contexts --csv .test-impact/measurement-timings.csv
 
-# Hybrid selection: component-owned units plus covered contract/integration tests.
+# Hybrid selection: static declarations/owners plus covered feature tests.
 .venv/Scripts/python.exe tools/run_tests.py affected --base origin/main --contexts --explain
 
 # Direct unittest execution for one named regression module.
@@ -100,28 +100,35 @@ the comparison revision; when omitted the runner attempts its upstream merge
 base. Local tracked and untracked changes participate in selection. Use an
 explicit base SHA for reproducible CI evidence.
 
-Without `--contexts`, code changes add mandatory contract and architecture
-modules. With `--contexts`, production Python changes use directory-derived
-unit ownership and the coverage seed for contract and integration modules;
-architecture checks remain mandatory. A nonproduction Python helper or tool
-change uses static selection instead, since the coverage seed records only
-production files. A directly changed test module always runs. Only unchanged
+Architecture checks remain mandatory. Contract/API checks use static imports,
+component ownership and explicit resource owners; a contract check without an
+established production owner remains conservatively selected. With `--contexts`,
+production function-body changes use directory-derived unit ownership and the
+coverage seed for contract and integration modules. Declaration or import-surface
+changes retain the complete scoped static selection, including high-level consumers,
+and add measured consumers afterward. A mixed public/private diff uses this same
+static floor. A nonproduction Python helper or tool change uses static selection,
+since the coverage seed records only production files. A directly changed test
+module always runs. Only unchanged
 or explicitly documented documentation-only changes may select no tests.
 Unknown groups and unexpectedly empty collection are errors. `--dry-run`
 proves selection only and produces no execution result.
 
-Feature-specific support helpers and private domain implementation changes
-use their static consumers and component owners. Global fixture paths,
-source-scanning helpers, bootstrap files, public signature/model changes,
-unknown consumers, and other shared infrastructure retain full fallbacks.
+Feature-specific support helpers and domain implementation changes use their
+static consumers and component owners. Signature/model/constant changes also run
+the suites of downstream production components, using the union of old and new
+imports so removed dependencies remain covered. Quoted annotations and supported
+type aliases retain dependencies on named lazy exports; literal metadata does not
+request an export. Global fixture paths, source-scanning helpers, bootstrap files,
+unknown consumers, and other repository-wide infrastructure retain full fallbacks.
 Camera tests are split by catalog, localization, consensus, zoom, targets,
 surface and view behavior. Navigation tests separate transitions, buildings,
 Campaign, Manor, chat, mail, research, trial and Workshop routes. Shared
 doubles live in support modules; tests should not import another test suite.
 
 Selection broadens to the full portable suite when it cannot establish safe
-ownership: shared test infrastructure, packaging/dependencies, public contract
-changes, added/deleted production modules, unresolved dynamic imports, unknown
+ownership: shared test infrastructure, packaging/dependencies, added/deleted
+production modules, unresolved dynamic imports, unknown
 resources, or unavailable base/analysis evidence. The selection JSON records
 each module's reasons and every full fallback. Static imports cannot completely
 describe reflection, plugins, source-as-data, or arbitrary external resources;
@@ -138,9 +145,12 @@ imported production module appear covered by every feature test. Dynamic test
 contexts begin before per-test setup and reset after cleanup; unattributed
 class/module-fixture execution remains conservatively owned by every module.
 
-For `affected --contexts`, coverage selects only contract and integration
-modules when a partial plan changes production Python. It does not add unrelated
-unit modules: low-level units continue to run by component ownership.
+For `affected --contexts`, coverage adds only contract and integration modules
+when a partial plan changes production Python. It does not add unrelated unit
+modules: low-level units run by static imports and component ownership. Required
+declaration/import consumers remain selected even if the seed records zero
+execution owners for that production file. Saved seeds identify selection policy
+version 3; earlier policy evidence is incompatible.
 Architecture checks remain static because they inspect source rather than
 execute it. Explicit non-Python resource ownership, a directly changed test,
 and full-suite safety fallbacks also remain authoritative. Empty plans,

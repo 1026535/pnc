@@ -24,6 +24,43 @@ class FaultRecallTests(unittest.TestCase):
         suite.run(result)
         return result
 
+    def test_contract_break_caught_by_downstream_consumer_despite_passing_producer(self) -> None:
+        producer = "pnc_automation/app/pnc/domain/sample.py"
+        service = "pnc_automation/app/automation/engine/consumer.py"
+        unit = "tests/unit/app/pnc/domain/test_sample.py"
+        contract = "tests/contract/entrypoints/test_consumer.py"
+        unrelated = "tests/unit/core/vision/test_other.py"
+        tests = inventory([unit, contract, unrelated])
+        old = {
+            producer: "def run(value=1, required=0): return value + required\n",
+            service: "from pnc_automation.app.pnc.domain.sample import run\n",
+            unit: "from pnc_automation.app.pnc.domain.sample import run\n",
+            contract: "from pnc_automation.app.automation.engine.consumer import consume\n",
+            unrelated: "pass\n",
+        }
+        new = {**old, producer: "def run(value, required): return value + required\n"}
+        current = [lambda value, required=0: value + required]
+
+        def producer_check() -> None:
+            self.assertEqual(current[0](1, 2), 3)
+
+        def consumer_check() -> None:
+            self.assertEqual(current[0](1), 1)
+
+        checks = {
+            module_name(unit): producer_check, module_name(contract): consumer_check,
+            module_name(unrelated): lambda: None,
+        }
+        self.assertTrue(self.execute(checks, set(checks)).wasSuccessful())
+        current[0] = lambda value, required: value + required
+        self.assertTrue(self.execute(checks, {module_name(unit)}).wasSuccessful())
+        plan = affected_plan(tests, OwnershipRules((), (), ()), [producer], old, new, "base", "head")
+        self.assertFalse(plan.fallbacks)
+        self.assertEqual(set(plan.reasons), {module_name(unit), module_name(contract)})
+        result = self.execute(checks, set(plan.reasons))
+        self.assertEqual(len(result.errors), 1)
+        self.assertFalse(result.failures)
+
     def test_source_scanning_fault_missed_by_imports_is_caught_by_mandatory_architecture(self) -> None:
         path = "pnc_automation/core/engine.py"
         source_file = self.root / "engine.py"
