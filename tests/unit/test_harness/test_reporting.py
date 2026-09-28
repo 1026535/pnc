@@ -28,6 +28,26 @@ def run_cases(*cases: unittest.TestCase, coverage=None) -> TimingResult:
 
 
 class TimingResultTests(unittest.TestCase):
+    def test_failure_traceback_is_flushed_before_the_suite_finishes(self) -> None:
+        stream = io.StringIO()
+
+        class Fail(unittest.TestCase):
+            def runTest(self) -> None:
+                self.fail("retained before timeout")
+
+        class Inspect(unittest.TestCase):
+            def runTest(case) -> None:
+                self.assertIn("AssertionError: retained before timeout", stream.getvalue())
+                self.assertIn(Fail().id(), stream.getvalue())
+
+        cases = (Fail(), Inspect())
+        result = unittest.TextTestRunner(
+            stream=stream,
+            resultclass=lambda *a, **kw: TimingResult(*a, inventory=describe_tests(cases), **kw),
+        ).run(unittest.TestSuite(cases))
+        self.assertEqual(len(result.failures), 1)
+        self.assertFalse(result.errors)
+
     def test_failed_subtest_is_preserved_after_later_successful_subtest(self) -> None:
         class Case(unittest.TestCase):
             def runTest(self) -> None:

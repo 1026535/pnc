@@ -1,0 +1,720 @@
+"""Navigation core buildings tests."""
+
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock, patch
+import unittest
+
+from pnc_automation.app.automation.engine.navigation_core import (
+    NavigationCore,
+    NavigationPolicy,
+    reviewed_navigation_edges,
+)
+from pnc_automation.app.pnc.domain.action_requests import (
+    SwipeAction,
+    TapSpatialObjectAction,
+)
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.observation import (
+    Bounds,
+    DetectedSpatialObject,
+    Observation,
+    SpatialObjectKind,
+    SpatialObjectSourceKind,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    home_city_scan_step_budget,
+    home_city_scan_steps,
+)
+from pnc_automation.core.errors import SelectorResolutionError
+
+from tests.support.pnc.navigation.core_frames import Actuator, observation
+from tests.support.pnc.navigation.core_home import (
+    camera_home_frame,
+    home_building_frame,
+    measured_building_object,
+    qualified_pan_step,
+)
+from tests.support.pnc.navigation.core_mail import mail_frame
+from tests.support.pnc.navigation.core_recording import RecordedFramesCore
+
+
+class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
+    def test_trial_building_opens_category_list_and_has_measured_return(self):
+        target = measured_building_object(
+            HomeCityObjectId.TOWER_OF_TRIAL,
+            bounds=Bounds(220, 470, 100, 100),
+            action_point=(270, 520),
+            action_bounds=Bounds(264, 514, 12, 12),
+        )
+        now = datetime.now(UTC)
+        content_frames = iter(
+            camera_home_frame((target,), captured_at=now + timedelta(seconds=index))
+            for index in (1, 2)
+        )
+        frames = iter(
+            mail_frame(ScreenType.PNC_TRIAL_CHALLENGE, captured_at=now + timedelta(seconds=index))
+            for index in (3, 4)
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(frames), reviewed_navigation_edges(), sleep=lambda _: None,
+        )
+        result = core.open_visible_building(
+            HomeCityObjectId.TOWER_OF_TRIAL,
+            observe_content=lambda _: next(content_frames),
+        )
+        self.assertEqual(ScreenType.PNC_TRIAL_CHALLENGE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertEqual(target.action_point, actuator.actions[0].target_point)
+
+
+    def test_building_uses_observed_point_and_rejects_absent_or_duplicate_target(self):
+        target = measured_building_object(
+            HomeCityObjectId.GODDESS_STATUE,
+            bounds=Bounds(220, 470, 110, 110),
+            action_point=(275, 524),
+            action_bounds=Bounds(269, 518, 12, 12),
+        )
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter(
+            camera_home_frame((target,), captured_at=now + timedelta(seconds=index))
+            for index in (1, 2)
+        )
+        core, actuator, _ = self.make_core([
+            observation(ScreenType.PNC_GODDESS_STATUE), observation(ScreenType.PNC_GODDESS_STATUE),
+        ])
+        core.open_visible_building(
+            HomeCityObjectId.GODDESS_STATUE, observe_content=lambda _: next(content_frames))
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertEqual(actuator.actions[0].target_point, (275, 524))
+        for bodies in ((), (target, target)):
+            core, actuator, _ = self.make_core([])
+            frames = iter(
+                camera_home_frame(bodies, captured_at=now + timedelta(seconds=index))
+                for index in (1, 2)
+            )
+            with self.assertRaisesRegex(RuntimeError, 'absent or ambiguous'):
+                core.open_visible_building(
+                    HomeCityObjectId.GODDESS_STATUE, observe_content=lambda _: next(frames))
+            self.assertEqual(actuator.actions, [])
+
+
+    def test_castle_building_opens_from_observed_point_and_returns_home_by_template_back(self):
+        target = measured_building_object(
+            HomeCityObjectId.CASTLE,
+            bounds=Bounds(220, 470, 100, 100),
+            action_point=(270, 520),
+            action_bounds=Bounds(264, 514, 12, 12),
+        )
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+
+        def castle_frame(captured_at: datetime) -> Observation:
+            return replace(
+                observation(ScreenType.PNC_CASTLE),
+                visible_elements={
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT: VisibleElement(
+                        UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        Bounds(22, 8, 58, 38),
+                        0.99,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                    ),
+                },
+                image_size=(540, 960),
+                captured_at=captured_at,
+            )
+
+        def home_frame(captured_at: datetime) -> Observation:
+            return replace(
+                observation(ScreenType.PNC_HOME_CITY),
+                image_size=(540, 960),
+                captured_at=captured_at,
+            )
+
+        content_frames = iter(
+            camera_home_frame((target,), captured_at=now + timedelta(seconds=index))
+            for index in (1, 2)
+        )
+        frames = iter(
+            (
+                castle_frame(now + timedelta(seconds=3)),
+                castle_frame(now + timedelta(seconds=4)),
+                castle_frame(now + timedelta(seconds=5)),
+                castle_frame(now + timedelta(seconds=6)),
+                home_frame(now + timedelta(seconds=7)),
+                home_frame(now + timedelta(seconds=8)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        opened = core.open_visible_building(
+            HomeCityObjectId.CASTLE,
+            observe_content=lambda _: next(content_frames),
+        )
+        returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertEqual(ScreenType.PNC_CASTLE, opened.screen_type)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual((270, 520), actuator.actions[0].target_point)
+        self.assertEqual(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, actuator.actions[1].selector_id)
+
+
+    def test_public_home_scan_sequence_and_budget_match_canonical_navigator(self):
+        steps = home_city_scan_steps()
+
+        self.assertEqual(6, len(steps))
+        self.assertEqual(18, home_city_scan_step_budget())
+        self.assertEqual(
+            (0.45, 0.54, 0.45, 0.26),
+            (steps[-1].start_x_ratio, steps[-1].start_y_ratio, steps[-1].end_x_ratio, steps[-1].end_y_ratio),
+        )
+
+
+    def test_open_building_visible_target_uses_no_scan_gesture(self):
+        """Hero Hall retains the direct-visible route: a current measured body needs no pan."""
+        target = measured_building_object(
+            HomeCityObjectId.HERO_HALL,
+            bounds=Bounds(220, 470, 100, 100),
+            action_point=(270, 520),
+            action_bounds=Bounds(264, 514, 12, 12),
+        )
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame((target,), captured_at=now),
+                camera_home_frame((target,), captured_at=now + timedelta(seconds=1)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_HERO_HALL),
+                observation(ScreenType.PNC_HERO_HALL),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.HERO_HALL,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_HERO_HALL, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual((270, 520), actuator.actions[0].target_point)
+
+
+    def test_unqualified_offscreen_building_does_not_replay_the_old_scan(self):
+        core, actuator, _ = self.make_core([])
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        capture = Mock(side_effect=(
+            camera_home_frame(captured_at=now),
+            camera_home_frame(captured_at=now + timedelta(seconds=1)),
+        ))
+        with self.assertRaisesRegex(RuntimeError, "no qualified offscreen"):
+            core.open_building(HomeCityObjectId.HERO_HALL, observe_content=capture)
+        self.assertEqual(2, capture.call_count)
+        self.assertEqual([], actuator.actions)
+
+
+    def test_direct_visible_building_loss_before_reacquisition_sends_no_input(self):
+        target = measured_building_object(
+            HomeCityObjectId.HERO_HALL,
+            bounds=Bounds(220, 470, 100, 100),
+            action_point=(270, 520),
+            action_bounds=Bounds(264, 514, 12, 12),
+        )
+        now = datetime(2026, 9, 22, tzinfo=UTC)
+        frames = iter((camera_home_frame((target,), captured_at=now),
+                       camera_home_frame(captured_at=now + timedelta(seconds=1))))
+        core, actuator, _ = self.make_core([])
+        with self.assertRaisesRegex(RuntimeError, "no qualified offscreen"):
+            core.open_building(HomeCityObjectId.HERO_HALL,
+                               observe_content=lambda _: next(frames))
+        self.assertEqual([], actuator.actions)
+
+
+    def test_unqualified_building_in_fixed_hud_region_sends_no_input(self):
+        target = measured_building_object(
+            HomeCityObjectId.HERO_HALL,
+            bounds=Bounds(380, 620, 120, 100),
+            action_point=(434, 654),
+            action_bounds=Bounds(428, 648, 12, 12),
+        )
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter((camera_home_frame((target,), captured_at=now),
+                       camera_home_frame((target,), captured_at=now + timedelta(seconds=1))))
+        core, actuator, _ = self.make_core([])
+        with self.assertRaisesRegex(RuntimeError, "no qualified offscreen"):
+            core.open_building(HomeCityObjectId.HERO_HALL,
+                               observe_content=lambda _: next(frames))
+        self.assertEqual([], actuator.actions)
+
+
+    def test_open_building_fails_closed_for_unsafe_scan_frames_without_swipe(self):
+        """Malformed current body evidence on the normalized frame stops before any input."""
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        no_point = replace(
+            measured_building_object(HomeCityObjectId.HERO_HALL),
+            action_point=None,
+            action_bounds=None,
+        )
+        out_of_image = replace(
+            measured_building_object(HomeCityObjectId.HERO_HALL),
+            action_point=(540, 520),
+            action_bounds=None,
+        )
+        malformed = replace(
+            measured_building_object(HomeCityObjectId.HERO_HALL),
+            action_point=("bad", 520),  # type: ignore[arg-type]
+            action_bounds=None,
+        )
+        second = measured_building_object(
+            HomeCityObjectId.HERO_HALL,
+            bounds=Bounds(60, 470, 80, 80),
+            action_point=(100, 500),
+            action_bounds=Bounds(94, 494, 12, 12),
+        )
+        cases = (
+            (camera_home_frame(captured_at=now, image_size=None), "image dimensions"),
+            (camera_home_frame((no_point,), captured_at=now), "action point"),
+            (camera_home_frame((out_of_image,), captured_at=now), "out-of-image"),
+            (camera_home_frame((malformed,), captured_at=now), "malformed"),
+            (camera_home_frame((measured_building_object(HomeCityObjectId.HERO_HALL), second), captured_at=now), "ambiguous"),
+        )
+        for defect, message in cases:
+            with self.subTest(message=message):
+                frames = iter((camera_home_frame(captured_at=now - timedelta(seconds=1)), defect))
+                actuator = Actuator()
+                core = NavigationCore(
+                    actuator,
+                    lambda _: observation(ScreenType.PNC_HERO_HALL),
+                    reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4),
+                    sleep=lambda _: None,
+                )
+                with self.assertRaisesRegex(RuntimeError, message):
+                    core.open_building(
+                        HomeCityObjectId.HERO_HALL,
+                        observe_content=lambda _: next(frames),
+                    )
+                self.assertEqual([], actuator.actions)
+
+
+    def test_open_building_stops_scan_on_unknown_popup_or_stale_follow_up(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        for follow_up in (
+            Observation(screen_type=ScreenType.UNKNOWN, visible_elements={}, captured_at=now + timedelta(seconds=2)),
+            Observation(screen_type=ScreenType.PNC_BAG, visible_elements={}, captured_at=now + timedelta(seconds=2)),
+            home_building_frame(captured_at=now, blocked=False),
+            home_building_frame(captured_at=now + timedelta(seconds=2), blocked=True),
+        ):
+            with self.subTest(screen=follow_up.screen_type, blocked=follow_up.blocking_popup):
+                actuator = Actuator()
+                content_frames = iter((
+                    camera_home_frame(captured_at=now),
+                    camera_home_frame(captured_at=now + timedelta(seconds=1)),
+                    follow_up,
+                ))
+                core = NavigationCore(
+                    actuator,
+                    lambda _: observation(ScreenType.PNC_INSTITUTE),
+                    reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4),
+                    sleep=lambda _: None,
+                )
+                step = qualified_pan_step(
+                    "up", axis="y", goal_atlas=(982, 1800),
+                    reason="pan_home_city_camera_institute_y",
+                )
+                with patch(
+                    "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+                    return_value=step,
+                ):
+                    with self.assertRaises(RuntimeError):
+                        core.open_building(
+                            HomeCityObjectId.INSTITUTE,
+                            observe_content=lambda _: next(content_frames),
+                        )
+                self.assertEqual(1, len(actuator.actions))
+                self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+
+    def test_open_building_rejects_unsupported_route_before_observation(self):
+        observed = Mock()
+        core = NavigationCore(
+            Actuator(),
+            lambda _: observation(ScreenType.PNC_HOME_CITY),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(ValueError, "return route"):
+            core.open_building(HomeCityObjectId.BANK, observe_content=observed)
+
+        observed.assert_not_called()
+
+
+    def test_institute_measured_open_taps_body_verified_target_without_queue_detour(self):
+        """A localized, body-verified in-band Institute opens with one tap and no focus detour."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        acquired: list[DetectedSpatialObject] = []
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame((target,), captured_at=now),
+                camera_home_frame((target,), captured_at=now + timedelta(seconds=1)),
+                camera_home_frame((target,), captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_INSTITUTE),
+                observation(ScreenType.PNC_INSTITUTE),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.INSTITUTE,
+            observe_content=lambda _: next(content_frames),
+            on_target_acquired=acquired.append,
+        )
+
+        self.assertEqual(ScreenType.PNC_INSTITUTE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual((154, 193), actuator.actions[0].target_point)
+        self.assertEqual([target], acquired)
+
+
+    def test_open_building_measured_pans_once_then_reacquires_and_taps(self):
+        """An out-of-band camera target produces one measured pan, fresh proof, then one tap."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame(captured_at=now),
+                camera_home_frame(captured_at=now + timedelta(seconds=1)),
+                camera_home_frame((target,), translation=(-1000, -710), captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_INSTITUTE),
+                observation(ScreenType.PNC_INSTITUTE),
+            )
+        )
+        records: list[dict[str, object]] = []
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+            record=records.append,
+        )
+
+        step = qualified_pan_step(
+            "up", axis="y", goal_atlas=(982, 1800),
+            reason="pan_home_city_camera_institute_y",
+        )
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+            return_value=step,
+        ) as planner:
+            result = core.open_building(
+                HomeCityObjectId.INSTITUTE,
+                observe_content=lambda _: next(content_frames),
+            )
+
+        self.assertEqual(ScreenType.PNC_INSTITUTE, result.screen_type)
+        self.assertEqual(1, planner.call_count)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("pan_home_city_camera_institute_y", actuator.actions[0].reason)
+        self.assertIsInstance(actuator.actions[1], TapSpatialObjectAction)
+        self.assertEqual((154, 193), actuator.actions[1].target_point)
+        self.assertIn("pending_building_pan", {event["event"] for event in records})
+
+
+    def test_open_building_measured_replans_after_partial_pan_before_single_tap(self):
+        """A partial first movement requires another measured pan before acquisition."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        frames = iter((
+            camera_home_frame(captured_at=now),
+            camera_home_frame(captured_at=now + timedelta(seconds=1)),
+            camera_home_frame(translation=(-732, -78), captured_at=now + timedelta(seconds=2)),
+            camera_home_frame((target,), translation=(-1000, -710), captured_at=now + timedelta(seconds=3)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_INSTITUTE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        step = qualified_pan_step(
+            "up", axis="y", goal_atlas=(982, 1800),
+            reason="pan_home_city_camera_institute_y",
+        )
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+            side_effect=[step, step],
+        ) as planner:
+            result = core.open_building(
+                HomeCityObjectId.INSTITUTE, observe_content=lambda _: next(frames)
+            )
+        self.assertEqual(ScreenType.PNC_INSTITUTE, result.screen_type)
+        self.assertEqual(2, planner.call_count)
+        self.assertEqual(3, len(actuator.actions))
+        self.assertTrue(all(isinstance(action, SwipeAction) for action in actuator.actions[:2]))
+        self.assertIsInstance(actuator.actions[2], TapSpatialObjectAction)
+        self.assertEqual((154, 193), actuator.actions[2].target_point)
+
+
+    def test_open_building_measured_lost_localization_after_pan_stops_without_tap(self):
+        """An unlocalized pose after a dispatched pan gets bounded passive recovery, never a tap."""
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        observed = Mock(side_effect=(
+            camera_home_frame(captured_at=now),
+            camera_home_frame(captured_at=now + timedelta(seconds=1)),
+            camera_home_frame(localized=False, captured_at=now + timedelta(seconds=2)),
+            camera_home_frame(localized=False, captured_at=now + timedelta(seconds=3)),
+            camera_home_frame(localized=False, captured_at=now + timedelta(seconds=4)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_INSTITUTE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        step = qualified_pan_step(
+            "up", axis="y", goal_atlas=(982, 1800),
+            reason="pan_home_city_camera_institute_y",
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+            return_value=step,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "could not be reacquired"):
+                core.open_building(HomeCityObjectId.INSTITUTE, observe_content=observed)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+
+    def test_open_building_measured_never_taps_ocr_only_targets(self):
+        """A correctly spelled label without a current-frame body match cannot authorize a tap."""
+        label_only = DetectedSpatialObject(
+            kind=SpatialObjectKind.HOME_BUILDING,
+            bounds=Bounds(220, 470, 100, 100),
+            action_point=(270, 520),
+            source_kind=SpatialObjectSourceKind.OCR,
+            metadata={"home_city_object_id": HomeCityObjectId.INSTITUTE.value},
+        )
+        core, actuator, _ = self.make_core([])
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content = iter((
+            camera_home_frame((label_only,), captured_at=now),
+            camera_home_frame((label_only,), captured_at=now + timedelta(seconds=1)),
+        ))
+
+        with self.assertRaisesRegex(RuntimeError, "no current-frame match|absent or ambiguous"):
+            core.open_visible_building(
+                HomeCityObjectId.INSTITUTE,
+                observe_content=lambda _: next(content),
+                require_measured=True,
+            )
+        self.assertEqual(actuator.actions, [])
+
+
+    def test_open_building_measured_stalled_pan_fails_closed_before_tap(self):
+        """A post-pan frame with the same translation proves no camera motion and blocks the tap."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame(captured_at=now),
+                camera_home_frame(captured_at=now + timedelta(seconds=1)),
+                camera_home_frame(
+                    (target,), translation=(-532, 222), captured_at=now + timedelta(seconds=2),
+                ),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_INSTITUTE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        step = qualified_pan_step(
+            "up", axis="y", goal_atlas=(982, 1800),
+            reason="pan_home_city_camera_institute_y",
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+            side_effect=[step, SelectorResolutionError("no qualified lane remains")],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "no camera movement"):
+                core.open_building(
+                    HomeCityObjectId.INSTITUTE,
+                    observe_content=lambda _: next(content_frames),
+                )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+
+    def test_open_building_zoom_change_after_pan_stops_without_replan_or_tap(self):
+        """A measured zoom departure after normalization stops the scan; nothing is replayed."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame(captured_at=now),
+                camera_home_frame(captured_at=now + timedelta(seconds=1)),
+                camera_home_frame(
+                    (target,), translation=(-778, 78), zoom=1.25,
+                    captured_at=now + timedelta(seconds=2),
+                ),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_INSTITUTE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        step = qualified_pan_step(
+            "up", axis="y", goal_atlas=(982, 1800),
+            reason="pan_home_city_camera_institute_y",
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+            return_value=step,
+        ) as planner:
+            with self.assertRaisesRegex(RuntimeError, "scale changed after normalization"):
+                core.open_building(
+                    HomeCityObjectId.INSTITUTE, observe_content=lambda _: next(content_frames),
+                )
+        self.assertEqual(1, planner.call_count)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+
+    def test_open_building_measured_small_zoom_drift_keeps_pan_progress(self):
+        """A moved view center with zoom drift inside tolerance still passes the stall check."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        # View center moves from atlas (982, 578) toward the target while zoom
+        # drifts to 1.01 — inside the 0.02 departure tolerance, so the pan is
+        # judged on its measured movement, not the incidental scale noise.
+        content_frames = iter(
+            (
+                camera_home_frame(captured_at=now),
+                camera_home_frame(captured_at=now + timedelta(seconds=1)),
+                camera_home_frame(
+                    (target,), translation=(-878, -22), zoom=1.01,
+                    captured_at=now + timedelta(seconds=2),
+                ),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_INSTITUTE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        step = qualified_pan_step(
+            "right", axis="x", goal_atlas=(1500, 778),
+            reason="pan_home_city_camera_institute_x",
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+            return_value=step,
+        ):
+            result = core.open_building(
+                HomeCityObjectId.INSTITUTE, observe_content=lambda _: next(content_frames)
+            )
+        self.assertEqual(ScreenType.PNC_INSTITUTE, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertIsInstance(actuator.actions[1], TapSpatialObjectAction)
+        self.assertEqual((154, 193), actuator.actions[1].target_point)
+
+
+    def test_open_building_measured_wrong_destination_does_not_repeat_tap(self):
+        """A tap that reaches a different screen is not repeated."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                camera_home_frame((target,), captured_at=now),
+                camera_home_frame((target,), captured_at=now + timedelta(seconds=1)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_CASTLE),
+                observation(ScreenType.PNC_CASTLE),
+                observation(ScreenType.PNC_CASTLE),
+                observation(ScreenType.PNC_CASTLE),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            core.open_building(
+                HomeCityObjectId.INSTITUTE,
+                observe_content=lambda _: next(content_frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)

@@ -22,7 +22,7 @@ from pnc_automation.app.pnc.navigation.spatial_navigation import plan_home_city_
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from tests.unit.app.pnc.navigation.test_home_city_slot_selection import _body, _core, _NOW
-from tests.unit.app.pnc.navigation.test_navigation_core import (
+from tests.support.pnc.navigation.core_home import (
     camera_home_frame, home_building_frame, qualified_pan_step,
 )
 

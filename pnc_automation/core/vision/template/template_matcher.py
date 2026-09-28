@@ -120,14 +120,14 @@ class _MatchContext:
 
 
 class DecodedTemplateCache:
-    """Thread-safe bounded cache for successfully decoded template images."""
+    """Thread-safe bounded cache for decoded templates and scaled variants."""
 
     def __init__(self, max_size: int = _DEFAULT_TEMPLATE_CACHE_SIZE) -> None:
         if isinstance(max_size, bool) or not isinstance(max_size, int) or max_size <= 0:
             raise ValueError("template cache max_size must be a positive integer")
         self._max_size = max_size
         self._entries: OrderedDict[
-            tuple[Path, int, int], _DecodedTemplate
+            tuple[Path, int, int, float | None], _DecodedTemplate
         ] = OrderedDict()
         self._lock = RLock()
 
@@ -140,21 +140,73 @@ class DecodedTemplateCache:
 
         resolved = _validate_template_path(path)
         stat = _stat_template(resolved)
-        key = (resolved, stat.st_mtime_ns, stat.st_size)
+        key = (resolved, stat.st_mtime_ns, stat.st_size, None)
         with self._lock:
             cached = self._entries.get(key)
             if cached is not None:
                 self._entries.move_to_end(key)
                 return cached
-            for old_key in tuple(self._entries):
-                if old_key[0] == resolved:
-                    del self._entries[old_key]
+            self._discard_stale_versions(resolved, stat.st_mtime_ns, stat.st_size)
             decoded = loader(resolved)
-            self._entries[key] = decoded
-            self._entries.move_to_end(key)
-            while len(self._entries) > self._max_size:
-                self._entries.popitem(last=False)
+            self._remember(key, decoded)
             return decoded
+
+    def _get_scaled(
+        self,
+        path: Path,
+        template_scale: float,
+    ) -> _DecodedTemplate | None:
+        """Return a cached scaled template, validating the current file version."""
+
+        scale = _validate_template_scale(template_scale)
+        if scale == 1.0:
+            return self.get(path)
+
+        resolved = _validate_template_path(path)
+        stat = _stat_template(resolved)
+        file_key = (resolved, stat.st_mtime_ns, stat.st_size)
+        scaled_key = (*file_key, scale)
+        decoded_key = (*file_key, None)
+        with self._lock:
+            cached = self._entries.get(scaled_key)
+            if cached is not None:
+                self._entries.move_to_end(scaled_key)
+                return cached
+            self._discard_stale_versions(resolved, stat.st_mtime_ns, stat.st_size)
+
+            decoded = self._entries.get(decoded_key)
+            if decoded is None:
+                decoded = _decode_template(resolved)
+                self._remember(decoded_key, decoded)
+            scaled = _scale_decoded_template(decoded, scale)
+            if scaled is None:
+                return None
+            self._remember(scaled_key, scaled)
+            return scaled
+
+    def _discard_stale_versions(
+        self,
+        path: Path,
+        modified_ns: int,
+        size: int,
+    ) -> None:
+        """Remove cached entries for older versions of one template path."""
+
+        for key in tuple(self._entries):
+            if key[0] == path and key[1:3] != (modified_ns, size):
+                del self._entries[key]
+
+    def _remember(
+        self,
+        key: tuple[Path, int, int, float | None],
+        decoded: _DecodedTemplate,
+    ) -> None:
+        """Insert one cache entry and enforce the shared LRU bound."""
+
+        self._entries[key] = decoded
+        self._entries.move_to_end(key)
+        while len(self._entries) > self._max_size:
+            self._entries.popitem(last=False)
 
     def clear(self) -> None:
         """Discard all decoded templates held by this cache."""
@@ -169,6 +221,9 @@ class DecodedTemplateCache:
         return self._max_size
 
 
+_default_template_cache = DecodedTemplateCache(max_size=512)
+
+
 class OpenCvTemplateMatcher:
     """Find templates with normalized correlation and an absolute-color guard.
 
@@ -181,7 +236,11 @@ class OpenCvTemplateMatcher:
     """
 
     def __init__(self, template_cache: DecodedTemplateCache | None = None) -> None:
-        self._template_cache = template_cache or DecodedTemplateCache()
+        self._template_cache = (
+            template_cache
+            if template_cache is not None
+            else _default_template_cache
+        )
 
     def prepare_frame(
         self,
@@ -472,12 +531,9 @@ class OpenCvTemplateMatcher:
                 threshold=threshold,
                 template_scale=template_scale,
             )
-        decoded = self._template_cache.get(template_path)
-        if template_scale != 1.0:
-            decoded_native = _scale_decoded_template(decoded, template_scale)
-            if decoded_native is None:
-                return None
-            decoded = decoded_native
+        decoded = self._template_cache._get_scaled(template_path, template_scale)
+        if decoded is None:
+            return None
         template_height, template_width = decoded.rgb.shape[:2]
         native_width, native_height = image.reference_size
         best: TemplateMatch | None = None
@@ -536,11 +592,9 @@ class OpenCvTemplateMatcher:
                 width=frame.reference_size[0],
                 height=frame.reference_size[1],
             )
-        decoded = self._template_cache.get(template_path)
-        if template_scale != 1.0:
-            decoded = _scale_decoded_template(decoded, template_scale)
-            if decoded is None:
-                return None
+        decoded = self._template_cache._get_scaled(template_path, template_scale)
+        if decoded is None:
+            return None
         template_height, template_width = decoded.rgb.shape[:2]
         if template_width > region.width or template_height > region.height:
             return None
@@ -675,14 +729,7 @@ def _scale_decoded_template(
     allocates fresh output.
     """
 
-    if (
-        isinstance(template_scale, bool)
-        or not isinstance(template_scale, Real)
-        or not math.isfinite(float(template_scale))
-        or float(template_scale) <= 0.0
-    ):
-        raise ValueError("template_scale must be a positive finite number")
-    scale = float(template_scale)
+    scale = _validate_template_scale(template_scale)
     height, width = decoded.rgb.shape[:2]
     scaled_width = max(1, int(round(width * scale)))
     scaled_height = max(1, int(round(height * scale)))
@@ -698,6 +745,19 @@ def _scale_decoded_template(
     if not np.any(scaled_alpha):
         return None
     return _DecodedTemplate(rgb=scaled_rgb, alpha=scaled_alpha)
+
+
+def _validate_template_scale(template_scale: float) -> float:
+    """Return a valid normalized template scale."""
+
+    if (
+        isinstance(template_scale, bool)
+        or not isinstance(template_scale, Real)
+        or not math.isfinite(float(template_scale))
+        or float(template_scale) <= 0.0
+    ):
+        raise ValueError("template_scale must be a positive finite number")
+    return float(template_scale)
 
 
 def _aspect_ratio_error(

@@ -140,7 +140,7 @@ class ChatArchiveStore:
             snapshot = validate_snapshot(snapshot)
         except ChatArchiveSchemaError as error:
             raise ChatArchiveConsistencyError("Chat snapshot is malformed.") from error
-        archive_day = captured_at.astimezone().date().isoformat()
+        archive_day = _host_local_archive_day(captured_at)
         directory = self._build_directory_for_local_day(
             account_id=account_id,
             castle=castle,
@@ -478,7 +478,7 @@ class ChatArchiveStore:
             account_id=account_id,
             castle=castle,
             channel=channel,
-            local_day=captured_at.astimezone().date().isoformat(),
+            local_day=_host_local_archive_day(captured_at),
         )
 
     def _build_directory_for_local_day(self, *, account_id: str, castle: CastleIdentity, channel: ChatChannel, local_day: str) -> Path:
@@ -708,6 +708,11 @@ def _equal_timestamp_observation_is_allowed(previous: VisibleChatSnapshot, curre
     if _entries_match(previous.entries, current.entries):
         return True
     return bool(previous.entries) and not current.entries
+
+
+def _host_local_archive_day(captured_at: datetime) -> str:
+    """Project a capture onto the host-local day used by the archive layout."""
+    return captured_at.astimezone().date().isoformat()
 
 
 def _format_append_bytes(*, captured_at: datetime, entries: tuple[NormalizedPlayerChatEntry, ...]) -> bytes:

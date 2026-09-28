@@ -10,7 +10,7 @@ from pnc_automation.app.pnc.navigation.home_city_scan import HomeCityScanError
 from tests.unit.app.pnc.navigation.test_home_city_normalization import (
     _BODY, _TARGET, frame, home, operation,
 )
-from tests.unit.app.pnc.navigation.test_navigation_core import Actuator
+from tests.support.pnc.navigation.core_frames import Actuator
 
 
 class HomeFinalFrameTests(unittest.TestCase):

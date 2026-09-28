@@ -24,9 +24,9 @@ from pnc_automation.app.pnc.navigation.spatial_navigation import HomeCityCameraP
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.image.models import Bounds
-from tests.unit.app.pnc.navigation.test_navigation_core import (
-    Actuator, camera_home_frame, mail_frame as frame, measured_building_object,
-)
+from tests.support.pnc.navigation.core_frames import Actuator
+from tests.support.pnc.navigation.core_home import camera_home_frame, measured_building_object
+from tests.support.pnc.navigation.core_mail import mail_frame as frame
 
 _NOW = datetime(2026, 9, 28, tzinfo=UTC)
 _TARGET = HomeCityObjectId.ILLUSORY_BEAST_MANOR

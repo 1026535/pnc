@@ -686,6 +686,10 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
         """Inherited overlap with no rows creates explicit no-transcript state for the new day."""
 
         zone = ZoneInfo("America/Toronto")
+        self.enterContext(patch(
+            "pnc_automation.app.pnc.persistence.chat_archive_store._host_local_archive_day",
+            side_effect=lambda captured: captured.astimezone(zone).date().isoformat(),
+        ))
         before_midnight = datetime(2026, 1, 1, 23, 59, tzinfo=zone)
         after_midnight = before_midnight + timedelta(minutes=2)
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -714,6 +718,10 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
         """Spring-forward local dates retain the prior-day overlap without borrowing its bytes."""
 
         zone = ZoneInfo("America/Toronto")
+        self.enterContext(patch(
+            "pnc_automation.app.pnc.persistence.chat_archive_store._host_local_archive_day",
+            side_effect=lambda captured: captured.astimezone(zone).date().isoformat(),
+        ))
         before_dst_day = datetime(2026, 3, 7, 23, 59, tzinfo=zone)
         on_dst_day = datetime(2026, 3, 8, 3, 1, tzinfo=zone)
         with tempfile.TemporaryDirectory() as temporary_directory:

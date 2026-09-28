@@ -191,6 +191,52 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
 
         self.assertEqual(decode.call_count, 1)
 
+    def test_scaled_variants_are_shared_between_default_matchers(self) -> None:
+        image = _textured_image((80, 60))
+        template = image.crop((23, 17, 39, 31))
+        path = self._save(template)
+        prepared = self.matcher.prepare_frame(image)
+        second_matcher = OpenCvTemplateMatcher()
+        assert prepared is not None
+
+        with (
+            mock.patch.object(
+                matcher_module,
+                "_decode_template",
+                wraps=matcher_module._decode_template,
+            ) as decode,
+            mock.patch.object(
+                matcher_module,
+                "_scale_decoded_template",
+                wraps=matcher_module._scale_decoded_template,
+            ) as scale,
+        ):
+            first = self.matcher.find_best_match(
+                prepared, path, threshold=0.0, template_scale=1.25
+            )
+            second = second_matcher.find_best_match(
+                prepared, path, threshold=0.0, template_scale=1.25
+            )
+
+        self.assertEqual(first, second)
+        self.assertIsNotNone(first)
+        self.assertEqual(1, decode.call_count)
+        self.assertEqual(1, scale.call_count)
+
+    def test_scaled_template_cache_invalidates_changed_file(self) -> None:
+        cache = DecodedTemplateCache(max_size=4)
+        path = self._save(Image.new("RGB", (16, 14), (10, 20, 30)))
+
+        first = cache._get_scaled(path, 1.25)
+        self.assertIsNotNone(first)
+        Image.new("RGB", (24, 18), (30, 40, 50)).save(path)
+        second = cache._get_scaled(path, 1.25)
+
+        self.assertIsNotNone(second)
+        assert second is not None
+        self.assertEqual((22, 30, 3), second.rgb.shape)
+        self.assertEqual(2, len(cache._entries))  # type: ignore[attr-defined]
+
     def test_template_cache_invalidates_changed_file(self) -> None:
         image = _textured_image((80, 60))
         first = image.crop((23, 17, 39, 31))
@@ -211,11 +257,17 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
             for color in ((10, 20, 30), (40, 50, 60), (70, 80, 90))
         ]
 
-        for path in paths:
-            cache.get(path)
+        for scaled in (False, True):
+            with self.subTest(scaled=scaled):
+                cache.clear()
+                for path in paths:
+                    if scaled:
+                        cache._get_scaled(path, 1.1)
+                    else:
+                        cache.get(path)
 
-        self.assertLessEqual(len(cache._entries), 2)  # type: ignore[attr-defined]
-        self.assertNotIn(paths[0].resolve(), {key[0] for key in cache._entries})  # type: ignore[attr-defined]
+                self.assertLessEqual(len(cache._entries), 2)  # type: ignore[attr-defined]
+                self.assertNotIn(paths[0].resolve(), {key[0] for key in cache._entries})  # type: ignore[attr-defined]
 
     def test_cached_file_deletion_is_validated(self) -> None:
         path = self._save(Image.new("RGB", (3, 3), (10, 20, 30)))

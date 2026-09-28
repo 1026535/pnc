@@ -29,6 +29,7 @@ from tools.test_selection.git_changes import base_revision, changed_paths, pytho
 from tools.test_selection.models import COVERAGE_SELECTED_TIERS, SelectionPlan, inventory
 from tools.test_selection.ownership import group_matches, load_rules
 from tools.test_selection.planner import affected_plan
+from tools.test_selection.sharding import shard_modules
 from tools.test_selection.reporting import (
     TimedTestSuite,
     TimingResult,
@@ -85,7 +86,15 @@ def main(argv: list[str] | None = None) -> int:
               "unit and architecture tests; measure produces the seed"),
     )
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--shard-index", type=int, default=0, help="Zero-based execution shard")
+    parser.add_argument("--shard-count", type=int, default=1, help="Number of execution shards")
     args = parser.parse_args(argv)
+    try:
+        shard_modules((), args.shard_index, args.shard_count)
+    except ValueError as error:
+        parser.error(str(error))
+    if args.mode == "measure" and args.shard_count != 1:
+        parser.error("coverage measurement requires an unsharded complete run")
     # Portable runs have no authority to activate opt-in runtime tests.
     for key in tuple(os.environ):
         if key.startswith("PNC_RUN_LIVE"):
@@ -155,15 +164,24 @@ def main(argv: list[str] | None = None) -> int:
         plan.source_fingerprint = candidate_fingerprint
         plan.inventory_modules = sorted(test.module for test in tests)
         selection_seconds = round(time.perf_counter() - selection_started, 6)
-        write_json(args.json, plan.document())
+        execution_modules = shard_modules(plan.reasons, args.shard_index, args.shard_count)
+        selection_document = plan.document()
+        selection_document["execution_shard"] = {
+            "index": args.shard_index, "count": args.shard_count,
+            "modules": execution_modules,
+        }
+        write_json(args.json, selection_document)
         print(f"{args.mode}: {len(plan.reasons)}/{len(tests)} portable modules; {len(plan.fallbacks)} full-suite reasons", flush=True)
+        if args.shard_count > 1:
+            print(f"Execution shard {args.shard_index}/{args.shard_count}: {len(execution_modules)} modules", flush=True)
         if args.explain or args.dry_run:
-            print(json.dumps(plan.document(), indent=2))
+            print(json.dumps(selection_document, indent=2))
         if args.dry_run:
             return 0
-        if not plan.reasons:
-            print("No test execution required: unchanged or explicitly documentation-only changes.")
-            write_json(args.results, {"head": head, "tests": [], "succeeded": True, "no_tests_reason": "unchanged or documentation-only", "selection": plan.document()})
+        if not execution_modules:
+            reason = "empty execution shard" if plan.reasons else "unchanged or documentation-only"
+            print(f"No test execution required: {reason}.")
+            write_json(args.results, {"head": head, "tests": [], "succeeded": True, "no_tests_reason": reason, "selection": selection_document})
             return 0
         collection_started = time.perf_counter()
         coverage = None
@@ -180,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         loader = unittest.TestLoader()
         selected = unittest.TestSuite(
             TimedTestSuite(name, loader.loadTestsFromName(name))
-            for name in sorted(plan.reasons)
+            for name in execution_modules
         )
         discovered = describe_tests(flatten(selected))
         ids = [test["test_id"] for test in discovered]
@@ -240,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
                     "reporting_seconds": phase_seconds["reporting"],
                     "test_execution_seconds": timing["test_execution_seconds"],
                     "unattributed_seconds": timing["unattributed_seconds"]}
-        report = {"metadata": metadata, "environment": env, "selection": plan.document(),
+        report = {"metadata": metadata, "environment": env, "selection": selection_document,
                   "discovered_test_ids": ids, "discovered_tests": discovered,
                   "inventory_modules": plan.inventory_modules,
                   "tests": records, "timing": timing,

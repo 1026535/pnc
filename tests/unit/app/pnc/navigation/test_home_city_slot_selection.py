@@ -19,10 +19,10 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.spatial_navigation import plan_home_city_camera_pan
 from pnc_automation.core.errors import SelectorResolutionError
-from tests.unit.app.pnc.navigation.test_navigation_core import (
+from tests.support.pnc.navigation.core_frames import observation
+from tests.support.pnc.navigation.core_home import (
     camera_home_frame,
     measured_building_object,
-    observation,
 )
 
 

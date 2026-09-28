@@ -10,13 +10,14 @@ full:
   - tools/test_selection/*
   - tests/selection_rules.yaml
   - tests/__init__.py
-  - tests/support/*
+  - tests/support/paths.py
+  - tests/support/python_sources.py
+  - tests/support/fixture_profile.py
   - tests/*/__init__.py
   - tests/data/*
   - tests/local_fixture_artifacts.py
   - pnc_automation/*/__init__.py
   - pnc_automation/__init__.py
-  - pnc_automation/app/pnc/domain/*
   - pnc_automation/app/authoring/config/*
   - pnc_automation/core/config/*
   - pnc_automation/app/authoring/scripts/registry.py

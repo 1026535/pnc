@@ -114,6 +114,27 @@ class RunnerCliTests(unittest.TestCase):
         self.loader_factory.assert_not_called()
         self.assertEqual(self.executed, [])
 
+    def test_shard_runs_only_its_partition_and_retains_complete_selection(self) -> None:
+        other = "tests/unit/sample/test_other.py"
+        self.files[other] = "pass\n"
+        (self.root / other).write_text("pass\n", encoding="utf-8")
+        with patch.object(run_tests, "working_paths", return_value=list(self.files)):
+            self.assertEqual(self.invoke("full", "--shard-index", "1", "--shard-count", "2"), 0)
+        self.assertEqual(self.executed, ["tests.unit.sample.test_other"])
+        plan = self.document("selection.json")
+        self.assertEqual(len(plan["reasons"]), 2)
+        self.assertEqual(plan["execution_shard"], {
+            "index": 1, "count": 2, "modules": ["tests.unit.sample.test_other"],
+        })
+
+    def test_empty_shard_writes_success_without_importing_tests(self) -> None:
+        self.assertEqual(self.invoke("full", "--shard-index", "3", "--shard-count", "4"), 0)
+        self.loader_factory.assert_not_called()
+        report = self.document("results.json")
+        self.assertTrue(report["succeeded"])
+        self.assertEqual(report["no_tests_reason"], "empty execution shard")
+        self.assertEqual(len(report["selection"]["reasons"]), 1)
+
     def test_documentation_dry_run_never_loads_or_executes_tests(self) -> None:
         self.assertEqual(self.invoke("affected", "--base", "base", "--dry-run"), 0)
         self.loader_factory.assert_not_called()

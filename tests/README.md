@@ -33,6 +33,9 @@ missing defaults skip without reading machine-local fixture configuration.
 # Complete portable inventory for a manual baseline.
 .venv/Scripts/python.exe tools/run_tests.py full
 
+# One zero-based execution partition; run indices 0 through 3 for full coverage.
+.venv/Scripts/python.exe tools/run_tests.py full --shard-index 0 --shard-count 4 --results .test-impact/shard-0-results.json
+
 # Inspect affected selection without importing or executing test modules.
 .venv/Scripts/python.exe tools/run_tests.py affected --base origin/main --dry-run --explain
 
@@ -63,6 +66,16 @@ fail-closed baseline. CI invokes `affected` for every event; the selector can
 still require the full inventory. `measure` runs the full inventory with
 instrumentation; compare its timings separately from
 uninstrumented `full`.
+CI runs four isolated Windows jobs. Each computes the same affected plan,
+then executes a disjoint round-robin partition of its sorted module names.
+The `Portable tests (affected)` gate requires every job to pass. Full fallbacks
+retain every test; a small plan may leave successful empty partitions.
+Use unique report paths for concurrent partitions in one checkout.
+Each selection JSON retains the complete plan plus its `execution_shard`.
+Coverage measurement remains unsharded because partial runs cannot publish a
+complete coverage seed. Failures and errors print tracebacks immediately so a
+later timeout does not hide them.
+
 The runner limits collection to the four portable tiers. Existing opt-in live
 tests and commands remain separate; none of these commands authorizes or starts
 live testing. No emulator, ADB, account credentials, or live game state is needed.
@@ -96,6 +109,15 @@ production files. A directly changed test module always runs. Only unchanged
 or explicitly documented documentation-only changes may select no tests.
 Unknown groups and unexpectedly empty collection are errors. `--dry-run`
 proves selection only and produces no execution result.
+
+Feature-specific support helpers and private domain implementation changes
+use their static consumers and component owners. Global fixture paths,
+source-scanning helpers, bootstrap files, public signature/model changes,
+unknown consumers, and other shared infrastructure retain full fallbacks.
+Camera tests are split by catalog, localization, consensus, zoom, targets,
+surface and view behavior. Navigation tests separate transitions, buildings,
+Campaign, Manor, chat, mail, research, trial and Workshop routes. Shared
+doubles live in support modules; tests should not import another test suite.
 
 Selection broadens to the full portable suite when it cannot establish safe
 ownership: shared test infrastructure, packaging/dependencies, public contract

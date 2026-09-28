@@ -260,10 +260,19 @@ class TimingResult(unittest.TextTestResult):
     def addFailure(self, test, err):
         self.outcome(test, "failed")
         super().addFailure(test, err)
+        self._print_failure_now(test, err)
 
     def addError(self, test, err):
         self.outcome(test, "error")
         super().addError(test, err)
+        self._print_failure_now(test, err)
+
+    def _print_failure_now(self, test, err) -> None:
+        """Keep the traceback in CI logs even when a later test times out."""
+        self.stream.writeln()
+        self.stream.writeln(f"Immediate failure details: {test.id()}")
+        self.stream.writeln(self._exc_info_to_string(err, test))
+        self.stream.flush()
 
     def addSkip(self, test, reason):
         # unittest reports a subtest skip separately but does not start that ID.
@@ -284,6 +293,8 @@ class TimingResult(unittest.TextTestResult):
             status = "failed" if issubclass(err[0], test.failureException) else "error"
             self.outcome(test, status)
         super().addSubTest(test, subtest, err)
+        if err is not None:
+            self._print_failure_now(subtest, err)
 
 
 def write_timings(path: Path, records: list[dict], metadata: dict) -> None:
