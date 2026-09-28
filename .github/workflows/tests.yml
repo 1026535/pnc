@@ -11,7 +11,11 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Exact commit SHA, branch, or tag to run full tests against'
+        description: 'Exact candidate commit SHA, branch, or tag'
+        required: true
+        type: string
+      base:
+        description: 'Ancestor commit SHA, branch, or tag to compare with the candidate'
         required: true
         type: string
 
@@ -24,7 +28,7 @@ concurrency:
 
 jobs:
   offline:
-    name: Portable tests (${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'affected' || 'full' }})
+    name: Portable tests (affected)
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
@@ -46,63 +50,27 @@ jobs:
       - name: Install portable test dependencies
         run: python -m pip install ".[test]"
 
-      - name: Restore candidate base coverage map
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/cache/restore@v6
-        with:
-          path: .test-impact/contexts.json
-          key: portable-contexts-v2-${{ runner.os }}-py313-${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-
-      - name: Restore trusted coverage map
-        id: trusted_coverage_map
-        if: github.event_name == 'push' || github.event_name == 'schedule'
-        uses: actions/cache/restore@v6
-        with:
-          path: .test-impact/contexts.json
-          key: portable-contexts-v2-${{ runner.os }}-py313-${{ github.sha }}
-
-      - name: Record nightly selector audit
-        if: github.event_name == 'schedule'
-        continue-on-error: true
-        run: |
-          python tools/run_tests.py affected --base 'HEAD^' --dry-run --explain --json .test-impact/audit-selection.json
-          $auditExit = $LASTEXITCODE
-          if ($auditExit -ne 0) {
-            Write-Warning 'Selector audit failed; the independent full measurement will still run.'
-          }
-          exit $auditExit
-
-      - name: Run portable tests
+      - name: Run affected portable tests
         env:
           TEST_EVENT: ${{ github.event_name }}
-          TEST_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          TEST_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || inputs.base }}
         run: |
-          if ($env:TEST_EVENT -eq 'pull_request' -or $env:TEST_EVENT -eq 'merge_group') {
-            python tools/run_tests.py affected --base "$env:TEST_BASE_SHA" --contexts --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
-          } elseif ($env:TEST_EVENT -eq 'push' -or $env:TEST_EVENT -eq 'schedule') {
-            python tools/run_tests.py measure --contexts --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
-          } else {
-            python tools/run_tests.py full --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
+          $testBase = $env:TEST_BASE_SHA
+          if ($env:TEST_EVENT -eq 'schedule') {
+            $testBase = 'HEAD^'
           }
-          exit $LASTEXITCODE
-
-      - name: Save trusted coverage map
-        if: >-
-          success() &&
-          (github.event_name == 'push' || github.event_name == 'schedule') &&
-          steps.trusted_coverage_map.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: .test-impact/contexts.json
-          key: portable-contexts-v2-${{ runner.os }}-py313-${{ github.sha }}
-
-      - name: Audit nightly selection against full results
-        if: >-
-          always() && github.event_name == 'schedule' &&
-          hashFiles('.test-impact/audit-selection.json') != '' &&
-          hashFiles('.test-impact/results.json') != ''
-        run: |
-          python tools/audit_test_selection.py .test-impact/audit-selection.json .test-impact/results.json --output .test-impact/audit-result.json
+          if ([string]::IsNullOrWhiteSpace($testBase) -or $testBase -match '^0+$') {
+            throw 'Affected CI requires a nonempty comparison base; use manual ref/base inputs for an initial push.'
+          }
+          $resolvedBase = git rev-parse --verify --end-of-options "${testBase}^{commit}"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Comparison base is not an available commit: $testBase"
+          }
+          git merge-base --is-ancestor "$resolvedBase" HEAD
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Comparison base must be an ancestor of the checked-out candidate.'
+          }
+          python tools/run_tests.py affected --base "$resolvedBase" --verbose --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
           exit $LASTEXITCODE
 
       - name: Upload selection and result evidence
@@ -117,7 +85,3 @@ jobs:
             .test-impact/selection.json
             .test-impact/results.json
             .test-impact/timings.csv
-            .test-impact/coverage.json
-            .test-impact/contexts.json
-            .test-impact/audit-selection.json
-            .test-impact/audit-result.json
