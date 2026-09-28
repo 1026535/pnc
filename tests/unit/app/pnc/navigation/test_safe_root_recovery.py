@@ -82,3 +82,9 @@ class SafeRootRecoveryTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+
+    def test_return_to_safe_root_screen_refuses_cash_mall_without_measured_back(self) -> None:
+        """Refuses the captured Cash Mall when the measured Back is absent instead of sending Android Back."""
+
+        with self.assertRaisesRegex(SelectorResolutionError, "Cash Mall requires the measured top-left Back control"):
+            self.flows.return_to_safe_root_screen(make_observation(ScreenType.PNC_CASH_MALL))
