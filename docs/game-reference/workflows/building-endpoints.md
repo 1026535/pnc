@@ -39,3 +39,67 @@ Prefab declarations are corroborated by `uis/winsprefabtype.lua`; window identif
 ## Remaining uncertainty
 
 The recovered source does not prove current downloaded-script overrides, server unlock rules, current text/layout, or return behavior. Bank and Dragondom remain unpromoted until independent live captures establish their current screen identities and measured return controls. Blacksmith remains without a reviewed return until a second exact live group can run after the generic VIP foreground identity is qualified. Shared-prefab branches do not collapse exact building identity or authorize upgrade actions.
+
+## V44 capture constraints — source recheck September 28, 2026
+
+These findings are **repository-proven for the recovered 5.0.203 / 233 client,
+high confidence**. They were rechecked offline against the accepted APK evidence
+root; they are not new observations of the installed game. The live correspondence
+and uncertainty above describe the September 14 checkpoint. Later V44 route
+acceptance is recorded in the coordinator's revision-bound evidence ledger.
+
+### Asset identity and occupied slots
+
+`scenes/cityscene/buildpositionitem.lua:64-82` obtains the current building DTO
+for a position before selecting its visible building. `LoadBuildingSkin` at
+lines 108-122 resolves the type through
+`scenes/cityscene/types/cityresourcepath.lua:GetBuildPrefabPath`, which maps to
+`Scenes/CityScene/builds_F/<type>.prefab`. The lookup establishes a useful semantic
+asset binding; it does not establish the current occupant from slot eligibility.
+The position table's inherited defaults must be applied when reading its rows.
+
+Use the extracted layout to plan relative movement and prefab identities to
+organize capture groups. Neither supplies current native body pixels, an interior
+tap region, visual availability, nor proof that all level/skin variants look
+equivalent. New body bindings still need a native source view and a distinct
+holdout; automatic input retains the shared current-frame body/slot contract.
+
+### Warehouse body entry
+
+`buildings/items/builditem_1005.lua:OnMouseClick` delegates to
+`buildings/components/buildclickcomponent.lua:ClickHandler`. With a current DTO,
+that component calls `BuildTableData:OpenBuildWin`; the `CELLARID` branch in
+`vo/buildtabledata.lua:153-154` opens `CELLAR_WIN`. This is a candidate Warehouse
+entry chain. Native body identity, current destination layout and return still
+require observation before a new automatic acquisition is accepted.
+
+### Bank can have an intermediate Home menu
+
+`buildings/items/builditem_5001.lua:OnMouseClick` checks unlock conditions first.
+Below the auction-house opening level it directly calls the Bank dispatcher.
+Otherwise a body click toggles the on-city menu; `Btn1` calls the Bank dispatcher
+and `Btn2` opens `AUCTION_HOUSE_WIN`. The Bank dispatcher maps to
+`TREASURE_CAVE_WIN` in `vo/buildtabledata.lua:198-199`.
+
+A Home frame immediately after the body tap therefore need not mean that the
+tap failed. Capture the intermediate menu when present, positively identify the
+visible Bank entry control, then observe the actual destination and return.
+Do not infer a production screen identity, button coordinates or current unlock
+level from these symbols. Do not enter the auction branch to qualify Bank.
+
+### Resource body taps may collect before opening
+
+The body handlers for client types 1015, 1016, 1017 and 1019 first check
+`GetHasResPop()`. When true they call `OnNormalResourcePopClick(buildDto.id)` and
+return before the ordinary building-window dispatcher. For example,
+`buildings/items/builditem_1016.lua:136-152` contains this branch. These types map
+to Gold Mine, Farm, Lumber Camp and Iron Mine in the canonical slot catalog.
+Moon Well (1027) has the same collection branch with an additional capacity check
+at `builditem_1027.lua:136-156`.
+
+Choosing a body point away from the bubble does not by itself make these taps
+non-claiming. Under a no-claim live assignment, capture the body passively and
+qualify a current non-collecting entry state before tapping. A visible harvest
+state leaves that entry case pending unless collection is separately authorized;
+it is neither unavailable nor a passed route. This source rule does not authorize
+collecting, upgrading or spending to create a test precondition.
