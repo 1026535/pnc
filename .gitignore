@@ -9,6 +9,10 @@ __pycache__/
 coverage.json
 htmlcov/
 
+# Package-install output must not enter affected-test source discovery.
+/build/
+/pnc_automation.egg-info/
+
 # Generated local output (preserve locally; do not commit)
 /test_timings.csv
 .testmondata*
