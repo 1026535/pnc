@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from pnc_automation.app.automation.engine.observed_action_executor import (
     ObservedActionExecutionPolicy,
@@ -30,7 +31,7 @@ class ObservedActionSettlingTests(AutomationFrameworkFixtures, unittest.TestCase
     """Proves observed action settling."""
 
     def test_observed_action_executor_escalates_unknown_navigation_destination_to_full_runtime_observation(self) -> None:
-        """Promotes settled unknown navigation results to one broad runtime observation before returning."""
+        """Broadens unknown navigation observations while preserving destination intent."""
 
         registry = self._make_selector_registry()
         before = make_observation(
@@ -54,7 +55,10 @@ class ObservedActionSettlingTests(AutomationFrameworkFixtures, unittest.TestCase
             fake_observer.requests,
             [
                 ObservationRequest.navigation_follow_up(registry.selectors[0].click_outcomes),
-                ObservationRequest.full_runtime_default(),
+                replace(
+                    ObservationRequest.full_runtime_default(),
+                    candidate_screen_types=frozenset({ScreenType.PNC_MORE_MENU}),
+                ),
             ],
         )
         self.assertFalse(execution.selector_interactions[0].fallback_attempted)
