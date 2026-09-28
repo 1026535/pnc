@@ -134,7 +134,10 @@ _LV10_ORDERS: tuple[dict[str, Any], ...] = (
         "rewards": (WorkshopOrderRewardCategory.CHEST,),
         "completeness": "complete",
         "ready": True,
-        "submit": Bounds(330, 172, 113, 53),
+        # The preserved PW05 Complete_4 variant wins the integrated template
+        # family and measures the upper button band; its center is on the
+        # visible control. The larger variant's footprint is not the winner.
+        "submit": Bounds(330, 170, 120, 32),
     },
     {
         "order_ref": 2,
