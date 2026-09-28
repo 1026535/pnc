@@ -189,6 +189,7 @@ def _api_call(method_name: str, policy: BlueStacksSessionCleanupPolicy) -> dict[
         return {
             "account_id": "account",
             "building": HomeCityObjectId.INSTITUTE.value,
+            "home_city_slot": None,
             "session_cleanup_policy": policy,
         }
     if method_name == "run_refresh_castle_roster":
