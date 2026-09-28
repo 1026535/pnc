@@ -57,7 +57,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(91, len(catalog["profiles"]))
+        self.assertEqual(94, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -110,7 +110,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                     4
                     if profile["id"] in {"bag", "world_map"}
                     else 3
-                    if profile["id"] == "vip_daily_reset"
+                    if profile["id"] in {"vip_daily_reset", "campaign_stage_chapter_6"}
                     else 2
                     if profile["id"] in {
                         "institute",
@@ -118,6 +118,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "alliance_invitation",
                         "savannah_hero_offer",
                         "campaign_map",
+                        "campaign_chapter_6",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",
@@ -145,7 +146,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
         # PNC_PET_WORKSHOP is occluded by its four modal surfaces in this
         # all-match degeneration; only the retained Wall profile adds a screen.
-        self.assertEqual(59, len({item.screen_type for item in recognition.evidence}))
+        self.assertEqual(60, len({item.screen_type for item in recognition.evidence}))
         # Alternate appearances can share a layout and retain separate source
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}

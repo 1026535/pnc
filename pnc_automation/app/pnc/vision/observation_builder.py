@@ -30,7 +30,7 @@ from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
-from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity
+from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity, CampaignStageDetail
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.building_details import BuildingDetail
@@ -72,6 +72,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
     bind_campaign_chapter_identity,
+    bind_campaign_stage_detail,
     bind_list_entry,
     bind_spatial_surface,
     bind_hero_recruit_result,
@@ -169,6 +170,7 @@ class ObservationAdditions:
     active_chat_channel: ChatChannel | None = None
     active_bag_tab: BagTab | None = None
     campaign_chapter: CampaignChapterIdentity | None = None
+    campaign_stage: CampaignStageDetail | None = None
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
@@ -868,6 +870,12 @@ class ObservationBuilder:
                 source_screen=decision.effective_screen,
                 source_layout_id=decision.layout_id,
             ),
+            campaign_stage=bind_campaign_stage_detail(
+                additions.campaign_stage,
+                frame_ref=getattr(screenshot, "frame_ref", None),
+                source_screen=decision.effective_screen,
+                source_layout_id=decision.layout_id,
+            ),
             profile_player_name=additions.profile_player_name,
             mailbox_type=additions.mailbox_type,
             mailbox_empty=additions.mailbox_empty,
@@ -1379,6 +1387,10 @@ def _merge_observation_additions(
             primary.campaign_chapter,
             fallback.campaign_chapter,
         ),
+        campaign_stage=_merge_campaign_stage_detail(
+            primary.campaign_stage,
+            fallback.campaign_stage,
+        ),
         profile_player_name=primary.profile_player_name or fallback.profile_player_name,
         mailbox_type=primary.mailbox_type or fallback.mailbox_type,
         empty_mailboxes=primary.empty_mailboxes | fallback.empty_mailboxes,
@@ -1416,6 +1428,29 @@ def _merge_campaign_chapter_identity(
     if fallback is None or fallback.chapter_number == primary.chapter_number:
         return primary
     return None
+
+
+def _merge_campaign_stage_detail(
+    primary: CampaignStageDetail | None,
+    fallback: CampaignStageDetail | None,
+) -> CampaignStageDetail | None:
+    """Keep one same-frame stage detail; contradictory ordinals stay unresolved."""
+
+    if primary is None:
+        return fallback
+    if fallback is None:
+        return primary
+    if (
+        primary.chapter_number is not None
+        and fallback.chapter_number is not None
+        and primary.chapter_number != fallback.chapter_number
+    ) or (
+        primary.stage_number is not None
+        and fallback.stage_number is not None
+        and primary.stage_number != fallback.stage_number
+    ):
+        return None
+    return primary
 
 
 def reconcile_visual_modal_guard(

@@ -84,3 +84,53 @@ class CampaignNodeFacts:
             raise TypeError("Campaign node name must be observed text or None.")
         if self.mode is not None and not isinstance(self.mode, CampaignMode):
             raise TypeError("Campaign node mode must be an observed CampaignMode or None.")
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignStageDetail:
+    """Observed facts for the accepted Campaign stage-detail surface for one frame.
+
+    Every field is a current-frame observation; an unread or ambiguous region
+    stays ``None``. There is no stage catalog, default mode, or default cost.
+    """
+
+    chapter_number: int | None = None
+    stage_number: int | None = None
+    name: str | None = None
+    mode: CampaignMode | None = None
+    action_points: int | None = None
+    max_action_points: int | None = None
+    challenge_cost: int | None = None
+    frame_ref: FrameRef | None = None
+    source_screen: ScreenType | None = None
+    source_layout_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """Require observed ordinals, non-negative gauges, and truthful provenance."""
+
+        for field_name, value in (
+            ("chapter_number", self.chapter_number),
+            ("stage_number", self.stage_number),
+            ("max_action_points", self.max_action_points),
+            ("challenge_cost", self.challenge_cost),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"Campaign stage detail {field_name} must be an integer or None.")
+            if value <= 0:
+                raise ValueError(f"Campaign stage detail {field_name} must be positive.")
+        if self.action_points is not None:
+            if isinstance(self.action_points, bool) or not isinstance(self.action_points, int):
+                raise TypeError("Campaign stage detail action_points must be an integer or None.")
+            if self.action_points < 0:
+                raise ValueError("Campaign stage detail action_points must not be negative.")
+        if self.name is not None and not isinstance(self.name, str):
+            raise TypeError("Campaign stage detail name must be observed text or None.")
+        if self.mode is not None and not isinstance(self.mode, CampaignMode):
+            raise TypeError("Campaign stage detail mode must be an observed CampaignMode or None.")
+        if self.source_screen is not None and self.source_screen != ScreenType.PNC_CAMPAIGN_STAGE:
+            raise SelectorResolutionError(
+                "Campaign stage detail must come from a stage-detail frame.",
+                source_screen=self.source_screen,
+            )

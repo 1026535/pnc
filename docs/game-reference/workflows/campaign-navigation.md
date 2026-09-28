@@ -89,3 +89,109 @@ during animation (node score0.9249 below0.93 while scene score0.9982 passed).
 Cropping the existing reference patch to the Grandia Ruins label yields
 0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
 scene anchor and measured Home portal are unchanged. The two native map fixtures share one correlated validation group. The shared Home-to-Campaign entry and Home return passed the independently reviewed V44 turn012 route. Campaign chapter/stage parsing and formation remain separately owned.
+
+## Chapter 6 qualification, September 22
+
+**Live-observed:** on the parked `testing` M1 run, the current castle's Chapter 6
+marker opened `Ch.6 Marsh of Tear` with five numbered stage cores and four
+padlocked nodes. The live diagnostic classified that visible path as UNKNOWN.
+Canonical offline replay isolated the missed terrain anchor: 0.929546 against
+its 0.95 bound; the title (0.991448) and Back (0.863272) anchors qualified. No stage, Challenge,
+battle, or spending action was taken, and the refused Back dispatch was correct
+while the frame stayed UNKNOWN. Sources are runtime `20260922T202247Z_d3962b64`
+captures 0037/0038 under `2026-09-22/testing`, tracked as
+`campaign_chapter_6_path_20260922.png` and
+`campaign_chapter_6_path_holdout_20260922.png`.
+These frames were captured seconds apart in one session. They share a capture
+group and establish correlated temporal consistency, not independent-session
+generalization, despite the second file's historical `holdout` name.
+
+**Scoped calibration:** the `campaign_chapter_6` terrain anchor is bound at
+0.92 — the only change; title identity stays 0.95 and Back stays 0.85. Both
+native frames now score title 0.991448/0.991899, terrain 0.929546/0.929546,
+Back 0.863272/0.863272, and the original mega_old_acc reference keeps
+0.996420/0.999439/0.875636. Other saved surfaces stay far outside: worst
+terrain 0.2764 (world map), worst title 0.3392 (Chapter 5 path), so no
+other-chapter, map, World, Home, or popup appearance reaches the profile.
+This remains a Chapter-6-only claim with no all-chapter generalization.
+
+**Offline-proven:** both publishers classify both native RGBA frames as
+`PNC_CAMPAIGN_CHAPTER` with a clear guard and the frame-bound Back control.
+RapidOCR 3.4.5 binds chapter 6 and measured stages 1-4; the pulsing current
+stage-5 node publishes no row rather than a guessed value, and the four locked
+nodes stay `no_action` with `number=None`. No completion, AP, formation, or
+battle state is inferred from the path frame. Live return acceptance and any
+formation proof remain pending with the lead.
+
+## Native stage ownership and map animation, September 22
+
+**Artifact-observed:** M1 runtime `20260922T234747Z_82d60eea`, capture0045
+(`tests/data/screen_recognition/campaign_stage_6_5_20260922.png`), shows the
+opened `[6-5] Marsh of Tear` detail, AP126/120 and Challenge cost12. The trace
+classified it as `PNC_POPUP`, then recovery tapped its Close at812,370;
+capture0046 shows the chapter after dismissal. The stage-entry tap succeeded
+visually. Missing feature identity caused the task-owned modal to be dismissed;
+the post-recovery chapter screenshot is not evidence that the tap did nothing.
+Installed build was not recorded. Confidence is high for this captured sequence,
+with no claim about other stage appearances or formation entry.
+
+The `campaign_stage_chapter_6` profile qualifies the observed Chapter 6 stage
+appearance using separate title and Enemy lineup patches. Existing Close and
+Challenge controls are measured independently. No Chapter 6 stage number, battle
+mode, completion or Auto-next state is inferred from the profile name. Stage
+content still comes from bounded OCR.
+Native gauge/cost crops need single-line normalization: the original900x1600
+detector split the gauge into overlapping `126/` and `5/120` reads and missed the
+cost. The gauge region now excludes the adjacent add-AP icon, and larger numeric
+strips use the canonical context's28px preprocessing with native frame/region
+provenance retained. Saved native reads are126/120 and12; reference reads remain
+150/120 and12. No resource action is authorized by this evidence.
+
+**Artifact-observed:** M1 runtime `20260922T233517Z_4ad73851`, capture0012
+(`tests/data/screen_recognition/campaign_stage_6_4_20260922.png`), shows
+`[6-4] Marsh of Tear` with the same AP and cost, but Challenge is to the left of
+Blitz. The shared Chapter 6 identity anchors qualify this frame without a new
+profile or lower threshold. Challenge is searched across the two observed
+positions, and cost OCR is derived from its matched bounds. When Challenge is
+not measured, its cost remains unknown. Blitz is not exposed as Challenge.
+The two stage captures come from distinct runs on the same account/build, not
+independent account validation. Corrected-candidate live acceptance is pending.
+
+**Artifact-observed:** own157_farm runtime `20260922T232718Z_26f6cf57`, captures
+0041/0043, is a clear Campaign map that the prior broad node/terrain patch missed
+during animation (node score0.9249 below0.93 while scene score0.9982 passed).
+Cropping the existing reference patch to the Grandia Ruins label yields
+0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
+scene anchor and measured Home portal are unchanged. The two native map fixtures
+share one correlated validation group; the stage image is a reference, not a
+holdout. Corrected-candidate live stage/return acceptance remains required.
+
+## Chapter 6 stage reflow, September 27
+
+**Artifact-observed:** M1 runtime `20260927T161139Z_cb7d3149` on `testing`,
+candidate `d07b2d8f`, captured stages 6-4 and 6-5 in frames 0057 and 0069.
+The native 900x1600 captures are retained unchanged as
+`tests/data/screen_recognition/campaign_stage_6_4_20260927.png` and
+`campaign_stage_6_5_20260927.png`; their manifest records original paths and
+hashes. The title, lineup and Close moved upward while the footer moved down;
+Challenge is still left of Blitz for 6-4 and centered for 6-5. AP126/120 is
+centered above the footer. Installed build was not recorded. These two frames
+share one session and are regression examples, not independent holdouts.
+
+The Chapter 6 profile retains two independent identity anchors at 0.95.
+Its existing title artwork is cropped to the invariant `Marsh of Tear` words,
+excluding the bracketed ordinal. Title and lineup search bounds cover their
+two observed positions; controls are still measured on the current frame.
+The new captures score title 0.9670, lineup 0.9801, Close 0.9784 and Challenge
+0.9813/0.9832. Neither anchor alone qualifies the stage. Ordinals remain
+bounded OCR facts, with no stage number inferred from the profile.
+
+**Offline-proven:** replay through both observation publishers retains clear
+stage identity, frame-bound Close and Challenge, stages 6-4/6-5, AP126/120 and
+cost12 on both September 22 and 27 native captures. Title OCR covers the
+observed reflow. Gauge OCR first uses the existing right-hand numeric strip,
+then the measured centered strip only when no credible pair was found;
+conflicting credible pairs within a strip still abstain. Cost remains tied to
+the measured Challenge bounds. No Blitz control, formation state or spending
+permission is inferred. Corrected-candidate live C2/C3 validation remains with
+the M1 owner.

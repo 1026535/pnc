@@ -1240,6 +1240,22 @@
     "notes": "Unmodified unmasked Chapter 6 path capture after the stage-5 detail closed; validation pair for the ch6-path profile."
   },
   {
+    "asset": "tests/data/screen_recognition/campaign_chapter_6_path_20260922.png",
+    "source": "artifacts/2026-09-22/testing/20260922T203549Z_core_20260922T202247Z_d3962b64_0037_core_6_campaign_chapter_after_7.png",
+    "source_sha256": "c9847cca704c6f759cd8fdcfcd7e60fdc6d5b12fc2b9055009c54d9bb723abd4",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-22/testing/m1_campaign_preentry",
+    "notes": "Unmodified current-build Chapter 6 Marsh of Tear path frame that returned UNKNOWN before the scoped 0.92 terrain calibration; observed qualification evidence."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_6_path_holdout_20260922.png",
+    "source": "artifacts/2026-09-22/testing/20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
+    "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-22/testing/m1_campaign_preentry",
+    "notes": "Unmodified current-build Chapter 6 path frame captured seconds later before the refused Back dispatch; correlated temporal check from the same session, not an independent holdout."
+  },
+  {
     "asset": "tests/data/screen_recognition/campaign_chapter_10_unmasked.png",
     "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T200143Z_core_20260912T195338Z_6a8f4869_0025_campaign_detail_close_settled.png",
     "source_sha256": "5bd696d4ce042bcf6db5b345d55e2f717800c361f185d0655358416c28387741",
@@ -1340,5 +1356,22 @@
     "reference_size": [900, 1600],
     "capture_group": "2026-09-16/mega_old_acc/v13_chapter5_return",
     "notes": "Actual settled map after one Back from Chapter5; demonstrates recentering of the prior southern map. No repeated tap after failed classification."
+  },
+  {
+    "asset": "screen_anchors/campaign_stage_6_5_title.png",
+    "source": "tests/data/screen_recognition/campaign_stage_6_5_20260922.png",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      219,
+      206,
+      431,
+      238
+    ],
+    "capture_group": "2026-09-22/testing/m1_v14_stage_6_5",
+    "review": "Exact invariant Marsh of Tear crop from previously qualified title asset; bracketed stage ordinal excluded. Maintains0.95 threshold plus independent Enemy lineup. New September27 frames are correlated regression samples, not live acceptance.",
+    "source_sha256": "b4c70d30986dc56ca8f4620e8bcd95a04bdbd65c3680e4ee76c2d35a11d9abad"
   }
 ]

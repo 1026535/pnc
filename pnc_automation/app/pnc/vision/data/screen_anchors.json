@@ -936,12 +936,22 @@
       "anchors": [
         {
           "image": "screen_anchors/popup/king_return_welcome_face.png",
-          "search_region": [78, 225, 115, 130],
+          "search_region": [
+            78,
+            225,
+            115,
+            130
+          ],
           "threshold": 0.95
         },
         {
           "image": "screen_anchors/popup/king_return_welcome_staff.png",
-          "search_region": [330, 120, 150, 145],
+          "search_region": [
+            330,
+            120,
+            150,
+            145
+          ],
           "threshold": 0.95
         }
       ],
@@ -951,14 +961,26 @@
           "popup_control_kind": "king_return_get_started",
           "anchor": {
             "image": "screen_anchors/popup/king_return_welcome_start.png",
-            "search_region": [195, 485, 160, 80],
+            "search_region": [
+              195,
+              485,
+              160,
+              80
+            ],
             "threshold": 0.9
           },
           "dismisses_surface": true
         }
       ],
-      "modal_bounds": [0, 0, 540, 960],
-      "occludes": ["PNC_HOME_CITY"]
+      "modal_bounds": [
+        0,
+        0,
+        540,
+        960
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "lucifer_special_offer",
@@ -2904,6 +2926,104 @@
       "layout_id": "chat_kingdom"
     },
     {
+      "id": "chat_kingdom_two_tab_20260927",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [
+            90,
+            0,
+            220,
+            52
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+          "search_region": [
+            0,
+            52,
+            275,
+            62
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [
+              0,
+              0,
+              90,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+            "search_region": [
+              0,
+              52,
+              275,
+              62
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_two_tab_alliance_inactive.png",
+            "search_region": [
+              265,
+              52,
+              275,
+              62
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_INPUT_FIELD",
+          "anchor": {
+            "image": "screen_anchors/chat_input_field.png",
+            "search_region": [
+              45,
+              890,
+              225,
+              60
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_kingdom_two_tab_20260927.png",
+        "decoded_sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+        "capture_group": "2026-09-27/testing/sanitized-chat-chrome"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Current two-tab Kingdom Chat chrome after VIP popup recovery; private messages removed from fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "chat_kingdom_two_tab_20260927"
+    },
+    {
       "id": "collect_mail_hub",
       "screen": "PNC_MAIL_HUB",
       "anchors": [
@@ -3272,7 +3392,7 @@
             180,
             95
           ],
-          "threshold": 0.95
+          "threshold": 0.92
         }
       ],
       "controls": [
@@ -3290,7 +3410,7 @@
           }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_chapter_6_path.png",
         "decoded_sha256": "180e1cfea3856c7ef79fd332f9c695732a6010cd0eac54639a9e4f6b6cec2857",
@@ -3298,7 +3418,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Chapter 6 Campaign path evidence only: the title and upper-terrain anchors are bound to the observed Marsh of Tear layout on the mega_old_acc account; no all-chapters claim is made.",
+        "description": "Chapter 6 Campaign path evidence only: the title and upper-terrain anchors are bound to the observed Marsh of Tear layout; no all-chapters claim is made. Terrain threshold calibrated to 0.92 for the 2026-09-22 testing build's current appearance (native frames campaign_chapter_6_path_20260922 and _holdout_20260922, canonical confidence 0.9295/0.9295) while the 0.95 title identity and 0.85 Back control bounds are unchanged; no lower bound is authorized without new evidence.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -4846,6 +4966,74 @@
       ]
     },
     {
+      "id": "remote_player_territory",
+      "layout_id": "remote_player_territory",
+      "screen": "PNC_PLAYER_TERRITORY",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/player_territory_20260923.png",
+        "decoded_sha256": "650fdbdb80e1ab95db49d141bcde8449f76e23571da996c1b1b053603ebefa4c",
+        "capture_group": "2026-09-23/157_farm/v19_castle_trial_20260923T072602Z"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Remote Player Territory identity requires two independent appearance patches: the title strip and static Coordinates label. Variable name, coordinate values, Might value, portrait art and action availability do not own identity. Player Info is independently measured and optional. Reference-only saved-frame proof from final007 live005; no independent-account or final live acceptance claim.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/territory_title.png",
+          "search_region": [
+            165,
+            111,
+            214,
+            50
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/territory_coordinates_label.png",
+          "search_region": [
+            116,
+            256,
+            120,
+            40
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_PLAYER_TERRITORY_HEADER",
+          "anchor": {
+            "image": "screen_anchors/territory_title.png",
+            "search_region": [
+              165,
+              111,
+              214,
+              50
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/territory_player_info.png",
+            "search_region": [
+              15,
+              705,
+              100,
+              82
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
       "id": "coordinate_dialog_captured",
       "layout_id": "coordinate_dialog_captured",
       "screen": "PNC_WORLD_COORDINATE_DIALOG",
@@ -6225,6 +6413,75 @@
       ],
       "occludes": [
         "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "campaign_stage_chapter_6",
+      "layout_id": "campaign_stage_chapter_6",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "revision": 3,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_stage_6_5_20260922.png",
+        "decoded_sha256": "6f98c42b47cfcc2529d6e4126b109f31c8b03948f087b68bd84cf8810009b43d",
+        "capture_group": "2026-09-22/testing/m1_v14_stage_6_5"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Captured Chapter6 stage modal appearances6-4 and6-5, including September27 reflow: invariant Marsh of Tear artwork and independent Enemy lineup qualify identity at unchanged0.95 thresholds; changing ordinals remain OCR facts. Current-frame Close and Challenge are searched within the union of the observed vertical positions, preserving left-of-Blitz and centered Challenge ownership. Final live acceptance remains pending.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_stage_6_5_title.png",
+          "search_region": [
+            210,
+            190,
+            230,
+            60
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_stage_6_5_lineup.png",
+          "search_region": [
+            198,
+            235,
+            163,
+            65
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_close_button.png",
+            "search_region": [
+              466,
+              180,
+              46,
+              68
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_CAMPAIGN_BATTLE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_challenge_button.png",
+            "search_region": [
+              55,
+              640,
+              310,
+              80
+            ],
+            "threshold": 0.95
+          }
+        }
       ]
     }
   ]
