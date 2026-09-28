@@ -24,15 +24,30 @@ def partition_guard_evidence(
 
     A dialog can cover another dialog. Retain same-screen visual layout proof,
     but let only the foreground guard compete for actionable surface ownership.
+    When the foreground guard owns a measured layout, a different visual layout
+    in the same family is a separate occluded surface and stays background.
     Conflicts within the guard evidence are preserved for the classifier.
     """
 
     if not guard_evidence:
         return tuple(visual_evidence), ()
     foreground_screens = {item.screen_type for item in guard_evidence}
+    foreground_layouts_by_family: dict[frozenset[ScreenType], set[str]] = {}
+    for item in guard_evidence:
+        if item.layout_id is not None:
+            foreground_layouts_by_family.setdefault(
+                _screen_type_family(item.screen_type), set()
+            ).add(item.layout_id)
+
+    def shares_foreground_surface(item: ScreenEvidence) -> bool:
+        if item.screen_type not in foreground_screens:
+            return False
+        owned_layouts = foreground_layouts_by_family.get(_screen_type_family(item.screen_type))
+        return not owned_layouts or item.layout_id in owned_layouts
+
     return (
-        (*guard_evidence, *(item for item in visual_evidence if item.screen_type in foreground_screens)),
-        tuple(item for item in visual_evidence if item.screen_type not in foreground_screens),
+        (*guard_evidence, *(item for item in visual_evidence if shares_foreground_surface(item))),
+        tuple(item for item in visual_evidence if not shares_foreground_surface(item)),
     )
 
 

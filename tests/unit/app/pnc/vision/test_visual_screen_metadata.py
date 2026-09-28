@@ -57,7 +57,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(89, len(catalog["profiles"]))
+        self.assertEqual(90, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -115,6 +115,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "hero_hall",
                         "alliance_invitation",
                         "savannah_hero_offer",
+                        "vip_daily_reset",
                         "campaign_map",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",

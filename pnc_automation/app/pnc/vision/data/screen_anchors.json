@@ -851,6 +851,72 @@
       ]
     },
     {
+      "id": "savannah_hero_offer_post_update",
+      "layout_id": "hero_offer_full_height",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "savannah_hero_offer_post_update_20260923.png",
+        "decoded_sha256": "4c5da25998c4c6d25fa5a951f950ea11b69871379bfb824638667700feb4f3df",
+        "capture_group": "2026-09-23/157_farm/v44_final034"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Retained 2026-09-23 post-update render of the Savannah full-height hero offer from its updated icon artwork and the shared lower panel structure; the separately measured X keeps the same upper-right bounds. Missing-X and purchase negatives remain non-actionable.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/savannah_offer_icon_20260923.png",
+          "search_region": [
+            5,
+            85,
+            110,
+            100
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/popup/savannah_offer_panel_structure.png",
+          "search_region": [
+            10,
+            780,
+            250,
+            150
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "popup_control_kind": "close_x",
+          "anchor": {
+            "image": "screen_anchors/popup/savannah_offer_close_20260923.png",
+            "search_region": [
+              470,
+              45,
+              65,
+              70
+            ],
+            "threshold": 0.94
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        18,
+        0,
+        504,
+        890
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "king_return_welcome",
       "layout_id": "king_return_welcome",
       "screen": "PNC_POPUP",
@@ -1032,7 +1098,7 @@
       "id": "vip_daily_reset",
       "layout_id": "vip_daily_reset",
       "screen": "PNC_VIP_DAILY_RESET",
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "vip_daily_reset.png",
         "decoded_sha256": "bae29ded34f50f968b391dc7004b1ebd032702d45077c980487be5e32114a40f",
@@ -1040,7 +1106,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
+        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. The same selector keeps a measured pressed/post-touch anchor so the persisted panel stays dismissible after one dispatch. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -1068,6 +1134,20 @@
         }
       ],
       "controls": [
+        {
+          "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/popup/vip_daily_reset_close_pressed.png",
+            "search_region": [
+              160,
+              525,
+              230,
+              90
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": false
+        },
         {
           "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
           "popup_control_kind": "close_text",
