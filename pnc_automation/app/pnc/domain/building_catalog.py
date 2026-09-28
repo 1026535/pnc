@@ -132,6 +132,7 @@ class HomeCityObjectId(StrEnum):
     PIT = "pit"
     BANK = "bank"
     DRAGONDOM_CONQUEST = "dragondom_conquest"
+    ILLUSORY_BEAST_MANOR = "illusory_beast_manor"
     RESERVED_INSTITUTE_SLOT = "reserved_institute_slot"
     RESERVED_WAREHOUSE_SLOT = "reserved_warehouse_slot"
     RESERVED_TRAP_WORKSHOP_SLOT = "reserved_trap_workshop_slot"
@@ -174,16 +175,24 @@ class BuildingConstructionSource:
 
 @dataclass(frozen=True, slots=True)
 class HomeCityMapCoordinate:
-    """Represents one canonical fixed-atlas coordinate on the inferred home-city panorama."""
+    """Represents one canonical fixed-atlas coordinate on the home-city panorama.
+
+    Coordinates are signed integers: measured scene geometry extends west of
+    and below the inferred atlas rectangle, so negative or out-of-rectangle
+    values are valid calibrated positions. A signed coordinate records a
+    position only; it is never permission to pan or tap without camera proof.
+    """
 
     x: int
     y: int
 
     def __post_init__(self) -> None:
-        """Rejects invalid negative atlas coordinates before navigation consumes them."""
+        """Rejects malformed coordinates before navigation consumes them."""
 
-        if self.x < 0 or self.y < 0:
-            raise ValueError("Home-city atlas coordinates must be non-negative integers.")
+        if not isinstance(self.x, int) or isinstance(self.x, bool) or not isinstance(
+            self.y, int
+        ) or isinstance(self.y, bool):
+            raise ValueError("Home-city atlas coordinates must be integers.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -601,6 +610,16 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         map_coordinate=HomeCityMapCoordinate(x=733, y=1583),
     ),
     HomeCityObjectDefinition(
+        id=HomeCityObjectId.ILLUSORY_BEAST_MANOR,
+        role=HomeCityObjectRole.HOME_CITY_BUILDING,
+        display_name="Illusory Beast Manor",
+        home_city_labels=("Illusory Beast Manor", "llusory Beast Manor"),
+        # 2026-09-21 verified body tap (511,722) on the measured body crop
+        # resolves through the camera target to atlas action point (1032,2068);
+        # body acquisition is camera-qualified, not label-derived.
+        map_coordinate=HomeCityMapCoordinate(x=1032, y=2068),
+    ),
+    HomeCityObjectDefinition(
         id=HomeCityObjectId.RESERVED_INSTITUTE_SLOT,
         role=HomeCityObjectRole.RESERVED_HOME_CITY_SLOT,
         display_name="Reserved Institute Slot",
@@ -687,6 +706,7 @@ _PRIMARY_SCREEN_BY_HOME_CITY_OBJECT_ID = {
     HomeCityObjectId.SIEGE_FACTORY: ScreenType.PNC_SIEGE_FACTORY,
     HomeCityObjectId.SAUROI_LAIR: ScreenType.PNC_SAUROI_LAIR,
     HomeCityObjectId.CAMPAIGN: ScreenType.PNC_CAMPAIGN_MAP,
+    HomeCityObjectId.ILLUSORY_BEAST_MANOR: ScreenType.PNC_ILLUSORY_BEAST_MANOR,
     HomeCityObjectId.ARENA: ScreenType.PNC_VERSUS_CENTER,
     HomeCityObjectId.WALL: ScreenType.PNC_WALL,
 }
@@ -818,6 +838,7 @@ _OWNING_HOME_CITY_OBJECT_ID_BY_SCREEN = {
     ScreenType.PNC_WALL: HomeCityObjectId.WALL,
     ScreenType.PNC_DEFENSE_INFO: HomeCityObjectId.WALL,
     ScreenType.PNC_CAMPAIGN_MAP: HomeCityObjectId.CAMPAIGN,
+    ScreenType.PNC_ILLUSORY_BEAST_MANOR: HomeCityObjectId.ILLUSORY_BEAST_MANOR,
     ScreenType.PNC_VERSUS_CENTER: HomeCityObjectId.ARENA,
 }
 _UPGRADEABLE_PRIMARY_SCREEN_TYPES = frozenset(

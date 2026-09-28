@@ -538,6 +538,8 @@ class RapidOcrServiceAdapterTests(unittest.TestCase):
         self.assertEqual("warning", params["Global.log_level"])
         self.assertTrue(params["Rec.model_path"].endswith("ch_PP-OCRv3_rec_infer.onnx"))
         self.assertEqual([3, 48, 0], params["Rec.rec_img_shape"])
+        self.assertEqual(1, params["EngineConfig.onnxruntime.intra_op_num_threads"])
+        self.assertEqual(1, params["EngineConfig.onnxruntime.inter_op_num_threads"])
 
     def test_boxes_txts_scores_become_localized_lines_with_synthesized_words(self) -> None:
         service, _engine = _rapid_service(

@@ -35,7 +35,7 @@ upgradeable | hall_of_war | Hall of War | existing_only | observed_live_lv5
 upgradeable | sauroi_lair | Sauroi Lair | existing_only | observed_live
 upgradeable | goddess_statue | Goddess Statue | constructable | observed_live_lv1
 
-# Non-upgradeable catalog buildings (9)
+# Non-upgradeable catalog buildings (10)
 non_upgradeable | hero_hall | Hero Hall | not_constructable | observed_live
 non_upgradeable | sanctum | Sanctum | not_constructable | catalog_only_this_survey
 non_upgradeable | tower_of_trial | Tower of Trial | not_constructable | catalog_only_this_survey
@@ -45,6 +45,7 @@ non_upgradeable | sacred_tree | Sacred Tree | not_constructable | observed_live
 non_upgradeable | pit | Pit | not_constructable | observed_live
 non_upgradeable | bank | Bank | not_constructable | observed_live
 non_upgradeable | dragondom_conquest | Dragondom Conquest | not_constructable | catalog_only_this_survey
+non_upgradeable | illusory_beast_manor | Illusory Beast Manor | not_constructable | observed_live
 
 # Live-observed landmarks that are not automation building targets yet
 unmodeled_landmark | mystery_shop | Mystery Shop | unsupported | observed_live

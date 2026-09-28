@@ -10,6 +10,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.core.infra.emulator.input_dispatch import (
+    InputDispatchEvent,
+    InputDispatchFailure,
+    InputDispatchRecord,
+    SwipeDispatch,
+    TapDispatch,
+    WheelDispatch,
+)
 from pnc_automation.core.errors import FrameProvenanceError, SelectorResolutionError
 from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
 from pnc_automation.app.pnc.domain.chat import chat_channel_selector_id
@@ -28,6 +36,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     TapPointAction,
     TapSpatialObjectAction,
     WaitAction,
+    WheelAction,
     resolve_swipe_points_for_action,
 )
 from pnc_automation.app.pnc.domain.observation import (
@@ -76,6 +85,7 @@ class ActionExecutor:
     input_attempt_deadline: float | None = None
     human_mode: bool = False
     rng: random.Random = field(default_factory=random.Random, repr=False)
+    input_dispatch_recorder: Callable[[InputDispatchEvent], None] | None = None
 
     def execute_actions(
         self,
@@ -143,13 +153,13 @@ class ActionExecutor:
             target = element.action_point if element.action_point is not None else element.bounds.center()
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self.session.tap_point(*target)
+                self._emit_dispatch_record(action, observation, self.session.tap_point(*target))
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapPointAction):
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self.session.tap_point(action.x, action.y)
+                self._emit_dispatch_record(action, observation, self.session.tap_point(action.x, action.y))
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapListEntryAction):
@@ -168,7 +178,7 @@ class ActionExecutor:
                 target = entry.action_point if action.use_action_point and entry.action_point is not None else entry.bounds.center()
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self.session.tap_point(*target)
+                self._emit_dispatch_record(action, observation, self.session.tap_point(*target))
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapSpatialObjectAction):
@@ -194,6 +204,27 @@ class ActionExecutor:
                         query=action.query,
                         require_unique_query=False,
                     )
+                if action.exact_geometry:
+                    if action.target_point is None:
+                        raise SelectorResolutionError(
+                            "Exact spatial-object taps require the observed action point.",
+                            object_kind=expected.kind,
+                        )
+                    if expected.action_bounds is None or expected.action_bounds.width <= 0 or expected.action_bounds.height <= 0:
+                        raise SelectorResolutionError(
+                            "Exact spatial-object taps require nonempty observed action bounds.",
+                            object_kind=expected.kind,
+                        )
+                    if observation.image_size is None or not (
+                        0 <= action.target_point[0] < observation.image_size[0]
+                        and 0 <= action.target_point[1] < observation.image_size[1]
+                    ):
+                        raise SelectorResolutionError(
+                            "Exact spatial-object tap point must lie inside the current display.",
+                            object_kind=expected.kind,
+                            target_point=action.target_point,
+                            image_size=observation.image_size,
+                        )
             target = action.target_point
             if target is None:
                 object_ = self._require_spatial_object(action, observation)
@@ -240,7 +271,20 @@ class ActionExecutor:
                     )
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self.session.tap_point(*target)
+                if action.exact_geometry:
+                    assert action.expected_object is not None and action.expected_object.action_bounds is not None
+                    try:
+                        dispatch = self.session.tap_point(
+                            *target,
+                            exact_geometry=True,
+                            safe_bounds=action.expected_object.action_bounds,
+                        )
+                    except Exception as error:
+                        self._emit_dispatch_failure(action, observation, error, input_kind="tap")
+                        raise
+                else:
+                    dispatch = self.session.tap_point(*target)
+                self._emit_dispatch_record(action, observation, dispatch)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, SelectChatChannelAction):
@@ -258,7 +302,7 @@ class ActionExecutor:
             target = element.action_point if element.action_point is not None else element.bounds.center()
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self.session.tap_point(*target)
+                self._emit_dispatch_record(action, observation, self.session.tap_point(*target))
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, InputTextAction):
@@ -272,7 +316,7 @@ class ActionExecutor:
             with self._authorized_input(action, observation):
                 if action.selector_id is not None:
                     self._record_input_attempt(action, observation)
-                    self.session.tap_point(x, y)
+                    self._emit_dispatch_record(action, observation, self.session.tap_point(x, y))
                     self._sleep_ms(self._stable_delay_ms_for(action))
                     self._clear_existing_text(action, observation)
                 self._input_text(action, observation)
@@ -302,22 +346,65 @@ class ActionExecutor:
             if observation.image_size is None:
                 raise SelectorResolutionError("Swipe actions require the current screenshot dimensions.")
             width, height = observation.image_size
+            self._validate_home_city_swipe(action)
             start_x, start_y, end_x, end_y = resolve_swipe_points_for_action(
                 width=width,
                 height=height,
                 action=action,
             )
+            if action.purpose == SwipePurpose.HOME_CITY_CAMERA:
+                for point in ((start_x, start_y), (end_x, end_y)):
+                    if not (0 <= point[0] < width and 0 <= point[1] < height):
+                        raise SelectorResolutionError(
+                            "Home camera swipe endpoints must lie inside the current display.",
+                            point=point,
+                            image_size=(width, height),
+                        )
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self.session.swipe(
-                    start_x,
-                    start_y,
-                    end_x,
-                    end_y,
-                    duration_ms=action.duration_ms,
-                    input_source=action.input_source.value,
-                    gesture_primitive=action.gesture_primitive.value,
-                )
+                try:
+                    dispatch = self.session.swipe(
+                        start_x,
+                        start_y,
+                        end_x,
+                        end_y,
+                        duration_ms=action.duration_ms,
+                        input_source=action.input_source.value,
+                        gesture_primitive=action.gesture_primitive.value,
+                        exact_geometry=action.exact_geometry,
+                        safe_bounds=action.safe_bounds,
+                    )
+                except Exception as error:
+                    self._emit_dispatch_failure(action, observation, error, input_kind="swipe")
+                    raise
+                self._emit_dispatch_record(action, observation, dispatch)
+            self._sleep_ms(self._stable_delay_ms_for(action))
+            return True
+        if isinstance(action, WheelAction):
+            if observation.image_size is None:
+                raise SelectorResolutionError("Wheel actions require the current screenshot dimensions.")
+            # Cheap authorization gates run before the bounded transport setup;
+            # authorized_input retains the source frame and it is revalidated
+            # for age again after the blocking mapping read, right before send.
+            self._validate_read_only_action(action, observation)
+            try:
+                self.session.prepare_scroll_transport()
+            except Exception as error:
+                self._emit_dispatch_failure(action, observation, error, input_kind="wheel")
+                raise
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                try:
+                    dispatch = self.session.scroll_wheel(
+                        action.x,
+                        action.y,
+                        vertical_detent=action.vertical_detent,
+                        frame_size=observation.image_size,
+                    )
+                except Exception as error:
+                    self._emit_dispatch_failure(action, observation, error, input_kind="wheel")
+                    raise
+                self._emit_dispatch_record(action, observation, dispatch)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         raise SelectorResolutionError(f"Unsupported action type '{type(action).__name__}'.", action_type=type(action).__name__)
@@ -443,6 +530,91 @@ class ActionExecutor:
                 provenance_error_type=type(error).__name__,
                 provenance_details=error.details,
             ) from error
+
+    @staticmethod
+    def _validate_home_city_swipe(action: SwipeAction) -> None:
+        """Requires the reviewed Home-camera swipe shape before any dispatch."""
+
+        if action.purpose != SwipePurpose.HOME_CITY_CAMERA:
+            return
+        if any(
+            ratio is None
+            for ratio in (action.start_x_ratio, action.start_y_ratio, action.end_x_ratio, action.end_y_ratio)
+        ):
+            raise SelectorResolutionError(
+                "Home camera swipes require explicit start and end ratios.",
+                purpose=action.purpose.value,
+            )
+        if not action.exact_geometry:
+            raise SelectorResolutionError(
+                "Home camera swipes require exact geometry.",
+                purpose=action.purpose.value,
+            )
+        bounds = action.safe_bounds
+        if bounds is None or bounds.width <= 0 or bounds.height <= 0:
+            raise SelectorResolutionError(
+                "Home camera swipes require nonempty native safe bounds.",
+                purpose=action.purpose.value,
+                safe_bounds=bounds,
+            )
+
+    @staticmethod
+    def _home_city_input(action: ActionRequest) -> bool:
+        """Returns whether one action is canonical Home-city input for typed traces."""
+
+        if isinstance(action, WheelAction):
+            return True
+        if isinstance(action, SwipeAction):
+            return action.purpose == SwipePurpose.HOME_CITY_CAMERA
+        if isinstance(action, TapSpatialObjectAction):
+            return action.exact_geometry
+        return False
+
+    def _emit_dispatch_record(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        dispatch: SwipeDispatch | WheelDispatch | TapDispatch,
+    ) -> None:
+        """Publishes one actual dispatch receipt bound to its authorizing frame."""
+
+        recorder = self.input_dispatch_recorder
+        if recorder is None or observation.frame_ref is None:
+            return
+        recorder(
+            InputDispatchRecord(
+                source_frame=observation.frame_ref,
+                dispatch=dispatch,
+                artifact_path=observation.artifact_path,
+                home_city=self._home_city_input(action),
+            )
+        )
+
+    def _emit_dispatch_failure(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        error: BaseException,
+        *,
+        input_kind: str,
+    ) -> None:
+        """Publishes one input attempt that ended without a dispatch receipt."""
+
+        recorder = self.input_dispatch_recorder
+        if recorder is None:
+            return
+        details = getattr(error, "details", None)
+        phase = details.get("failure_phase") if isinstance(details, dict) else None
+        recorder(
+            InputDispatchFailure(
+                source_frame=observation.frame_ref,
+                input_kind=input_kind,
+                failure_phase=phase if isinstance(phase, str) else "dispatch",
+                exception_type=type(error).__name__,
+                artifact_path=observation.artifact_path,
+                home_city=self._home_city_input(action),
+            )
+        )
 
     def _validate_selector_input(self, selector_id: UiElementId) -> None:
         """Reject read-only label targets before center fallback or input authorization."""

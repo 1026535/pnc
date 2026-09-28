@@ -1,320 +1,275 @@
-"""Measured single-pan planning for camera-qualified Home building targets."""
+"""Fixed Home gesture profiles over current endpoint, body and mapped region proof."""
 
-from __future__ import annotations
-
-import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
+import unittest
 
+from pnc_automation.app.pnc.domain.action_requests import SwipePurpose, resolve_swipe_points_for_action
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.home_city_camera import (
-    HomeCityCameraProof,
-    HomeCityCameraStatus,
+    HomeCityCameraProof, HomeCityCameraStatus, HomeCityViewEvidence, HomeCityZoomStatus,
 )
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import (
-    Bounds,
-    DetectedSpatialObject,
-    Observation,
-    SpatialObjectKind,
-    SpatialObjectSourceKind,
-    SpatialSurfaceObservation,
-    SpatialSurfaceType,
-    SpatialViewport,
-    SpatialViewportAddressingKind,
+    Bounds, DetectedSpatialObject, Observation, SpatialObjectKind,
+    SpatialObjectSourceKind, SpatialSurfaceObservation, SpatialSurfaceType,
+    SpatialViewport, SpatialViewportAddressingKind,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
-    plan_home_city_camera_pan,
+    plan_home_city_camera_pan, plan_home_city_camera_step,
 )
 from pnc_automation.core.errors import SelectorResolutionError
 
 
-def _measured_object(
-    target: HomeCityObjectId,
-    *,
-    bounds: Bounds,
-    action_point: tuple[int, int],
-    action_bounds: Bounds,
-) -> DetectedSpatialObject:
+def _body(target=HomeCityObjectId.INSTITUTE, *, bounds=Bounds(634, 863, 60, 56),
+          slot=9, point=None):
     return DetectedSpatialObject(
-        kind=SpatialObjectKind.HOME_BUILDING,
-        bounds=bounds,
-        action_point=action_point,
-        action_bounds=action_bounds,
-        source_kind=SpatialObjectSourceKind.TEMPLATE,
+        kind=SpatialObjectKind.HOME_BUILDING, bounds=bounds,
+        action_point=point or bounds.center(), source_kind=SpatialObjectSourceKind.TEMPLATE,
+        home_city_slot=HomeCitySlotSelector(slot_index=slot) if slot is not None else None,
         metadata={"home_city_object_id": target.value},
     )
 
 
-def _observation(
-    *,
-    translation: tuple[int, int] | None = (-532, 222),
-    objects: tuple[DetectedSpatialObject, ...] = (),
-    screen: ScreenType = ScreenType.PNC_HOME_CITY,
-) -> Observation:
-    proof = (
-        None
-        if translation is None
-        else HomeCityCameraProof(
-            status=HomeCityCameraStatus.LOCALIZED,
-            reason="test",
-            translation=translation,
-            frame_size=(540, 960),
-        )
-    )
+def _observation(*, translation=(-288, 100), zoom=.75, objects=(),
+                 size=(900, 1600), status=HomeCityZoomStatus.AT_ENDPOINT):
+    proof = HomeCityCameraProof(HomeCityCameraStatus.LOCALIZED, "controlled", translation,
+                                zoom, frame_size=size)
+    view = HomeCityViewEvidence(status, "controlled", "test_endpoint", None, size)
     return Observation(
-        screen_type=screen,
+        screen_type=ScreenType.PNC_HOME_CITY, image_size=size, captured_at=datetime.now(UTC),
         spatial_surface=SpatialSurfaceObservation(
-            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE, objects=objects,
             viewport=SpatialViewport(addressing_kind=SpatialViewportAddressingKind.CAMERA_RELATIVE),
-            objects=objects,
-            camera_proof=proof,
+            camera_proof=proof, home_city_view=view,
         ),
-        image_size=(540, 960),
-        captured_at=datetime.now(UTC),
     )
+
+
+def _points(action):
+    return resolve_swipe_points_for_action(width=900, height=1600, action=action)
 
 
 class HomeCityCameraPanTests(unittest.TestCase):
-    """One measured pan moves the qualified target into the HUD-safe band."""
+    def test_live_horizontal_left_profile_exact_points(self):
+        action = plan_home_city_camera_pan(observation=_observation(), target=HomeCityObjectId.CAMPAIGN)
+        self.assertEqual((753, 727, 639, 727), _points(action))
+        self.assertEqual(429, action.duration_ms)
+        self.assertEqual(SwipePurpose.HOME_CITY_CAMERA, action.purpose)
+        self.assertTrue(action.exact_geometry)
+        self.assertEqual(Bounds(624, 705, 145, 46), action.safe_bounds)
+        self.assertTrue(action.follow_up_request.include_home_city_camera)
 
-    def test_institute_at_reference_pans_up_toward_the_safe_band(self) -> None:
+    def test_live_horizontal_right_profile_uses_new_measured_pose(self):
+        body = _body(HomeCityObjectId.CAMPAIGN, bounds=Bounds(60, 690, 40, 30), slot=None)
         action = plan_home_city_camera_pan(
-            observation=_observation(),
-            target=HomeCityObjectId.INSTITUTE,
-        )
+            observation=_observation(translation=(-542, 99), objects=(body,)),
+            target=HomeCityObjectId.CAMPAIGN)
+        self.assertEqual((385, 726, 499, 726), _points(action))
+        self.assertEqual("right", action.direction)
 
-        # Institute anchor projects to reference (724,1253); the band top edge is
-        # at 928 reference units, so content must move up by ~645.
-        self.assertEqual("up", action.direction)
-        self.assertAlmostEqual(645 / (1600 * 2.33), action.distance_ratio, places=2)
-        self.assertEqual("pan_home_city_camera_institute_y", action.reason)
-        self.assertTrue(action.observe_after)
-        self.assertGreater(action.start_y_ratio, action.end_y_ratio)
-
-    def test_tower_at_reference_pans_up_with_a_larger_bounded_step(self) -> None:
+    def test_two_pixel_settle_clips_region_without_growing_or_shortening(self):
         action = plan_home_city_camera_pan(
-            observation=_observation(),
-            target=HomeCityObjectId.TOWER_OF_TRIAL,
-        )
+            observation=_observation(translation=(-286, 100)), target=HomeCityObjectId.CAMPAIGN)
+        x1, y1, x2, y2 = _points(action)
+        self.assertEqual(114, x1 - x2)
+        self.assertEqual(y1, y2)
+        self.assertEqual(770, action.safe_bounds.x + action.safe_bounds.width)
+        self.assertGreaterEqual(action.safe_bounds.x, 626)
+        self.assertTrue(action.safe_bounds.contains_point((x1, y1)))
+        self.assertTrue(action.safe_bounds.contains_point((x2, y2)))
 
-        self.assertEqual("up", action.direction)
-        self.assertAlmostEqual(0.297, action.distance_ratio, places=2)
-        self.assertLessEqual(action.distance_ratio, 0.56)
+    def test_too_little_remaining_horizontal_lane_is_refused(self):
+        with self.assertRaisesRegex(SelectorResolutionError, "No safe fixed gesture"):
+            plan_home_city_camera_pan(observation=_observation(translation=(-800, 100)),
+                                      target=HomeCityObjectId.CAMPAIGN)
 
-    def test_measured_object_point_drives_the_pan_when_body_is_visible(self) -> None:
-        # Body-verified object sitting below the tap band on a 540x960 frame:
-        # reference-space action point (300, 1500) -> needs an upward pan.
-        target = _measured_object(
-            HomeCityObjectId.INSTITUTE,
-            bounds=Bounds(165, 890, 30, 24),
-            action_point=(180, 900),
-            action_bounds=Bounds(170, 892, 20, 20),
-        )
+    def test_hud_covered_ground_strip_is_never_dispatched(self):
+        with self.assertRaisesRegex(SelectorResolutionError, "No safe fixed gesture"):
+            plan_home_city_camera_pan(observation=_observation(), target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+
+    def test_institute_bridge_uses_current_slot9_body_and_exact_stage0_vector(self):
+        action = plan_home_city_camera_pan(observation=_observation(objects=(_body(),)),
+                                          target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+        self.assertEqual((664, 892, 737, 685), _points(action))
+        self.assertEqual(488, action.duration_ms)
+        self.assertIn("institute_bridge", action.reason)
+
+    def test_institute_bridge_at_settled_pose_keeps_whole_stroke_safe(self):
         action = plan_home_city_camera_pan(
-            observation=_observation(objects=(target,)),
-            target=HomeCityObjectId.INSTITUTE,
-        )
+            observation=_observation(translation=(-286, 100), objects=(_body(bounds=Bounds(636, 863, 60, 56)),)),
+            target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+        self.assertEqual((666, 892, 739, 685), _points(action))
+        self.assertEqual(770, action.safe_bounds.x + action.safe_bounds.width)
 
-        self.assertEqual("up", action.direction)
-        # 900 frame px is 1500 reference units; needed delta 608-1500 = -892.
-        self.assertAlmostEqual(892 / (1600 * 2.33), action.distance_ratio, places=2)
+    def test_institute_bridge_refuses_unmatched_or_wrong_slot_body(self):
+        for body in (_body(slot=None), _body(slot=12), replace(_body(), source_kind=SpatialObjectSourceKind.GEOMETRY)):
+            with self.subTest(body=body), self.assertRaises(SelectorResolutionError):
+                plan_home_city_camera_pan(observation=_observation(objects=(body,)),
+                                          target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
 
-    def test_visible_in_band_body_needs_no_pan_step(self) -> None:
-        # The measured route taps an in-band body directly; asked anyway, the
-        # planner must refuse to invent a step.
-        target = _measured_object(
-            HomeCityObjectId.INSTITUTE,
-            bounds=Bounds(139, 185, 48, 45),
-            action_point=(154, 193),
-            action_bounds=Bounds(146, 187, 18, 11),
-        )
-        with self.assertRaisesRegex(SelectorResolutionError, "no pan is needed"):
+    def test_bridge_refuses_endpoint_outside_actual_region(self):
+        # Recognized body near the right edge does not license a longer envelope.
+        with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(
-                observation=_observation(objects=(target,), translation=(-1000, -710)),
-                target=HomeCityObjectId.INSTITUTE,
-            )
+                observation=_observation(objects=(_body(bounds=Bounds(700, 863, 60, 56)),)),
+                target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
 
-    def test_anchor_inside_band_without_body_match_is_rejected(self) -> None:
-        # Tower anchor on the tower view projects inside the band; without a
-        # current-frame body match the planner must not invent a target.
-        with self.assertRaisesRegex(SelectorResolutionError, "no current-frame match"):
-            plan_home_city_camera_pan(
-                observation=_observation(translation=(-532, -638)),
-                target=HomeCityObjectId.TOWER_OF_TRIAL,
-            )
+    def test_observed_body_intrusion_blocks_ground_region(self):
+        obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(640, 710, 30, 25), slot=12)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(observation=_observation(objects=(obstacle,)), target=HomeCityObjectId.CAMPAIGN)
 
-    def test_missing_or_unlocalized_proof_is_rejected(self) -> None:
-        with self.assertRaisesRegex(SelectorResolutionError, "localized"):
-            plan_home_city_camera_pan(
-                observation=_observation(translation=None),
-                target=HomeCityObjectId.INSTITUTE,
-            )
-        insufficient = _observation()
-        insufficient = replace(
-            insufficient,
-            spatial_surface=replace(
-                insufficient.spatial_surface,
-                camera_proof=HomeCityCameraProof(
-                    status=HomeCityCameraStatus.INSUFFICIENT,
-                    reason="test",
-                    frame_size=(540, 960),
-                ),
-            ),
-        )
-        with self.assertRaisesRegex(SelectorResolutionError, "localized"):
-            plan_home_city_camera_pan(
-                observation=insufficient,
-                target=HomeCityObjectId.INSTITUTE,
-            )
+    def test_other_body_intrusion_blocks_institute_envelope(self):
+        obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(610, 700, 30, 25), slot=12)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(observation=_observation(objects=(_body(), obstacle)),
+                                      target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
 
-    def test_unqualified_target_is_rejected(self) -> None:
-        with self.assertRaisesRegex(SelectorResolutionError, "no camera-qualified target"):
-            plan_home_city_camera_pan(
-                observation=_observation(),
-                target=HomeCityObjectId.CASTLE,
-            )
+    def test_central_ground_strip_up_has_fixed_length_and_duration(self):
+        action = plan_home_city_camera_pan(observation=_observation(translation=(-114, -350)),
+                                          target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+        x1, y1, x2, y2 = _points(action)
+        self.assertEqual(x1, x2)
+        self.assertEqual(179, y1 - y2)
+        self.assertEqual(425, action.duration_ms)
+        self.assertIn("ground_strip", action.reason)
+        self.assertLess(action.safe_bounds.y + action.safe_bounds.height, 1170)
 
-    def test_vertical_pan_uses_the_reviewed_safe_lane(self) -> None:
-        # Institute objects visible -> the castle-utility courtyard lane.
-        target = _measured_object(
-            HomeCityObjectId.INSTITUTE,
-            bounds=Bounds(165, 890, 30, 24),
-            action_point=(180, 900),
-            action_bounds=Bounds(170, 892, 20, 20),
-        )
+    def test_ground_reverse_uses_fixed_length_not_error_scaled_microdrag(self):
+        body = _body(HomeCityObjectId.CAMPAIGN, bounds=Bounds(410, 225, 40, 40), slot=None)
         action = plan_home_city_camera_pan(
-            observation=_observation(objects=(target,)),
-            target=HomeCityObjectId.INSTITUTE,
-        )
-        self.assertAlmostEqual(0.69, action.start_x_ratio)
-        self.assertAlmostEqual(0.69, action.end_x_ratio)
-
-    def test_lower_tower_pan_uses_translated_ground_instead_of_blacksmith(self) -> None:
-        """The observed lower-city lane must avoid the Blacksmith body."""
-        target = _measured_object(
-            HomeCityObjectId.INSTITUTE,
-            bounds=Bounds(420, 107, 48, 45),
-            action_point=(434, 115),
-            action_bounds=Bounds(425, 110, 20, 20),
-        )
-        for translation_x in (-532, -600):
-            with self.subTest(translation_x=translation_x):
-                action = plan_home_city_camera_pan(
-                    observation=_observation(
-                        translation=(translation_x, -840), objects=(target,),
-                    ),
-                    target=HomeCityObjectId.INSTITUTE,
-                )
-                self.assertEqual("down", action.direction)
-                self.assertAlmostEqual((1072 + translation_x) / 900, action.start_x_ratio)
-                self.assertEqual(action.start_x_ratio, action.end_x_ratio)
-
-    def test_ground_lane_does_not_extend_beyond_its_observed_vertical_extent(self) -> None:
-        target = _measured_object(
-            HomeCityObjectId.INSTITUTE,
-            bounds=Bounds(165, 890, 30, 24),
-            action_point=(180, 900),
-            action_bounds=Bounds(170, 892, 20, 20),
-        )
-        action = plan_home_city_camera_pan(
-            observation=_observation(translation=(-532, -840), objects=(target,)),
-            target=HomeCityObjectId.INSTITUTE,
-        )
-        self.assertAlmostEqual(0.69, action.start_x_ratio)
-        self.assertAlmostEqual(0.69, action.end_x_ratio)
-
-    def test_campaign_at_northern_camera_descends_to_corridor_first(self) -> None:
-        """Horizontal acquisition off-corridor would outrun the landmark catalog."""
-        action = plan_home_city_camera_pan(
-            observation=_observation(translation=(-532, 222)),
-            target=HomeCityObjectId.CAMPAIGN,
-        )
-
-        # Corridor aim -709 from camera row 222 requires image motion -931.
-        self.assertEqual("up", action.direction)
-        self.assertEqual("pan_home_city_camera_campaign_y", action.reason)
-        self.assertAlmostEqual(931 / (1600 * 2.33), action.distance_ratio, places=2)
-        self.assertTrue(action.observe_after)
-
-    def test_campaign_below_corridor_moves_up_into_the_band(self) -> None:
-        """A camera just below the corridor steps back up toward -709."""
-        action = plan_home_city_camera_pan(
-            observation=_observation(translation=(-700, -880)),
-            target=HomeCityObjectId.CAMPAIGN,
-        )
-
-        # A 0.10 minimum would overshoot the entire corridor and reverse again.
+            observation=_observation(translation=(-288, -350), objects=(body,)), target=HomeCityObjectId.CAMPAIGN)
+        _, y1, _, y2 = _points(action)
+        self.assertEqual(179, y2 - y1)
         self.assertEqual("down", action.direction)
-        self.assertEqual("pan_home_city_camera_campaign_y", action.reason)
-        self.assertAlmostEqual(171 / (1600 * 2.33), action.distance_ratio)
 
-    def test_campaign_near_corridor_edge_does_not_force_an_overshooting_step(self) -> None:
-        """A short correction remains proportional on either side of the corridor."""
-        for source_y in (-600, -880):
-            with self.subTest(source_y=source_y):
-                action = plan_home_city_camera_pan(
-                    observation=_observation(translation=(-700, source_y)),
-                    target=HomeCityObjectId.CAMPAIGN,
-                )
-                self.assertLess(action.distance_ratio, 0.10)
-                signed_motion = action.distance_ratio * 1600 * 2.33
-                if action.direction == "up":
-                    signed_motion = -signed_motion
-                planned_y = source_y + signed_motion
-                self.assertGreaterEqual(planned_y, -850)
-                self.assertLessEqual(planned_y, -620)
-                # A fresh measurement in the corridor resumes horizontal work;
-                # the runtime never promotes this estimate to camera evidence.
-                next_action = plan_home_city_camera_pan(
-                    observation=_observation(translation=(-700, round(planned_y))),
-                    target=HomeCityObjectId.CAMPAIGN,
-                )
-                self.assertEqual("left", next_action.direction)
+    def test_retained_manor_pose_can_use_surveyed_road_at_measured_endpoint_scale(self):
+        obs = _observation(translation=(-360, -753), zoom=.7389549110743511)
+        action = plan_home_city_camera_pan(observation=obs, target=HomeCityObjectId.CAMPAIGN)
+        self.assertEqual("pan_home_city_ground_strip_down", action.reason)
+        self.assertEqual(Bounds(410, 363, 44, 206), action.safe_bounds)
+        self.assertEqual((431, 376, 431, 555), _points(action))
+        self.assertEqual(425, action.duration_ms)
+        self.assertGreaterEqual(376 - action.safe_bounds.y, 9)
+        self.assertGreaterEqual(action.safe_bounds.y + action.safe_bounds.height - 1 - 555, 9)
 
-    def test_campaign_in_corridor_pans_horizontally_toward_the_body(self) -> None:
-        """Inside the measured corridor the ordinary horizontal plan applies."""
-        action = plan_home_city_camera_pan(
-            observation=_observation(translation=(-1000, -709)),
-            target=HomeCityObjectId.CAMPAIGN,
-        )
-
-        # Atlas action anchor (2083,1121) projects to reference (1083,412): only
-        # horizontal acquisition is needed.
-        self.assertEqual("left", action.direction)
-        self.assertEqual("pan_home_city_camera_campaign_x", action.reason)
-        self.assertAlmostEqual(633 / (900 * 2.33), action.distance_ratio, places=2)
-
-    def test_campaign_body_above_band_pans_down_without_corridor_override(self) -> None:
-        """A matched body needing only vertical motion keeps the ordinary plan."""
-        target = _measured_object(
-            HomeCityObjectId.CAMPAIGN,
-            bounds=Bounds(353, 145, 90, 42),
-            action_point=(395, 167),
-            action_bounds=Bounds(389, 161, 13, 13),
-        )
-        action = plan_home_city_camera_pan(
-            observation=_observation(objects=(target,), translation=(-1423, -843)),
-            target=HomeCityObjectId.CAMPAIGN,
-        )
-
-        # Reference point (658,278) sits above the band; content must move down.
-        self.assertEqual("down", action.direction)
-        self.assertEqual("pan_home_city_camera_campaign_y", action.reason)
-
-    def test_campaign_in_band_body_needs_no_pan_step(self) -> None:
-        target = _measured_object(
-            HomeCityObjectId.CAMPAIGN,
-            bounds=Bounds(78, 225, 90, 42),
-            action_point=(121, 247),
-            action_bounds=Bounds(114, 241, 13, 13),
-        )
-        with self.assertRaisesRegex(SelectorResolutionError, "no pan is needed"):
+    def test_newly_surveyed_road_remains_subject_to_current_body_occlusion(self):
+        obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(420, 562, 12, 6), slot=12)
+        obs = _observation(translation=(-360, -753), zoom=.7389549110743511,
+                           objects=(obstacle,))
+        action = plan_home_city_camera_pan(observation=obs, target=HomeCityObjectId.CAMPAIGN)
+        self.assertEqual("pan_home_city_southern_terrace_left", action.reason)
+        # Blocking the old road cannot authorize crossing it. The independent
+        # terrace may supply a different route until it too has a body intrusion.
+        terrace_obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(300, 600, 20, 20), slot=11)
+        with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(
-                observation=_observation(objects=(target,), translation=(-1882, -709)),
+                observation=replace(obs, spatial_surface=replace(
+                    obs.spatial_surface, objects=(obstacle, terrace_obstacle))),
                 target=HomeCityObjectId.CAMPAIGN,
             )
 
+    def test_unsupported_native_size_or_scale_does_not_resize_profiles(self):
+        for overrides in ({"size": (540, 960)}, {"zoom": 1.0}):
+            with self.subTest(overrides=overrides), self.assertRaisesRegex(SelectorResolutionError, "display/scale"):
+                plan_home_city_camera_pan(observation=_observation(**overrides), target=HomeCityObjectId.CAMPAIGN)
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_southern_pose_has_left_terrace_for_wall_and_exact_blacksmith(self):
+        blacksmith = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(756, 786, 89, 96),
+                           slot=12, point=(807, 844))
+        obs = _observation(translation=(-110, -414), zoom=.7388729965534407,
+                           objects=(blacksmith,))
+        for target, slot in ((HomeCityObjectId.WALL, None),
+                             (HomeCityObjectId.BLACKSMITH, HomeCitySlotSelector(12))):
+            with self.subTest(target=target):
+                step = plan_home_city_camera_step(
+                    observation=obs, target=target, home_city_slot=slot,
+                )
+                self.assertEqual("pan_home_city_southern_terrace_left", step.action.reason)
+                self.assertEqual(Bounds(526, 928, 158, 50), step.action.safe_bounds)
+                self.assertEqual((661, 952, 547, 952), _points(step.action))
+                self.assertEqual(429, step.action.duration_ms)
+                self.assertTrue(step.action.exact_geometry)
+                self.assertGreater(step.distance_to_goal(obs.spatial_surface.camera_proof), 0)
+
+    def test_southern_terrace_observed_body_or_stalled_direction_refuses(self):
+        obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(570, 940, 20, 20), slot=11)
+        for objects, avoid in (((obstacle,), None), ((), "left")):
+            with self.subTest(objects=objects, avoid=avoid), self.assertRaises(SelectorResolutionError):
+                plan_home_city_camera_step(
+                    observation=_observation(translation=(-110, -414), zoom=.7388729965534407,
+                                             objects=objects),
+                    target=HomeCityObjectId.WALL, avoid_direction=avoid,
+                )
+
+    def test_southern_terrace_does_not_authorize_unqualified_reverse(self):
+        left_body = _body(HomeCityObjectId.CAMPAIGN, bounds=Bounds(40, 600, 45, 40), slot=None)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(
+                observation=_observation(translation=(-110, -414), zoom=.7388729965534407,
+                                         objects=(left_body,)),
+                target=HomeCityObjectId.CAMPAIGN,
+            )
+
+    def test_nonendpoint_or_missing_current_view_refuses_motion(self):
+        for status in (HomeCityZoomStatus.NOT_AT_ENDPOINT, HomeCityZoomStatus.UNRESOLVED):
+            with self.subTest(status=status), self.assertRaisesRegex(SelectorResolutionError, "normalized endpoint"):
+                plan_home_city_camera_pan(observation=_observation(status=status), target=HomeCityObjectId.CAMPAIGN)
+        obs = _observation()
+        obs = replace(obs, spatial_surface=replace(obs.spatial_surface, home_city_view=None))
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(observation=obs, target=HomeCityObjectId.CAMPAIGN)
+
+    def test_mismatched_camera_dimensions_refuse_motion(self):
+        obs = replace(_observation(), image_size=(540, 960))
+        with self.assertRaisesRegex(SelectorResolutionError, "localized current-frame"):
+            plan_home_city_camera_pan(observation=obs, target=HomeCityObjectId.CAMPAIGN)
+
+    def test_stalled_direction_is_not_repeated(self):
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_step(observation=_observation(), target=HomeCityObjectId.CAMPAIGN,
+                                       avoid_direction="left")
+
+    def test_current_body_overrides_static_hint_and_already_visible_needs_no_pan(self):
+        body = _body(HomeCityObjectId.CAMPAIGN, bounds=Bounds(400, 500, 60, 60), slot=None)
+        with self.assertRaisesRegex(SelectorResolutionError, "no pan is needed"):
+            plan_home_city_camera_pan(observation=_observation(objects=(body,)), target=HomeCityObjectId.CAMPAIGN)
+
+    def test_missing_body_inside_safe_band_does_not_invent_search_input(self):
+        with self.assertRaisesRegex(SelectorResolutionError, "no current-frame match"):
+            plan_home_city_camera_pan(observation=_observation(), target=HomeCityObjectId.INSTITUTE)
+
+    def test_goal_is_recomputed_from_measured_pose_without_gesture_gain(self):
+        first = plan_home_city_camera_step(observation=_observation(), target=HomeCityObjectId.CAMPAIGN)
+        after = _observation(translation=(-542, 99))
+        second = plan_home_city_camera_step(observation=after, target=HomeCityObjectId.CAMPAIGN)
+        self.assertEqual(first.goal_atlas[0], second.goal_atlas[0])
+        self.assertLess(second.distance_to_goal(after.spatial_surface.camera_proof),
+                        first.distance_to_goal(_observation().spatial_surface.camera_proof))
+        self.assertEqual(114, _points(second.action)[0] - _points(second.action)[2])
+
+    def test_eastern_pose_can_return_right_through_independent_paved_strip(self):
+        action = plan_home_city_camera_pan(observation=_observation(translation=(-886, -372)),
+                                          target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+        self.assertEqual("pan_home_city_eastern_return_right", action.reason)
+        self.assertEqual((222, 659, 336, 659), _points(action))
+        self.assertEqual(Bounds(200, 636, 159, 48), action.safe_bounds)
+
+    def test_eastern_return_does_not_authorize_left_or_cross_a_foreign_body(self):
+        obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(230, 642, 30, 30), slot=12)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(
+                observation=_observation(translation=(-886, -372), objects=(obstacle,)),
+                target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+        campaign = _body(HomeCityObjectId.CAMPAIGN, bounds=Bounds(800, 450, 50, 50), slot=None)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(
+                observation=_observation(translation=(-886, -372), objects=(campaign,)),
+                target=HomeCityObjectId.CAMPAIGN)
+
+    def test_thin_clipped_region_cannot_lose_perpendicular_margin(self):
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_pan(observation=_observation(translation=(-886, -796)),
+                                      target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)

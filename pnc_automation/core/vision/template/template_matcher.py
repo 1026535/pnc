@@ -18,10 +18,31 @@ from PIL import Image, UnidentifiedImageError
 from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 
 
+# OpenCV's inner thread pool stays bounded to one thread: callers such as the
+# Home-camera zoom sweep already own bounded parallelism across matcher calls,
+# and a nested per-operation pool oversubscribes it (~2x measured camera
+# cost).  ``cv2.setNumThreads`` is process-wide and not thread-safe, so it is
+# applied once here at module import — before any matcher can run — and must
+# never be toggled per match, per matcher, or inside a worker pool.
+cv2.setNumThreads(1)
+
 _MAX_ASPECT_RATIO_ERROR = 0.01
 _MAX_COLOR_DELTA = 255.0
 _MAX_CANDIDATES_TO_CHECK = 256
 _DEFAULT_TEMPLATE_CACHE_SIZE = 128
+# Coarse-to-fine search constants.  The proposal floor sits below the final
+# threshold to retain native candidates on the qualified captures; coarse
+# score changes and bounded candidate ranking can still omit candidates on
+# unseen content. Proposals never qualify a match. Distinct neighborhoods are
+# deduplicated at a coarse Chebyshev
+# radius and bounded; overflow falls back to the exact full-resolution search
+# rather than truncating a possible rival.
+_PROPOSAL_THRESHOLD_MARGIN = 0.20
+_PROPOSAL_NEIGHBORHOOD_PX = 3
+_MAX_REFINEMENT_PROPOSALS = 8
+# A coarse pixel maps through the frame-size ratio into native reference
+# coordinates; this radius covers the resulting position quantization.
+_REFINEMENT_RADIUS_PX = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,14 +228,17 @@ class OpenCvTemplateMatcher:
         threshold: float,
         search_region: Bounds | None = None,
         reference_size: tuple[int, int] | None = None,
+        template_scale: float = 1.0,
     ) -> TemplateMatch | None:
         """Return the best bounded candidate above ``threshold``.
 
         PIL frames are normalized to ``reference_size`` before matching.  A
         prepared frame reuses its existing normalization.  Search regions are
         in reference coordinates, while returned bounds are in original
-        screenshot coordinates.  Unsupported aspect ratios return ``None``
-        before template decoding.
+        screenshot coordinates.  ``template_scale`` rescales the decoded
+        template before matching so callers can probe a bounded camera-zoom
+        hypothesis; returned bounds reflect the scaled on-screen size.
+        Unsupported aspect ratios return ``None`` before template decoding.
         """
 
         _validate_threshold(threshold)
@@ -223,6 +247,7 @@ class OpenCvTemplateMatcher:
             template_path,
             search_region=search_region,
             reference_size=reference_size,
+            template_scale=template_scale,
         )
         if context is None:
             return None
@@ -322,6 +347,169 @@ class OpenCvTemplateMatcher:
             for match_x, match_y, confidence in accepted
         )
 
+    def prepare_proposal_frame(self, frame: PreparedFrame) -> PreparedFrame:
+        """Returns a half-resolution proposal frame for coarse-to-fine matching.
+
+        The proposal frame is a fresh immutable downsample of ``frame`` that
+        keeps the original screenshot size, so coarse positions still project
+        through the standard original/reference mapping.  One proposal frame
+        serves every scale hypothesis of a localization; it carries no
+        mutable scratch state — its pixels are owned and read-only like any
+        prepared frame.
+        """
+
+        if not isinstance(frame, PreparedFrame):
+            raise TypeError("frame must be a PreparedFrame")
+        width = max(1, frame.reference_size[0] // 2)
+        height = max(1, frame.reference_size[1] // 2)
+        pixels = cv2.resize(
+            frame.pixels, (width, height), interpolation=cv2.INTER_AREA
+        )
+        return PreparedFrame(
+            pixels=pixels,
+            original_size=frame.original_size,
+            reference_size=(width, height),
+        )
+
+    def find_best_match_coarse_to_fine(
+        self,
+        image: PreparedFrame,
+        proposal_frame: PreparedFrame,
+        template_path: Path,
+        *,
+        threshold: float,
+        template_scale: float = 1.0,
+    ) -> TemplateMatch | None:
+        """Returns the best bounded candidate via coarse proposals and native refinement.
+
+        The coarse pass runs the same correlation and color machinery on the
+        smaller ``proposal_frame`` at ``threshold - _PROPOSAL_THRESHOLD_MARGIN``
+        to propose candidate neighborhoods; every distinct neighborhood is
+        then refined by the exact bounded search on ``image`` at the unchanged
+        ``threshold`` and ``template_scale``.  A proposal can never qualify a
+        match by itself, and the returned bounds and confidence carry the same
+        meaning as ``find_best_match``.
+
+        Numerical limits, stated honestly:
+
+        - Proposals come from the same bounded top-correlation set
+          (``_MAX_CANDIDATES_TO_CHECK``) evaluated at the lowered floor, so a
+          candidate that would qualify natively can be missed if its coarse
+          score degrades beyond the measured margin or its coarse correlation
+          rank falls outside that bounded set. Qualification therefore applies
+          to the validated landmark content and scales, not arbitrary images.
+        - Distinct proposal neighborhoods are deduplicated at Chebyshev
+          radius ``_PROPOSAL_NEIGHBORHOOD_PX`` and bounded to
+          ``_MAX_REFINEMENT_PROPOSALS``.  More distinct neighborhoods fall
+          back to the exact full-resolution search for this template and
+          scale, so no possible rival is silently truncated and the result
+          keeps all proof consequences of the full search.
+        - Proposal positions map through the actual frame-size ratio; a
+          ``_REFINEMENT_RADIUS_PX`` window covers the resulting quantization.
+        """
+
+        _validate_threshold(threshold)
+        if not isinstance(image, PreparedFrame) or not isinstance(
+            proposal_frame, PreparedFrame
+        ):
+            raise TypeError("coarse-to-fine matching requires prepared frames")
+        ratio_x = image.reference_size[0] / proposal_frame.reference_size[0]
+        ratio_y = image.reference_size[1] / proposal_frame.reference_size[1]
+        if not (
+            math.isfinite(ratio_x)
+            and math.isfinite(ratio_y)
+            and ratio_x > 0.0
+            and ratio_y > 0.0
+            and _aspect_ratio_error(ratio_x, 1.0, ratio_y, 1.0)
+            <= _MAX_ASPECT_RATIO_ERROR
+        ):
+            raise ValueError(
+                "proposal_frame must be a same-aspect downscale of image"
+            )
+        context = self._match_context(
+            proposal_frame,
+            template_path,
+            search_region=None,
+            reference_size=None,
+            template_scale=template_scale / ratio_x,
+        )
+        if context is None:
+            # The scaled template cannot exist on the proposal frame; the
+            # exact native search decides so edge semantics (e.g. an
+            # oversized or undecodable template) stay identical.
+            return self.find_best_match(
+                image,
+                template_path,
+                threshold=threshold,
+                template_scale=template_scale,
+            )
+        qualified = _qualified_candidates(
+            context.response,
+            source=context.source,
+            template=context.decoded.rgb,
+            alpha=context.decoded.alpha,
+            threshold=max(0.0, threshold - _PROPOSAL_THRESHOLD_MARGIN),
+        )
+        if not qualified:
+            return None
+        ranked = sorted(
+            qualified,
+            key=lambda item: (-item[3], -item[2], item[1], item[0]),
+        )
+        positions: list[tuple[int, int]] = []
+        for candidate_x, candidate_y, _correlation, _confidence in ranked:
+            if any(
+                abs(candidate_x - kept_x) <= _PROPOSAL_NEIGHBORHOOD_PX
+                and abs(candidate_y - kept_y) <= _PROPOSAL_NEIGHBORHOOD_PX
+                for kept_x, kept_y in positions
+            ):
+                continue
+            positions.append((candidate_x, candidate_y))
+        if len(positions) > _MAX_REFINEMENT_PROPOSALS:
+            return self.find_best_match(
+                image,
+                template_path,
+                threshold=threshold,
+                template_scale=template_scale,
+            )
+        decoded = self._template_cache.get(template_path)
+        if template_scale != 1.0:
+            decoded_native = _scale_decoded_template(decoded, template_scale)
+            if decoded_native is None:
+                return None
+            decoded = decoded_native
+        template_height, template_width = decoded.rgb.shape[:2]
+        native_width, native_height = image.reference_size
+        best: TemplateMatch | None = None
+        for candidate_x, candidate_y in positions:
+            native_x = int(round(candidate_x * ratio_x))
+            native_y = int(round(candidate_y * ratio_y))
+            left = max(0, native_x - _REFINEMENT_RADIUS_PX)
+            top = max(0, native_y - _REFINEMENT_RADIUS_PX)
+            right = min(
+                native_width,
+                native_x + template_width + _REFINEMENT_RADIUS_PX,
+            )
+            bottom = min(
+                native_height,
+                native_y + template_height + _REFINEMENT_RADIUS_PX,
+            )
+            hit = self.find_best_match(
+                image,
+                template_path,
+                threshold=threshold,
+                search_region=Bounds(
+                    x=left,
+                    y=top,
+                    width=right - left,
+                    height=bottom - top,
+                ),
+                template_scale=template_scale,
+            )
+            if hit is not None and (best is None or hit.confidence > best.confidence):
+                best = hit
+        return best
+
     def _match_context(
         self,
         image: Image.Image | PreparedFrame,
@@ -329,6 +517,7 @@ class OpenCvTemplateMatcher:
         *,
         search_region: Bounds | None,
         reference_size: tuple[int, int] | None,
+        template_scale: float = 1.0,
     ) -> _MatchContext | None:
         """Resolve the shared frame, region, template, and correlation response."""
 
@@ -348,6 +537,10 @@ class OpenCvTemplateMatcher:
                 height=frame.reference_size[1],
             )
         decoded = self._template_cache.get(template_path)
+        if template_scale != 1.0:
+            decoded = _scale_decoded_template(decoded, template_scale)
+            if decoded is None:
+                return None
         template_height, template_width = decoded.rgb.shape[:2]
         if template_width > region.width or template_height > region.height:
             return None
@@ -470,6 +663,43 @@ def _decode_template(path: Path) -> _DecodedTemplate:
     return _DecodedTemplate(rgb=rgba[..., :3], alpha=alpha)
 
 
+def _scale_decoded_template(
+    decoded: _DecodedTemplate,
+    template_scale: float,
+) -> _DecodedTemplate | None:
+    """Rescale a decoded template for one bounded camera-zoom hypothesis.
+
+    Returns ``None`` when the scaled template would be too small to match
+    meaningfully; the caller treats that hypothesis as producing no
+    candidate.  The input arrays stay untouched because ``cv2.resize``
+    allocates fresh output.
+    """
+
+    if (
+        isinstance(template_scale, bool)
+        or not isinstance(template_scale, Real)
+        or not math.isfinite(float(template_scale))
+        or float(template_scale) <= 0.0
+    ):
+        raise ValueError("template_scale must be a positive finite number")
+    scale = float(template_scale)
+    height, width = decoded.rgb.shape[:2]
+    scaled_width = max(1, int(round(width * scale)))
+    scaled_height = max(1, int(round(height * scale)))
+    if scaled_width < 4 or scaled_height < 4:
+        return None
+    interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    scaled_rgb = cv2.resize(
+        decoded.rgb, (scaled_width, scaled_height), interpolation=interpolation
+    )
+    scaled_alpha = cv2.resize(
+        decoded.alpha, (scaled_width, scaled_height), interpolation=interpolation
+    )
+    if not np.any(scaled_alpha):
+        return None
+    return _DecodedTemplate(rgb=scaled_rgb, alpha=scaled_alpha)
+
+
 def _aspect_ratio_error(
     image_width: int,
     image_height: int,
@@ -529,6 +759,10 @@ def _qualified_candidates(
     finite_response = np.nan_to_num(response, nan=-1.0, posinf=-1.0, neginf=-1.0)
     flat = finite_response.ravel()
     if not flat.size:
+        return []
+    # Confidence is bounded by correlation, so no candidate can qualify when
+    # the strongest response is already below the threshold.
+    if float(finite_response.max()) < threshold:
         return []
 
     candidate_count = min(_MAX_CANDIDATES_TO_CHECK, flat.size)

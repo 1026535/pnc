@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "native_frame_size": [900, 1600],
+  "hud_exclusion_bounds": [
+    [0, 0, 900, 190],
+    [0, 190, 140, 1195],
+    [765, 190, 135, 1195],
+    [0, 1385, 900, 215]
+  ],
+  "endpoint": {
+    "id": "home_zoom_endpoint_20260925",
+    "reference_size": [900, 1600],
+    "zoom_interval": [0.738, 0.744],
+    "non_endpoint_floor": 0.7469,
+    "min_fixed_groups": 2,
+    "max_mean_residual_px": 3.0,
+    "native_sources": [
+      "2026-09-25/157_farm run 173752Z-866a21f1 (endpoint fits 0.7406-0.7406)",
+      "2026-09-25/157_farm run 182013Z-bbc50e93 (endpoint fits 0.7398-0.7422)",
+      "2026-09-25/157_farm run 183834Z-409d1503 (endpoint fits 0.7388-0.7431)"
+    ],
+    "holdout_sources": [
+      "home_city_zoom_endpoint_20260925.png (tracked endpoint fixture, refit 0.74275)",
+      "home_city_zoom_rung_20260925.png (tracked nearest-rung fixture, refit 0.74692)",
+      "20260925T182119Z_v44_home_after_identity.png (non-endpoint rung, refit 0.7793)",
+      "home_city_northeast_holdout_20260923.png (non-endpoint, zoom 1.0)",
+      "home_city_native_zoom_baseline_20260922.png (non-endpoint, zoom 1.0)",
+      "home_city_native_zoom_holdout_20260922.png (non-endpoint, zoom 1.072)"
+    ]
+  },
+  "zoom_anchors": [
+    {
+      "id": "northeast_moat_slope_wheel_20260925",
+      "file_name": "northeast_moat_slope_wheel.png",
+      "point_offset": [80, 54],
+      "scales": [0.98, 1.0, 1.02, 1.05, 1.11, 1.17, 1.35, 1.4],
+      "min_score": 0.9,
+      "native_sources": [
+        "template: crop [190,650]-[360,850] of 20260925T184512Z_v44_z1_endpoint_repeat_pre.png (sha256 9b7484319a9a002d9c38e29855694c71173f5c863026f1c69acc048e69a0beb9, native 900x1600)",
+        "dispatch: run 20260925T183834Z-409d1503 z1_endpoint_repeat sent wheel at native (270,704) -- offset (80,54) inside the crop -- postcondition frame 20260925T184527Z_v44_z1_endpoint_repeat_post.png shows Home unchanged",
+        "positive evidence: source frame and tracked post frame match at scales 0.98/1.00/1.02, scores 0.95-1.00, projected point <=2px from the dispatched point; home_city_northeast_holdout_20260923.png matches at scales 1.35/1.40, scores 0.9716/0.9078, point <=4px from the proof-predicted location",
+        "trajectory evidence: native pre-input frames 20260925T184100Z (zoom 0.779), 20260925T184349Z (0.824), and 20260925T184320Z (0.871) match at template scales 1.05/1.11/1.17 with scores 0.9623/0.9707/0.9656; tracked as home_city_zoom_mid_{779,824,871}_20260925.png",
+        "negative evidence: no >=0.9 match on retained views where the patch is offscreen (endpoint_a, endpoint_c, rung_7469, rung_779 at the other pose, zoom_1_0, holdout_1_072); obscuring the ground point while leaving the remote shaft visible rejects the anchor",
+        "qualification scope: direct scenery recognition plus the recorded wheel input and Home postcondition support this point; no extracted collider polygon or universal building-free region is claimed; final production live input validation remains required"
+      ]
+    },
+    {
+      "id": "castle_fountain_wheel_20260927",
+      "file_name": "castle_fountain.png",
+      "point_offset": [33, 20],
+      "scales": [0.72, 0.74, 0.75, 0.76, 0.78, 0.84, 0.86, 0.88, 0.9, 0.92, 0.94, 0.95, 0.96, 0.98, 1.0, 1.02, 1.04, 1.05, 1.06, 1.08, 1.1],
+      "min_score": 0.9,
+      "native_sources": [
+        "template: packaged castle_fountain.png landmark crop (85x70, sha256 941ad035d9385e3089b3f547681dc9fda8f8982048ec4e0d16caaacf06f5308a) -- reused directly; the crop sits below the Castle name label and contains no HUD, label text, chat or mutable badge pixels",
+        "dispatch: 2026-09-22 157_farm wheel-validation turn-020 (raw v44_wheel_live_raw_turn-020.json) sent wheel -1 and +1 at native (450,800) with no touch or click, from default Home and its closer view; fixed-landmark fits proved 1.0 -> 1.072 -> 1.0 with Home retained; recovered citymoveitem.lua Update() consumes Mouse ScrollWheel orthographic size independently of collider queries",
+        "offset provenance: on pre-input frame 20260922T081031Z_v44_wheel_e2_pre.png (sha256 a97a71f25628e8d9bd3d06eaaa21f0f3196c175caae47c5eb5240c43bf09a3d3, zoom 1.072, atlas translation (-602,78)) the template matched at bounds (416,779,89,74) at scale 1.05, placing the dispatched point inside the patch at offset (33,20); the best hit (scale 1.06, bounds (415,779,90,74), score 0.9748) reproduces (450,800)",
+        "positive evidence: zoom-1.0 default pose (atlas translation (-532,222)) matches at bounds (417,875,85,70) with scores 0.9086-1.0 on 20260922T080949Z_v44_wheel_e1_pre.png (sha256 d6048af792a96e6e3eb60b8e69504c953e0ce79db9775c335d2369f37ee6f5d2), 20260922T080932Z_v44_baseline_2.png (sha256 c441b6c7080ae875f582df7e3cb5d401e0e80b89136dd6dc1b76ea7f12fa26aa), and the 2026-09-27 turn-002 default baseline (sha256 0288458021c5253bb6a38cf56f84beb863fe005485aefceec1d24a156f759703); the restored zoom-1.0 pose (-532,73) matches at (417,726,85,70); zoom-1.072 views match at scales 1.02-1.10; the 0.747 rung fixture matches at scales 0.72-0.78 (score up to 0.9663); native institute/tower pretap holdouts match at scales 0.95-1.06",
+        "negative evidence: no >=0.9 match where the fountain is offscreen or unrecognizable (endpoint pose (-1084,50), mid-zoom pans (-1159,14)/(-1252,-32)/(-1349,-79), northeast/west holdouts, wall corridor, pw_manor)",
+        "September27 turn003 production wheel proof: -1/+1 at current fountain patches retained Home and measured1.0->1.07294->1.0; two subsequent+1 inputs reached0.93519 and0.87963. The0.93519 native frame matches template scales0.88-0.98 (best0.94,score0.97475); the0.87956 stopped frame matches0.84-0.92 (best0.88,score0.97537), current point(450,657). These positive matches add the missing search scales; both native frames are retained with source hashes in tests/data/home_city_camera/manifest.json",
+        "qualification scope: WHEEL ONLY -- each current-frame positive match must identify the same scenery patch and contain the calibrated point outside HUD; no tap safety, drag lane, collider-free region or universal pose coverage is claimed. Listed scales are measured template-search candidates, not endpoint classifications. Widest normalization and post-pan production acceptance remain pending"
+      ]
+    }
+  ]
+}

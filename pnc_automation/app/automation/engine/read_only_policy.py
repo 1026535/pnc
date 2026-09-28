@@ -10,9 +10,20 @@ from pnc_automation.app.pnc.domain.action_requests import (
     LaunchAppAction,
     SwipeAction,
     TapAction,
+    TapSpatialObjectAction,
     WaitAction,
+    WheelAction,
 )
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.building_catalog import (
+    HomeCityObjectId,
+    home_city_object_id_from_metadata,
+)
+from pnc_automation.app.pnc.domain.observation import (
+    Observation,
+    SpatialObjectKind,
+    SpatialObjectSourceKind,
+    SpatialSurfaceType,
+)
 from pnc_automation.app.pnc.domain.popup import PopupControlKind, decide_popup_recovery
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -28,11 +39,14 @@ class ReadOnlyProbePolicy:
     allowed_selector_screens: tuple[tuple[UiElementId, frozenset[ScreenType]], ...] = ()
     allow_launch: bool = False
     allow_swipe: bool = False
+    allow_wheel: bool = False
     allowed_back_screens: frozenset[ScreenType] = frozenset()
     allowed_swipe_screens: frozenset[ScreenType] = frozenset()
+    allowed_wheel_screens: frozenset[ScreenType] = frozenset()
     allowed_launch_screens: frozenset[ScreenType] = frozenset()
     max_wait_ms: int = 1000
     allow_system_popup_recovery: bool = False
+    allowed_home_buildings: frozenset[HomeCityObjectId] = frozenset()
 
     def __post_init__(self) -> None:
         """Rejects invalid probe wait budgets."""
@@ -59,6 +73,23 @@ class ReadOnlyProbePolicy:
 
         if not self.enabled:
             return
+        if isinstance(action, TapSpatialObjectAction):
+            # Building entry is explicitly scoped by semantic identity. The
+            # executor still owns current-object/provenance and geometry checks.
+            body = action.expected_object
+            surface = observation.spatial_surface
+            if (
+                observation.screen_type == ScreenType.PNC_HOME_CITY
+                and surface is not None
+                and surface.surface_type == SpatialSurfaceType.HOME_CITY_SURFACE
+                and action.exact_geometry
+                and body is not None
+                and body.kind == SpatialObjectKind.HOME_BUILDING
+                and body.source_kind == SpatialObjectSourceKind.TEMPLATE
+                and home_city_object_id_from_metadata(body.metadata)
+                in self.allowed_home_buildings
+            ):
+                return
         if (
             isinstance(action, TapAction)
             and action.selector_id in self.allowed_selectors
@@ -108,6 +139,12 @@ class ReadOnlyProbePolicy:
             isinstance(action, SwipeAction)
             and self.allow_swipe
             and observation.screen_type in self.allowed_swipe_screens
+        ):
+            return
+        if (
+            isinstance(action, WheelAction)
+            and self.allow_wheel
+            and observation.screen_type in self.allowed_wheel_screens
         ):
             return
         raise SelectorResolutionError(

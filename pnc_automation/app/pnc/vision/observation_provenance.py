@@ -10,7 +10,10 @@ from typing import TypeVar
 
 from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
-from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
+from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraProof,
+    HomeCityViewEvidence,
+)
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
@@ -171,6 +174,12 @@ def bind_spatial_surface(
             source_screen=source_screen,
             source_layout_id=source_layout_id,
         ),
+        home_city_view=bind_home_city_view(
+            surface.home_city_view,
+            frame_ref=frame_ref,
+            source_screen=source_screen,
+            source_layout_id=source_layout_id,
+        ),
     )
 
 
@@ -219,6 +228,26 @@ def bind_camera_proof(
         frame_ref=proof.frame_ref or frame_ref,
         source_screen=proof.source_screen or source_screen,
         source_layout_id=proof.source_layout_id if proof.source_layout_id is not None else source_layout_id,
+    )
+
+
+def bind_home_city_view(
+    view: HomeCityViewEvidence | None,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> HomeCityViewEvidence | None:
+    """Adds missing Home-view provenance while rejecting contradictory proof."""
+
+    if view is None:
+        return None
+    return _bind_typed_fact(
+        view,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Home-city view",
     )
 
 
@@ -413,6 +442,7 @@ _TypedFactT = TypeVar(
     BuildingDetail,
     BuildingRequirementRow,
     WorkshopView,
+    HomeCityViewEvidence,
 )
 
 

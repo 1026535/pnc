@@ -1723,12 +1723,12 @@
           "threshold": 0.93
         },
         {
-          "image": "screen_anchors/core_world_map_identity_1.png",
+          "image": "screen_anchors/core_world_map_hud_toggle.png",
           "search_region": [
             8,
             798,
             40,
-            37
+            38
           ],
           "threshold": 0.93
         }
@@ -1800,7 +1800,7 @@
           }
         }
       ],
-      "revision": 2,
+      "revision": 4,
       "source": {
         "fixture": "tests/data/screen_recognition/world_map_core.png",
         "decoded_sha256": "d3e13823aa5ccc3962c6faf6689e161303e9d418f728f2f15fd01413f8ac45b8",
@@ -1808,7 +1808,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Rebased reviewed PNC_WORLD_MAP identity and measured magnifier action anchor; coordinate-bar OCR remains a separate label.",
+        "description": "World identity requires the Home-nav strip and the existing lower-left HUD arrows. Their shared HUD-control asset preserves RGB/geometry and uses an authoring-only alpha mask retaining 346/1088 cyan foreground pixels (B-R>=25,G-R>=25,B>=110,G>=110) to exclude variable terrain. The separately measured magnifier uses its reviewed tan-foreground mask and remains optional: hiding it must not remove World identity. Both masks use the existing alpha matcher and unchanged 0.93 floor; coordinate OCR remains a separate fact. Provenance: world-hud-foreground031-probe.json and v19-world-magnifier-probe-20260923.json.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -3061,12 +3061,12 @@
           "threshold": 0.93
         },
         {
-          "image": "screen_anchors/campaign_map_nodes.png",
+          "image": "screen_anchors/campaign_map_grandia_name.png",
           "search_region": [
-            175,
-            445,
-            160,
-            115
+            228,
+            460,
+            115,
+            45
           ],
           "threshold": 0.93
         }
@@ -3086,7 +3086,7 @@
           }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_map.png",
         "decoded_sha256": "05f3d0ff1fba60751a71e366a89946f8750e38fd48eabb6ce377548a74bf3059",
@@ -3094,7 +3094,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Evidence-backed Campaign map identity with bounded map-scene and node anchors plus the reviewed lower-right Home portal.",
+        "description": "Campaign map identity combines the original bounded scene with the Grandia Ruins nameplate. The second patch is cropped from the original reference nodes patch at [58,20,158,49], excluding most animated badge/terrain pixels; its0.93 threshold is unchanged. Native correlated2026-09-22 failure frames score0.9451/0.9490 and retain the independently measured Home portal.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -6016,6 +6016,64 @@
         656,
         530,
         304
+      ]
+    },
+    {
+      "id": "building_wall",
+      "layout_id": "building_wall",
+      "screen": "PNC_WALL",
+      "revision": 1,
+      "source": {
+        "fixture": "wall_overview_20260918.png",
+        "decoded_sha256": "5b06560b79336464382b02c3a5044965d4c92d2634868536df9d53f00013a2fa",
+        "capture_group": "2026-09-18/serious_stuff/live_turn007_wall_overview"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Wall identity uses the captured title and static description, independently of mutable level and statistics. Only the measured owned Back is exposed for ordinary-building acquisition; Defense Info and repair/upgrade actions belong to V34.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/wall_title.png",
+          "search_region": [
+            95,
+            0,
+            270,
+            55
+          ],
+          "threshold": 0.94
+        },
+        {
+          "image": "screen_anchors/wall_description.png",
+          "search_region": [
+            265,
+            130,
+            275,
+            60
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              5,
+              0,
+              90,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
       ]
     }
   ]

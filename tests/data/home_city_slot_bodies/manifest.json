@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
+  "samples": [
+    {
+      "image": "home_city_blacksmith_slot12_f1_20260922.png",
+      "role": "slot_body_positive_institute_post",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "e9c00ef45b2bc50ad9244db7908b9349da6a9e6d15463b402e4027a68a388651",
+      "sha256": "3e97493533d277c67231eda9eb6c11b6354083ad1639c8f63a0db19894e1d1ba",
+      "source_artifact": "20260922T050144Z_core_20260922T045658Z_f03a5eab_0047_c2_institute_home_post.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "ec0ed6d53163277b18de43f1e359d9dad231393a1fb31344753cf33539433548",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "157_farm independent post-Institute view. Camera zoom 1.0, atlas translation (-530,-391): the slot-12 Blacksmith body is measured at frame (642,1232,120,130) score .9782 and its candidate action point lands at native (712,1312); eligible slot-11/13 predictions lie off-viewport.",
+      "outside_mask_sha256": "a50c97022b15eea759ec92a7338aee2ce40c466c4f563cec431ff9f7ad4bdd15"
+    },
+    {
+      "image": "home_city_blacksmith_slot12_f2_20260922.png",
+      "role": "slot_body_positive_tower_post",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "a151bda6c011404e8f379f54d591dc78e425e42bd554a1257788f04750e7437a",
+      "sha256": "5a1aa2bc26767cc2600bd6ccb951efab513ecdfb158d37d4b35d2dac8826d8d1",
+      "source_artifact": "20260922T050321Z_core_20260922T045658Z_f03a5eab_0062_c2_tower_of_trial_home_post.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "d427ec928904dac82d12799358b9b39ebb6a5765f7434fa62b0317208d61bca0",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "157_farm post-Tower view. Camera zoom 1.0, atlas translation (-530,-874): slot-12 Blacksmith body measured at frame (642,749,120,130) score .9794, candidate action point (712,829) as visually measured by the lead; slot-11/13 predictions off-viewport.",
+      "outside_mask_sha256": "7521f132ec025d8cbd11d38bd9733c8f1b3af884bd5dddfabdd2f6b228f0a4e2"
+    },
+    {
+      "image": "home_city_baseline_f0_20260922.png",
+      "role": "slot_body_negative_offscreen",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "dde9f98afc8ec7bf9547f3833cf31e216942b7a3b9ce44da7579eb66c87d2fd2",
+      "sha256": "d6dc30e9c3dca8ef647ba082558cf09406be9b63c6522eaa8a8145e95bf6381e",
+      "source_artifact": "20260922T050000Z_core_20260922T045658Z_f03a5eab_0030_c1_home_baseline_a.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "8c6e4e298de0d51a2cfa8c6381d2e1864d31f7a4a88f5de31e809780b457cf22",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "157_farm baseline view. Camera zoom 1.0, atlas translation (-532,222): all eligible Blacksmith slot predictions lie below the viewport, so no slot-bound body may publish even though the frame localizes.",
+      "outside_mask_sha256": "d3d743e448b0f50a4973e5e65ee1172dd19370f627c10114b45639c9c98bf76b"
+    },
+    {
+      "image": "home_city_pan2_f5_20260922.png",
+      "role": "slot_body_negative_wrong_slot_content",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "e1b72938438b47731f101b7aee092104320f0d6a6b9a2a125682ef599c6010ab",
+      "sha256": "29beef7f779ec16793b83bbe70dd01977d8027cedf87923ad881d846e4193969",
+      "source_artifact": "20260922T050420Z_core_20260922T045658Z_f03a5eab_0069_core_12_building_pan_2_after_0.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "b18d13ee75a74c4e30b9756a7ce00dd14068fc47b4fce61e9fe71b5dbf6f72e8",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "157_farm pan-2 view. Camera zoom 1.0, atlas translation (-1632,-718): the only on-viewport eligible candidate is slot 13, which this account holds as Alliance Hall; the Blacksmith crop must not claim it.",
+      "outside_mask_sha256": "513f8200f3796336109262dfc03cf5d6bd928a989cc220076adc2aaa46cba0c7"
+    },
+    {
+      "image": "home_city_wall_slot2_f6_20260922.png",
+      "role": "wall_body_independent_following_capture",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "90fbabc1584eb5a9db735f67e2dfd8f21633b7c0557cfd5a3952244da75cff54",
+      "sha256": "ea54e44f87eda84a639141503238bd12c3f03730f3ea10b9bab2248bf5969880",
+      "source_artifact": "20260922T050429Z_core_20260922T045658Z_f03a5eab_0070_core_12_building_pan_2_after_1.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "f0a4f246600d2e6643a2d7a68aa7869da59e22c3b79cd8bb3cc039442db04ae2",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "157_farm f6 independent capture immediately after crop-source f5 at essentially the same pose. Wall slot 2 matches gatehouse at (77,905,95,125), candidate point (118,983), score .9943. No cross-pose or live hitbox acceptance is implied.",
+      "outside_mask_sha256": "570d2b4a6ed0b3d568a88a581265ac69b67244047fb92bfd092fabe669f67e8c"
+    },
+    {
+      "image": "home_city_goddess_slot15_0066_20260923.png",
+      "role": "goddess_statue_body_observed_regression",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "53e19404c6134db5cad2e579c9c9166e041751f57e8fd2d3312e3099e5ffcd40",
+      "sha256": "5ceee88c7132693dcaa36b290a9e5698a8f4fc3aeb370d5b722ff7613c412f71",
+      "source_artifact": "20260923T105931Z_core_20260923T105322Z_174413f3_0066_core_13_building_source.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "c95d011e2845142a9def2f69656cdd5a8e6ae6505e0b223686293258566dcb2d",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "157_farm live005 frame 0066, the authored source of the Goddess statue-body crop. Observed regression/validation frame, not an independent holdout. Camera zoom 1.0, atlas translation (-595,-847): the slot-15 gold statue column/plinth matches at (368,145,60,78) score 1.0 with candidate action (398,200), which sits above the HUD-safe tap band so production must pan and reobserve before tapping. The earlier platform-trim target was never a proved clickable body.",
+      "outside_mask_sha256": "c195b827516bd9cd0fff2f38a0284c48ef8fae74a27e1d4882bce5cef7f7bd88"
+    }
+  ]
+}

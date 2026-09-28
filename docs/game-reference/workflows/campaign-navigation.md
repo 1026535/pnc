@@ -80,3 +80,12 @@ are 0.928/0.932 against other Campaign-surface maxima 0.629/0.529, using a
 0.90 floor for each anchor. The actual native return capture is tracked as
 `campaign_map_recentered_20260916.png`; both publishers retain its frame-bound
 Home portal. Final live return and integrated V13 acceptance remain pending.
+
+## Shared Campaign entry recognition
+
+**Artifact-observed:** own157_farm runtime `20260922T232718Z_26f6cf57`, captures
+0041/0043, is a clear Campaign map that the prior broad node/terrain patch missed
+during animation (node score0.9249 below0.93 while scene score0.9982 passed).
+Cropping the existing reference patch to the Grandia Ruins label yields
+0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
+scene anchor and measured Home portal are unchanged. The two native map fixtures share one correlated validation group. The shared Home-to-Campaign entry and Home return passed the independently reviewed V44 turn012 route. Campaign chapter/stage parsing and formation remain separately owned.

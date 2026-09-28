@@ -15,7 +15,11 @@ from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity, CampaignNodeFacts
 from pnc_automation.app.pnc.domain.chat import ChatChannel
-from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
+from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraProof,
+    HomeCityViewEvidence,
+)
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.popup import PopupOverlayObservation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -368,6 +372,7 @@ class DetectedSpatialObject:
     action_bounds: Bounds | None = None
     action_qualification: SpatialObjectActionQualification | None = None
     source_kind: SpatialObjectSourceKind | None = None
+    home_city_slot: HomeCitySlotSelector | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     frame_ref: FrameRef | None = None
     source_screen: ScreenType | None = None
@@ -417,6 +422,14 @@ class DetectedSpatialObject:
                 "Spatial objects must use integer confirmed world coordinates when present.",
                 object_kind=self.kind,
                 confirmed_world_coordinate=self.confirmed_world_coordinate,
+            )
+        if self.home_city_slot is not None and not isinstance(
+            self.home_city_slot, HomeCitySlotSelector
+        ):
+            raise SelectorResolutionError(
+                "Spatial objects must carry a typed Home-city slot selector or None.",
+                object_kind=self.kind,
+                home_city_slot=self.home_city_slot,
             )
         if self.action_bounds is not None:
             if self.action_point is None or not self.action_bounds.contains_point(self.action_point):
@@ -498,6 +511,7 @@ class SpatialSurfaceObservation:
     viewport: SpatialViewport
     objects: tuple[DetectedSpatialObject, ...] = ()
     camera_proof: HomeCityCameraProof | None = None
+    home_city_view: HomeCityViewEvidence | None = None
     detection_diagnostics: tuple[SpatialDetectionDiagnostics, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 

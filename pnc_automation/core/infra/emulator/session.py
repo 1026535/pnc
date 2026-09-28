@@ -31,8 +31,20 @@ from pnc_automation.core.errors import (
     GameLaunchError,
     ScreenshotCaptureError,
 )
+from pnc_automation.core.infra.emulator.input_dispatch import (
+    SwipeDispatch,
+    TapDispatch,
+    WheelDispatch,
+)
 from pnc_automation.core.infra.emulator.provenance import CapturedFrame, FrameRef
+from pnc_automation.core.infra.emulator.scroll_transport import (
+    SCROLL_TRANSPORT_NAME,
+    ScrcpyControlTransport,
+    build_scroll_packet,
+    require_native_display_mapping,
+)
 from pnc_automation.core.lifecycle import close_preserving_error
+from pnc_automation.core.vision.image.models import Bounds
 
 
 def _input_dispatch(function: Callable[..., object]) -> Callable[..., object]:
@@ -152,6 +164,10 @@ class BlueStacksSession:
     provenance_max_age_seconds: float = 30.0
     rng: random.Random = field(default_factory=random.Random, repr=False)
     input_jitter_px: float = 4.0
+    scroll_transport_factory: Callable[[BlueStacksSession], ScrcpyControlTransport] | None = field(
+        default=None,
+        repr=False,
+    )
     _instance_lease: ProcessInstanceLease | None = field(default=None, init=False, repr=False)
     _cleanup_intent_registered: bool = field(default=False, init=False, repr=False)
     _cleanup_intent_id: str | None = field(default=None, init=False, repr=False)
@@ -162,7 +178,9 @@ class BlueStacksSession:
     _input_sequence: int = field(default=0, init=False, repr=False)
     _latest_frame: FrameRef | None = field(default=None, init=False, repr=False)
     _consumed_frame: tuple[str, int, int, int] | None = field(default=None, init=False, repr=False)
+    _authorizing_frame: FrameRef | None = field(default=None, init=False, repr=False)
     _provenance_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+    _scroll_transport: ScrcpyControlTransport | None = field(default=None, init=False, repr=False)
 
     def connect(self) -> None:
         """Connects to the configured ADB endpoint and validates device readiness."""
@@ -320,11 +338,25 @@ class BlueStacksSession:
         return max(0, round(duration_ms * self.rng.uniform(0.85, 1.15)))
 
     @_input_dispatch
-    def tap_point(self, x: int, y: int) -> None:
-        """Sends one screen tap to the device."""
+    def tap_point(
+        self,
+        x: int,
+        y: int,
+        *,
+        exact_geometry: bool = False,
+        safe_bounds: Bounds | None = None,
+    ) -> TapDispatch:
+        """Sends one screen tap to the device and returns its actual dispatch."""
 
         self._require_input()
-        x, y = self._jitter_point(x, y)
+        if not exact_geometry:
+            x, y = self._jitter_point(x, y)
+        _require_point_in_safe_bounds(
+            (x, y),
+            safe_bounds=safe_bounds,
+            primitive="tap",
+            device_id=self.instance.device_id,
+        )
         result = self.adb_client.shell(self.instance.device_id, "input", "tap", str(x), str(y))
         if not result.succeeded:
             raise DeviceConnectionError(
@@ -334,6 +366,7 @@ class BlueStacksSession:
                 y=y,
                 stderr=result.stderr_text,
             )
+        return TapDispatch(point=(x, y), input_sequence=self._input_sequence)
 
     @_input_dispatch
     def input_text(self, text: str) -> None:
@@ -385,13 +418,32 @@ class BlueStacksSession:
         duration_ms: int = 300,
         input_source: str = "touchscreen",
         gesture_primitive: str = "swipe",
-    ) -> None:
-        """Sends one swipe-like drag through the requested Android input primitive."""
+        exact_geometry: bool = False,
+        safe_bounds: Bounds | None = None,
+    ) -> SwipeDispatch:
+        """Sends one swipe-like drag and returns its actual post-jitter dispatch.
+
+        With ``exact_geometry=True`` the resolved endpoints and duration are sent
+        exactly: no jitter and no eased path drift for motion-event gestures.
+        """
 
         self._require_input()
-        start_x, start_y = self._jitter_point(start_x, start_y)
-        end_x, end_y = self._jitter_point(end_x, end_y)
-        duration_ms = self._jitter_duration_ms(duration_ms)
+        if not exact_geometry:
+            start_x, start_y = self._jitter_point(start_x, start_y)
+            end_x, end_y = self._jitter_point(end_x, end_y)
+            duration_ms = self._jitter_duration_ms(duration_ms)
+        _require_point_in_safe_bounds(
+            (start_x, start_y),
+            safe_bounds=safe_bounds,
+            primitive="swipe start",
+            device_id=self.instance.device_id,
+        )
+        _require_point_in_safe_bounds(
+            (end_x, end_y),
+            safe_bounds=safe_bounds,
+            primitive="swipe end",
+            device_id=self.instance.device_id,
+        )
         if gesture_primitive == "swipe":
             command = [
                 *_input_command_prefix(input_source=input_source, device_id=self.instance.device_id),
@@ -413,42 +465,151 @@ class BlueStacksSession:
                     stderr=result.stderr_text,
                     gesture_primitive=gesture_primitive,
                 )
-            return
-        if gesture_primitive != "press_move_release":
+        elif gesture_primitive == "press_move_release":
+            motion_event_prefix = [*_input_command_prefix(input_source=input_source, device_id=self.instance.device_id), "motionevent"]
+            timeline = _motion_event_drag_timeline(
+                start_x=start_x,
+                start_y=start_y,
+                end_x=end_x,
+                end_y=end_y,
+                duration_ms=duration_ms,
+                rng=self.rng,
+                jitter_px=0.0 if exact_geometry else self.input_jitter_px,
+            )
+            for index, (event_name, x, y, delay_seconds) in enumerate(timeline):
+                result = self.adb_client.shell(
+                    self.instance.device_id,
+                    *motion_event_prefix,
+                    event_name,
+                    str(x),
+                    str(y),
+                )
+                if not result.succeeded:
+                    raise DeviceConnectionError(
+                        "Failed to send press-move-release gesture.",
+                        device_id=self.instance.device_id,
+                        stderr=result.stderr_text,
+                        gesture_primitive=gesture_primitive,
+                        event_name=event_name,
+                        event_index=index,
+                    )
+                if delay_seconds > 0:
+                    self.sleep(delay_seconds)
+        else:
             raise DeviceConnectionError(
                 "Unsupported swipe gesture primitive.",
                 device_id=self.instance.device_id,
                 gesture_primitive=gesture_primitive,
             )
-        motion_event_prefix = [*_input_command_prefix(input_source=input_source, device_id=self.instance.device_id), "motionevent"]
-        timeline = _motion_event_drag_timeline(
-            start_x=start_x,
-            start_y=start_y,
-            end_x=end_x,
-            end_y=end_y,
+        return SwipeDispatch(
+            start=(start_x, start_y),
+            end=(end_x, end_y),
             duration_ms=duration_ms,
-            rng=self.rng,
-            jitter_px=self.input_jitter_px,
+            input_source=input_source,
+            gesture_primitive=gesture_primitive,
+            input_sequence=self._input_sequence,
         )
-        for index, (event_name, x, y, delay_seconds) in enumerate(timeline):
-            result = self.adb_client.shell(
-                self.instance.device_id,
-                *motion_event_prefix,
-                event_name,
-                str(x),
-                str(y),
-            )
-            if not result.succeeded:
-                raise DeviceConnectionError(
-                    "Failed to send press-move-release gesture.",
+
+    def prepare_scroll_transport(self) -> None:
+        """Prepares the lazily owned scroll transport without sending any input.
+
+        Preparation performs the bounded transport setup outside the provenance
+        transaction so the frame that will authorize a wheel dispatch is
+        revalidated immediately before the single packet send.
+        """
+
+        self._require_input()
+        self._require_scroll_transport()
+
+    def scroll_wheel(
+        self,
+        x: int,
+        y: int,
+        *,
+        vertical_detent: int,
+        frame_size: tuple[int, int],
+    ) -> WheelDispatch:
+        """Sends exactly one signed vertical wheel detent through the scrcpy control transport.
+
+        The packet is fully built and validated before the dispatch boundary so
+        an invalid wheel request neither consumes the source frame nor advances
+        the input sequence.
+        """
+
+        packet = build_scroll_packet(
+            x=x,
+            y=y,
+            width=frame_size[0],
+            height=frame_size[1],
+            vscroll_detent=vertical_detent,
+        )
+        return self._send_wheel_packet(
+            x=x,
+            y=y,
+            vertical_detent=vertical_detent,
+            frame_size=frame_size,
+            packet=packet,
+        )
+
+    @_input_dispatch
+    def _send_wheel_packet(
+        self,
+        *,
+        x: int,
+        y: int,
+        vertical_detent: int,
+        frame_size: tuple[int, int],
+        packet: bytes,
+    ) -> WheelDispatch:
+        """Crosses the dispatch boundary and sends one prebuilt wheel packet."""
+
+        self._require_input()
+        transport = self._require_scroll_transport()
+        require_native_display_mapping(
+            self.adb_client,
+            device_id=self.instance.device_id,
+            frame_size=frame_size,
+        )
+        # Display mapping is a blocking device read; the frame authorizing this
+        # send must still be fresh at the packet boundary, not only on entry.
+        authorizing_frame = self._authorizing_frame
+        if authorizing_frame is not None:
+            self._require_frame_within_age_policy(authorizing_frame)
+        transport.send_packet(packet)
+        return WheelDispatch(
+            point=(x, y),
+            frame_size=(frame_size[0], frame_size[1]),
+            vertical_detent=vertical_detent,
+            transport=SCROLL_TRANSPORT_NAME,
+            input_sequence=self._input_sequence,
+        )
+
+    def _require_scroll_transport(self) -> ScrcpyControlTransport:
+        """Builds or returns the session-epoch-owned scrcpy control transport."""
+
+        transport = self._scroll_transport
+        if transport is None:
+            factory = self.scroll_transport_factory
+            transport = (
+                factory(self)
+                if factory is not None
+                else ScrcpyControlTransport(
+                    adb_client=self.adb_client,
                     device_id=self.instance.device_id,
-                    stderr=result.stderr_text,
-                    gesture_primitive=gesture_primitive,
-                    event_name=event_name,
-                    event_index=index,
+                    run_id=f"s{self._session_epoch}-{self._session_id[:12]}",
                 )
-            if delay_seconds > 0:
-                self.sleep(delay_seconds)
+            )
+            transport.start()
+            self._scroll_transport = transport
+        return transport
+
+    def _close_scroll_transport(self) -> None:
+        """Releases the epoch-owned transport, preserving its cleanup failure."""
+
+        transport = self._scroll_transport
+        self._scroll_transport = None
+        if transport is not None:
+            transport.close()
 
     def capture_screenshot_bytes(self) -> bytes:
         """Captures a PNG screenshot through `adb exec-out screencap -p`."""
@@ -523,7 +684,12 @@ class BlueStacksSession:
         with self._provenance_lock:
             self._validate_frame_locked(frame_ref)
             self._consumed_frame = _frame_identity(frame_ref)
-            yield
+            previous_frame = self._authorizing_frame
+            self._authorizing_frame = frame_ref
+            try:
+                yield
+            finally:
+                self._authorizing_frame = previous_frame
 
     def _validate_frame_locked(self, frame_ref: FrameRef) -> None:
         """Validates a frame while the caller holds the provenance lock."""
@@ -548,6 +714,16 @@ class BlueStacksSession:
                 input_sequence=frame_ref.input_sequence,
                 current_input_sequence=self._input_sequence,
             )
+        self._require_frame_within_age_policy(frame_ref)
+        if self._consumed_frame == identity:
+            raise FrameProvenanceError(
+                "Action proof was already consumed and cannot authorize replay.",
+                capture_sequence=frame_ref.capture_sequence,
+            )
+
+    def _require_frame_within_age_policy(self, frame_ref: FrameRef) -> None:
+        """Enforces the bounded frame age at the moment it is checked."""
+
         age_seconds = time.monotonic() - frame_ref.captured_monotonic
         if age_seconds < 0.0 or age_seconds > self.provenance_max_age_seconds:
             raise FrameProvenanceError(
@@ -555,28 +731,46 @@ class BlueStacksSession:
                 age_seconds=age_seconds,
                 max_age_seconds=self.provenance_max_age_seconds,
             )
-        if self._consumed_frame == identity:
-            raise FrameProvenanceError(
-                "Action proof was already consumed and cannot authorize replay.",
-                capture_sequence=frame_ref.capture_sequence,
-            )
 
     def _start_session_epoch(self) -> None:
         """Starts a new connected epoch and clears prior frame authorization state."""
 
+        self._close_scroll_transport()
         with self._provenance_lock:
             self._session_epoch += 1
             self._capture_sequence = 0
             self._input_sequence = 0
             self._latest_frame = None
             self._consumed_frame = None
+            self._authorizing_frame = None
 
     def close(self) -> None:
-        """Optionally closes the selected phase target, then releases its operation lease."""
+        """Releases the owned transport, then runs phase cleanup and releases the lease.
+
+        A transport cleanup failure is held while the operation lease release
+        path runs, then surfaced so callers learn about unresolved remote
+        resources without the failure stranding the lease.
+        """
 
         if self._closed:
             return
         self._closed = True
+        transport_cleanup_error: BaseException | None = None
+        try:
+            self._close_scroll_transport()
+        except BaseException as error:
+            transport_cleanup_error = error
+        close_preserving_error(
+            self._release_instance_lease,
+            transport_cleanup_error,
+            message="BlueStacks scroll transport and phase cleanup both failed.",
+        )
+        if transport_cleanup_error is not None:
+            raise transport_cleanup_error
+
+    def _release_instance_lease(self) -> None:
+        """Runs the phase-end cleanup policy and releases the operation lease."""
+
         lease = self._instance_lease
         self._instance_lease = None
         should_close = self.cleanup_policy.should_close(instance=self.instance)
@@ -835,6 +1029,30 @@ def _type_delay_seconds(previous: str, current: str, *, rng: random.Random) -> f
     if _same_qwerty_finger(previous, current):
         shift += _input_letter_same_finger_seconds
     return _skewed_delay_seconds(low + shift, high + shift, rng=rng)
+
+
+def _require_point_in_safe_bounds(
+    point: tuple[int, int],
+    *,
+    safe_bounds: Bounds | None,
+    primitive: str,
+    device_id: str,
+) -> None:
+    """Rejects one resolved input point that escapes its declared delivery rectangle."""
+
+    if safe_bounds is None:
+        return
+    if safe_bounds.width <= 0 or safe_bounds.height <= 0:
+        raise DeviceConnectionError(
+            f"Input safe bounds for {primitive} must be a nonempty rectangle.",
+            device_id=device_id,
+        )
+    if not safe_bounds.contains_point(point):
+        raise DeviceConnectionError(
+            f"Resolved {primitive} point {point} escapes its declared safe bounds {safe_bounds}.",
+            device_id=device_id,
+            point=point,
+        )
 
 
 def _input_command_prefix(*, input_source: str, device_id: str) -> list[str]:

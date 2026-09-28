@@ -25,6 +25,12 @@ Start groups `unit.app.pnc.vision` and `unit.app.pnc.navigation`, then affected 
 
 ## Execution status
 
+**Scope clarification, 2026-09-18:** acceptance below remains limited to the
+three stated routes. [V44](V44_FULL_HOME_CITY_NAVIGATION.md) now owns supplemental
+full-city slot coverage, zoom, observed occupancy and bounded scan integration.
+V02 acceptance is not a declaration of full Home-city navigation. V44 is planned;
+V44 implementation and applicable live validation are resumed; full coverage remains pending.
+
 **Accepted for stated coverage, 2026-09-16 UTC.** Integrated with accepted
 V01/V09 base `32a03492a2b83684582cb1868928d531c2064180`. One canonical camera
 producer publishes independent current-frame proof through both observation

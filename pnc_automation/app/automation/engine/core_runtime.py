@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import json
 from pathlib import Path
@@ -26,6 +27,15 @@ from pnc_automation.app.automation.engine.navigation_core import (
     reviewed_navigation_edges,
 )
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
+from pnc_automation.core.infra.emulator.input_dispatch import (
+    InputDispatchEvent,
+    InputDispatchFailure,
+    InputDispatchRecord,
+    SwipeDispatch,
+    TapDispatch,
+    WheelDispatch,
+)
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 from pnc_automation.core.lifecycle import close_preserving_error
 
@@ -44,6 +54,8 @@ class CoreRuntime:
     _perception: NavigationPerception
     _run_id: str
     _observed_action_executor: ObservedActionExecutor | None = None
+    _input_dispatch_recorder: Callable[[InputDispatchEvent], None] | None = None
+    _previous_input_dispatch_recorder: Callable[[InputDispatchEvent], None] | None = None
     _capture_count: int = 0
     _last_observation: Observation | None = None
     _last_observe_recovered: bool = False
@@ -51,6 +63,11 @@ class CoreRuntime:
     def close(self) -> None:
         """Releases the connected runtime owned by this replacement-core operation."""
 
+        executor = (
+            None if self._observed_action_executor is None else self._observed_action_executor.action_executor
+        )
+        if executor is not None and executor.input_dispatch_recorder == self._input_dispatch_recorder:
+            executor.input_dispatch_recorder = self._previous_input_dispatch_recorder
         self.runtime.close()
 
     def __enter__(self) -> "CoreRuntime":
@@ -110,8 +127,12 @@ class CoreRuntime:
         self._last_observe_recovered = True
         if (
             requested_scope is not None
-            and requested_scope.include_world_yolo_objects
-            and recovered.screen_type == ScreenType.PNC_WORLD_MAP
+            and (
+                (requested_scope.include_world_yolo_objects
+                 and recovered.screen_type == ScreenType.PNC_WORLD_MAP)
+                or (requested_scope.include_home_city_camera
+                    and recovered.screen_type == ScreenType.PNC_HOME_CITY)
+            )
             and not recovered.blocking_popup
         ):
             return self._observe_once(
@@ -389,6 +410,9 @@ def assemble_core_runtime(
 
         holder["runtime"].record(entry)
 
+    previous_input_dispatch_recorder = observed_action_executor.action_executor.input_dispatch_recorder
+    input_dispatch_recorder = _make_input_dispatch_recorder(record)
+    observed_action_executor.action_executor.input_dispatch_recorder = input_dispatch_recorder
     navigation = NavigationCore(
         observed_action_executor.action_executor,
         observe,
@@ -405,6 +429,8 @@ def assemble_core_runtime(
         _perception=perception,
         _run_id=run_id,
         _observed_action_executor=observed_action_executor,
+        _input_dispatch_recorder=input_dispatch_recorder,
+        _previous_input_dispatch_recorder=previous_input_dispatch_recorder,
     )
     holder["runtime"] = result
     return result
@@ -420,6 +446,64 @@ def _default_trace_path(*, script_runner: ScriptRunner, artifact_directory: str,
         / sanitize_artifact_segment(artifact_directory)
         / f"{run_id}_core_trace.jsonl"
     )
+
+
+_INPUT_KIND_BY_DISPATCH = {
+    SwipeDispatch: "swipe",
+    WheelDispatch: "wheel",
+    TapDispatch: "tap",
+}
+"""Maps each concrete dispatch receipt to its canonical input kind."""
+
+
+def _make_input_dispatch_recorder(
+    record: Callable[[dict[str, object]], None],
+) -> Callable[[InputDispatchEvent], None]:
+    """Adapts typed input dispatch events into sanitized Home-city trace entries."""
+
+    def handle(event: InputDispatchEvent) -> None:
+        if isinstance(event, InputDispatchRecord):
+            if not event.home_city:
+                return
+            entry: dict[str, object] = {
+                "event": "home_city_input_dispatched",
+                "input_kind": _INPUT_KIND_BY_DISPATCH[type(event.dispatch)],
+                "dispatch": json.dumps(asdict(event.dispatch), sort_keys=True),
+                "artifact": None if event.artifact_path is None else event.artifact_path.name,
+                "operation_id": None,
+            }
+            entry.update(_frame_identity(event.source_frame))
+            record(entry)
+            return
+        if isinstance(event, InputDispatchFailure):
+            if not event.home_city:
+                return
+            entry = {
+                "event": "home_city_input_failed",
+                "operation_id": event.operation_id,
+                "input_kind": event.input_kind,
+                "failure_phase": event.failure_phase,
+                "error_type": event.exception_type,
+                "artifact": None if event.artifact_path is None else event.artifact_path.name,
+            }
+            if event.source_frame is not None:
+                entry.update(_frame_identity(event.source_frame))
+            record(entry)
+            return
+        raise TypeError(f"Unsupported input dispatch event type: {type(event).__name__}.")
+
+    return handle
+
+
+def _frame_identity(frame: FrameRef) -> dict[str, object]:
+    """Returns the provenance identity of one authorizing capture frame."""
+
+    return {
+        "session_id": frame.session_id,
+        "session_epoch": frame.session_epoch,
+        "capture_sequence": frame.capture_sequence,
+        "input_sequence": frame.input_sequence,
+    }
 
 
 def _castle_roster_signature(observation: Observation) -> tuple[tuple[str, str, int | None], ...]:
@@ -442,6 +526,28 @@ def _castle_roster_signature(observation: Observation) -> tuple[tuple[str, str, 
 def _sanitize_trace_entry(entry: dict[str, object]) -> dict[str, object]:
     """Keeps traces to stable navigation metadata and strips identity-bearing values."""
 
+    if entry.get("event") in {"home_city_navigation_step", "home_city_scan_stopped"}:
+        # These events contain a closed schema, not arbitrary caller metadata.
+        scalar_fields = {
+            "event", "operation_id", "stage", "target", "slot", "reason",
+            "zoom_status", "calibration_id", "zoom", "zoom_inputs", "gestures",
+            "elapsed_seconds",
+        }
+        list_fields = {
+            "translation", "group_ids", "inspected_slots", "remaining_slots",
+            "remaining_fixed_targets",
+        }
+        safe = {}
+        for key, value in entry.items():
+            if key == "artifact":
+                safe[key] = None if value is None else Path(str(value)).name
+            elif key in scalar_fields and (value is None or type(value) in (str, int, float, bool)):
+                safe[key] = value
+            elif key in list_fields and isinstance(value, (tuple, list)):
+                if all(type(item) in (str, int, float) for item in value):
+                    safe[key] = list(value)
+        return safe
+
     allowed = {
         "event",
         "source",
@@ -455,6 +561,14 @@ def _sanitize_trace_entry(entry: dict[str, object]) -> dict[str, object]:
         "workflow",
         "effect",
         "identity_verified",
+        "session_id",
+        "session_epoch",
+        "capture_sequence",
+        "input_sequence",
+        "input_kind",
+        "failure_phase",
+        "dispatch",
+        "operation_id",
     }
     safe: dict[str, object] = {}
     for key, value in entry.items():

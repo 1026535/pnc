@@ -38,6 +38,12 @@ CATALOG_PATH = (
 
 CASES = (
     (
+        "../wall_overview_20260918.png",
+        ScreenType.PNC_WALL,
+        "building_wall",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
         "blacksmith_reference_20260914.png",
         ScreenType.PNC_BLACKSMITH,
         "building_blacksmith",

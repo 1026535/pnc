@@ -39,6 +39,8 @@ from pnc_automation.app.pnc.domain.building_operations import (
     observable_construction_slot_key,
 )
 from pnc_automation.app.pnc.domain.feature_actions import FeatureActionKind
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
+from pnc_automation.app.pnc.navigation.home_city_scan import HomeCityScanResult
 from pnc_automation.app.pnc.domain.pet_workshop import WorkshopMutationKind
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.bag_items import TreasureIdentity
@@ -108,6 +110,8 @@ def _resolve_unique_home_building_identity(
     if expected_instance_key is not None and instance_key != expected_instance_key:
         raise RuntimeError("Building Home object identity changed before its detail was opened.")
     return instance_key
+
+
 
 
 class WorkflowEffect(StrEnum):
@@ -626,7 +630,9 @@ class WorkflowContext:
         self._last_observation = returned
         return target, source, detail, profile, returned
 
-    def open_building(self, target: HomeCityObjectId) -> Observation:
+    def open_building(
+        self, target: HomeCityObjectId, *, home_city_slot: HomeCitySlotSelector | None = None
+    ) -> Observation:
         """Opens one exact building through NavigationCore and records its fresh endpoint."""
 
         if not isinstance(target, HomeCityObjectId):
@@ -634,17 +640,37 @@ class WorkflowContext:
         self._research_node = None
         observation = self._runtime.navigation.open_building(
             target,
-            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+            observe_content=self._observe_home_city_navigation,
+            home_city_slot=home_city_slot,
         )
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation
+
+    def _observe_home_city_navigation(self, label: str) -> Observation:
+        """Acquire current Home scene proof through the guarded narrow scope."""
+
+        return self._runtime.observe(
+            label, include_content=True,
+            request=ObservationRequest.home_city_navigation(),
+        )
+
+    def discover_home_city(self) -> HomeCityScanResult:
+        """Run the canonical bounded survey without exposing gestures to workflows."""
+        self._research_node = None
+        result = self._runtime.navigation.discover_home_city(
+            observe_content=self._observe_home_city_navigation,
+        )
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = self._runtime.last_observation
+        return result
 
     def open_building_with_identity(
         self,
         target: HomeCityObjectId,
         *,
         expected_instance_key: str | None = None,
+        home_city_slot: HomeCitySlotSelector | None = None,
     ) -> tuple[Observation, str]:
         """Open one building and bind its identity to the exact dispatch frame."""
 
@@ -667,8 +693,9 @@ class WorkflowContext:
         self._research_node = None
         observation = self._runtime.navigation.open_building(
             target,
-            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+            observe_content=self._observe_home_city_navigation,
             on_target_acquired=remember,
+            home_city_slot=home_city_slot,
         )
         if len(acquired) != 1:
             raise RuntimeError("Building navigation did not publish one exact dispatch identity.")

@@ -27,6 +27,27 @@ MANIFEST_PATH = DATA_ROOT / "manifest.json"
 class VisualScreenMetadataTests(unittest.TestCase):
     """Keep source provenance strict without making artifacts runtime dependencies."""
 
+    def test_wall_route_profile_requires_both_anchors_and_owns_only_back(self) -> None:
+        recognizer = load_visual_screen_recognizer()
+        with Image.open(DATA_ROOT / "wall_overview_20260918.png") as source:
+            image = source.copy()
+        recognition = recognizer.recognize(image)
+        self.assertEqual({ScreenType.PNC_WALL}, {item.screen_type for item in recognition.evidence})
+        self.assertEqual({UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+                         {item.selector_id for item in recognition.controls})
+        for region in ((95, 0, 365, 55), (265, 130, 540, 190)):
+            with self.subTest(erased=region):
+                negative = image.copy()
+                negative.paste(0, region)
+                result = recognizer.recognize(negative)
+                self.assertNotIn(ScreenType.PNC_WALL, {item.screen_type for item in result.evidence})
+        missing_back = image.copy()
+        missing_back.paste(0, (5, 0, 95, 55))
+        result = recognizer.recognize(missing_back)
+        self.assertEqual({ScreenType.PNC_WALL}, {item.screen_type for item in result.evidence})
+        self.assertNotIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                         {item.selector_id for item in result.controls})
+
     def test_all_profiles_match_the_frozen_reference_manifest(self) -> None:
         catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -35,7 +56,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(88, len(catalog["profiles"]))
+        self.assertEqual(89, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -86,14 +107,14 @@ class VisualScreenMetadataTests(unittest.TestCase):
                     self.assertIsNone(profile["review"]["locale"])
                 expected_revision = (
                     4
-                    if profile["id"] == "bag"
+                    if profile["id"] in {"bag", "world_map"}
                     else 2
                     if profile["id"] in {
                         "institute",
                         "hero_hall",
                         "alliance_invitation",
                         "savannah_hero_offer",
-                        "world_map",
+                        "campaign_map",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",
@@ -119,8 +140,8 @@ class VisualScreenMetadataTests(unittest.TestCase):
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
         # PNC_PET_WORKSHOP is occluded by its four modal surfaces in this
-        # all-match degeneration, so six added screens surface as five.
-        self.assertEqual(57, len({item.screen_type for item in recognition.evidence}))
+        # all-match degeneration; only the retained Wall profile adds a screen.
+        self.assertEqual(58, len({item.screen_type for item in recognition.evidence}))
         # Alternate appearances can share a layout and retain separate source
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}

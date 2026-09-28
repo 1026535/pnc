@@ -202,6 +202,18 @@ is measured separately on the current frame. Shared popup recovery makes one tap
 and requires a fresh observation. A still-present entry, an unrecognized follow-up
 screen, or a different tutorial remains a stop, with no assumed Home transition.
 
+The original V44 failure was captured at 18:03:55 UTC on candidate
+`4dfbe8fcfaf78283469196ecb018870cfd36b9fa`: observation reported `UNKNOWN`,
+guard `clear`, and `blocking_popup=false`; navigation stopped before the Home
+checks. The source stayed unchanged and the canonical lease was released.
+Its trace is
+`artifacts/2026-09-21/157_farm/20260921T180345Z_29a6b69e_core_trace.jsonl`;
+the V44 evidence manifest is
+`.local-data/devin-live-test/runs/v44-foundation-157farm-4dfbe8f/turn-001/evidence.json`.
+The shared recognition and recovery implementation described above supersedes
+that historical unsupported state; it does not qualify V44 camera routes or
+turn an absent overlay into a live recovery test.
+
 ## Extracted prefab geometry, September 2026 audit
 
 Reviewed Devin recovery against prefab layouts decoded from the **5.0.203 /

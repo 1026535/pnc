@@ -1,0 +1,1132 @@
+{
+ "schema": "home_city_scene_geometry",
+ "version": 1,
+ "provenance": {
+  "archived_build": {
+   "version_name": "5.0.203",
+   "version_code": 233,
+   "apk": "split-1.apk",
+   "apk_sha256": "5c5276f03b2b838442d371932c34c7f858b9d09fbf86610f9ffa7340d838b730",
+   "note": "Archived extraction build; distinct from the installed 5.0.204/235 client."
+  },
+  "scene_bundle": {
+   "member": "assets/ABAsset.pkglzma_14",
+   "sha256": "b4c0a3c4f14ffe286873a040b740b8eaa76def444164449a541e5acd1197b105"
+  },
+  "prefab_bundle": {
+   "member": "assets/ABAsset.pkglzma_18",
+   "sha256": "136cdf0fc168bcdf8fd6e6af57de3cf5886dec3300e1223e84bb12abcc6406c2"
+  },
+  "buildingposition_table": {
+   "member": "assets/ABAsset.pkglzma_18",
+   "bundle_offset": 9107651,
+   "xor_key": "0x2c",
+   "raw_sha256": "81538538b0a9e118da2d0f48cf802cada4dde2bf64f55f25c94fed5ab0e56574"
+  },
+  "extraction": "Parent-composed BuildingPosition transforms, direct-bundle full matrix composition; shelled-sneeze v44-scene-evidence-20260922/buildingposition_transforms.json, independently reproduced by the lead (54 numeric + 16 system markers).",
+  "calibration_review": ".local-data/devin-vision-pipeline/lead-review-v44-calibration016-20260922.md",
+  "calibration_proof": ".local-data/devin-vision-pipeline/lead-v44-calibration016-proof-20260922.json",
+  "current_build_corroboration": {
+   "version_name": "5.0.204",
+   "version_code": 235,
+   "frame": "artifacts/2026-09-22/157_farm/20260922T063243Z_v44_baseline_final.png",
+   "file_sha256": "673ef049d04b1b0a85c96935d37a6707633478f21d2b64ba971db98b87ed158e",
+   "note": "Installed-build same-view baseline; localized at zoom 1 translation (-532,222)."
+  },
+  "west_holdout_fixture": {
+   "path": "tests/data/home_city_camera/home_city_west_holdout_20260916.png",
+   "file_sha256": "4fc6926e4387726b56b7870941eba9d345b7d515dba3e2914a7fd3c73c51a7a2",
+   "note": "mega_old_acc active castle captured 2026-09-16 on an unrecorded build; current file bytes verified against this native SHA. The fixture manifest sha256 field is the declared decoded-RGB digest, verified matching."
+  }
+ },
+ "transform": {
+  "model": "atlas_x = k*world_x + tx ; atlas_y = -k*world_y + ty",
+  "k": 108.24698772671348,
+  "tx": -681.4851210137155,
+  "ty": -180.35407805478746,
+  "zoom": 1.0
+ },
+ "calibration": {
+  "uncertainty_reference_px": 6.0,
+  "leave_one_out_max_reference_px": 3.6154851979,
+  "fit_anchors": [
+   {
+    "object_id": "castle",
+    "label_world_position": [
+     15.43,
+     -7.44,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     990.7,
+     625.7
+    ],
+    "full_fit_residual_px": 2.0557,
+    "leave_one_out_error_px": 2.4087550938922417
+   },
+   {
+    "object_id": "infantry_barracks",
+    "label_world_position": [
+     12.388,
+     -9.974,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     659.75,
+     899.5
+    ],
+    "full_fit_residual_px": 0.3363,
+    "leave_one_out_error_px": 0.4154616435104905
+   },
+   {
+    "object_id": "institute",
+    "label_world_position": [
+     18.042999,
+     -11.943,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     1271.4166666666667,
+     1113.0
+    ],
+    "full_fit_residual_px": 0.5944,
+    "leave_one_out_error_px": 0.7063086759165185
+   },
+   {
+    "object_id": "wall",
+    "label_world_position": [
+     22.836999,
+     -18.541,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     1791.25,
+     1826.0
+    ],
+    "full_fit_residual_px": 0.9566,
+    "leave_one_out_error_px": 1.2186275068936543
+   },
+   {
+    "object_id": "ranged_barracks",
+    "label_world_position": [
+     12.467,
+     -11.995,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     665.0,
+     1118.0
+    ],
+    "full_fit_residual_px": 3.0309,
+    "leave_one_out_error_px": 3.61548519788703
+   },
+   {
+    "object_id": "siege_factory",
+    "label_world_position": [
+     9.977,
+     -12.297001,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     398.5,
+     1151.0
+    ],
+    "full_fit_residual_px": 0.2408,
+    "leave_one_out_error_px": 0.2811086372510637
+   },
+   {
+    "object_id": "bank",
+    "label_world_position": [
+     9.951,
+     -15.306,
+     -1.0
+    ],
+    "measured_mean_atlas": [
+     396.0,
+     1475.5
+    ],
+    "full_fit_residual_px": 1.0253,
+    "leave_one_out_error_px": 1.3310775315888324
+   }
+  ],
+  "excluded": [
+   {
+    "scope": "blacksmith, alliance_hall",
+    "reason": "Movable occupants on multi-type slots 11-13; excluded from fitting, usable only for post-fit diagnosis."
+   },
+   {
+    "scope": "moon_well",
+    "reason": "Repeatable occupant with no canonical fixed coordinate; excluded from fitting."
+   },
+   {
+    "scope": "watchtower, hall_of_war, trap_workshop, arena",
+    "reason": "Nominal catalog points, not measured in bounded frames; need specific captures."
+   },
+   {
+    "scope": "pw_manor frames 175215/131504/130155",
+    "reason": "Producer returns insufficient landmark correspondences; no camera pose, no localized correspondence."
+   }
+  ]
+ },
+ "measured_extent_atlas": {
+  "min_x": -332.2803,
+  "max_x": 2357.2244,
+  "min_y": 370.6231,
+  "max_y": 3724.9806,
+  "note": "Measured geometry extent of the extracted markers; NOT a camera boundary, clamp, or reachability claim."
+ },
+ "ordinary_slots": [
+  {
+   "slot_index": 1,
+   "node_path": "SceneContent/BuildingPosition/1",
+   "world_position": [
+    15.43,
+    -5.09,
+    -1.0
+   ],
+   "atlas_pivot": [
+    989,
+    371
+   ]
+  },
+  {
+   "slot_index": 2,
+   "node_path": "SceneContent/BuildingPosition/2",
+   "world_position": [
+    22.469999,
+    -17.15,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1751,
+    1676
+   ]
+  },
+  {
+   "slot_index": 3,
+   "node_path": "SceneContent/BuildingPosition/3",
+   "world_position": [
+    20.403999,
+    -10.342,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1527,
+    939
+   ]
+  },
+  {
+   "slot_index": 4,
+   "node_path": "SceneContent/BuildingPosition/4",
+   "world_position": [
+    21.341999,
+    -5.962,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1629,
+    465
+   ]
+  },
+  {
+   "slot_index": 5,
+   "node_path": "SceneContent/BuildingPosition/5",
+   "world_position": [
+    12.353,
+    -9.424,
+    -1.0
+   ],
+   "atlas_pivot": [
+    656,
+    840
+   ]
+  },
+  {
+   "slot_index": 6,
+   "node_path": "SceneContent/BuildingPosition/6",
+   "world_position": [
+    10.549,
+    -10.276,
+    -1.0
+   ],
+   "atlas_pivot": [
+    460,
+    932
+   ]
+  },
+  {
+   "slot_index": 7,
+   "node_path": "SceneContent/BuildingPosition/7",
+   "world_position": [
+    12.275,
+    -11.397,
+    -1.0
+   ],
+   "atlas_pivot": [
+    647,
+    1053
+   ]
+  },
+  {
+   "slot_index": 8,
+   "node_path": "SceneContent/BuildingPosition/8",
+   "world_position": [
+    9.993,
+    -11.887,
+    -1.0
+   ],
+   "atlas_pivot": [
+    400,
+    1106
+   ]
+  },
+  {
+   "slot_index": 9,
+   "node_path": "SceneContent/BuildingPosition/9",
+   "world_position": [
+    18.042999,
+    -11.473,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1272,
+    1062
+   ]
+  },
+  {
+   "slot_index": 10,
+   "node_path": "SceneContent/BuildingPosition/10",
+   "world_position": [
+    20.219999,
+    -12.38,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1507,
+    1160
+   ]
+  },
+  {
+   "slot_index": 11,
+   "node_path": "SceneContent/BuildingPosition/11",
+   "world_position": [
+    20.207001,
+    -16.499001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1506,
+    1606
+   ]
+  },
+  {
+   "slot_index": 12,
+   "node_path": "SceneContent/BuildingPosition/12",
+   "world_position": [
+    17.607,
+    -17.663,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1224,
+    1732
+   ]
+  },
+  {
+   "slot_index": 13,
+   "node_path": "SceneContent/BuildingPosition/13",
+   "world_position": [
+    22.995001,
+    -15.31,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1808,
+    1477
+   ]
+  },
+  {
+   "slot_index": 14,
+   "node_path": "SceneContent/BuildingPosition/14",
+   "world_position": [
+    6.144,
+    -12.935,
+    -1.0
+   ],
+   "atlas_pivot": [
+    -16,
+    1220
+   ]
+  },
+  {
+   "slot_index": 15,
+   "node_path": "SceneContent/BuildingPosition/15",
+   "world_position": [
+    15.45,
+    -11.417,
+    -1.0
+   ],
+   "atlas_pivot": [
+    991,
+    1056
+   ]
+  },
+  {
+   "slot_index": 16,
+   "node_path": "SceneContent/BuildingPosition/16",
+   "world_position": [
+    25.023001,
+    -7.374,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2027,
+    618
+   ]
+  },
+  {
+   "slot_index": 17,
+   "node_path": "SceneContent/BuildingPosition/17",
+   "world_position": [
+    22.969999,
+    -21.15,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1805,
+    2109
+   ]
+  },
+  {
+   "slot_index": 18,
+   "node_path": "SceneContent/BuildingPosition/18",
+   "world_position": [
+    24.959999,
+    -19.98,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2020,
+    1982
+   ]
+  },
+  {
+   "slot_index": 19,
+   "node_path": "SceneContent/BuildingPosition/19",
+   "world_position": [
+    24.879999,
+    -22.219999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2012,
+    2225
+   ]
+  },
+  {
+   "slot_index": 20,
+   "node_path": "SceneContent/BuildingPosition/20",
+   "world_position": [
+    26.809999,
+    -21.139999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2221,
+    2108
+   ]
+  },
+  {
+   "slot_index": 21,
+   "node_path": "SceneContent/BuildingPosition/21",
+   "world_position": [
+    15.64,
+    -23.889999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1011,
+    2406
+   ]
+  },
+  {
+   "slot_index": 22,
+   "node_path": "SceneContent/BuildingPosition/22",
+   "world_position": [
+    18.700001,
+    -23.57,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1343,
+    2371
+   ]
+  },
+  {
+   "slot_index": 23,
+   "node_path": "SceneContent/BuildingPosition/23",
+   "world_position": [
+    15.32,
+    -25.700001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    977,
+    2602
+   ]
+  },
+  {
+   "slot_index": 24,
+   "node_path": "SceneContent/BuildingPosition/24",
+   "world_position": [
+    17.190001,
+    -24.950001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1179,
+    2520
+   ]
+  },
+  {
+   "slot_index": 25,
+   "node_path": "SceneContent/BuildingPosition/25",
+   "world_position": [
+    20.74,
+    -24.950001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1564,
+    2520
+   ]
+  },
+  {
+   "slot_index": 26,
+   "node_path": "SceneContent/BuildingPosition/26",
+   "world_position": [
+    19.07,
+    -26.23,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1383,
+    2659
+   ]
+  },
+  {
+   "slot_index": 27,
+   "node_path": "SceneContent/BuildingPosition/27",
+   "world_position": [
+    5.673,
+    -20.450001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    -67,
+    2033
+   ]
+  },
+  {
+   "slot_index": 28,
+   "node_path": "SceneContent/BuildingPosition/28",
+   "world_position": [
+    5.12,
+    -21.870001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    -127,
+    2187
+   ]
+  },
+  {
+   "slot_index": 29,
+   "node_path": "SceneContent/BuildingPosition/29",
+   "world_position": [
+    7.17,
+    -22.98,
+    -1.0
+   ],
+   "atlas_pivot": [
+    95,
+    2307
+   ]
+  },
+  {
+   "slot_index": 30,
+   "node_path": "SceneContent/BuildingPosition/30",
+   "world_position": [
+    7.77,
+    -21.09,
+    -1.0
+   ],
+   "atlas_pivot": [
+    160,
+    2103
+   ]
+  },
+  {
+   "slot_index": 31,
+   "node_path": "SceneContent/BuildingPosition/31",
+   "world_position": [
+    9.46,
+    -22.120001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    343,
+    2214
+   ]
+  },
+  {
+   "slot_index": 32,
+   "node_path": "SceneContent/BuildingPosition/32",
+   "world_position": [
+    7.97,
+    -26.389999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    181,
+    2676
+   ]
+  },
+  {
+   "slot_index": 33,
+   "node_path": "SceneContent/BuildingPosition/33",
+   "world_position": [
+    7.93,
+    -28.299999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    177,
+    2883
+   ]
+  },
+  {
+   "slot_index": 34,
+   "node_path": "SceneContent/BuildingPosition/34",
+   "world_position": [
+    10.13,
+    -29.24,
+    -1.0
+   ],
+   "atlas_pivot": [
+    415,
+    2985
+   ]
+  },
+  {
+   "slot_index": 35,
+   "node_path": "SceneContent/BuildingPosition/35",
+   "world_position": [
+    12.38,
+    -28.01,
+    -1.0
+   ],
+   "atlas_pivot": [
+    659,
+    2852
+   ]
+  },
+  {
+   "slot_index": 36,
+   "node_path": "SceneContent/BuildingPosition/36",
+   "world_position": [
+    10.47,
+    -26.969999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    452,
+    2739
+   ]
+  },
+  {
+   "slot_index": 37,
+   "node_path": "SceneContent/BuildingPosition/37",
+   "world_position": [
+    19.950001,
+    -31.0,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1478,
+    3175
+   ]
+  },
+  {
+   "slot_index": 38,
+   "node_path": "SceneContent/BuildingPosition/38",
+   "world_position": [
+    17.18,
+    -29.608,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1178,
+    3025
+   ]
+  },
+  {
+   "slot_index": 39,
+   "node_path": "SceneContent/BuildingPosition/39",
+   "world_position": [
+    19.75,
+    -29.049999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1456,
+    2964
+   ]
+  },
+  {
+   "slot_index": 40,
+   "node_path": "SceneContent/BuildingPosition/40",
+   "world_position": [
+    17.32,
+    -31.32,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1193,
+    3210
+   ]
+  },
+  {
+   "slot_index": 41,
+   "node_path": "SceneContent/BuildingPosition/41",
+   "world_position": [
+    22.299999,
+    -29.139999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1732,
+    2974
+   ]
+  },
+  {
+   "slot_index": 42,
+   "node_path": "SceneContent/BuildingPosition/42",
+   "world_position": [
+    7.56,
+    -32.549999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    137,
+    3343
+   ]
+  },
+  {
+   "slot_index": 43,
+   "node_path": "SceneContent/BuildingPosition/43",
+   "world_position": [
+    10.92,
+    -32.91,
+    -1.0
+   ],
+   "atlas_pivot": [
+    501,
+    3382
+   ]
+  },
+  {
+   "slot_index": 44,
+   "node_path": "SceneContent/BuildingPosition/44",
+   "world_position": [
+    14.05,
+    -33.599998,
+    -1.0
+   ],
+   "atlas_pivot": [
+    839,
+    3457
+   ]
+  },
+  {
+   "slot_index": 45,
+   "node_path": "SceneContent/BuildingPosition/45",
+   "world_position": [
+    9.1,
+    -34.490002,
+    -1.0
+   ],
+   "atlas_pivot": [
+    304,
+    3553
+   ]
+  },
+  {
+   "slot_index": 46,
+   "node_path": "SceneContent/BuildingPosition/46",
+   "world_position": [
+    11.82,
+    -35.07,
+    -1.0
+   ],
+   "atlas_pivot": [
+    598,
+    3616
+   ]
+  },
+  {
+   "slot_index": 47,
+   "node_path": "SceneContent/BuildingPosition/47",
+   "world_position": [
+    19.51,
+    -34.330002,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1430,
+    3536
+   ]
+  },
+  {
+   "slot_index": 48,
+   "node_path": "SceneContent/BuildingPosition/48",
+   "world_position": [
+    22.040001,
+    -34.220001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1704,
+    3524
+   ]
+  },
+  {
+   "slot_index": 49,
+   "node_path": "SceneContent/BuildingPosition/49",
+   "world_position": [
+    23.459999,
+    -35.459999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1858,
+    3658
+   ]
+  },
+  {
+   "slot_index": 50,
+   "node_path": "SceneContent/BuildingPosition/50",
+   "world_position": [
+    20.959999,
+    -36.077999,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1587,
+    3725
+   ]
+  },
+  {
+   "slot_index": 51,
+   "node_path": "SceneContent/BuildingPosition/51",
+   "world_position": [
+    18.23,
+    -35.68,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1292,
+    3682
+   ]
+  },
+  {
+   "slot_index": 52,
+   "node_path": "SceneContent/BuildingPosition/52",
+   "world_position": [
+    27.608999,
+    -14.288,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2307,
+    1366
+   ]
+  },
+  {
+   "slot_index": 53,
+   "node_path": "SceneContent/BuildingPosition/53",
+   "world_position": [
+    18.489,
+    -9.301,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1320,
+    826
+   ]
+  },
+  {
+   "slot_index": 54,
+   "node_path": "SceneContent/BuildingPosition/54",
+   "world_position": [
+    4.259,
+    -8.583,
+    -1.0
+   ],
+   "atlas_pivot": [
+    -220,
+    749
+   ]
+  }
+ ],
+ "system_markers": [
+  {
+   "marker": "sys_1",
+   "implied_client_type_id": 5001,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_1",
+   "world_position": [
+    9.901,
+    -14.806,
+    -1.0
+   ],
+   "atlas_pivot": [
+    390,
+    1422
+   ]
+  },
+  {
+   "marker": "sys_2",
+   "implied_client_type_id": 5002,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_2",
+   "world_position": [
+    25.540001,
+    -10.78,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2083,
+    987
+   ]
+  },
+  {
+   "marker": "sys_3",
+   "implied_client_type_id": 5003,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_3",
+   "world_position": [
+    13.93,
+    -15.22,
+    -1.0
+   ],
+   "atlas_pivot": [
+    826,
+    1467
+   ]
+  },
+  {
+   "marker": "sys_4",
+   "implied_client_type_id": 5004,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_4",
+   "world_position": [
+    10.28,
+    -7.19,
+    -1.0
+   ],
+   "atlas_pivot": [
+    431,
+    598
+   ]
+  },
+  {
+   "marker": "sys_5",
+   "implied_client_type_id": 5005,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_5",
+   "world_position": [
+    18.468,
+    -14.482,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1318,
+    1387
+   ]
+  },
+  {
+   "marker": "sys_6",
+   "implied_client_type_id": 5006,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_6",
+   "world_position": [
+    11.675,
+    -13.731,
+    -1.0
+   ],
+   "atlas_pivot": [
+    582,
+    1306
+   ]
+  },
+  {
+   "marker": "sys_7",
+   "implied_client_type_id": 5007,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_7",
+   "world_position": [
+    11.438,
+    -18.593,
+    -1.0
+   ],
+   "atlas_pivot": [
+    557,
+    1832
+   ]
+  },
+  {
+   "marker": "sys_8",
+   "implied_client_type_id": 5008,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_8",
+   "world_position": [
+    6.76,
+    -6.97,
+    -1.0
+   ],
+   "atlas_pivot": [
+    50,
+    574
+   ]
+  },
+  {
+   "marker": "sys_9",
+   "implied_client_type_id": 5009,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_9",
+   "world_position": [
+    4.391,
+    -17.111,
+    -1.0
+   ],
+   "atlas_pivot": [
+    -206,
+    1672
+   ]
+  },
+  {
+   "marker": "sys_10",
+   "implied_client_type_id": 5010,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_10",
+   "world_position": [
+    28.072001,
+    -9.552,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2357,
+    854
+   ]
+  },
+  {
+   "marker": "sys_11",
+   "implied_client_type_id": 5011,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_11",
+   "world_position": [
+    17.193001,
+    -13.059,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1180,
+    1233
+   ]
+  },
+  {
+   "marker": "sys_12",
+   "implied_client_type_id": 5012,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_12",
+   "world_position": [
+    3.226,
+    -10.644,
+    -1.0
+   ],
+   "atlas_pivot": [
+    -332,
+    972
+   ]
+  },
+  {
+   "marker": "sys_13",
+   "implied_client_type_id": 5013,
+   "declared_in_system_table": false,
+   "node_path": "SceneContent/BuildingPosition/sys_13",
+   "world_position": [
+    27.624001,
+    -14.387,
+    -1.0
+   ],
+   "atlas_pivot": [
+    2309,
+    1377
+   ]
+  },
+  {
+   "marker": "sys_14",
+   "implied_client_type_id": 5014,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_14",
+   "world_position": [
+    18.315001,
+    -21.134001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1301,
+    2107
+   ]
+  },
+  {
+   "marker": "sys_15",
+   "implied_client_type_id": 5015,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_15",
+   "world_position": [
+    6.862,
+    -16.992001,
+    -1.0
+   ],
+   "atlas_pivot": [
+    61,
+    1659
+   ]
+  },
+  {
+   "marker": "sys_16",
+   "implied_client_type_id": 5016,
+   "declared_in_system_table": true,
+   "node_path": "SceneContent/BuildingPosition/sys_16",
+   "world_position": [
+    15.79,
+    -20.65,
+    -1.0
+   ],
+   "atlas_pivot": [
+    1028,
+    2055
+   ]
+  }
+ ],
+ "limitations": [
+  "Slot pivots are candidate search geometry only: not tap authorization, body targets, routes, or occupancy.",
+  "Zoom 1.0 atlas basis only; no native-zoom input is qualified.",
+  "Glyph box centers approximate TextMesh anchors (few reference px systematic offset).",
+  "sys_13 marker exists in the scene but type 5013 is absent from the decoded BuildingSystem table; it stays unbound.",
+  "sys_16 / type 5016 geometry supports the reviewed PW Manor integration: 5016 binds to the Illusory Beast Manor through the archived marker plus 2026-09-21 destination evidence.",
+  "Scene extraction is archived build 5.0.203/233; current-image corroboration exists but is not equal-build proof."
+ ]
+}

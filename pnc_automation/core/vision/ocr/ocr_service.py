@@ -877,6 +877,11 @@ class RapidOcrService:
                 "Global.log_level": "warning",
                 "Rec.model_path": str(_RECOGNIZER_MODEL_PATH),
                 "Rec.rec_img_shape": [3, 48, 0],
+                # Engine calls are serialized under _engine_lock, so the default
+                # all-core ONNX pools per model only oversubscribe the host on
+                # crop-heavy observation reads. Bound each session to one thread.
+                "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+                "EngineConfig.onnxruntime.inter_op_num_threads": 1,
             }
         )
         self._engine_lock = RLock()

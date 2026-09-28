@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -22,6 +24,28 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         self.matcher = OpenCvTemplateMatcher()
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
+
+    def test_opencv_inner_pool_stays_bounded_during_concurrent_matching(self) -> None:
+        self.assertEqual(cv2.getNumThreads(), 1)
+        image = _textured_image((80, 60))
+        patch = image.crop((23, 17, 39, 31))
+        path = self._save(patch)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = tuple(
+                pool.map(
+                    lambda _: self.matcher.find_best_match(
+                        image, path, threshold=0.98
+                    ),
+                    range(4),
+                )
+            )
+
+        self.assertEqual(
+            [result.bounds for result in results if result is not None],
+            [Bounds(x=23, y=17, width=16, height=14)] * 4,
+        )
+        self.assertEqual(cv2.getNumThreads(), 1)
 
     def test_finds_translated_textured_patch(self) -> None:
         image = _textured_image((80, 60))
@@ -376,6 +400,138 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         self.assertIn(Bounds(42, 22, 20, 16), {match.bounds for match in matches})
         self.assertIn(Bounds(120, 40, 20, 16), {match.bounds for match in matches})
 
+    def test_coarse_to_fine_refinement_recovers_full_search_result(self) -> None:
+        image = _smooth_textured_image((120, 80))
+        patch = image.crop((47, 33, 63, 47))
+        path = self._save(patch)
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert proposal is not None
+        expected = self.matcher.find_best_match(prepared, path, threshold=0.9)
+
+        with mock.patch.object(
+            self.matcher,
+            "find_best_match",
+            wraps=self.matcher.find_best_match,
+        ) as native:
+            result = self.matcher.find_best_match_coarse_to_fine(
+                prepared, proposal, path, threshold=0.9
+            )
+
+        self.assertEqual(result, expected)
+        assert result is not None
+        self.assertEqual(result.bounds, Bounds(x=47, y=33, width=16, height=14))
+        refined = [
+            call
+            for call in native.call_args_list
+            if call.kwargs.get("search_region") is not None
+        ]
+        self.assertGreaterEqual(len(refined), 1)
+        self.assertLessEqual(len(refined), 8)
+        self.assertTrue(
+            all(call.args[0] is prepared for call in refined)
+        )
+
+    def test_coarse_to_fine_projects_bounds_at_nonnative_resolution(self) -> None:
+        reference = _smooth_textured_image((80, 40))
+        template = reference.crop((21, 11, 31, 19))
+        image = reference.resize((160, 80), Image.Resampling.NEAREST)
+        path = self._save(template)
+        prepared = self.matcher.prepare_frame(image, reference_size=(80, 40))
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert proposal is not None
+        self.assertEqual(proposal.original_size, (160, 80))
+        expected = self.matcher.find_best_match(prepared, path, threshold=0.85)
+
+        result = self.matcher.find_best_match_coarse_to_fine(
+            prepared, proposal, path, threshold=0.85
+        )
+
+        self.assertEqual(result, expected)
+        assert result is not None
+        self.assertEqual(result.bounds, Bounds(x=42, y=22, width=20, height=16))
+
+    def test_coarse_to_fine_supports_off_grid_template_scale(self) -> None:
+        donor = _smooth_textured_image((120, 90))
+        patch = donor.crop((8, 8, 32, 32))
+        scaled_values = cv2.resize(
+            np.array(patch), (20, 20), interpolation=cv2.INTER_AREA
+        )
+        image = Image.new("RGB", (120, 90), (24, 28, 32))
+        image.paste(Image.fromarray(scaled_values, mode="RGB"), (61, 44))
+        path = self._save(patch)
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert proposal is not None
+        expected = self.matcher.find_best_match(
+            prepared, path, threshold=0.8, template_scale=0.83
+        )
+
+        result = self.matcher.find_best_match_coarse_to_fine(
+            prepared, proposal, path, threshold=0.8, template_scale=0.83
+        )
+
+        assert expected is not None and result is not None
+        self.assertEqual(result.bounds, Bounds(x=61, y=44, width=20, height=20))
+        self.assertEqual(result.bounds, expected.bounds)
+        self.assertAlmostEqual(result.confidence, expected.confidence, delta=1e-5)
+
+    def test_coarse_to_fine_overflow_falls_back_to_exact_search(self) -> None:
+        donor = _smooth_textured_image((160, 100))
+        patch = donor.crop((4, 4, 16, 16))
+        path = self._save(patch)
+        image = Image.new("RGB", (160, 100), (24, 28, 32))
+        image.paste(patch, (24, 8))
+        noise = np.random.default_rng(11).integers(-3, 4, (12, 12, 3))
+        perturbed = np.clip(np.array(patch).astype(np.int16) + noise, 0, 255)
+        rival = Image.fromarray(perturbed.astype(np.uint8), mode="RGB")
+        for index in range(1, 9):
+            image.paste(rival, (24 + 14 * index, 8))
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert proposal is not None
+        expected = self.matcher.find_best_match(prepared, path, threshold=0.9)
+
+        with mock.patch.object(
+            self.matcher,
+            "find_best_match",
+            wraps=self.matcher.find_best_match,
+        ) as native:
+            result = self.matcher.find_best_match_coarse_to_fine(
+                prepared, proposal, path, threshold=0.9
+            )
+
+        # Nine distinct neighborhoods exceed the refinement budget, so the
+        # exact full-resolution search runs once and no rival is truncated.
+        self.assertEqual(native.call_count, 1)
+        self.assertIsNone(native.call_args.kwargs.get("search_region"))
+        self.assertEqual(result, expected)
+        assert result is not None
+        self.assertEqual(result.bounds, Bounds(x=24, y=8, width=12, height=12))
+
+    def test_coarse_to_fine_leaves_generic_matcher_behavior_unchanged(self) -> None:
+        image = _smooth_textured_image((80, 60))
+        patch = image.crop((23, 17, 39, 31))
+        path = self._save(patch)
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert proposal is not None
+        self.assertIsNotNone(
+            self.matcher.find_best_match_coarse_to_fine(
+                prepared, proposal, path, threshold=0.9
+            )
+        )
+
+        direct = self.matcher.find_best_match(prepared, path, threshold=0.98)
+        matches = self.matcher.find_matches(prepared, path, threshold=0.98)
+
+        assert direct is not None
+        self.assertEqual(direct.bounds, Bounds(x=23, y=17, width=16, height=14))
+        self.assertEqual(
+            [match.bounds for match in matches],
+            [Bounds(x=23, y=17, width=16, height=14)],
+        )
+
     def _save(self, image: Image.Image) -> Path:
         path = Path(self.temp_dir.name) / f"template-{len(list(Path(self.temp_dir.name).iterdir()))}.png"
         image.save(path)
@@ -390,6 +546,25 @@ def _textured_image(size: tuple[int, int]) -> Image.Image:
         size=(height, width, 3),
         dtype=np.uint8,
     )
+    return Image.fromarray(values, mode="RGB")
+
+
+def _smooth_textured_image(size: tuple[int, int]) -> Image.Image:
+    """Structured content that survives 2x area downsampling at any phase.
+
+    Independent pixel noise loses its coarse-scale correlation when a patch
+    sits at odd coordinates, so coarse-to-fine tests need content with
+    realistic multi-pixel structure instead.
+    """
+
+    width, height = size
+    small = np.random.default_rng(7).integers(
+        0,
+        256,
+        size=(max(1, height // 4), max(1, width // 4), 3),
+        dtype=np.uint8,
+    )
+    values = cv2.resize(small, (width, height), interpolation=cv2.INTER_LINEAR)
     return Image.fromarray(values, mode="RGB")
 
 

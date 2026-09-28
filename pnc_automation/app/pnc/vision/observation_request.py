@@ -34,6 +34,7 @@ class ObservationRequest:
     expected_world_coordinate: tuple[int, int] | None = None
     world_map_coordinate_only: bool = False
     include_world_yolo_objects: bool = False
+    include_home_city_camera: bool = False
     artifact_selection: ObservationArtifactSelection | None = None
 
     @classmethod
@@ -95,6 +96,21 @@ class ObservationRequest:
                 if screen_type == ScreenType.PNC_WORLD_COORDINATE_DIALOG
                 else frozenset()
             ),
+        )
+
+    @classmethod
+    def home_city_navigation(cls) -> "ObservationRequest":
+        """Request measured Home pose, zoom and bodies without unrelated HUD OCR.
+
+        Independent screen recognition and interruption checks still own the
+        frame. This scope never supplies screen identity or a predicted body.
+        """
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_HOME_CITY}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+            include_home_city_camera=True,
         )
 
     @classmethod

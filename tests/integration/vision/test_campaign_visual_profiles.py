@@ -1145,6 +1145,26 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 image.paste((0, 0, 0), box)
                 self.assertEqual(recognizer.recognize(image).evidence, ())
 
+    def test_native_grandia_animation_frames_keep_map_and_owned_home_control(self) -> None:
+        """The captured node animation cannot make a clear map lose its return route."""
+        for name in (
+            "campaign_map_grandia_pulse_20260922.png",
+            "campaign_map_grandia_return_20260922.png",
+        ):
+            capture = _capture(_image(name))
+            for publisher in ("builder", "navigation"):
+                with self.subTest(frame=name, publisher=publisher):
+                    observation = (
+                        _builder().build(capture)
+                        if publisher == "builder"
+                        else _navigation_perception().build(capture)
+                    )
+                    self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, observation.screen_type)
+                    self.assertEqual("clear", observation.decision.guard.value)
+                    control = observation.get(UiElementId.PNC_CAMPAIGN_HOME_PORTAL)
+                    self.assertIsNotNone(control)
+                    self.assertEqual(capture.frame_ref, control.frame_ref)
+
 
 if __name__ == "__main__":
     unittest.main()

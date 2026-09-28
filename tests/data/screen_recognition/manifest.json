@@ -1709,6 +1709,72 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-24/pet_workshop_manual_board_5d839e9e_20260924/20260924T062959Z_c3_detail_2.png",
         "derivative": "Unmodified native RGBA c3_detail_2 frame from the 2026-09-24 manual-board recognition run on Main (Hopium): three Fruit 5 pedestals and one framed Item Chest reward with a visible '1' badge."
       }
+    },
+    {
+      "image": "wall_overview_20260918.png",
+      "screen": "PNC_WALL",
+      "split": "reference",
+      "group": "2026-09-18/serious_stuff/live_turn007_wall_overview",
+      "sha256": "5b06560b79336464382b02c3a5044965d4c92d2634868536df9d53f00013a2fa",
+      "expected_visual_screens": [
+        "PNC_WALL"
+      ]
+    },
+    {
+      "image": "building_routes/home_city_illusory_beast_manor_20260921.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "reference",
+      "group": "2026-09-21/main/pw02_final_board",
+      "sha256": "650c51b49f9f0af0fc9f865510a3d2d8b1b434616240844916013852c5b4cc56",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ],
+      "note": "Native RGBA source at17:52:15 UTC before verified Illusory Beast Manor body tap; near unrelated Manor label is not a Workshop target."
+    },
+    {
+      "image": "campaign_map_grandia_pulse_20260922.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "validation",
+      "group": "2026-09-22/157_farm/v44_campaign",
+      "sha256": "1d9e2e622c4d89bf764303055ee8b81d5f2419eb9acef221c89022689f2b864a",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-22\\157_farm\\20260922T233242Z_core_20260922T232718Z_26f6cf57_0041_core_8_campaign_chapter_source.png",
+        "derivative": "Native frame classified UNKNOWN before the nameplate crop correction; correlated with the return frame from the same session."
+      }
+    },
+    {
+      "image": "campaign_map_grandia_return_20260922.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "validation",
+      "group": "2026-09-22/157_farm/v44_campaign",
+      "sha256": "178fbdba534b922848e20c8d68981da6ed729da15071b496c8140749ccc6ec1d",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-22\\157_farm\\20260922T233245Z_core_20260922T232718Z_26f6cf57_0043_core_route_source.png",
+        "derivative": "Native owned-Home-return source; same-session validation, not independent holdout."
+      }
+    },
+    {
+      "image": "world_map_loaded_20260923.png",
+      "screen": "PNC_WORLD_MAP",
+      "split": "validation",
+      "group": "2026-09-23/157_farm/v19_castle_trial_20260923T031214Z",
+      "sha256": "f851d976ca86f1cf28bd9e51a4461662d724c15014e2a0b6c0650fe7e3d2e27f",
+      "expected_visual_screens": [
+        "PNC_WORLD_MAP"
+      ],
+      "annotation": "Loaded populated World map from the V19 live003 Castle-trial session whose lower-left identity patch fell to 0.8255 under the unchanged 0.93 threshold; the exact frame class that motivated the foreground-masked magnifier correction. This saved failure frame was used during diagnosis and mask verification; it is regression evidence, not unseen evaluation.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-23/157_farm/20260923T031745Z_core_20260923T031744Z_9f3e09fa_0001_t003_post_failure_state.png",
+        "source_sha256": "a86dc1d80c8b7277b81000cb0e104ab5a4e8ad7bfb7c6d89df3ca00e794d8985",
+        "file_sha256": "2926e931aef1a9308e1dcc353cda0c97bc10e953bac36f058e801b56d371296d",
+        "derivative": "Native RGBA 900x1600 session frame captured 2026-09-23T03:17:45Z at the end of the V19 live003 World Castle trial turn-003 run; only chat strip rows y=1395:1485 filled opaque black (0,0,0,255), all other pixels preserved. Same live session as the 03:12 route-source frame (run 20260923T031214Z_c43ce246); the two same-session frames are one correlated group, not independent validation. Installed build not recorded."
+      }
     }
   ]
 }

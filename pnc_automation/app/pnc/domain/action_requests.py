@@ -7,7 +7,12 @@ from enum import StrEnum
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
-from pnc_automation.app.pnc.domain.observation import DetectedSpatialObject, ListEntryKind, SpatialObjectQuery
+from pnc_automation.app.pnc.domain.observation import (
+    Bounds,
+    DetectedSpatialObject,
+    ListEntryKind,
+    SpatialObjectQuery,
+)
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
@@ -35,10 +40,11 @@ class SwipeGesturePrimitive(StrEnum):
 
 
 class SwipePurpose(StrEnum):
-    """Identifies whether a swipe is ordinary UI scrolling or typed world movement."""
+    """Identifies whether a swipe is ordinary UI scrolling or typed movement."""
 
     UI_SCROLL = "ui_scroll"
     WORLD_MAP_MOVEMENT = "world_map_movement"
+    HOME_CITY_CAMERA = "home_city_camera"
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +92,7 @@ class TapSpatialObjectAction(ActionRequest):
     target_point: tuple[int, int] | None = None
     expected_object: DetectedSpatialObject | None = None
     use_action_point: bool = True
+    exact_geometry: bool = False
 
     def __post_init__(self) -> None:
         """Rejects empty or malformed spatial tap requests before execution begins."""
@@ -94,6 +101,8 @@ class TapSpatialObjectAction(ActionRequest):
             raise SelectorResolutionError("TapSpatialObjectAction requires either a query or a concrete target_point.")
         if self.expected_object is not None and self.target_point is None:
             raise SelectorResolutionError("Exact spatial-object taps require a concrete target_point.")
+        if self.exact_geometry and self.expected_object is None:
+            raise SelectorResolutionError("Exact spatial-object taps require the planning-time expected_object body match.")
         if self.target_point is not None and (
             not isinstance(self.target_point, tuple)
             or len(self.target_point) != 2
@@ -157,6 +166,8 @@ class SwipeAction(ActionRequest):
     start_y_ratio: float | None = None
     end_x_ratio: float | None = None
     end_y_ratio: float | None = None
+    exact_geometry: bool = False
+    safe_bounds: Bounds | None = None
 
 
 def resolve_swipe_points_for_action(*, width: int, height: int, action: SwipeAction) -> tuple[int, int, int, int]:
@@ -220,3 +231,34 @@ def _validate_swipe_ratio(ratio: float, *, field_name: str) -> None:
             field_name=field_name,
             ratio=ratio,
         )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WheelAction(ActionRequest):
+    """Sends exactly one signed vertical wheel detent through the scroll transport."""
+
+    x: int
+    y: int
+    vertical_detent: int
+
+    def __post_init__(self) -> None:
+        """Rejects malformed wheel requests before any transport setup or dispatch."""
+
+        if (
+            not isinstance(self.x, int)
+            or isinstance(self.x, bool)
+            or not isinstance(self.y, int)
+            or isinstance(self.y, bool)
+            or self.x < 0
+            or self.y < 0
+        ):
+            raise SelectorResolutionError("WheelAction x/y must be non-negative integers.")
+        if (
+            not isinstance(self.vertical_detent, int)
+            or isinstance(self.vertical_detent, bool)
+            or self.vertical_detent not in (-1, 1)
+        ):
+            raise SelectorResolutionError(
+                "WheelAction.vertical_detent must be exactly +1 or -1.",
+                vertical_detent=self.vertical_detent,
+            )

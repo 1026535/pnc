@@ -14,6 +14,7 @@ import hashlib
 import unittest
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 
 from PIL import Image
 
@@ -21,7 +22,10 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_from_metadata,
 )
-from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraStatus
+from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraStatus,
+    HomeCityZoomStatus,
+)
 from pnc_automation.app.pnc.domain.observation import (
     Observation,
     SpatialObjectSourceKind,
@@ -55,7 +59,13 @@ from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_
 FIXTURES = TEST_DATA_ROOT / "home_city_camera"
 HOME_LAYOUT_ID = "home_city"
 _CAMERA_TARGET_IDS = frozenset(
-    {HomeCityObjectId.INSTITUTE, HomeCityObjectId.TOWER_OF_TRIAL, HomeCityObjectId.CAMPAIGN}
+    {
+        HomeCityObjectId.INSTITUTE,
+        HomeCityObjectId.TOWER_OF_TRIAL,
+        HomeCityObjectId.CAMPAIGN,
+        HomeCityObjectId.ILLUSORY_BEAST_MANOR,
+        HomeCityObjectId.GODDESS_STATUE,
+    }
 )
 
 # Reviewed measured results for each tracked fixture: expected atlas-to-
@@ -71,11 +81,15 @@ _EXPECTED = {
         "targets": {
             HomeCityObjectId.INSTITUTE: (434, 236),
             HomeCityObjectId.TOWER_OF_TRIAL: (179, 512),
+            HomeCityObjectId.GODDESS_STATUE: (277, 245),
         },
     },
     "home_city_mega_castle.png": {
         "translation": (-822, -260),
-        "targets": {HomeCityObjectId.INSTITUTE: (260, 463)},
+        "targets": {
+            HomeCityObjectId.INSTITUTE: (260, 463),
+            HomeCityObjectId.GODDESS_STATUE: (103, 473),
+        },
     },
     "home_city_campaign_portal_20260915.png": {
         "translation": (-1881, -710),
@@ -84,6 +98,56 @@ _EXPECTED = {
     "home_city_bridge_t2_20260916.png": {
         "translation": (-1423, -843),
         "targets": {HomeCityObjectId.CAMPAIGN: (395, 167)},
+    },
+    "home_city_campaign_hud_occluded_20260916.png": {
+        "translation": (-1423, -485),
+        "targets": {HomeCityObjectId.CAMPAIGN: (395, 382)},
+    },
+    "home_city_castle_default_20260921.png": {
+        "translation": (-532, 222),
+        "targets": {},
+    },
+    "home_city_castle_holdout_20260921.png": {
+        "translation": (-545, 149),
+        "targets": {},
+    },
+    # 2026-09-22 157_farm native wheel-zoom captures (client 5.0.204/235):
+    # sampled scene scales 1.0 and ~1.072 at unchanged 900x1600. The zoomed
+    # holdout does not qualify the Institute body; the corrected Goddess
+    # statue body does. The baseline renders that column uniformly darker and
+    # honestly stays unmatched, while the restored frame proves scale 1.0
+    # returns the body without restoring the baseline camera pose.
+    "home_city_native_zoom_baseline_20260922.png": {
+        "translation": (-532, 222),
+        "targets": {HomeCityObjectId.INSTITUTE: (724, 1253)},
+        "zoom": 1.0,
+    },
+    "home_city_native_zoom_holdout_20260922.png": {
+        "translation": (-603, 78),
+        "targets": {HomeCityObjectId.GODDESS_STATUE: (462, 1201)},
+        "zoom": 1.071989179,
+    },
+    "home_city_native_zoom_restored_20260922.png": {
+        "translation": (-532, 73),
+        "targets": {HomeCityObjectId.INSTITUTE: (724, 1104), HomeCityObjectId.GODDESS_STATUE: (461, 1120)},
+        "zoom": 1.0,
+    },
+    # 2026-09-23 157_farm northeast baseline frame: the new fixed Sauroi pier
+    # and moat fortification crops localize the previously landmark-free view.
+    # No qualified building target is visible in this view.
+    "home_city_northeast_holdout_20260923.png": {
+        "translation": (-1251, 139),
+        "targets": {},
+        "zoom": 1.0,
+    },
+    # 2026-09-23 157_farm wall-corridor regression frame (turn003 c3c post-pan
+    # view, frame 0064): the new campaign_left_pedestal landmark supplies the
+    # second independent fixed group and the existing Wall slot-2 body
+    # qualifies. Diagnosis-derived live regression sample, not a holdout.
+    "home_city_wall_corridor_regression_20260923.png": {
+        "translation": (-1298, -645),
+        "targets": {HomeCityObjectId.WALL: (456, 1057)},
+        "zoom": 1.0,
     },
 }
 
@@ -118,11 +182,13 @@ class _BoundedRapidOcrService:
         return "\n".join(line.text for line in self.read_result(image, region).lines)
 
 
-def _capture(name: str, *, session_id: str, capture_sequence: int) -> CapturedScreenshot:
+def _capture(
+    name: str, *, session_id: str, capture_sequence: int, fixture_root: Path = FIXTURES,
+) -> CapturedScreenshot:
     """Load a tracked capture with explicit frame provenance and no payload shortcut."""
 
-    with Image.open(FIXTURES / name) as source:
-        image = source.convert("RGB")
+    with Image.open(fixture_root / name) as source:
+        image = source.copy()
     captured_at = datetime.now(UTC)
     return CapturedScreenshot(
         None,
@@ -173,6 +239,28 @@ def _wire(
 
 class HomeCameraPublicationTests(unittest.TestCase):
     """Replayed Home captures qualify the camera contract on both publishers."""
+
+    def test_wall_and_native_zoom_goddess_reach_both_publishers(self) -> None:
+        for sequence, (root, name, identity, slot, translation, point) in enumerate((
+            (TEST_DATA_ROOT / "home_city_slot_bodies", "home_city_wall_slot2_f6_20260922.png",
+             HomeCityObjectId.WALL, 2, (-1635, -718), (118, 983)),
+            (FIXTURES, "home_city_native_zoom_holdout_20260922.png",
+             HomeCityObjectId.GODDESS_STATUE, 15, (-603, 78), (462, 1201)),
+        )):
+            with self.subTest(identity=identity):
+                backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+                builder, navigation = _wire(backend)
+                capture = _capture(name, session_id="v44-ordinary-bodies",
+                                   capture_sequence=sequence, fixture_root=root)
+                self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
+                observations = self._build_both(builder, navigation, backend, capture)
+                for observation in observations:
+                    self._assert_camera_publication(observation, capture, translation, {identity: point})
+                    bodies = [item for item in observation.spatial_surface.objects
+                              if home_city_object_id_from_metadata(item.metadata) == identity]
+                    self.assertEqual(1, len(bodies))
+                    self.assertEqual(slot, bodies[0].home_city_slot.slot_index)
+                self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_west_holdout_publishes_camera_and_tower_through_both_paths(self) -> None:
         """A current west view localizes without inventing the offscreen Institute."""
@@ -257,7 +345,8 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 self.assertEqual(ScreenType.PNC_HOME_CITY, item.source_screen)
                 self.assertEqual(observation.decision.layout_id, item.source_layout_id)
         self.assertTrue(
-            any(item.source_kind == SpatialObjectSourceKind.OCR for item in surface.objects),
+            any(item.source_kind == SpatialObjectSourceKind.OCR for item in surface.objects)
+            or any("home_city_label" in item.metadata for item in by_target.values()),
             "useful OCR facts must survive alongside camera-qualified objects",
         )
 
@@ -379,8 +468,15 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 )
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
-    def test_campaign_post_pan_hud_occlusion_keeps_fresh_actionable_body(self) -> None:
-        """Actual HUD occlusion does not erase the independent camera proof."""
+    def test_campaign_post_pan_hud_occlusion_publishes_measured_body(self) -> None:
+        """HUD occlusion must not hide qualified fixed evidence on the V02 route.
+
+        The HUD-covered eastern view still carries two independent fixed groups:
+        east-fortification aqueduct/ridge-wall and the scene-fixed Campaign
+        portal body. Alliance Hall also matches but stays a movable corroborator
+        and does not establish the camera. Both publishers must localize at the
+        measured atlas translation and expose the Campaign body tap.
+        """
         backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
         builder, navigation = _wire(backend)
         capture = _capture(
@@ -389,12 +485,385 @@ class HomeCameraPublicationTests(unittest.TestCase):
             capture_sequence=8,
         )
         observations = self._build_both(builder, navigation, backend, capture)
-        for observation in observations:
-            self._assert_camera_publication(
-                observation, capture, (-1423, -484),
-                {HomeCityObjectId.CAMPAIGN: (395, 382)},
-            )
+        expected = _EXPECTED["home_city_campaign_hud_occluded_20260916.png"]
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_camera_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+                surface = observation.spatial_surface
+                assert surface is not None and surface.camera_proof is not None
+                self.assertIn(
+                    "campaign_portal",
+                    surface.camera_proof.matched_group_ids,
+                    "the fixed Campaign portal group must corroborate the camera",
+                )
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_castle_views_publish_camera_proof_without_authorizing_buildings(self) -> None:
+        """The 2026-09-21 castle captures localize through independent courtyard groups.
+
+        The default-camera view localizes on castle structure plus plaza floor,
+        and the panned holdout agrees on castle structure, the Goddess Statue
+        monument, and the west garden -- three genuinely independent regions.
+        No camera-qualified building target is visible in either view, so both
+        publishers must localize without inventing a tap point.
+        """
+        for name, expected_translation in (
+            ("home_city_castle_default_20260921.png", (-532, 222)),
+            ("home_city_castle_holdout_20260921.png", (-545, 149)),
+        ):
+            backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+            builder, navigation = _wire(backend)
+            capture = _capture(name, session_id="v44-castle-camera", capture_sequence=9)
+
+            observations = self._build_both(builder, navigation, backend, capture)
+            expected = _EXPECTED[name]
+            for publisher, observation in (
+                ("observation_builder", observations[0]),
+                ("navigation_perception", observations[1]),
+            ):
+                with self.subTest(fixture=name, publisher=publisher):
+                    self._assert_camera_publication(
+                        observation,
+                        capture,
+                        expected_translation,
+                        expected["targets"],
+                    )
+                    surface = observation.spatial_surface
+                    assert surface is not None and surface.camera_proof is not None
+                    self.assertIn(
+                        "castle_structure",
+                        surface.camera_proof.matched_group_ids,
+                        "the castle keep group must corroborate the camera",
+                    )
+                    self.assertFalse(
+                        any(
+                            item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                            for item in surface.objects
+                        ),
+                        "a castle-only view must not authorize an unobserved building",
+                    )
+            self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_native_zoom_frames_publish_measured_scale_through_both_paths(self) -> None:
+        """The 2026-09-22 native wheel-zoom captures pin both publishers.
+
+        These are the game's own rendered zoom states at native 900x1600 —
+        distinct from the cross-resolution and resampled-zoom regressions —
+        captured on 157_farm under client 5.0.204/235. Wheel -1 sampled
+        scale ~1.072 at atlas (-603, 78); the inverse wheel +1 restored
+        scale 1.0 at a different translation (-532, 73), so scale recovery
+        is never pose recovery. At the zoomed pose the Institute body crop
+        stays unmatched, while the independently measured Goddess statue body
+        supplies a slot-15 body. Preserve the Institute negative without
+        suppressing this qualified body. Only the sampled scales are qualified.
+        """
+        for sequence, name in enumerate(
+            (
+                "home_city_native_zoom_baseline_20260922.png",
+                "home_city_native_zoom_holdout_20260922.png",
+                "home_city_native_zoom_restored_20260922.png",
+            )
+        ):
+            backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+            builder, navigation = _wire(backend)
+            capture = _capture(
+                name, session_id="v44-native-zoom", capture_sequence=sequence,
+            )
+            self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
+
+            observations = self._build_both(builder, navigation, backend, capture)
+            expected = _EXPECTED[name]
+            for publisher, observation in (
+                ("observation_builder", observations[0]),
+                ("navigation_perception", observations[1]),
+            ):
+                with self.subTest(fixture=name, publisher=publisher):
+                    self._assert_camera_publication(
+                        observation,
+                        capture,
+                        expected["translation"],
+                        expected["targets"],
+                    )
+                    surface = observation.spatial_surface
+                    assert surface is not None and surface.camera_proof is not None
+                    proof = surface.camera_proof
+                    self.assertAlmostEqual(expected["zoom"], proof.zoom, delta=0.005)
+                    self.assertEqual((900, 1600), proof.frame_size)
+                    self.assertGreaterEqual(len(proof.evidence), 3)
+                    self.assertGreaterEqual(len(proof.matched_group_ids), 2)
+                    if name == "home_city_native_zoom_holdout_20260922.png":
+                        self.assertFalse(
+                            any(
+                                item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                                and home_city_object_id_from_metadata(item.metadata)
+                                is HomeCityObjectId.INSTITUTE
+                                for item in surface.objects
+                            ),
+                            "the zoomed frame does not qualify the Institute body",
+                        )
+            self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_northeast_holdout_publishes_camera_without_authorizing_buildings(self) -> None:
+        """The 2026-09-23 northeast view localizes but authorizes no tap.
+
+        The 157_farm baseline frame shows the northeast district that had zero
+        landmark correspondences before the Sauroi pier and moat fortification
+        crops were authored. Both publishers must localize at zoom ~1.0 near
+        atlas translation (-1251, +139) through at least three fixed
+        correspondences in two genuinely independent groups, and must not
+        invent a body or tap while no qualified target is visible.
+        """
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        name = "home_city_northeast_holdout_20260923.png"
+        capture = _capture(name, session_id="v44-northeast-camera", capture_sequence=1)
+        self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
+
+        observations = self._build_both(builder, navigation, backend, capture)
+        expected = _EXPECTED[name]
+        for publisher, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=publisher):
+                self._assert_camera_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+                surface = observation.spatial_surface
+                assert surface is not None and surface.camera_proof is not None
+                proof = surface.camera_proof
+                self.assertAlmostEqual(expected["zoom"], proof.zoom, delta=0.005)
+                self.assertGreaterEqual(len(proof.evidence), 3)
+                self.assertTrue(
+                    {"sauroi_lair_structure", "east_fortification"}
+                    <= proof.matched_group_ids,
+                    "the northeast view must localize on the new fixed groups",
+                )
+                self.assertFalse(
+                    any(
+                        item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                        for item in surface.objects
+                    ),
+                    "a target-free northeast view must not invent a building",
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_wall_corridor_publishes_wall_slot2_through_both_paths(self) -> None:
+        """The 2026-09-23 wall-corridor regression frame qualifies Wall slot 2.
+
+        V44 final live turn003 panned to a clear Wall view where only
+        east_fortification could previously establish the camera; the new
+        fixed campaign_left_pedestal landmark (shared campaign_portal group)
+        supplies the second group while the movable Alliance Hall
+        corroborates only. Both publishers must localize at zoom 1.0 near
+        atlas (-1298,-645), publish the existing Wall slot-2 body at
+        (456,1057) with full provenance, and invent no other target.
+        """
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        name = "home_city_wall_corridor_regression_20260923.png"
+        capture = _capture(name, session_id="v44-wall-corridor", capture_sequence=1)
+        self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
+
+        observations = self._build_both(builder, navigation, backend, capture)
+        expected = _EXPECTED[name]
+        for publisher, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=publisher):
+                self._assert_camera_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+                surface = observation.spatial_surface
+                assert surface is not None and surface.camera_proof is not None
+                proof = surface.camera_proof
+                self.assertAlmostEqual(expected["zoom"], proof.zoom, delta=0.005)
+                self.assertTrue(
+                    {"campaign_portal", "east_fortification"}
+                    <= proof.matched_group_ids,
+                    "the wall corridor must localize on the two fixed groups",
+                )
+                walls = [
+                    item
+                    for item in surface.objects
+                    if home_city_object_id_from_metadata(item.metadata)
+                    is HomeCityObjectId.WALL
+                ]
+                self.assertEqual(1, len(walls))
+                self.assertEqual(2, walls[0].home_city_slot.slot_index)
+                self.assertEqual(
+                    {HomeCityObjectId.WALL},
+                    {
+                        home_city_object_id_from_metadata(item.metadata)
+                        for item in surface.objects
+                        if item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                    },
+                    "the corridor view must not invent any other camera target",
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_manor_capture_publishes_measured_body_through_both_paths(self) -> None:
+        """The native PW02 view localizes through the Manor structure and exposes its tap."""
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        manor_frame = (
+            TEST_DATA_ROOT
+            / "screen_recognition"
+            / "building_routes"
+            / "home_city_illusory_beast_manor_20260921.png"
+        )
+        with Image.open(manor_frame) as source:
+            image = source.copy()
+        self.assertEqual(("RGBA", (900, 1600)), (image.mode, image.size))
+        captured_at = datetime.now(UTC)
+        capture = CapturedScreenshot(
+            None,
+            image,
+            "PNG",
+            frame_ref=FrameRef(
+                session_id="pw07-manor-camera",
+                session_epoch=1,
+                capture_sequence=1,
+                input_sequence=0,
+                captured_at=captured_at,
+            ),
+            ephemeral_captured_at=captured_at,
+        )
+
+        observations = self._build_both(builder, navigation, backend, capture)
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_camera_publication(
+                    observation,
+                    capture,
+                    (-521, -1346),
+                    {HomeCityObjectId.ILLUSORY_BEAST_MANOR: (511, 722)},
+                )
+                # The generic Manor label and the other camera targets must not
+                # be invented on this frame.
+                self.assertFalse(
+                    any(
+                        item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                        and home_city_object_id_from_metadata(item.metadata)
+                        in _CAMERA_TARGET_IDS - {HomeCityObjectId.ILLUSORY_BEAST_MANOR}
+                        for item in observation.spatial_surface.objects
+                    )
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_zoom_view_evidence_publishes_identically_through_both_paths(self) -> None:
+        """Both publishers carry the measured zoom verdict and qualified anchor.
+
+        The 2026-09-25 endpoint repeat frame publishes the calibrated endpoint
+        class and the northeast moat lane anchor; the nearest non-endpoint
+        rung -- publishing the same snapped 0.75 consensus zoom -- must
+        classify NOT_AT_ENDPOINT and publishes the castle-fountain wheel
+        anchor that is visible at that pose; the 2026-09-27 default-start
+        frame publishes the same fountain anchor at its measured position.
+        Both publishers consume the single shared surface, so the view
+        evidence, frame size, and frame provenance are identical on each path.
+        """
+        for sequence, (name, translation, status, reason, anchor_id, anchor_point) in enumerate((
+            (
+                "home_city_zoom_endpoint_20260925.png",
+                (-1084, 50),
+                HomeCityZoomStatus.AT_ENDPOINT,
+                "measured_zoom_at_endpoint",
+                "northeast_moat_slope_wheel_20260925",
+                (270, 704),
+            ),
+            (
+                "home_city_zoom_rung_20260925.png",
+                (-287, 52),
+                HomeCityZoomStatus.NOT_AT_ENDPOINT,
+                "measured_zoom_closer_than_endpoint",
+                "castle_fountain_wheel_20260927",
+                (450, 558),
+            ),
+            (
+                "home_city_default_start_20260927.png",
+                (-532, 222),
+                HomeCityZoomStatus.NOT_AT_ENDPOINT,
+                "measured_zoom_closer_than_endpoint",
+                "castle_fountain_wheel_20260927",
+                (450, 895),
+            ),
+            (
+                "home_city_fountain_935_20260927.png",
+                (-468, 69),
+                HomeCityZoomStatus.NOT_AT_ENDPOINT,
+                "measured_zoom_closer_than_endpoint",
+                "castle_fountain_wheel_20260927",
+                (450, 699),
+            ),
+            (
+                "home_city_fountain_879_20260927.png",
+                (-414, 65),
+                HomeCityZoomStatus.NOT_AT_ENDPOINT,
+                "measured_zoom_closer_than_endpoint",
+                "castle_fountain_wheel_20260927",
+                (450, 657),
+            ),
+        )):
+            backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+            builder, navigation = _wire(backend)
+            capture = _capture(
+                name, session_id="v44-zoom-view", capture_sequence=sequence,
+            )
+            self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
+
+            observations = self._build_both(builder, navigation, backend, capture)
+            for publisher, observation in (
+                ("observation_builder", observations[0]),
+                ("navigation_perception", observations[1]),
+            ):
+                with self.subTest(fixture=name, publisher=publisher):
+                    self._assert_camera_publication(
+                        observation, capture, translation, {},
+                    )
+                    surface = observation.spatial_surface
+                    assert surface is not None
+                    view = surface.home_city_view
+                    self.assertIsNotNone(view)
+                    assert view is not None
+                    self.assertEqual(status, view.zoom_status)
+                    self.assertEqual(reason, view.reason)
+                    self.assertEqual("home_zoom_endpoint_20260925", view.calibration_id)
+                    self.assertEqual(capture.image.size, view.frame_size)
+                    self.assertEqual(capture.frame_ref, view.frame_ref)
+                    self.assertEqual(ScreenType.PNC_HOME_CITY, view.source_screen)
+                    self.assertEqual(
+                        observation.decision.layout_id, view.source_layout_id
+                    )
+                    anchor = view.zoom_anchor
+                    if anchor_point is None:
+                        self.assertIsNone(anchor)
+                    else:
+                        self.assertIsNotNone(anchor)
+                        assert anchor is not None
+                        self.assertEqual(anchor_id, anchor.qualification_id)
+                        self.assertEqual(anchor_point, anchor.point)
+                        self.assertTrue(anchor.bounds.contains_point(anchor.point))
+            self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_world_map_is_a_camera_negative_on_both_paths(self) -> None:
         """The World fixture shares HUD chrome but must never carry a localized proof."""

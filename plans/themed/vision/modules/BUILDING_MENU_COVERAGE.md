@@ -1,8 +1,8 @@
 # Building-menu coverage
 
-[Plan index](../PNC_VISION_MODULAR_PLAN.md) · [Execution roadmap](../PNC_VISION_ROADMAP.md). Updated 2026-09-15.
+[Plan index](../PNC_VISION_MODULAR_PLAN.md) · [Execution roadmap](../PNC_VISION_ROADMAP.md). Updated 2026-09-18.
 
-Every current `HomeCityObjectId` has a planning owner below; Lost City Headquarters is an additional user-confirmed slot awaiting catalog qualification. **Assigned does not mean implemented or visually qualified.** V02 supplies current Home acquisition; each feature owns the opened menu, content, popups and actual return. V16 owns shared upgrade/requirement/queue surfaces; V17 owns construction menus.
+Every current `HomeCityObjectId` has a planning owner below; Lost City Headquarters is an additional user-confirmed slot awaiting catalog qualification. **Assigned does not mean implemented or visually qualified.** V02 supplies accepted Institute/Tower/Campaign acquisition; [V44](V44_FULL_HOME_CITY_NAVIGATION.md) owns full-city slot, zoom, occupancy and remaining Home-entry qualification; each feature owns the opened menu, content, popups and actual return. V16 owns shared upgrade/requirement/queue surfaces; V17 owns construction menus.
 
 The catalog and [building-endpoint note](../../../../docs/game-reference/workflows/building-endpoints.md) are the repository baseline. A declared screen or old client route is a lead, not proof of the current interface. For capture gaps, use the packet's bounded route and report unsupported states.
 
@@ -60,3 +60,17 @@ The catalog and [building-endpoint note](../../../../docs/game-reference/workflo
 An agent implements one packet's observed feature family, including its ordinary detail/close/popups. It does not need to implement every possible future event or locked progression variant to finish an evidenced subset, but must state those limits. A newly discovered, materially distinct subtree becomes a named follow-on packet before expansion; it must not disappear behind an “all buildings supported” claim.
 
 Fresh capture evidence can supersede old route names. One shared menu family may cover several building IDs only when identity and geometry are actually proved. Existing working profiles remain intact, and generic upgrades/construction are reused rather than reimplemented per building.
+
+## V44 acquisition gate
+
+The 54 ordinary slot definitions and separate system nodes are a map inventory,
+not 54 verified menu routes. Slot eligibility is separate from observed occupancy.
+V44 precedes new navigation-dependent work; offline feature parsing remains
+independent. V23–26 inherit Blacksmith entry through V22. V03/V32/V33 retain
+appearance/event gates and do not block V44 ordinary coverage.
+
+Record geometry evidence and route evidence separately. Acceptance covers every
+available ordinary type on the authorized castle. Positive evidence can establish
+unavailability; scan failures, missing templates and unknown positions cannot.
+Unavailable routes remain individually blocked after V44's scoped acceptance.
+V44 and independent packets are resumed. V44 foundation live validation is authorized on `157_farm`; remaining mapping/route coverage is still pending.

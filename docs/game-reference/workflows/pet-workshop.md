@@ -17,6 +17,58 @@ are static evidence, not a guarantee of current server-delivered data. Active
 orders and hidden/random order selection are server-driven and are observed
 at runtime, not from these tables.
 
+## Illusory Beast Manor entry evidence
+
+**Artifact-observed, 2026-09-28; high confidence for this target:** a current
+body tap at (401,775) on `157_farm`, active castle `0 sticker NPC` C15,
+produced the transient message `Castle : Lv.24 required`. The native source
+and first post-tap frame are recorded in V44 run
+`v44-3-route-correction-20260928-10`, turn010 `core_6_home_endpoint_confirmation`
+and `20260928T104145Z_core_20260928T104039Z_17a76e14_0026_core_6_home_after_0.png`.
+Later frames had already lost the message and remained Home. This proves the
+building received the tap and refused entry on this castle; it does not prove
+a missed tap or an open Manor destination. Validate Manor/Workshop entry on an
+authorized C24+ castle and inspect the first post-action frame for transient
+unlock messages. Do not retry a locked target or change its castle to satisfy a
+test without switching authority. The captured run did not independently
+establish its installed build. The archived `builditem_5016.lua:87-105` checks
+`BuildingSystem` prerequisites and shows a transient failure message before
+opening `BEAST_MANOR_ENTER_VIEW`; current UI evidence establishes the level here.
+
+**Client-source verified, archived 5.0.203/build 233:** `buildidtype.lua`
+identifies `BEAST_MANOR=5016`. `cityscenebaseview.lua:490–531` parents system
+buildings to `BuildingPosition/sys_(buildId-5000)` at local position zero;
+this places Manor at `sys_16`, separately from ordinary movable slots.
+`builditem_5016.lua` opens `BEAST_MANOR_ENTER_VIEW` after unlock checks.
+These sources are under the gameplay root cited above; fixed initial system
+placement does not establish every future client's layout.
+
+**Artifact-observed, 2026-09-21/22:** the purple owl building beside the
+unrelated generic Manor is the Illusory Beast Manor. Native PW02 frame
+`20260921T175215Z_c2_home_scan_1.png` and its subsequent Manor captures prove
+the exploratory body tap (511,722) entered that hub. The tracked native RGBA
+fixture is `tests/data/screen_recognition/building_routes/`
+`home_city_illusory_beast_manor_20260921.png`; the manifest retains its digest.
+This observation does not itself qualify a production route.
+
+Native 157_farm frame `20260922T050321Z_core_20260922T045658Z_f03a5eab_0062_`
+`c2_tower_of_trial_home_post.png` (source SHA256
+`d427ec928904dac82d12799358b9b39ebb6a5765f7434fa62b0317208d61bca0`)
+establishes the packaged body, owl-head and right-tower crops through an
+independently measured camera pose. The two nonoverlapping identity regions
+share one structural group; they cannot independently establish camera pose.
+Current-frame body match, camera projection agreement and guarded native
+action geometry remain required. Label offsets and generic Manor labels
+provide no tap authority. Confidence is high for these captured native views.
+The current installed build is 5.0.204/build 235; changed-scale support and the
+final Home→Manor→Workshop route still require their own validation.
+
+Lead reproduction and raw provenance remain under ignored
+`.local-data/review/pw07-home-entry/qualification-20260922.md` and
+`manor-two-region-{main,v44}.json`. The latter preserves an observed view
+that correctly fails when no second independent fixed group is available.
+These are perception/navigation facts, not simulator gameplay transitions.
+
 ## Table structure and inheritance
 
 **Client source verified:** every `ComposeAct*` table is a Lua literal whose

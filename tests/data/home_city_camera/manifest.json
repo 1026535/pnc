@@ -157,7 +157,305 @@
         1600
       ],
       "source_sha256": "a6d2a3e0a846f4a092b30215960772974a9eb4b2694054d8f066f92e2d4ee993",
-      "annotation": "2026-09-16 mega_old_acc active castle. Raw source stopped safely with only Tower body correspondence. New Tower wall and Sanctum column references are crops of the separately localized 06:34 Tower-lower source, not this holdout. All three agree on image translation(458,-1034), atlas(-74,-812). Only chat band y1390:1485 is masked; scene geometry is unchanged."
+      "annotation": "2026-09-16 mega_old_acc active castle; old capture build is unknown \u2014 the 5.0.204/235 package evidence belongs only to the 2026-09-22 157_farm baseline, not to this frame. Raw source stopped safely with only Tower body correspondence. New Tower wall and Sanctum column references are crops of the separately localized 06:34 Tower-lower source, not this holdout. All three agree on image translation(458,-1034), atlas(-74,-812). Only chat band y1390:1485 is masked; scene geometry is unchanged.",
+      "native_sha256": "4fc6926e4387726b56b7870941eba9d345b7d515dba3e2914a7fd3c73c51a7a2",
+      "digest_note": "sha256 is the manifest's decoded-RGB digest; native_sha256 is the raw file digest recorded by the 2026-09-22 lead calibration proof. Both verified against the current bytes; neither is stale."
+    },
+    {
+      "image": "home_city_castle_default_20260921.png",
+      "role": "castle_default_reference_camera",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "ec51bb572eea5d8635517f45840313820c3db62edf7f310b76c9a881976bf325",
+      "source_artifact": "20260921T060257Z_core_20260921T060037Z_56664016_0018_live_turn001b_v44_serious_stuff_seek_0.png",
+      "source_size": [
+        540,
+        960
+      ],
+      "source_sha256": "1dd5605cfaa0c22cc512f03d4341e0fdd75056f5a5f8e38ab24019a5a86352be",
+      "annotation": "2026-09-21 serious_stuff active castle, V44 foundation run seek_0 frame at the reference camera (image translation (0,0), atlas (-532,222)). Castle-structure crops plus plaza_ring supply the two independent groups; this account's statue/garden appearance diverges from the authored references and contributes no votes. Private chat band masked at rows 824 through 890 inclusive (540x960), mapping to reference rows ~1373:1485."
+    },
+    {
+      "image": "home_city_castle_holdout_20260921.png",
+      "role": "castle_panned_holdout",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "e0d95663bb63b67bb8e53d76f9cca9da049f2dd71f87cefc55b41edc14c6a98a",
+      "source_artifact": "20260921T060456Z_core_20260921T060037Z_56664016_0026_live_turn001b_v44_serious_stuff_seek_4_after_1.png",
+      "source_size": [
+        540,
+        960
+      ],
+      "source_sha256": "8a534c3b6685cfae2f22e6866fa5b0e1795b35d89ae56deed229bc0ca06ce90f",
+      "annotation": "2026-09-21 serious_stuff active castle, V44 foundation run seek_4_after_1 frame. Image translation (-13,-74), atlas (-545,149); castle structure, Goddess Statue monument and west garden agree within 1px -- three independent scene regions. The east garden region is occluded on this account. Private chat band masked at rows 824 through 890 inclusive (540x960); scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_institute_pretap_20260922.png",
+      "role": "live_regression_center_correspondence_institute",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "0c26e2f0665481444e0c3378ed7c4c6612b2f593054fb8db3f2270c5f58eccf3",
+      "source_artifact": "20260922T015141Z_core_20260922T014849Z_873314fa_0036_core_7_building_source.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "1fa7bcf134bdade9d01ed8d6716af819c523a9d01733ab165f8cf58089749528",
+      "annotation": "2026-09-22 157_farm active castle, V44 foundation live010 run. Institute pre-tap source frame after one dispatched pan: weak 0.95/1.05 matches of the same scene features disagreed with one another by over 10px under top-left correspondences (size-dependent crop bias) and the frame refused conflicting_zoom_hypotheses; no building tap was sent. Center correspondences converge on the true transform: image translation (-5,-624), atlas (-537,-402), zoom 1.0. Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_tower_pretap_20260922.png",
+      "role": "live_regression_center_correspondence_tower",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "920aea2de86f2edfbfc836162619c8d781131f0c4e6d2bb85322c13000ec0e92",
+      "source_artifact": "20260922T001425Z_core_20260922T000737Z_863e028d_0040_c2_tower_of_trial_home_pre.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "9fa7f1eb96d85c9652c75eb8ca67ede23ffb24d87229bb841782b123c6307c50",
+      "annotation": "2026-09-22 157_farm active castle, V44 foundation live008 run. Tower of Trial pre-tap source frame: weak 0.95/1.05 matches of the same scene features produced the same false conflicting_zoom_hypotheses ambiguity under top-left correspondences; no building tap was sent. Center correspondences converge on the true transform: image translation (-2,-594), atlas (-534,-372), zoom 1.0. Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_native_zoom_baseline_20260922.png",
+      "role": "native_zoom_baseline_scale_1",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "5912d981e21a72c25c4a61fc023279db5709a4caf5dbb91dede8af1e3db86756",
+      "source_artifact": "20260922T080932Z_v44_baseline_2.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "c441b6c7080ae875f582df7e3cb5d401e0e80b89136dd6dc1b76ea7f12fa26aa",
+      "annotation": "2026-09-22 157_farm active castle (sticker NPC/K157), V44 wheel-validation turn-020 baseline, client 5.0.204/235. Native rendered scene zoom 1.0, atlas translation (-532,222); 11 landmark correspondences across 6 independent scene groups. Institute body qualifies via p6_path_right at action point (724,1253). Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_native_zoom_holdout_20260922.png",
+      "role": "native_zoom_holdout_scale_1_072",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "83262af9bffd772c5c0d2ba40b0b4bd290890f3980905514704b2cebb35b3608",
+      "source_artifact": "20260922T081014Z_v44_scale_after_e1_2.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "87fe25bed29f5ccdfb245caede224d43295e7ebbe0749ce3083e9660557779e6",
+      "annotation": "2026-09-22 157_farm active castle (sticker NPC/K157), V44 wheel-validation turn-020 after wheel -1, client 5.0.204/235. First independently verified native scene zoom: measured scale 1.071989179 at atlas translation (-603,78); 9 correspondences across 6 independent groups. The p6_path_right Institute body crop is unmatched at this scale, so no camera-qualified target publishes. Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_native_zoom_restored_20260922.png",
+      "role": "native_zoom_restored_scale_1",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "44c460a2bf4327ea72d4b5371b081abd56ca8cbc2256f20fc71f157224528cbb",
+      "source_artifact": "20260922T081125Z_v44_final_2.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "43962d8fc317e5fd5aa32dee6c1c8f09f17d8db5a8c3b54c46e6d58d5d0fe831",
+      "annotation": "2026-09-22 157_farm active castle (sticker NPC/K157), V44 wheel-validation turn-020 after inverse wheel +1, client 5.0.204/235. Scale restored to 1.0 but the camera pose did not return: atlas translation (-532,73), not the baseline (-532,222); 11 correspondences across 6 groups. Institute body qualifies at action point (724,1104). Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_pw_manor_negative_20260922.png",
+      "role": "pw_manor_insufficient_groups_negative",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "53508cd3eb42df662b3466aec3da3da020e6fe8eb756d4d7debaca6c2231220b",
+      "source_artifact": "20260922T065818Z_core_20260922T065527Z_66216f20_0044_c5_final.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "134d6924b0b0b387a7f420700cdfd5da45923711fe2413b99e86e5b46970e6a9",
+      "native_sha256": "59a13c608a44dd9086b588403c36fe7fab8472eb886be225127c60f578932272",
+      "annotation": "2026-09-22 hopium_growth active castle, pet_workshop_pw05 c5_final frame (PW006). Native 900x1600 RGBA kept unconverted. Both Illusory Beast Manor landmarks match but share the single illusory_beast_manor_structure group and the movable Blacksmith cannot vote, so the frame fails closed as insufficient_independent_landmark_groups with no translation or zoom. Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_northeast_holdout_20260923.png",
+      "role": "northeast_camera_live_holdout",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "700dec3ed954d9a5a87d80fda402feb0eabd11f8be4b7f5e06b49b2b92b935b5",
+      "source_artifact": "20260923T020508Z_core_20260923T020504Z_1de57f30_0003_c1_home_baseline_a.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "3688071e77cfb456e526133775039b212e710b08c9edce89e5778e6f562cf5c1",
+      "native_sha256": "9b3367e7f1b5a15ac1429a18348b0949deb5152d866da10a33b652fc3fd4f004",
+      "annotation": "2026-09-23 157_farm active castle, V44 final live002 baseline frame 0003. Native 900x1600 RGBA kept unconverted. Measured through the real matcher and both publishers: LOCALIZED at zoom 1.0, atlas translation (-1250,+139), through the three northeast fixed landmarks northeast_sauroi_pier (sauroi_lair_structure), northeast_moat_cap and northeast_moat_shaft (east_fortification, one physical group). The campaign_left_pedestal landmark (added 2026-09-23, shared campaign_portal group) also matches this view at .9714, so the current catalog corroborates through a third independent group; the original three-landmark measurement is unchanged. No camera-qualified target is published in this view. The consecutive frame 0004 (same pose, not tracked) corroborates; the pair is not cross-pose proof. Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_wall_corridor_regression_20260923.png",
+      "role": "live_regression_wall_corridor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "2e0aa7034f0bf84de6c13bd60c139ed2cb9de2cef13e294accc9cb2ebe1da948",
+      "source_artifact": "20260923T055023Z_core_20260923T054248Z_9c46e534_0064_c3c_wall_home_post.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "9f56c17aba32a55a458ff6bcd4080a05f48d08528fb855b4da12db553d1fdeb2",
+      "native_sha256": "374949a21e6f30f40f02b6782bbad7db7ffd918470e908e915ed031a8fc804fa",
+      "annotation": "2026-09-23 157_farm active castle, V44 final live turn003 c3c wall_home_post frame 0064. Native 900x1600 RGBA kept unconverted. This frame was the failed-Wall localization diagnosis source, so it is a live regression/validation sample, not an unseen holdout; the later frame 0072 (same pose, ..._0072_c3e_blacksmith_home_pre.png) is same-pose corroboration, not cross-pose independence. With the campaign_left_pedestal landmark added (shared campaign_portal group), measured through the real matcher and both publishers: LOCALIZED at zoom 1.0, atlas translation (-1298,-645), through east_fortification plus campaign_portal; the movable Alliance Hall corroborates only. The existing Wall slot 2 body qualifies at action point (456,1057), score .9846, projection error 1.41. Private chat band masked at rows 1390 through 1484 inclusive; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_zoom_endpoint_20260925.png",
+      "role": "native_zoom_endpoint_at_max_zoom_out",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "57adcf12ccd890a0f89d6ba2d7e075ce42c5af406aa77b28808b99d9c112ddcd",
+      "source_artifact": "20260925T184527Z_v44_z1_endpoint_repeat_post.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "4557092ed8020e055e4e8dc4d389d1b91872eac8366b22e0c54294de69729a5a",
+      "annotation": "2026-09-25 157_farm active castle, V44 gesture-validation endpoint-repeat post frame. Fixed-landmark refit measures raw zoom 0.74275 at atlas translation (-1084,+50) -- inside the enabled endpoint interval [0.738,0.744]. The directly matched scenery patch qualifies the historical wheel dispatch point itself: point (270,704), bounds (190,650,170,200), qualification northeast_moat_slope_wheel_20260925 (patch authored on the paired pre frame, source run 20260925T183834Z-409d1503 z1_endpoint_repeat). Private chat band masked at rows 1390 through 1484 inclusive, then stored RGBA to match captured-frame mode; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_zoom_rung_20260925.png",
+      "role": "native_zoom_nearest_non_endpoint_rung",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "94a99e09d02f8fc73bb1964c9104582e294c623ec80997e59a95c94eac8654e8",
+      "source_artifact": "20260925T174122Z_v44_z1_leg_a_out3_post.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "c25ebbe36701b39cb4bf1678fbb8acba981d1c87dd4983062a6e9145d315488a",
+      "annotation": "2026-09-25 157_farm active castle, V44 gesture-validation leg_a out3 post frame. The published zoom is grid-snapped to 0.75 while the fixed-landmark refit measures raw 0.74692 at atlas translation (-287,+52) -- the nearest zoom rung above the endpoint band, separated from the endpoint fixture's measured 0.74275 by ~0.004 at a nearly identical pose. Honest verdict: not_at_endpoint through measured_zoom_closer_than_endpoint. Private chat band masked at rows 1390 through 1484 inclusive, then stored RGBA to match captured-frame mode; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_zoom_mid_779_20260925.png",
+      "role": "native_intermediate_zoom_anchor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "4e2e377028342579f6e7eb8884bbb67e7a5342f6b089f29c863aa3b9ba5c3fc0",
+      "source_artifact": "20260925T184100Z_v44_z1_leg_a_out0_pre.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "61689f8b3ea224650191edbfe8652f698146cddd6c12e86feef41976c5cd78c1",
+      "annotation": "Retained 2026-09-25 157_farm pre-wheel capture at approximately 0.779 atlas scale. Direct scenery-patch recognition must remain available along this native zoom-out trajectory. Chat rows1390-1484 masked; scene geometry unchanged; RGBA publication mode. Final production live input remains a separate gate."
+    },
+    {
+      "image": "home_city_zoom_mid_824_20260925.png",
+      "role": "native_intermediate_zoom_anchor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "a69d95c49e1a48d84f19933b27e83b5938a465184241e30baa5a2889e0f5984b",
+      "source_artifact": "20260925T184349Z_v44_z1_leg_b_out1_pre.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "7f0ed016ceaf5e101a1563d731700dc8dadf0d741a65144a379b3645057cb68e",
+      "annotation": "Retained 2026-09-25 157_farm pre-wheel capture at approximately 0.824 atlas scale. Direct scenery-patch recognition must remain available along this native zoom-out trajectory. Chat rows1390-1484 masked; scene geometry unchanged; RGBA publication mode. Final production live input remains a separate gate."
+    },
+    {
+      "image": "home_city_zoom_mid_871_20260925.png",
+      "role": "native_intermediate_zoom_anchor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "6a1f66544c72662f7bebfa5e4eeef3f869adae79656135cbd9101bbaea2aa0df",
+      "source_artifact": "20260925T184320Z_v44_z1_leg_b_out0_pre.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "040ddcc5322ab1544af6f57ec987ca1d4ba6645ef50c9215f26be2ebf4cab1b4",
+      "annotation": "Retained 2026-09-25 157_farm pre-wheel capture at approximately 0.871 atlas scale. Direct scenery-patch recognition must remain available along this native zoom-out trajectory. Chat rows1390-1484 masked; scene geometry unchanged; RGBA publication mode. Final production live input remains a separate gate."
+    },
+    {
+      "image": "home_city_default_start_20260927.png",
+      "role": "native_default_start_wheel_anchor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "8052273ddd2ba41c9a73ae9973ebb5a55105f17bcb90c5b2cce5443c79da8859",
+      "file_sha256": "cec6a9e9b363a1ea72e8e6f5bd354194046fd27ef67a3b74e5ad637a4b56f270",
+      "source_artifact": "20260927T160640Z_core_20260927T160552Z_6d7cd750_0022_home_baseline.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "0288458021c5253bb6a38cf56f84beb863fe005485aefceec1d24a156f759703",
+      "annotation": "2026-09-27 157_farm active castle, devin-live-test v44-input-perception turn-002 verified default Home baseline (zoom 1.0, atlas translation (-532,+222)). The required start where the sole northeast-moat wheel patch was off-screen; the castle_fountain patch publishes the qualified wheel anchor at (450,895) inside bounds (417,875,85,70), qualification castle_fountain_wheel_20260927. Private chat band masked at rows 1390 through 1484 inclusive, then stored RGBA to match captured-frame mode; scene geometry is unchanged."
+    },
+    {
+      "image": "home_city_fountain_935_20260927.png",
+      "role": "native_fountain_intermediate_wheel_anchor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "8c5c67c91dedcf5b15c9db13b283b729c69ed2375419ee590ecd63dbd93c4bc1",
+      "file_sha256": "a8b8a33c2f12f0c975bbb6048a120a0e199004c1eef91c797ad2f2eabf309452",
+      "source_artifact": "20260927T174358Z_core_20260927T173755Z_152e21f4_0030_pl1_converge_2_after_08.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "aeda46dd2cd268fcc3137162236a438da9e6d0d1c8c8d8c7eaed64b4fccc1866",
+      "capture_group": "2026-09-27/157_farm/v44-input-perception-turn003",
+      "annotation": "Native saved production wheel trajectory. Private chat rows1390..1484 masked; remaining RGBA pixels unchanged. Correlated qualification/regression frame, not independent live acceptance. Wheel-only current fountain match; no drag or tap safety inferred."
+    },
+    {
+      "image": "home_city_fountain_879_20260927.png",
+      "role": "native_fountain_intermediate_wheel_anchor",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "6b902ec382306fbe0443e6091e05e351efcbed8e579c4f4545066531d790aa27",
+      "file_sha256": "536cb0780e1f6a63e2e6fc549b51d3ce1d6ace3acc337f9cf995714ada8174a9",
+      "source_artifact": "20260927T174517Z_core_20260927T173755Z_152e21f4_0033_pl1_converge_4_before_11.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "1bda652fb6a0e945a1dd5b6dd409fdc3b4e2136eecf5e1bd18639fd71f61ba08",
+      "capture_group": "2026-09-27/157_farm/v44-input-perception-turn003",
+      "annotation": "Native saved production wheel trajectory. Private chat rows1390..1484 masked; remaining RGBA pixels unchanged. Correlated qualification/regression frame, not independent live acceptance. Wheel-only current fountain match; no drag or tap safety inferred."
     }
   ]
 }

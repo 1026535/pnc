@@ -2,9 +2,9 @@
 
 Date: 2026-09-15. Status: prepared for implementation; no implementation is authorized by this document alone.
 
-**Execution order:** use the [43-packet roadmap](PNC_VISION_ROADMAP.md) for delivery waves, dependency gates, next assignments and progress tracking. This index owns scope and shared architecture.
+**Execution order:** use the [44-packet roadmap](PNC_VISION_ROADMAP.md) for delivery waves, dependency gates, next assignments and progress tracking. This index owns scope and shared architecture.
 
-**Shared OCR modernization:** use the [OCR text recognition and localization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) for backend, model, packaging, and measured text-position qualification. It is cross-cutting infrastructure outside the 43-packet count; numbered packets retain feature semantics and action policy.
+**Shared OCR modernization:** use the [OCR text recognition and localization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) for backend, model, packaging, and measured text-position qualification. It is cross-cutting infrastructure outside the 44-packet count; numbered packets retain feature semantics and action policy.
 
 **Match-3 amendment, 2026-09-21:** V13/V14 Campaign and V30 Arena add selectable `solver`, `daily_exit` and `game_auto` requests to the [shared match-3 API](../gameplay/PNC_MATCH3_COMPONENT_PLAN.md). Their new prerequisite is its M0 contract only. Completion requires production caller/contract tests, including honest unavailable behavior, not implemented battle modes or live combat. V13 forwards target/mode to the single V14-owned adapter; V30 owns the Arena adapter. Existing perception/navigation proof remains required, and V13's accepted coverage is preserved with the new caller amendment pending. The same epic owns the pure algorithm in M1 and its runtime integration in M4; the [solver design reference](../gameplay/PNC_MATCH3_BATTLE_SOLVER_PLAN.md) supplies technical evidence, not another prerequisite.
 
@@ -36,7 +36,26 @@ Before dispatch, reconcile the actual current commit and active feature work. Re
 
 ## Work packets
 
-The set contains **43 implementation packets**. All packets start **not implemented by this plan**. Existing functionality is described inside each packet; do not redo it. The [building coverage map](modules/BUILDING_MENU_COVERAGE.md) assigns every current Home catalog object and the user-confirmed Lost City slot. The [retirement map](../../reviewed/vision/modules/PLAN_RETIREMENT.md) records superseded plans and preserved requirements.
+**Full Home coverage:** [V44](modules/V44_FULL_HOME_CITY_NAVIGATION.md)
+adds the 54-slot eligibility model, separate system nodes, initial fully zoomed-out
+normalization, landmark camera positioning and measured scanning. Its first gate
+is Devin qualification of native zoom and gesture behavior before more navigation
+implementation. It is the next shared navigation priority on resumption.
+V02 remains accepted for its three stated routes. Navigation-dependent remaining
+work waits for V44 qualification; unrelated implementation/offline work may proceed
+when the broader workflow resumes. The September 25 bounded plan/qualification
+task does not resume that paused queue. Applicable live proof remains required
+before acceptance. V44's remaining implementation has four separate packets:
+[native input](modules/v44/V44_1_NATIVE_INPUT.md),
+[normalized-view perception](modules/v44/V44_2_NORMALIZED_VIEW_PERCEPTION.md),
+[navigation orchestration](modules/v44/V44_3_NAVIGATION_ORCHESTRATION.md), and
+[building-route migration](modules/v44/V44_4_BUILDING_ROUTE_MIGRATION.md).
+The first two can run in parallel using the now-specified
+[shared interface agreement](modules/v44/V44_INTERFACE_CONTRACT.md); the
+third consumes their reviewed integration and the fourth follows its stable API.
+They remain slices of V44, preserving the 44-packet count and external ownership.
+
+The set contains **44 implementation packets**. All packets start **not implemented by this plan**. Existing functionality is described inside each packet; do not redo it. The [building coverage map](modules/BUILDING_MENU_COVERAGE.md) assigns every current Home catalog object and the user-confirmed Lost City slot. The [retirement map](../../reviewed/vision/modules/PLAN_RETIREMENT.md) records superseded plans and preserved requirements.
 
 | ID | Complete assignment | Dependencies |
 |---|---|---|
@@ -83,12 +102,15 @@ The set contains **43 implementation packets**. All packets start **not implemen
 | [V41](modules/V41_CASTLE_TERRITORY.md) | Castle and Territory Overview | V01; V02 for Home entry; V16–17 for upgrade/construction controls |
 | [V42](modules/V42_UTILITY_BUILDING_DETAILS.md) | Warehouse, resource buildings and Recruiting Center details | V01; V02 for Home entry; V16 for shared upgrades |
 | [V43](modules/V43_GODDESS_STATUE.md) | Goddess Statue menu and information | V01; V02 for Home entry; V16 for shared upgrades |
+| [V44](modules/V44_FULL_HOME_CITY_NAVIGATION.md) | Full Home-city slot mapping, zoom, occupancy and measured navigation | Accepted V01/V02; current capture calibration |
 
-“Automatic Home entry” dependencies do not block offline parsing from saved frames. A feature can finish its parser first and leave its automatic entry proof explicitly pending V02. No packet can claim the complete route passed until its dependencies and route are verified.
+References to V02 for Home entry retain accepted routes; remaining unqualified routes also require V44 and its target-specific evidence. This includes transitive Gear entry in V23–26 through V22; V03/V32/V33 retain additional appearance/event gates. Unrelated work such as V19 does not depend on V44.
+
+“Automatic Home entry” dependencies do not block offline parsing from saved frames. A feature can finish its parser first and leave its automatic entry proof explicitly pending V02/V44 qualification for the required target. No packet can claim the complete route passed until its dependencies and route are verified.
 
 ### Suggested order
 
-The [roadmap](PNC_VISION_ROADMAP.md) is the canonical execution sequence. It starts with V01, then V02 and V04, and separates ordinary feature delivery from appearance/event/model availability. A feature's own prerequisites determine when it can start; an unfinished unrelated packet does not block a whole wave.
+The [roadmap](PNC_VISION_ROADMAP.md) is the canonical execution sequence. Its original order started with V01, then V02 and V04; V44 is the next shared navigation priority on resumption. Ordinary feature delivery remains separate from appearance/event/model availability. A feature's own prerequisites determine when it can start; an unfinished unrelated packet does not block a whole wave.
 
 ## Shared architecture contract
 
@@ -98,7 +120,7 @@ The [roadmap](PNC_VISION_ROADMAP.md) is the canonical execution sequence. It sta
 4. **Measured controls only.** Control bounds must belong to the visible, unoccluded surface. Identity anchors are not automatically click controls. Reacquire rows after scroll and buildings after pan; invalidate stale points.
 5. **Popup ownership stays explicit.** Inspection/detail screens stay open for the owning workflow. Automatic recovery handles blocking popups only. Keep the existing bounded unknown-modal guard and session/epoch behavior.
 6. **Core stays generic.** OpenCV matching primitives belong in core vision; PNC atlas, icon catalogs, layouts and semantic parsers belong in app/pnc. New modules should serve the current feature, not anticipate arbitrary games or backends.
-7. **Integrate by symbols and catalog keys.** Each worker owns its feature functions, profile IDs, selectors and tests even when files are shared. V01 owns engine-wide contract changes; V02 owns Home camera/atlas integration; V04 owns common research helpers; V09 owns common Bag helpers. Feature-specific typed additions stay with their feature owner and include migration of affected callers. Merge shared changes before dependent work. Do not recreate the old “wait for recognition agent B” whole-file split.
+7. **Integrate by symbols and catalog keys.** Each worker owns its feature functions, profile IDs, selectors and tests even when files are shared. V01 owns engine-wide contract changes; V02 establishes Home camera/atlas integration and V44 owns its remaining full-city extension; V04 owns common research helpers; V09 owns common Bag helpers. Feature-specific typed additions stay with their feature owner and include migration of affected callers. Merge shared changes before dependent work. Do not recreate the old “wait for recognition agent B” whole-file split.
 
 Each feature parser may be extracted from `pnc_observation_enricher.py` when that keeps the changed feature cohesive. Extraction is not a prerequisite to support every menu and is not permission to reorganize unrelated code.
 

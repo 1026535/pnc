@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from abc import ABC
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -36,9 +37,15 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialSurfaceObservation,
     SpatialSurfaceType,
 )
+from pnc_automation.app.pnc.domain.home_city_slots import (
+    HomeCitySlotSelector,
+    validate_home_city_slot_selector,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof, HomeCityZoomStatus
+from pnc_automation.app.pnc.navigation.home_city_scan import camera_view_center_atlas
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.world_yolo import world_yolo_roi_bounds
 from pnc_automation.core.vision.image.models import Bounds
@@ -57,26 +64,28 @@ HOME_CITY_HUD_SAFE_MIN_X_RATIO = 0.18
 HOME_CITY_HUD_SAFE_MAX_X_RATIO = 0.82
 HOME_CITY_HUD_SAFE_MIN_Y_RATIO = 0.18
 HOME_CITY_HUD_SAFE_MAX_Y_RATIO = 0.58
-# Measured on the 2026-09-15 live tour: a unit of finger-travel ratio moves home
-# city content by ~2.33 viewport axes on both axes (pan_07 gesture 0.2223/0.25
-# produced (-468,-931) reference pixels).
-_HOME_CITY_CAMERA_PAN_CONTENT_GAIN = 2.33
-_HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO = 0.10
-_HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO = 0.56
-# Measured courtyard strip between Tower of Trial and Blacksmith, in atlas
-# coordinates. On the lower-Tower view the old x=.69 lane crosses Blacksmith
-# and opens it instead of panning. This ground strip is visible in
-# home_city_tower_lower_20260916.png and the native 20260916T131327Z capture.
-_HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE = Bounds(1042, 1510, 60, 265)
-# Measured southern corridor for the eastern Campaign acquisition: at the
-# northern/default Home camera a dominant horizontal pan leaves every supported
-# landmark behind before the eastern landmarks enter below the viewport, so a
-# Campaign target that still needs horizontal acquisition first descends into
-# the independently measured atlas band (-709 corridor qualified on pan_07/c45;
-# -843 on the mega-castle bridge pair).
-_HOME_CITY_CAMPAIGN_CORRIDOR_MIN_Y = -850
-_HOME_CITY_CAMPAIGN_CORRIDOR_MAX_Y = -620
-_HOME_CITY_CAMPAIGN_CORRIDOR_AIM_Y = -709
+# Independent scene regions reviewed in V44 Stage0 and the 2026-09-28
+# qualification. These are terrain/body envelopes, never swipe endpoint unions.
+# Turn011 endpoint frame0026 independently shows this road through native
+# y363..569 at pose(-360,-753), scale.738955. The old bottom excluded clear
+# paving and left only176px after margins, rejecting the fixed179px profile.
+# This surveyed boundary is static; runtime clipping never pads a short lane.
+_HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE = Bounds(1042, 1510, 60, 280)
+_HOME_CITY_INSTITUTE_COURTYARD = Bounds(1152, 754, 258, 400)
+_HOME_CITY_PAVED_COURTYARD = Bounds(1216, 806, 194, 62)
+# Paved return strip west of Alliance Hall, independently inspected in turn009
+# frame0028: native x200..360,y635..685 at translation(-886,-372), zoom .75.
+# Rightward use was observed in turn010; leftward remains unqualified.
+_HOME_CITY_EASTERN_RETURN_LANE = Bounds(1448, 1343, 213, 66)
+# Southern terrace between Sanctum and Manor, surveyed independently of the
+# stroke in turn013 frame0046: native x526..684,y928..978 at(-110,-414),
+# zoom.738873. Its leftward profile needs candidate live qualification. Use
+# it only after the established routes fail, preserving their route choices.
+_HOME_CITY_SOUTHERN_TERRACE = Bounds(860, 1815, 215, 70)
+# Qualification is currently native 900x1600 at the measured widest endpoint.
+# Exclude both side docks and the complete bottom quest/chat region.
+_HOME_CITY_PAN_WINDOW = Bounds(150, 250, 620, 920)
+_HOME_CITY_PAN_MARGIN = 9
 
 
 @dataclass(frozen=True, slots=True)
@@ -2294,156 +2303,203 @@ def home_city_scan_step_budget() -> int:
     return len(home_city_scan_steps()) * _HOME_CITY_FIXED_MAP_TOUR_PASSES
 
 
+@dataclass(frozen=True, slots=True)
+class HomeCityCameraPanStep:
+    """One input proposal and its measured route goal, including corridor revisits."""
+
+    action: SwipeAction
+    axis: str
+    goal_atlas: tuple[float, float]
+
+    def distance_to_goal(self, proof: HomeCityCameraProof) -> float:
+        """Remaining distance on the planned axis in common atlas units."""
+        axis = 0 if self.axis == "x" else 1
+        return abs(camera_view_center_atlas(proof)[axis] - self.goal_atlas[axis])
+
+
 def plan_home_city_camera_pan(
     *,
     observation: Observation,
     target: HomeCityObjectId,
+    home_city_slot: HomeCitySlotSelector | None = None,
 ) -> SwipeAction:
-    """Plans ONE bounded measured pan toward a camera-qualified target's safe band.
+    """Return the canonical measured step's action for existing pan callers."""
+    return plan_home_city_camera_step(
+        observation=observation, target=target, home_city_slot=home_city_slot,
+    ).action
 
-    The step uses the current-frame camera proof and the target's measured body
-    position (or its atlas action anchor when the body is off-frame), never a
-    remembered or gesture-derived camera center.  Content must move into the
-    HUD-safe tap band on the dominant axis; the reviewed safe-lane swipe builder
-    keeps the gesture off buildings.
+
+def plan_home_city_camera_step(
+    *,
+    observation: Observation,
+    target: HomeCityObjectId,
+    home_city_slot: HomeCitySlotSelector | None = None,
+    avoid_direction: str | None = None,
+) -> HomeCityCameraPanStep:
+    """Choose one fixed gesture inside a current mapped region and the safe viewport.
+
+    Target offsets come from the current body or canonical slot geometry. Gesture
+    lengths are individual measured profiles, not a camera gain or universal drag
+    threshold. The caller must remeasure pose after every input. A missing usable
+    profile is a refusal, never permission to fall back to an unqualified swipe.
     """
-
+    validate_home_city_slot_selector(target, home_city_slot)
     surface = observation.spatial_surface
-    if surface is None or surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE:
-        raise SelectorResolutionError(
-            "Measured home-city pan requires the canonical home-city surface.",
-            target=target.value,
-        )
-    proof = surface.camera_proof
-    if (
-        proof is None
-        or not proof.localized
-        or proof.translation is None
-        or proof.frame_size is None
-    ):
-        raise SelectorResolutionError(
-            "Measured home-city pan requires a localized current-frame camera proof.",
-            target=target.value,
-        )
+    if (observation.screen_type != ScreenType.PNC_HOME_CITY
+            or observation.blocking_popup or surface is None
+            or surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE):
+        raise SelectorResolutionError("Measured Home pan requires clear Home content.")
+    proof, view = surface.camera_proof, surface.home_city_view
+    if (proof is None or not proof.localized or proof.translation is None
+            or proof.zoom is None or proof.frame_size != observation.image_size):
+        raise SelectorResolutionError("Measured Home pan requires a localized current-frame camera proof.")
+    if (view is None or view.zoom_status != HomeCityZoomStatus.AT_ENDPOINT
+            or view.frame_size != observation.image_size
+            or view.frame_ref != observation.frame_ref
+            or proof.frame_ref != observation.frame_ref):
+        raise SelectorResolutionError("Measured Home pan requires the current normalized endpoint.")
+    if (proof.frame_size != (900, 1600) or proof.reference_size != (900, 1600)
+            or not 0.73 <= proof.zoom <= 0.77):
+        raise SelectorResolutionError("No gesture profile is qualified for this native display/scale.")
     spec = home_city_camera_target(target)
     if spec is None:
+        raise SelectorResolutionError("Building has no camera-qualified target.", target=target.value)
+    body = next((item for item in surface.objects
+                 if home_city_object_id_from_metadata(item.metadata) == target
+                 and item.source_kind == SpatialObjectSourceKind.TEMPLATE
+                 and (home_city_slot is None or item.home_city_slot == home_city_slot)
+                 and item.action_point is not None), None)
+    point = (body.action_point if body is not None else
+             proof.project_atlas_to_reference(spec.atlas_action_point(home_city_slot=home_city_slot)))
+    width, height = proof.frame_size
+    bands = ((width * HOME_CITY_HUD_SAFE_MIN_X_RATIO, width * HOME_CITY_HUD_SAFE_MAX_X_RATIO),
+             (height * HOME_CITY_HUD_SAFE_MIN_Y_RATIO, height * HOME_CITY_HUD_SAFE_MAX_Y_RATIO))
+    needed = tuple(0.0 if low <= value <= high else (low + high) / 2 - value
+                   for value, (low, high) in zip(point, bands))
+    if needed == (0.0, 0.0):
         raise SelectorResolutionError(
-            "Building has no camera-qualified target for a measured pan.",
-            target=target.value,
-        )
-    frame_width, frame_height = proof.frame_size
-    reference_width, reference_height = proof.reference_size
-    to_reference_x = reference_width / frame_width
-    to_reference_y = reference_height / frame_height
-    measured_object = next(
-        (
-            item
-            for item in surface.objects
-            if home_city_object_id_from_metadata(item.metadata) == target
-            and item.source_kind == SpatialObjectSourceKind.TEMPLATE
-            and item.action_point is not None
-        ),
-        None,
-    )
-    if measured_object is not None and measured_object.action_point is not None:
-        point_reference = (
-            measured_object.action_point[0] * to_reference_x,
-            measured_object.action_point[1] * to_reference_y,
-        )
-    else:
-        atlas_anchor = spec.atlas_action_point()
-        point_reference = (
-            atlas_anchor[0] + proof.translation[0],
-            atlas_anchor[1] + proof.translation[1],
-        )
-    band_x = (
-        HOME_CITY_HUD_SAFE_MIN_X_RATIO * reference_width,
-        HOME_CITY_HUD_SAFE_MAX_X_RATIO * reference_width,
-    )
-    band_y = (
-        HOME_CITY_HUD_SAFE_MIN_Y_RATIO * reference_height,
-        HOME_CITY_HUD_SAFE_MAX_Y_RATIO * reference_height,
-    )
-    dx_needed = 0.0 if band_x[0] <= point_reference[0] <= band_x[1] else (band_x[0] + band_x[1]) / 2 - point_reference[0]
-    dy_needed = 0.0 if band_y[0] <= point_reference[1] <= band_y[1] else (band_y[0] + band_y[1]) / 2 - point_reference[1]
-    entering_campaign_corridor = (
-        target == HomeCityObjectId.CAMPAIGN
-        and dx_needed != 0.0
-        and not (
-            _HOME_CITY_CAMPAIGN_CORRIDOR_MIN_Y
-            <= proof.translation[1]
-            <= _HOME_CITY_CAMPAIGN_CORRIDOR_MAX_Y
-        )
-    )
-    if entering_campaign_corridor:
-        # Horizontal acquisition at a non-corridor camera row would outrun the
-        # landmark catalog; descend to the measured southern corridor instead.
-        dx_needed = 0.0
-        dy_needed = _HOME_CITY_CAMPAIGN_CORRIDOR_AIM_Y - proof.translation[1]
-    if dx_needed == 0.0 and dy_needed == 0.0:
-        raise SelectorResolutionError(
-            (
-                "Measured target is already inside the HUD-safe band; no pan is needed."
-                if measured_object is not None
-                else "Projected target anchor is inside the HUD-safe band but its body has no current-frame match."
-            ),
-            target=target.value,
-        )
-    axis = (
-        "x"
-        if abs(dx_needed) / reference_width >= abs(dy_needed) / reference_height
-        else "y"
-    )
-    needed = dx_needed if axis == "x" else dy_needed
-    axis_reference_size = reference_width if axis == "x" else reference_height
-    direction = _home_city_atlas_swipe_direction(axis=axis, remaining_delta=int(round(-needed)))
-    # The ordinary minimum moves about 373 reference pixels vertically, more
-    # than this 230-pixel corridor is wide. Near either edge it would overshoot
-    # and reverse indefinitely; use the measured error for that correction.
-    # The interior aim keeps even the shortest such gesture above touch slop.
-    minimum_distance_ratio = 0.0 if entering_campaign_corridor else _HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO
-    distance_ratio = min(
-        _HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO,
-        max(
-            minimum_distance_ratio,
-            abs(needed) / (axis_reference_size * _HOME_CITY_CAMERA_PAN_CONTENT_GAIN),
-        ),
-    )
-    axis_order = (axis, "y" if axis == "x" else "x")
-    action = _build_home_city_atlas_swipe_action(
-        direction=direction,
-        distance_ratio=distance_ratio,
-        reason=f"pan_home_city_camera_{target.value}_{axis}",
-        vertical_swipe_x_ratio=_resolve_home_city_atlas_vertical_swipe_x_ratio(surface, axis_order=axis_order),
-        horizontal_swipe_y_ratio=_HOME_CITY_ATLAS_HORIZONTAL_SWIPE_Y_RATIO,
-    )
-    if axis == "y":
-        # Use the scene-owned ground lane only when the entire current gesture
-        # fits inside its measured extent. Camera translation moves the lane;
-        # a fixed screen x would become unsafe on another city viewport.
-        lane = _HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE
-        lane_x = (lane.x + lane.width / 2 + proof.translation[0]) / reference_width
-        lane_top = lane.y + proof.translation[1]
-        lane_bottom = lane_top + lane.height
-        assert action.start_y_ratio is not None and action.end_y_ratio is not None
-        if (
-            HOME_CITY_HUD_SAFE_MIN_X_RATIO <= lane_x <= HOME_CITY_HUD_SAFE_MAX_X_RATIO
-            and lane_top <= min(action.start_y_ratio, action.end_y_ratio) * reference_height
-            and max(action.start_y_ratio, action.end_y_ratio) * reference_height <= lane_bottom
-        ):
-            action = replace(action, start_x_ratio=lane_x, end_x_ratio=lane_x)
+            "Measured target is already inside the HUD-safe band; no pan is needed."
+            if body is not None else
+            "Projected target anchor is inside the HUD-safe band but has no current-frame match.")
+    axes = sorted((0, 1), key=lambda axis: abs(needed[axis]) / (width, height)[axis], reverse=True)
+    # Preserve already qualified route choices on both axes before considering
+    # the additional terrace. A new horizontal lane must not displace a usable
+    # vertical correction on an accepted Campaign route.
+    for allow_southern_terrace in (False, True):
+        for axis in axes:
+            if needed[axis] == 0:
+                continue
+            direction = (("left" if needed[axis] < 0 else "right") if axis == 0
+                         else ("up" if needed[axis] < 0 else "down"))
+            if direction == avoid_direction:
+                continue
+            action = _home_city_profile_action(
+                observation, direction, allow_southern_terrace=allow_southern_terrace,
+            )
+            if action is not None:
+                center = camera_view_center_atlas(proof)
+                goal = tuple(center[i] - needed[i] / proof.zoom if i == axis else center[i]
+                             for i in (0, 1))
+                return HomeCityCameraPanStep(action, "xy"[axis], goal)
+    raise SelectorResolutionError("No safe fixed gesture fits the current measured scene region.", target=target.value)
+
+
+def _home_city_pan_region(proof: HomeCityCameraProof, atlas: Bounds) -> Bounds | None:
+    """Intersect an independently mapped region with the conservative input window.
+
+    Inward rounding and clipping can only REMOVE scene area. This avoids rejecting
+    a complete usable stroke because an unused corner lies one pixel under HUD;
+    neither the region nor the gesture is ever enlarged to make a proposal fit.
+    """
+    x0, y0 = proof.project_atlas_to_reference((atlas.x, atlas.y))
+    x1, y1 = proof.project_atlas_to_reference((atlas.x + atlas.width, atlas.y + atlas.height))
+    window = _HOME_CITY_PAN_WINDOW
+    left, top = max(math.ceil(x0), window.x), max(math.ceil(y0), window.y)
+    right = min(math.floor(x1), window.x + window.width)
+    bottom = min(math.floor(y1), window.y + window.height)
+    return Bounds(left, top, right - left, bottom - top) if right > left and bottom > top else None
+
+
+def _home_city_region_clear(surface: SpatialSurfaceObservation, region: Bounds,
+                            allowed_body: DetectedSpatialObject | None = None) -> bool:
+    """Reject observed body intrusions; only the named Institute profile permits its body."""
+    return not any(item is not allowed_body
+                   and item.bounds.x < region.x + region.width
+                   and region.x < item.bounds.x + item.bounds.width
+                   and item.bounds.y < region.y + region.height
+                   and region.y < item.bounds.y + item.bounds.height
+                   for item in surface.objects
+                   if item.source_kind == SpatialObjectSourceKind.TEMPLATE)
+
+
+def _home_city_profile_action(
+    observation: Observation, direction: str, *, allow_southern_terrace: bool = False,
+) -> SwipeAction | None:
+    """Instantiate the courtyard, ground-strip or specific Institute profile.
+
+    Horizontal 114px/429ms was observed in both directions on 2026-09-28.
+    The 179px/425ms ground profile was observed downward and upward. The
+    turn011 surveyed road extension passed the turn012 Campaign route.
+    The additional southern terrace remains pending candidate live proof.
+    The caller always remeasures pose instead of predicting displacement.
+    """
+    surface = observation.spatial_surface
+    assert surface is not None and surface.camera_proof is not None
+    proof = surface.camera_proof
+    horizontal = direction in ("left", "right")
+    regions = [(_HOME_CITY_PAVED_COURTYARD, "courtyard")] if horizontal else [
+        (_HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE, "ground_strip")]
+    if direction == "right":
+        regions.append((_HOME_CITY_EASTERN_RETURN_LANE, "eastern_return"))
+    if direction == "left" and allow_southern_terrace:
+        regions.append((_HOME_CITY_SOUTHERN_TERRACE, "southern_terrace"))
+    length = 114 if horizontal else 179
+    for atlas, profile in regions:
+        region = _home_city_pan_region(proof, atlas)
+        if region is None or not _home_city_region_clear(surface, region):
+            continue
+        if min(region.width, region.height) < 2 * _HOME_CITY_PAN_MARGIN + 1:
+            continue
+        axis = 0 if horizontal else 1
+        capacity = (region.width, region.height)[axis] - 1 - 2 * _HOME_CITY_PAN_MARGIN
+        if capacity >= length:
+            center = (region.x + (region.width - 1) // 2, region.y + (region.height - 1) // 2)
+            low = list(center)
+            high = list(center)
+            low[axis] = (region.x, region.y)[axis] + ((region.width, region.height)[axis] - 1 - length) // 2
+            high[axis] = low[axis] + length
+            start, end = (high, low) if direction in ("left", "up") else (low, high)
+            return _exact_home_city_pan(region, tuple(start), tuple(end), direction,
+                                        429 if horizontal else 425, profile)
+    if direction != "up":
+        return None
+    # Stage0 G3a is a building-specific body-start exception. Do not generalize
+    # it to arbitrary bodies or derive its point from the static slot pivot.
+    institute = next((item for item in surface.objects
+                      if item.source_kind == SpatialObjectSourceKind.TEMPLATE
+                      and home_city_object_id_from_metadata(item.metadata) == HomeCityObjectId.INSTITUTE
+                      and item.home_city_slot == HomeCitySlotSelector(slot_index=9)), None)
+    region = _home_city_pan_region(proof, _HOME_CITY_INSTITUTE_COURTYARD)
+    if institute is None or region is None or not _home_city_region_clear(surface, region, institute):
+        return None
+    x, y = institute.bounds.center()
+    start, end = (x, y + 1), (x + 73, y + 1 - 207)
+    if not (region.contains_point(start) and region.contains_point(end)):
+        return None
+    return _exact_home_city_pan(region, start, end, direction, 488, "institute_bridge")
+
+
+def _exact_home_city_pan(region: Bounds, start: tuple[int, int], end: tuple[int, int],
+                         direction: str, duration_ms: int, profile: str) -> SwipeAction:
+    """Keep native integer geometry exact through ratio-based transport resolution."""
     return SwipeAction(
-        direction=action.direction,
-        distance_ratio=action.distance_ratio,
-        duration_ms=action.duration_ms,
-        reason=action.reason,
-        observe_after=True,
-        follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
-        timing_profile=action.timing_profile,
-        start_x_ratio=action.start_x_ratio,
-        start_y_ratio=action.start_y_ratio,
-        end_x_ratio=action.end_x_ratio,
-        end_y_ratio=action.end_y_ratio,
+        direction=direction, duration_ms=duration_ms,
+        distance_ratio=abs(end[0] - start[0]) / 900 if direction in ("left", "right") else abs(end[1] - start[1]) / 1600,
+        purpose=SwipePurpose.HOME_CITY_CAMERA, exact_geometry=True, safe_bounds=region,
+        start_x_ratio=(start[0] + 0.5) / 900, start_y_ratio=(start[1] + 0.5) / 1600,
+        end_x_ratio=(end[0] + 0.5) / 900, end_y_ratio=(end[1] + 0.5) / 1600,
+        reason=f"pan_home_city_{profile}_{direction}", observe_after=True,
+        follow_up_request=ObservationRequest.home_city_navigation(),
     )
 
 

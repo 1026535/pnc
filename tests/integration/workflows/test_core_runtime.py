@@ -10,13 +10,18 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+import json
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
 from PIL import Image
 
-from pnc_automation.app.automation.engine.core_runtime import CoreRuntime, build_core_runtime
+from pnc_automation.app.automation.engine.core_runtime import (
+    CoreRuntime,
+    _make_input_dispatch_recorder,
+    build_core_runtime,
+)
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.navigation_core import (
     NavigationCore, NavigationPolicy, reviewed_navigation_edges,
@@ -45,6 +50,12 @@ from pnc_automation.app.pnc.vision.selectors import build_default_selector_regis
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.emulator.input_dispatch import (
+    InputDispatchFailure,
+    InputDispatchRecord,
+    TapDispatch,
+    WheelDispatch,
+)
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
 from pnc_automation.core.vision.image.models import Bounds
@@ -818,7 +829,9 @@ class CoreRuntimeTests(unittest.TestCase):
         """Uses one ScriptRunner runtime and does not construct a legacy observer graph."""
 
         connected = Mock()
-        connected.require_observed_action_executor.return_value = SimpleNamespace(action_executor=object())
+        connected.require_observed_action_executor.return_value = SimpleNamespace(
+            action_executor=SimpleNamespace(input_dispatch_recorder=None),
+        )
         connected.observation_service.observation_builder.visual_recognizer = object()
         connected.observation_service.observation_builder.enricher = object()
         script_runner = Mock()
@@ -892,6 +905,179 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(identity, observation.current_castle)
         self.assertEqual(CurrentCastleEvidenceKind.EXACT, observation.current_castle_evidence)
         self.assertEqual(1, len(observation.visible_elements))
+
+    def test_input_dispatch_recorder_writes_sanitized_home_city_trace(self) -> None:
+        """Maps one Home-city dispatch receipt into the typed sanitized trace schema."""
+
+        frame_ref = FrameRef(
+            session_id="session-1",
+            session_epoch=2,
+            capture_sequence=3,
+            input_sequence=4,
+            captured_at=datetime.now(tz=UTC),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(session=Mock()),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=trace_path,
+                _perception=Mock(),
+                _run_id="run",
+            )
+            recorder = _make_input_dispatch_recorder(runtime.record)
+
+            recorder(
+                InputDispatchRecord(
+                    source_frame=frame_ref,
+                    dispatch=WheelDispatch(
+                        point=(64, 40),
+                        frame_size=(1280, 720),
+                        vertical_detent=-1,
+                        transport="scrcpy_control_v4",
+                        input_sequence=4,
+                    ),
+                    artifact_path=Path("private_capture.png"),
+                    home_city=True,
+                )
+            )
+
+            entry = json.loads(trace_path.read_text(encoding="utf-8").strip())
+            self.assertEqual("home_city_input_dispatched", entry["event"])
+            self.assertEqual("wheel", entry["input_kind"])
+            self.assertEqual("session-1", entry["session_id"])
+            self.assertEqual("2", entry["session_epoch"])
+            self.assertEqual("3", entry["capture_sequence"])
+            self.assertEqual("4", entry["input_sequence"])
+            self.assertEqual("private_capture.png", entry["artifact"])
+            self.assertNotIn("operation_id", entry)
+            dispatch = json.loads(entry["dispatch"])
+            self.assertEqual([64, 40], dispatch["point"])
+            self.assertEqual(-1, dispatch["vertical_detent"])
+            self.assertEqual("scrcpy_control_v4", dispatch["transport"])
+
+    def test_input_dispatch_recorder_writes_home_city_failure_trace(self) -> None:
+        """Maps one stopped Home-city input into the failure trace schema."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(session=Mock()),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=trace_path,
+                _perception=Mock(),
+                _run_id="run",
+            )
+            recorder = _make_input_dispatch_recorder(runtime.record)
+
+            recorder(
+                InputDispatchFailure(
+                    source_frame=None,
+                    input_kind="wheel",
+                    failure_phase="setup",
+                    exception_type="DeviceConnectionError",
+                    home_city=True,
+                )
+            )
+
+            entry = json.loads(trace_path.read_text(encoding="utf-8").strip())
+            self.assertEqual("home_city_input_failed", entry["event"])
+            self.assertNotIn("operation_id", entry)
+            self.assertEqual("wheel", entry["input_kind"])
+            self.assertEqual("setup", entry["failure_phase"])
+            self.assertEqual("DeviceConnectionError", entry["error_type"])
+            self.assertNotIn("session_id", entry)
+
+    def test_input_dispatch_recorder_drops_non_home_city_events(self) -> None:
+        """Leaves non-Home input out of the Home-city trace channel."""
+
+        frame_ref = FrameRef(
+            session_id="session-1",
+            session_epoch=2,
+            capture_sequence=3,
+            input_sequence=4,
+            captured_at=datetime.now(tz=UTC),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(session=Mock()),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=trace_path,
+                _perception=Mock(),
+                _run_id="run",
+            )
+            recorder = _make_input_dispatch_recorder(runtime.record)
+
+            recorder(
+                InputDispatchRecord(
+                    source_frame=frame_ref,
+                    dispatch=TapDispatch(point=(1, 1), input_sequence=4),
+                    home_city=False,
+                )
+            )
+            recorder(
+                InputDispatchFailure(
+                    source_frame=frame_ref,
+                    input_kind="tap",
+                    failure_phase="dispatch",
+                    exception_type="DeviceConnectionError",
+                    home_city=False,
+                )
+            )
+
+            self.assertFalse(trace_path.exists())
+
+    def test_close_restores_previous_input_dispatch_recorder(self) -> None:
+        """Restores a pre-existing dispatch recorder instead of clearing it on close."""
+
+        previous = Mock()
+        installed = _make_input_dispatch_recorder(lambda entry: None)
+        action_executor = SimpleNamespace(input_dispatch_recorder=installed)
+        connected = Mock()
+        runtime = CoreRuntime(
+            runtime=connected,
+            navigation=Mock(),
+            artifact_directory="account",
+            trace_path=Path("trace.jsonl"),
+            _perception=Mock(),
+            _run_id="run",
+            _observed_action_executor=SimpleNamespace(action_executor=action_executor),
+            _input_dispatch_recorder=installed,
+            _previous_input_dispatch_recorder=previous,
+        )
+
+        runtime.close()
+
+        self.assertIs(previous, action_executor.input_dispatch_recorder)
+        connected.close.assert_called_once_with()
+
+    def test_close_preserves_foreign_input_dispatch_recorder(self) -> None:
+        """Leaves a recorder installed by another owner untouched on close."""
+
+        foreign = Mock()
+        installed = _make_input_dispatch_recorder(lambda entry: None)
+        action_executor = SimpleNamespace(input_dispatch_recorder=foreign)
+        connected = Mock()
+        runtime = CoreRuntime(
+            runtime=connected,
+            navigation=Mock(),
+            artifact_directory="account",
+            trace_path=Path("trace.jsonl"),
+            _perception=Mock(),
+            _run_id="run",
+            _observed_action_executor=SimpleNamespace(action_executor=action_executor),
+            _input_dispatch_recorder=installed,
+            _previous_input_dispatch_recorder=Mock(),
+        )
+
+        runtime.close()
+
+        self.assertIs(foreign, action_executor.input_dispatch_recorder)
+        connected.close.assert_called_once_with()
 
 
 class _FakeClock:

@@ -2012,6 +2012,20 @@ class PncObservationEnricher:
     ) -> ObservationAdditions:
         """Read semantic facts for the independently established screen and layout."""
 
+        if request.include_home_city_camera:
+            if screen_type != ScreenType.PNC_HOME_CITY:
+                return ObservationAdditions()
+            # Home acquisition consumes measured scene facts, not resource,
+            # queue, navigation-label or building-name OCR. Keep the same
+            # canonical camera/body producer, including unresolved verdicts.
+            return ObservationAdditions(
+                spatial_surface=build_home_city_spatial_surface(
+                    image=image,
+                    lines=(),
+                    selector_registry=self.selector_registry,
+                    camera=self.home_city_camera,
+                ),
+            )
         if (
             request.world_map_coordinate_only
             and request.allows_screen(ScreenType.PNC_WORLD_MAP)

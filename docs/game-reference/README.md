@@ -11,6 +11,7 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Source map](SOURCE_MAP.md) | Discovery across the recovered source; individual workflows mostly unverified |
 | [Shared request path](REQUEST_PATH.md) | Native outgoing path statically traced; checksum independently checked by isolated emulation |
 | [Building upgrades](workflows/building-upgrade.md) | Normal-upgrade UI checks, request, response handling, and automation implications inspected |
+| [Home-city slot eligibility](workflows/home-city-slots.md) | Decoded 5.0.203 slot/system tables, semantic bindings, geometry coverage and occupancy rules |
 | [Castle skins and ambience](workflows/castle-appearance.md) | Castle and ambience preview layers, world-map rendering, and appearance-collection implications |
 | [Campaign navigation](workflows/campaign-navigation.md) | Chapter 10 and stage 10-3 saved transitions, source correspondence, and bounded automation implications |
 | [Match-3 battle modes](workflows/match3-battles.md) | Packaged Auto toggle/unlock and context-dependent exit behavior; Campaign/Arena/Lost Land scope and unproved Daily-credit boundaries |

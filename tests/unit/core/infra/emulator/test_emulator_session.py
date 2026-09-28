@@ -9,17 +9,24 @@ import tempfile
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from pnc_automation.core.infra.adb.command_result import CommandResult
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
+from pnc_automation.core.infra.emulator.scroll_transport import SCROLL_TRANSPORT_NAME
 from pnc_automation.core.infra.emulator.session import (
     BlueStacksSession,
     BlueStacksSessionCleanupPolicy,
 )
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
 from pnc_automation.bluestacks_management.policy import BlueStacksCapabilities
-from pnc_automation.core.errors import DeviceConnectionError, GameLaunchError, InstanceBusyError
+from pnc_automation.core.errors import (
+    DeviceConnectionError,
+    FrameProvenanceError,
+    GameLaunchError,
+    InstanceBusyError,
+)
+from pnc_automation.core.vision.image.models import Bounds
 
 
 @dataclass(slots=True)
@@ -1250,6 +1257,330 @@ class BlueStacksSessionTests(unittest.TestCase):
                 self.assertEqual(acquired.display_name, "serious_stuff")
             finally:
                 competitor.release_all()
+
+    def _wheel_session(
+        self,
+        *,
+        adb_client: _FakeAdbClient,
+        transport: Mock,
+        capabilities: BlueStacksCapabilities | None = None,
+    ) -> BlueStacksSession:
+        """Builds one session whose scroll transport is a test double."""
+
+        if not isinstance(transport.cleanup_report, dict):
+            transport.cleanup_report = {"unresolved": []}
+        return self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=lambda _: None,
+            lease_registry=self._lease_registry,
+            input_jitter_px=0,
+            scroll_transport_factory=lambda _session: transport,
+            **({"capabilities": capabilities} if capabilities is not None else {}),
+        ))
+
+    def test_prepare_scroll_transport_starts_one_owned_transport_per_epoch(self) -> None:
+        """Lazily builds and starts the session transport, then reuses it."""
+
+        transport = Mock()
+        session = self._wheel_session(
+            adb_client=_FakeAdbClient(
+                connect_result=_command_result(returncode=0, stdout_text="connected"),
+                state_result=_command_result(returncode=0, stdout_text="device"),
+                shell_result=_command_result(returncode=0, stdout_text=""),
+            ),
+            transport=transport,
+        )
+
+        session.prepare_scroll_transport()
+        session.prepare_scroll_transport()
+
+        transport.start.assert_called_once_with()
+        transport.send_packet.assert_not_called()
+
+    def test_prepare_scroll_transport_rejects_a_read_only_account(self) -> None:
+        """Applies the same dynamic input-role gate to wheel preparation."""
+
+        transport = Mock()
+        session = self._wheel_session(
+            adb_client=_FakeAdbClient(
+                connect_result=_command_result(returncode=0, stdout_text="connected"),
+                state_result=_command_result(returncode=0, stdout_text="device"),
+                shell_result=_command_result(returncode=0, stdout_text=""),
+            ),
+            transport=transport,
+            capabilities=BlueStacksCapabilities(
+                allow_instance_launch=False,
+                allow_app_launch=False,
+                allow_input=False,
+            ),
+        )
+
+        with self.assertRaises(PermissionError):
+            session.prepare_scroll_transport()
+        transport.start.assert_not_called()
+
+    def test_scroll_wheel_sends_exactly_one_signed_detent_packet(self) -> None:
+        """Crosses the dispatch boundary once and returns the actual send-boundary receipt."""
+
+        transport = Mock()
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(
+                returncode=0,
+                stdout_text="Display 0: real 1280 x 720, rotation 0",
+            ),
+        )
+        session = self._wheel_session(adb_client=adb_client, transport=transport)
+        session.prepare_scroll_transport()
+
+        dispatch = session.scroll_wheel(640, 360, vertical_detent=-1, frame_size=(1280, 720))
+
+        transport.send_packet.assert_called_once()
+        packet = transport.send_packet.call_args.args[0]
+        self.assertEqual(len(packet), 21)
+        self.assertEqual(dispatch.point, (640, 360))
+        self.assertEqual(dispatch.frame_size, (1280, 720))
+        self.assertEqual(dispatch.vertical_detent, -1)
+        self.assertEqual(dispatch.transport, SCROLL_TRANSPORT_NAME)
+        self.assertEqual(dispatch.input_sequence, 1)
+        self.assertEqual(
+            adb_client.shell_calls,
+            [("127.0.0.1:5555", ("dumpsys", "display"))],
+        )
+
+    def test_scroll_wheel_rejects_invalid_requests_before_the_dispatch_boundary(self) -> None:
+        """Neither consumes provenance nor sends when the wheel request is malformed."""
+
+        transport = Mock()
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(
+                returncode=0,
+                stdout_text="Display 0: real 1280 x 720, rotation 0",
+            ),
+        )
+        session = self._wheel_session(adb_client=adb_client, transport=transport)
+
+        with self.assertRaises(ValueError):
+            session.scroll_wheel(640, 360, vertical_detent=2, frame_size=(1280, 720))
+        with self.assertRaises(ValueError):
+            session.scroll_wheel(2000, 360, vertical_detent=1, frame_size=(1280, 720))
+
+        transport.send_packet.assert_not_called()
+        self.assertEqual(adb_client.shell_calls, [])
+
+    def test_scroll_wheel_requires_the_live_native_display_mapping(self) -> None:
+        """Stops the send when the native display no longer matches the frame."""
+
+        transport = Mock()
+        session = self._wheel_session(
+            adb_client=_FakeAdbClient(
+                connect_result=_command_result(returncode=0, stdout_text="connected"),
+                state_result=_command_result(returncode=0, stdout_text="device"),
+                shell_result=_command_result(
+                    returncode=0,
+                    stdout_text="Display 0: real 720 x 1280, rotation 1",
+                ),
+            ),
+            transport=transport,
+        )
+
+        with self.assertRaises(DeviceConnectionError) as context:
+            session.scroll_wheel(640, 360, vertical_detent=1, frame_size=(1280, 720))
+
+        self.assertEqual(context.exception.details["failure_phase"], "mapping")
+        transport.send_packet.assert_not_called()
+
+    def test_close_releases_the_owned_scroll_transport(self) -> None:
+        """Closes the epoch-owned transport with the rest of session lifecycle state."""
+
+        transport = Mock()
+        session = self._wheel_session(
+            adb_client=_FakeAdbClient(
+                connect_result=_command_result(returncode=0, stdout_text="connected"),
+                state_result=_command_result(returncode=0, stdout_text="device"),
+                shell_result=_command_result(returncode=0, stdout_text=""),
+            ),
+            transport=transport,
+        )
+        session.prepare_scroll_transport()
+
+        session.close()
+
+        transport.close.assert_called_once_with()
+
+    def test_scroll_wheel_revalidates_frame_age_after_the_mapping_read(self) -> None:
+        """Stops the send when the authorizing frame ages during the blocking setup work."""
+
+        transport = Mock()
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(
+                returncode=0,
+                stdout_text="Display 0: real 1280 x 720, rotation 0",
+            ),
+        )
+        session = self._wheel_session(adb_client=adb_client, transport=transport)
+        session.prepare_scroll_transport()
+        frame = session.capture_screenshot_frame()
+
+        with session.authorized_input(frame.frame_ref):
+            aged = frame.frame_ref.captured_monotonic + session.provenance_max_age_seconds + 1
+            with patch("time.monotonic", return_value=aged):
+                with self.assertRaises(FrameProvenanceError) as context:
+                    session.scroll_wheel(640, 360, vertical_detent=1, frame_size=(1280, 720))
+
+        self.assertIn("age_seconds", context.exception.details)
+        self.assertEqual(
+            adb_client.shell_calls,
+            [("127.0.0.1:5555", ("dumpsys", "display"))],
+        )
+        transport.send_packet.assert_not_called()
+
+    def test_close_surfaces_unresolved_transport_cleanup_and_releases_the_lease(self) -> None:
+        """Reports unresolved remote cleanup while still freeing the operation lease."""
+
+        transport = Mock()
+        transport.cleanup_report = {
+            "remote_path": "/data/local/tmp/pnc-scrcpy-control-test.jar",
+            "socket_name": "scrcpy_00000001",
+            "unresolved": ["remote_file"],
+        }
+        transport.close.side_effect = DeviceConnectionError(
+            "scrcpy control transport cleanup left unresolved remote resources.",
+            failure_phase="cleanup",
+            **transport.cleanup_report,
+        )
+        session = self._wheel_session(
+            adb_client=_FakeAdbClient(
+                connect_result=_command_result(returncode=0, stdout_text="connected"),
+                state_result=_command_result(returncode=0, stdout_text="device"),
+                shell_result=_command_result(returncode=0, stdout_text=""),
+            ),
+            transport=transport,
+        )
+        session.prepare_scroll_transport()
+
+        with self.assertRaises(DeviceConnectionError) as context:
+            session.close()
+
+        self.assertEqual(context.exception.details["failure_phase"], "cleanup")
+        self.assertEqual(context.exception.details["unresolved"], ["remote_file"])
+        self.assertEqual(
+            context.exception.details["remote_path"],
+            "/data/local/tmp/pnc-scrcpy-control-test.jar",
+        )
+        competitor = InstanceLeaseRegistry(root=Path(self._lease_directory.name), wait_timeout_seconds=0)
+        try:
+            competitor.acquire(display_name="serious_stuff")
+        finally:
+            competitor.release_all()
+
+    def test_close_releases_the_lease_when_transport_cleanup_raises(self) -> None:
+        """Still frees the operation lease when the transport close itself fails."""
+
+        transport = Mock()
+        transport.cleanup_report = {"unresolved": []}
+        transport.close.side_effect = RuntimeError("transport close exploded")
+        session = self._wheel_session(
+            adb_client=_FakeAdbClient(
+                connect_result=_command_result(returncode=0, stdout_text="connected"),
+                state_result=_command_result(returncode=0, stdout_text="device"),
+                shell_result=_command_result(returncode=0, stdout_text=""),
+            ),
+            transport=transport,
+        )
+        session.prepare_scroll_transport()
+
+        with self.assertRaises(RuntimeError):
+            session.close()
+
+        competitor = InstanceLeaseRegistry(root=Path(self._lease_directory.name), wait_timeout_seconds=0)
+        try:
+            competitor.acquire(display_name="serious_stuff")
+        finally:
+            competitor.release_all()
+
+    def test_tap_point_returns_the_actual_dispatch_point(self) -> None:
+        """Returns the post-jitter tap that was really sent."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=lambda _: None,
+            lease_registry=self._lease_registry,
+            input_jitter_px=0,
+        ))
+
+        dispatch = session.tap_point(100, 200)
+
+        self.assertEqual(dispatch.point, (100, 200))
+        self.assertEqual(dispatch.input_sequence, 1)
+
+    def test_swipe_returns_the_actual_dispatch_geometry(self) -> None:
+        """Returns the post-jitter swipe endpoints and duration that were really sent."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=lambda _: None,
+            lease_registry=self._lease_registry,
+            input_jitter_px=0,
+        ))
+
+        dispatch = session.swipe(100, 200, 300, 400, duration_ms=750)
+
+        self.assertEqual(dispatch.start, (100, 200))
+        self.assertEqual(dispatch.end, (300, 400))
+        self.assertEqual(dispatch.duration_ms, 750)
+        self.assertEqual(dispatch.input_sequence, 1)
+
+    def test_input_methods_reject_points_outside_declared_safe_bounds(self) -> None:
+        """Stops resolved input points that escape their declared delivery rectangle."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=lambda _: None,
+            lease_registry=self._lease_registry,
+            input_jitter_px=0,
+        ))
+        safe_bounds = Bounds(x=0, y=0, width=200, height=100)
+
+        with self.assertRaises(DeviceConnectionError):
+            session.tap_point(500, 50, exact_geometry=True, safe_bounds=safe_bounds)
+        with self.assertRaises(DeviceConnectionError):
+            session.swipe(
+                10,
+                10,
+                500,
+                50,
+                exact_geometry=True,
+                safe_bounds=safe_bounds,
+            )
+        with self.assertRaises(DeviceConnectionError):
+            session.tap_point(50, 50, exact_geometry=True, safe_bounds=Bounds(x=0, y=0, width=0, height=10))
+
+        self.assertEqual(adb_client.shell_calls, [])
 
 
 def _window_dump(component: str) -> str:

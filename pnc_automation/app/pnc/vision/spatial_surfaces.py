@@ -16,6 +16,8 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraProof,
     HomeCityCameraStatus,
+    HomeCityViewEvidence,
+    HomeCityZoomStatus,
 )
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
@@ -180,6 +182,7 @@ def build_home_city_spatial_surface(
         ),
     )
     camera_proof: HomeCityCameraProof | None = None
+    home_city_view: HomeCityViewEvidence | None = None
     if camera is not None:
         prepared = camera.prepare_frame(image)
         if prepared is None:
@@ -188,8 +191,16 @@ def build_home_city_spatial_surface(
                 reason="unsupported_frame_layout",
                 frame_size=image.size,
             )
+            home_city_view = HomeCityViewEvidence(
+                zoom_status=HomeCityZoomStatus.UNSUPPORTED,
+                reason="unsupported_frame_layout",
+                calibration_id=None,
+                zoom_anchor=None,
+                frame_size=image.size,
+            )
         else:
             camera_proof = camera.localize(prepared)
+            home_city_view = camera.analyze_view(prepared, camera_proof=camera_proof)
             if camera_proof.localized:
                 objects = merge_camera_target_objects(
                     objects,
@@ -208,6 +219,7 @@ def build_home_city_spatial_surface(
         ),
         objects=objects,
         camera_proof=camera_proof,
+        home_city_view=home_city_view,
         metadata=metadata,
     )
 

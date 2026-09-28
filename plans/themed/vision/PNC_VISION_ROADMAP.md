@@ -1,6 +1,6 @@
-# PNC vision roadmap — 43 implementation packets
+# PNC vision roadmap — 44 implementation packets
 
-Updated: 2026-09-16. Status: **14/43 accepted for stated coverage: V01, V02, V04–V07, V09–V13, V15, V16 and V18. V13/V18 passed combined full acceptance, architecture/caller review and their required live routes. V22 safe entry is prepared while its inventory/detail evidence remains pending.**
+Updated: 2026-09-21. Recorded acceptance remains **14/44 accepted for stated coverage: V01, V02, V04–V07, V09–V13, V15, V16 and V18. V13/V18 passed combined full acceptance, architecture/caller review and their required live routes. V22 safe entry is prepared while its inventory/detail evidence remains pending.**
 
 [Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [OCR text modernization](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) · [Building coverage](modules/BUILDING_MENU_COVERAGE.md) · [Evidence](modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](../../reviewed/vision/modules/PLAN_RETIREMENT.md)
 
@@ -8,7 +8,30 @@ Updated: 2026-09-16. Status: **14/43 accepted for stated coverage: V01, V02, V04
 
 ## Start here
 
-**First assignment: V01. Then prioritize V02 and V04.** This proves the existing vision integration, fixes Home acquisition/panning, and completes the Institute/Development inspection path that exposed the original OCR problem.
+**Current shared navigation priority:**
+[V44 — Full Home-city mapping, localization and navigation](modules/V44_FULL_HOME_CITY_NAVIGATION.md).
+V44 extends the accepted V02 routes using 54 ordinary slot definitions, separate
+system nodes, measured zoom and observed occupancy. Navigation-dependent remaining
+work waits for V44 acceptance and the relevant target's qualification; unrelated
+implementation and offline feature work may proceed independently. Preserve accepted
+V02 routes. Verified unavailable targets retain individual route blockers without
+holding other accepted coverage; acquisition failures remain unknown/blocked.
+**2026-09-25 direction:** the broader queue remains paused after the user's low-usage request. Devin's bounded native zoom/gesture qualification on `157_farm` is complete and independently reviewed for the sampled capability and documented limits. V44 will normalize to the fully zoomed-out endpoint, then establish camera position from landmarks. The current planning update separates the remaining implementation into the four packets below; full mapping and acceptance remain incomplete. Earlier automatic continuation instructions below apply only when the broader queue resumes.
+
+**V44 implementation packets:** [V44-1 native input](modules/v44/V44_1_NATIVE_INPUT.md)
+and [V44-2 perception](modules/v44/V44_2_NORMALIZED_VIEW_PERCEPTION.md) can run in
+parallel using the specified [interface agreement](modules/v44/V44_INTERFACE_CONTRACT.md)
+when execution resumes. Their reviewed integration
+feeds [V44-3 navigation orchestration](modules/v44/V44_3_NAVIGATION_ORCHESTRATION.md),
+then [V44-4 building-route migration](modules/v44/V44_4_BUILDING_ROUTE_MIGRATION.md).
+Use isolated worktrees and disjoint symbol/target ownership; the lead owns shared
+design, review, integration and acceptance. All four implementation slices are
+currently not started; this split does not resume the queue.
+The agreement fixes APIs, typed evidence, units, ownership, lifecycle, state
+transitions, limits and failure outcomes. Each packet now supplies ordered work
+and named offline/live acceptance cases; remaining empirical gaps have explicit owners.
+
+**Original foundation order: V01, then V02 and V04.** This proves the existing vision integration, fixes Home acquisition/panning, and completes the Institute/Development inspection path that exposed the original OCR problem.
 
 V01 uses the existing Bag Resource layout. The
 [retained navigation findings](modules/CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
@@ -18,25 +41,27 @@ remaining content and routes; these packets are not completed by the small fix.
 
 Continue with V09, V13 and V16 to establish Bag, Campaign and shared building-menu contracts. Their dependent features then reuse those contracts. This is the execution-order document; the individual packets remain authoritative for detailed scope, owners, evidence and validation.
 
-The [OCR text recognition and localization modernization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) is planned cross-cutting infrastructure outside the 43-packet count. It owns the shared backend/model/localization comparison and qualification. V10, V13, V15 and other feature packets retain their domain semantics and consume the qualified service. The accepted V13/V18 stack at `f93dd2a` is its baseline. Corpus and benchmark preparation can proceed independently; serialize any runtime promotion with feature integration and reuse unchanged acceptance evidence. This work does not block unrelated ready packets or change the 43-packet count.
+The [OCR text recognition and localization modernization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) is planned cross-cutting infrastructure outside the 44-packet count. It owns the shared backend/model/localization comparison and qualification. V10, V13, V15 and other feature packets retain their domain semantics and consume the qualified service. The accepted V13/V18 stack at `f93dd2a` is its baseline. Corpus and benchmark preparation can proceed independently; serialize any runtime promotion with feature integration and reuse unchanged acceptance evidence. This work does not block unrelated ready packets or change the 44-packet count.
 
-The roadmap has **five delivery waves containing 39 packets**, plus **four packets on an availability-dependent track**. Every packet appears once in the tables below. Wave numbers express priority, not a barrier requiring every earlier packet to finish. Start a later packet when its own prerequisites are integrated and its work is the next useful available assignment.
+The roadmap has **five delivery waves containing 40 packets**, plus **four packets on an availability-dependent track**. Every packet appears once in the tables below. Wave numbers express priority, not a barrier requiring every earlier packet to finish. Start a later packet when its own prerequisites are integrated and its work is the next useful available assignment.
 
 ## Delivery overview
 
 | Wave | Packets | Count | Value delivered |
 |---|---|---:|---|
 | **W1 — Existing foundation** | V01 | 1 | One canonical OpenCV, OCR and observation path ready for feature work. |
-| **W2 — Home and reusable menu contracts** | V02, V04, V09, V13, V16 | 5 | Reliable Home targeting plus research, Bag, Campaign and building-menu foundations. |
+| **W2 — Home and reusable menu contracts** | V02, V44, V04, V09, V13, V16 | 6 | Reliable Home targeting plus research, Bag, Campaign and building-menu foundations. |
 | **W3 — Requested feature flows** | V05–08, V10–12, V14–15, V17–18 | 11 | Broader research, Bag tabs, Campaign formation, Trial, construction and Hero result inspection. |
 | **W4 — Ordinary building menus** | V20–22, V27, V30–31, V34–38, V41–43 | 14 | Training/healing, equipment entry, defense, Alliance support and ordinary building details. |
 | **W5 — Equipment branches and deeper menus** | V23–26, V28–29, V39–40 | 8 | Equipment submenus, Relics, Sauroi, Pit and Bank. |
 | **E — Appearance, event and model availability** | V03, V19, V32–33 | 4 | Supported Home variants, qualified World detections and available event hubs. |
-| **Total** | V01–V43 | **43** | Named planning ownership; completion requires each supported feature's evidence. |
+| **Total** | V01–V44 | **44** | Named planning ownership; completion requires each supported feature's evidence. |
 
 ```mermaid
 flowchart LR
   F["V01 Existing vision contract"] --> H["V02 Home camera and targeting"]
+  H --> HC["V44 Full Home mapping and navigation"]
+  HC --> ENTRY["Remaining Home-entry-dependent routes"]
   F --> R["V04 Research contract"]
   F --> B["V09 Bag contract"]
   F --> C["V13 Campaign maps"]
@@ -56,7 +81,7 @@ flowchart LR
   M["Qualified PNC model"] --> W
 ```
 
-The diagram shows shared prerequisites, not every route dependency. The tables cover all 43 packets. **H** in a table means V02's current Home acquisition for the automated route. It does not block offline parsing of an already-saved menu frame. A parent dependency means the relevant shared contract is reviewed and integrated; unrelated missing variants do not delay work that can use an already-qualified contract.
+The diagram shows shared prerequisites, not every route dependency. The tables cover all 44 packets. **H** in a table means the qualified Home acquisition contract: accepted V02 routes remain usable; remaining routes require V44 acceptance and target-specific proof. V23–26 inherit that gate through V22. Event routes also retain V03 occupancy/appearance gates. It does not block offline parsing of an already-saved menu frame. A parent dependency means the relevant shared contract is reviewed and integrated; unrelated missing variants do not delay work that can use an already-qualified contract.
 
 ## W1 — Qualify the existing foundation
 
@@ -71,12 +96,13 @@ The diagram shows shared prerequisites, not every route dependency. The tables c
 | Packet | Prerequisite for its supported scope | Acceptance outcome |
 |---|---|---|
 | [V02 — Home camera localization and atlas navigation](modules/V02_HOME_CAMERA_AND_NAVIGATION.md) | V01 | Home camera localization, measured pan, fresh building acquisition and verified open/return. |
+| [V44 — Full Home-city mapping, localization and navigation](modules/V44_FULL_HOME_CITY_NAVIGATION.md) | Accepted V01/V02; Stage 0 native zoom/gesture qualification | Normalize zoom first, localize with landmarks, then available ordinary routes with slot occupancy, bounded scan and final-candidate live proof. |
 | [V04 — Institute, Development research and shared research parsing](modules/V04_INSTITUTE_DEVELOPMENT.md) | V01; H for route | Institute/Development node and detail inspection, scrolling and queue facts. |
 | [V09 — Bag shell, common cards and Resource inventory](modules/V09_BAG_SHELL_AND_RESOURCES.md) | V01 | Bag tab/card contract and correct Resource partial-card handling. |
 | [V13 — Campaign map and chapter navigation](modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | V01; H for route; M0 + V14 adapter for new caller proof | Campaign map/chapter facts and Home portal; forward target and all three battle-mode choices. |
 | [V16 — Building upgrade, prerequisites and queue menus](modules/V16_BUILDING_UPGRADE_AND_QUEUES.md) | V01; H for route | Shared building upgrade, prerequisite and queue observations. |
 
-**Recommended order:** V02 and V04 first; V09 and V13 next; V16 next or earlier when it unblocks an active building caller. Feature parsing can proceed while V02's route proof is pending. Mark that split explicitly.
+**Recommended order on resumption:** V44 is the next shared Home-navigation priority; preserve completed work. Original foundation order: V02 and V04 first; V09 and V13 next; V16 next or earlier when it unblocks an active building caller. Feature parsing can proceed while V02's route proof is pending. Mark that split explicitly.
 
 **Finish when:** supported Home localization survives a pan and verifies the opened building; each shared menu producer has a reviewed typed result and current measured controls. A useful first acceptance route is Home → Institute → Development → matching node detail → Home. Bag, Campaign and generic-building contracts can land independently.
 
@@ -158,7 +184,7 @@ This track is **not the final mandatory barrier for ordinary menus**:
 
 ## Dispatch and integration
 
-### First assignments
+### Original foundation assignments (historical order)
 
 1. Reconcile the current branch/base and newer feature01/02/04 work against the
    retained evidence. The source Campaign/Trial/chest fix is `4d317db`; its
@@ -176,9 +202,9 @@ Use the dispatch prompt in the plan index. Each worker owns its feature's produc
 
 For the current implementation, the user requested **up to three persistent Devin SWE-2 Max workers** for independent concrete packages. The lead owns uncertain analysis, shared interfaces, architecture review and integration. Increase concurrency only when symbols/profile IDs are independent and consumed shared contracts are already integrated. Keep one owner for Home localization, common research, common Bag and common equipment helpers. A small shared correction belongs to that owner and should land before dependent feature edits.
 
-The user has delegated all live testing in this roadmap to Devin through [devin-live-test](../../../.agents/skills/devin-live-test/SKILL.md). The live worker owns the canonical process lease, authorized checks, curated evidence manifest and cleanup. The user reauthorized `mega_old_acc` on September 17 alongside `3xx_spies`; use a declared target bundle, configured live roles and active castles, preserving each capture's actual target provenance. The lead defines acceptance, reviews the packaged evidence and resolves implementation findings; it does not duplicate live probes. Use bounded Devin game-knowledge consultation to resolve missing facts before assigning dependent live checks. No resource spending or account/castle switching is authorized by this delegation. Continue automatically through all 43 packets: review each handback, resolve findings, delegate applicable live proof, merge/push accepted changes and assign the next ready packet without another user prompt. Coordinate by feature symbols and profile/control keys rather than assigning the entire enricher file to one worker. Do not revive the dropped A/B wait rules.
+The user has delegated all live testing in this roadmap to Devin through [devin-live-test](../../../.agents/skills/devin-live-test/SKILL.md). The live worker owns the canonical process lease, authorized checks, curated evidence manifest and cleanup. Current authorized live assignments use `serious_stuff` for V08 and `157_farm` for V44, each on its current active castle. Resolve its configured role and canonical lease at execution time; do not reuse older account authorizations as defaults. Historical evidence retains its original target provenance. The lead defines acceptance, reviews the packaged evidence and resolves implementation findings; it does not duplicate live probes. Use bounded Devin game-knowledge consultation to resolve missing facts before assigning dependent live checks. No resource spending or account/castle switching is authorized by this delegation. The user has resumed V44 and independent packets; continue automatically through all 44 packets: review each handback, resolve findings, delegate applicable live proof, merge/push accepted changes and assign the next ready packet without another user prompt. Coordinate by feature symbols and profile/control keys rather than assigning the entire enricher file to one worker. Do not revive the dropped A/B wait rules.
 
-As explicitly requested on September 17, the Join Alliance popup bug and its dedicated verification are excluded from this entire epic, its worker assignments and its acceptance gates. The [standalone popup plan](../operations/PNC_ALLIANCE_INVITATION_DISMISSAL_FOLLOWUP_PLAN.md) owns the cause, existing merged fix `4f1e119` and still-pending post-Home live proof. Do not seek or wait for the popup while executing these 43 packets. Continue the original recommended order and independent ready work. Gear inventory/detail/return, Arena details and Alliance feature packets V08/V37 remain in scope. If the popup actually prevents a required feature route, record that external obstruction without bypassing guards or claiming the route passed; continue other safe work.
+As explicitly requested on September 17, the Join Alliance popup bug and its dedicated verification are excluded from this entire epic, its worker assignments and its acceptance gates. The [standalone popup plan](../operations/PNC_ALLIANCE_INVITATION_DISMISSAL_FOLLOWUP_PLAN.md) owns the cause, existing merged fix `4f1e119` and still-pending post-Home live proof. Do not seek or wait for the popup while executing these 44 packets. Follow the updated V44 dependency priority and continue independent ready work. Gear inventory/detail/return, Arena details and Alliance feature packets V08/V37 remain in scope. If the popup actually prevents a required feature route, record that external obstruction without bypassing guards or claiming the route passed; continue other safe work.
 
 ### Acceptance and integration gates
 
@@ -202,6 +228,7 @@ Record status changes here in the following compact log; use the linked packet f
 | Baseline correction | Integrated with these plans; no packet completed | Exact runtime/fixture port of `4d317db` after `ff38127` | Chapter 6 recognition/Home portal, Tower destination/return and chest-preview ownership/close. V01-V43 remain planned; V11/V13/V15 retain their content and broader route acceptance. |
 | V01 | Integrated and pushed to main | Base `552bb766619e7997c8d7898ccd7bfd414f7bdf6f`; result `f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65` | 2026-09-16 UTC: both publishers qualified with real bounded OCR on Bag reference and independent validation capture; Home negative, demand/cache/provenance and guard regressions passed. 56 core vision tests, 445 vision integration passes (6 optional skips), 198 final affected passes; merge gate: 2,186 full portable passes and 7 expected skips. No runtime change or new live route required. One reference Safe Food row remains explicitly unreadable; V09 owns that improvement. See V01 for evidence and extension owners. |
 | V02 | Integrated and pushed to main | Base `32a03492a2b83684582cb1868928d531c2064180`; result `55d3d7f0e428140db922f431ad6603478c2563eb` | September16: one canonical camera,16 landmarks/10 groups, fresh measured Institute/Tower/Campaign bodies and bounded replanning. Lead architecture/caller review and corrective checks complete. Full2,275 passed+7 skipped; later focused corrections passed. Non-spending core live Institute, Tower/Trial and default Home -> two pans -> Campaign map -> Home passed on mega_old_acc. V03 owns appearance variants. See V02 for exact evidence. |
+| V44 | Revised design; Stage 0 sampled capability reviewed | September 25 Devin native-input evidence independently reviewed; normalized endpoint and deliberate drags supported at sampled poses; broader envelope/reporting gaps explicit; no whole-plan acceptance | Next implement bounded normalization and landmark feedback using canonical 54-slot/system geometry. Broader queue held. |
 | V04 | Integrated | Base `55d3d7f`; result `0dcc68d3201999a43c087a2c8de4220e72d1dcf4` | Typed Research rows/detail/queue and both-publisher provenance; lead architectural/caller review plus R1–R5 and freshness/max-panel fixes complete. Full fallback 2,314 passed + 7 skipped; subsequent focused checks passed. Non-spending Home → Institute → Development → scroll → matching Infirmary Cap I 5/5 detail → tree → queue → Home passed on mega_old_acc; no Start/premium action. See V04 for evidence and scoped limits. |
 | V09 | Integrated and pushed to main | Base `f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65`; result `32a03492a2b83684582cb1868928d531c2064180` | September 16: shared Bag geometry/typed selection, selected and unselected Resource/Speedup/Treasure controls, clipped rows and Safe Food crop retry. Lead architecture/caller review resolved ambiguous-source selection locally. Full offline: 2,208 passed, 7 skipped; lead 17 captured/navigation checks plus 13 correction checks passed. Core live on mega_old_acc: Home → Bag → Speedup → Treasure → Resource → one scroll → Home, five complete and two non-actionable clipped rows. No spending; instance preserved. V10–12 own remaining tab semantics/controls. |
 | V15 | Accepted for stated coverage | Base `0dcc68d`; worker snapshot `cabf1c0` plus lead corrections in this acceptance commit | Six typed Trial cards and Gear Applicable Stats through both publishers and canonical navigation. Architecture/caller review complete; full 2,347 passed + 7 skipped, 31 focused corrected checks passed. Production Home → Tower → Gear Stats (nine rows) → Trial → Home passed on mega_old_acc, runtime `20260916T102239Z_f31a49a3`, zero spending. Gear is the only qualified detail family; see V15 for exact evidence and limits. |
@@ -216,6 +243,6 @@ To choose the next assignment: filter out integrated/accepted work as appropriat
 
 The first useful milestone is reliable Home → Institute research inspection. The next is the requested Home/research/Bag/Campaign/Trial coverage, followed by ordinary building and equipment families.
 
-Full roadmap completion means all 43 packets have an accepted disposition with exact supported coverage and required integration proof. Blocked required interfaces remain incomplete; do not report “all buildings supported” while hiding unqualified menus. New events or substantially different future layouts remain explicit follow-on scope.
+Full roadmap completion means all 44 packets have an accepted disposition with exact supported coverage and required integration proof. Blocked required interfaces remain incomplete; do not report “all buildings supported” while hiding unqualified menus. New events or substantially different future layouts remain explicit follow-on scope.
 
 This roadmap updates sequencing only. The [modular plan](PNC_VISION_MODULAR_PLAN.md) owns architecture/validation policy, individual packets own feature details, and the [retirement map](../../reviewed/vision/modules/PLAN_RETIREMENT.md) preserves requirements from dropped plans.
