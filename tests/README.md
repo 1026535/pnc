@@ -58,9 +58,10 @@ missing defaults skip without reading machine-local fixture configuration.
 `group` or a named test module is the focused development path. Run `affected`
 once on the finished source candidate when downstream consumers need checking;
 reuse a passing worker result for the same candidate and scope. Neither mode
-automatically expands to unrelated tiers. `full` is the post-merge, nightly,
-manual, and fail-closed baseline. `measure` runs the
-full inventory with instrumentation; compare its timings separately from
+automatically expands to unrelated tiers. `full` is the explicit manual and
+fail-closed baseline. CI invokes `affected` for every event; the selector can
+still require the full inventory. `measure` runs the full inventory with
+instrumentation; compare its timings separately from
 uninstrumented `full`.
 The runner limits collection to the four portable tiers. Existing opt-in live
 tests and commands remain separate; none of these commands authorizes or starts
@@ -131,14 +132,12 @@ it is selected directly. A removed or unexplained module forces a full run.
 Runtime observations do not establish dependencies on unexecuted branches or
 non-Python files.
 
-The context store is generated evidence, not release evidence. Pushes to `main`
-and nightly runs create it from a successful full measurement and save it under
-an exact commit-SHA cache key. Pull requests and merge groups restore only the
-key for their base SHA; the runner independently revalidates every provenance
-field and falls back to the full suite on a cache miss or mismatch. Neither
-publishes a seed. Ordinary local runs use their local
-`.test-impact/contexts.json`. Use separate output paths for independent runs;
-atomic replacement prevents partial files but does not combine competing reports.
+The context store is generated evidence, not release evidence. An explicit
+successful `measure --contexts` run produces a seed for that exact candidate.
+Consumers must supply a compatible seed themselves. CI uses static affected
+selection without `--contexts`; it neither depends on a cache nor runs coverage
+measurement to populate one. Existing offline measurement and audit commands
+remain available for separately requested timing or dependency-learning work.
 
 ## Evidence and exit status
 
@@ -187,59 +186,46 @@ selection), `1` for test failures/errors, and `2` for runner/configuration error
 
 ## CI and the external merge gate
 
-`.github/workflows/tests.yml` uses hosted Windows and Python 3.13. It has no path
-filters. PR and merge-group events restore the exact-base coverage map and run
-`affected --contexts` on GitHub's merge candidate. Superseded PR runs cancel.
-A missing or invalid map makes the selector run the full suite; this can occur
-when a merge group's base includes earlier queued changes. Pushes to `main`
-and nightly runs execute `measure --contexts` over the full portable inventory
-and publish the trusted SHA-keyed map. Manual dispatches run `full`.
-Before its measurement, the nightly job records a separate
-`affected --base HEAD^ --dry-run` plan in `.test-impact/audit-selection.json`.
-Recording that plan is informational: a failure is visible but does not suppress
-the independent full measurement. The full measurement's exit status remains
-gating. After measurement, even if tests failed, the nightly job runs
-`tools/audit_test_selection.py` when both the audit plan and full result files
-exist. It requires matching candidate SHAs and full source/resource fingerprints
-across the affected plan, result metadata, and full selection. The result must
-come from `full` or `measure`, select the complete matching portable inventory,
-and account for every discovered test with a terminal outcome or a matching
-setup error/skip. Empty, stale, duplicate, unfinished, or incomplete evidence is
-rejected. A complete failing run remains eligible for comparison.
-Failed tests, errors, and unexpected successes outside the selection are listed
-as missed failure IDs in `.test-impact/audit-result.json`; observed misses make
-the audit command fail with exit code `1`. Invalid evidence returns `2` and
-replaces any prior audit report with `audit_valid: false`; it cannot leave a stale
-success report. A valid comparison with no observed misses returns `0`.
-Missing input artifacts skip comparison and provide no audit evidence.
+`.github/workflows/tests.yml` uses hosted Windows and Python 3.13, with no path
+filters. Every event runs `tools/run_tests.py affected --base <resolved-base>`
+without coverage instrumentation or `--contexts`. Named test output (`--verbose`)
+keeps the active test and earlier failures identifiable if execution is interrupted.
+Superseded PR runs cancel. The job retains its 30-minute limit.
 
-Zero observed misses is evidence about this run, not a proof of future selector
-correctness: an all-passing full run cannot expose a missed failing test.
-No numerical coverage threshold is enforced by this workflow.
+| Event | Candidate | Comparison base |
+|---|---|---|
+| Pull request | GitHub merge candidate | PR base SHA |
+| Merge queue | GitHub queue candidate | Merge-group base SHA |
+| Push to `main` | Pushed SHA | Event `before` SHA, covering the whole pushed range |
+| Scheduled | Default-branch HEAD | `HEAD^`, the last commit's parent |
+| Manual | Required `ref` input | Required `base` input |
 
-Selection JSON, result JSON, timing CSV, nightly coverage JSON, the audit plan,
-and the comparison report are uploaded even after a test failure;
-install/collection failures may leave some artifacts absent.
+The base must resolve locally to a commit and be an ancestor of the candidate.
+Empty, all-zero, unavailable or non-ancestor bases fail before test execution;
+use explicit manual inputs for a first push without a usable previous SHA.
+Manual inputs may be branches/tags, but immutable SHAs give reproducible evidence.
+The checkout fetches history and honors the requested candidate ref.
 
-Manual dispatch requires a `ref` input (commit SHA, branch, or tag). Checkout
-uses that exact input, not an unconditional `main` checkout. For an auditable
-final candidate, pass an immutable full commit SHA and verify the reported
-`metadata.commit_sha` matches it. A branch/tag input resolves at checkout time.
+**Affected selection can still select every test.** Shared contracts, test
+infrastructure, unknown resources or uncertain dependency ownership retain the
+selector's documented safety fallback. CI does not force a smaller set by
+ignoring those dependencies. Selection JSON records the exact range, selected
+modules and reasons. A missing coverage cache no longer causes a fallback,
+because CI does not use coverage-based selection.
+
+There is no automatic `full`, `measure`, coverage-cache publication or full-suite
+nightly audit in this workflow. The scheduled run is affected-only and is not an
+independent full baseline. Use explicit offline `full`, `measure` and
+`tools/audit_test_selection.py` assignments when those results are needed.
+
+Selection JSON, result JSON and timing CSV are uploaded after success or failure
+when present. A hard interruption may leave only selection JSON; it is not a
+passing result. For the diagnosed timeout and limits of the available evidence,
+see [the CI diagnosis handoff](../plans/themed/testing/PNC_CI_AFFECTED_TESTS_HANDOFF.md).
 
 A passing **affected check on the current merge candidate is required before
-merge**. It runs the full suite when selection cannot establish safe ownership
-or a compatible coverage seed. An administrator must configure the required
-check/ruleset externally; adding this workflow alone does not enforce that
-policy. Require `Portable tests (affected)` for PRs and, when a merge queue is
-used, for queue candidates. The post-merge `main` run and nightly measurement
-retain the independent full baseline. Manual `full` remains available when a
-specific risk calls for it. If a ruleset still requires `Portable tests (full)`
-for merge groups, update that requirement when this workflow is rolled out;
-otherwise queued merges will wait for an obsolete check. Repository settings
-are not changed here.
-
-The event and checkout choices follow the official
-[GitHub Actions event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
-and [checkout ref documentation](https://github.com/actions/checkout#usage).
-Context attribution uses the documented
-[Coverage.py 7.10.7 API](https://coverage.readthedocs.io/en/7.10.7/api_coverage.html).
+merge**. An administrator must configure the required check/ruleset externally;
+adding this workflow alone does not enforce it. The check name is
+`Portable tests (affected)` for all events. Any ruleset that still requires
+`Portable tests (full)` must be updated separately. Repository settings are not
+changed here.
