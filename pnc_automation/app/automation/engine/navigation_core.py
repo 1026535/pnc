@@ -1886,6 +1886,11 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_WORLD_KINGDOM_LIST, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_WORLD_MAP_OVERVIEW})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_HUD_TOGGLE, frozenset({screen.PNC_WORLD_MAP_EXPANDED})),
         NavigationEdge(screen.PNC_WORLD_MAP_EXPANDED, selector.PNC_WORLD_HUD_TOGGLE, frozenset({screen.PNC_WORLD_MAP})),
+        # PW owns these measured inner controls; Home acquisition remains
+        # with the shared building-navigation owner.
+        NavigationEdge(screen.PNC_ILLUSORY_BEAST_MANOR, selector.PNC_ILLUSORY_BEAST_MANOR_PET_WORKSHOP_BUTTON, frozenset({screen.PNC_PET_WORKSHOP})),
+        NavigationEdge(screen.PNC_PET_WORKSHOP, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_ILLUSORY_BEAST_MANOR})),
+        NavigationEdge(screen.PNC_ILLUSORY_BEAST_MANOR, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
     ]
     # Back returns to the actual parent. Rank and the Settings hub can have
     # different parents; their measured destination is used for replanning.
