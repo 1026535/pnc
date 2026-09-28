@@ -121,6 +121,11 @@ class CoreRuntime:
                 include_content=include_content,
                 request=request if include_content and request is not None else requested_scope,
             ),
+            expected_screens=(
+                frozenset()
+                if requested_scope is None
+                else requested_scope.candidate_screen_types
+            ),
         )
         if recovered is None:
             return observation

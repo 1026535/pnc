@@ -55,6 +55,45 @@ class ObservationCallback(Protocol):
         """Returns the freshly captured observation."""
 
 
+def _full_runtime_request_with_expected_screens(
+    expected_screens: frozenset[ScreenType],
+) -> ObservationRequest:
+    """Keeps broad runtime enrichment while carrying explicit destination candidates."""
+
+    request = ObservationRequest.full_runtime_default()
+    return replace(
+        request,
+        candidate_screen_types=request.candidate_screen_types | expected_screens,
+    )
+
+
+def _observer_preserving_expected_screens(
+    observe: ObservationCallback,
+    expected_screens: frozenset[ScreenType],
+) -> ObservationCallback:
+    """Carries one recovery episode's explicit destinations through nested observations."""
+
+    if not expected_screens:
+        return observe
+
+    def observe_with_scope(
+        label: str,
+        request: ObservationRequest | None = None,
+    ) -> Observation:
+        scoped_request = request or ObservationRequest.full_runtime_default()
+        return observe(
+            label,
+            request=replace(
+                scoped_request,
+                candidate_screen_types=(
+                    scoped_request.candidate_screen_types | expected_screens
+                ),
+            ),
+        )
+
+    return observe_with_scope
+
+
 @dataclass(frozen=True, slots=True)
 class ObservedActionExecutionPolicy:
     """Centralizes bounded settle behavior for observed selector taps."""
@@ -101,6 +140,7 @@ class ObservedActionExecutionResult:
     observation: Observation
     selector_interactions: tuple[SelectorInteractionResult, ...] = ()
     update_recovered: bool = False
+    expected_screens: frozenset[ScreenType] = frozenset()
 
     @property
     def screen_type(self) -> ScreenType:
@@ -204,6 +244,7 @@ class ObservedActionExecutor:
         initial_observation: Observation,
         *,
         observe: ObservationCallback,
+        expected_screens: frozenset[ScreenType] = frozenset(),
     ) -> ObservedActionExecutionResult:
         """Executes the action sequence and returns the freshest observed result."""
 
@@ -211,19 +252,26 @@ class ObservedActionExecutor:
             initial_observation,
             label_prefix="pre_action_update",
             observe=observe,
+            expected_screens=expected_screens,
         )
         if recovered.observation is not None:
             return ObservedActionExecutionResult(
                 observation=recovered.observation,
                 update_recovered=recovered.update_recovered,
+                expected_screens=expected_screens,
             )
         current_observation = initial_observation
         observed_after_action = False
         executed_any_action = False
         selector_interactions: list[SelectorInteractionResult] = []
+        latest_expected_screens: frozenset[ScreenType] = frozenset()
         for index, action in enumerate(actions):
             candidate = self._resolve_observed_navigation_tap(action, current_observation)
             if candidate is not None:
+                action_expected_screens = (
+                    action.follow_up_request
+                    or ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
+                ).candidate_screen_types
                 interaction_result = self._execute_observed_navigation_tap(
                     action=action,
                     before=current_observation,
@@ -233,26 +281,26 @@ class ObservedActionExecutor:
                 )
                 current_observation = interaction_result.observation
                 selector_interactions.extend(interaction_result.selector_interactions)
+                latest_expected_screens = action_expected_screens
                 if interaction_result.update_recovered:
                     return ObservedActionExecutionResult(
                         observation=current_observation,
                         selector_interactions=tuple(selector_interactions),
                         update_recovered=True,
+                        expected_screens=latest_expected_screens,
                     )
                 recovered = self._recover_interruption_if_required(
                     current_observation,
                     label_prefix=f"post_action_{index + 1}_update",
                     observe=observe,
-                    expected_screens=(
-                        action.follow_up_request
-                        or ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
-                    ).candidate_screen_types,
+                    expected_screens=action_expected_screens,
                 )
                 if recovered.observation is not None:
                     return ObservedActionExecutionResult(
                         observation=recovered.observation,
                         selector_interactions=tuple(selector_interactions),
                         update_recovered=recovered.update_recovered,
+                        expected_screens=latest_expected_screens,
                     )
                 executed_any_action = True
                 observed_after_action = True
@@ -265,6 +313,13 @@ class ObservedActionExecutor:
                 expected_element=self._selector_source_element(action, current_observation),
             )
             executed_any_action = executed_any_action or action_executed
+            action_expected_screens = (
+                frozenset()
+                if action.follow_up_request is None
+                else action.follow_up_request.candidate_screen_types
+            )
+            if action_executed:
+                latest_expected_screens = action_expected_screens
             if getattr(action, "observe_after", False) and action_executed:
                 current_observation = self.action_executor.observe_action_follow_up(
                     action=action,
@@ -275,41 +330,47 @@ class ObservedActionExecutor:
                     current_observation,
                     label_prefix=f"post_action_{index + 1}_update",
                     observe=observe,
-                    expected_screens=(
-                        frozenset()
-                        if action.follow_up_request is None
-                        else action.follow_up_request.candidate_screen_types
-                    ),
+                    expected_screens=action_expected_screens,
                 )
                 if recovered.observation is not None:
                     return ObservedActionExecutionResult(
                         observation=recovered.observation,
                         selector_interactions=tuple(selector_interactions),
                         update_recovered=recovered.update_recovered,
+                        expected_screens=latest_expected_screens,
                     )
                 if not self.action_executor.validate_follow_up(action, current_observation):
                     return ObservedActionExecutionResult(
                         observation=current_observation,
                         selector_interactions=tuple(selector_interactions),
+                        expected_screens=latest_expected_screens,
                     )
                 observed_after_action = True
         if executed_any_action and not observed_after_action:
             self._sleep_for_observe()
-            current_observation = observe("post_actions")
+            post_actions_request = (
+                _full_runtime_request_with_expected_screens(latest_expected_screens)
+                if latest_expected_screens
+                else None
+            )
+            current_observation = observe("post_actions", request=post_actions_request)
             recovered = self._recover_interruption_if_required(
                 current_observation,
                 label_prefix="post_actions_update",
                 observe=observe,
+                expected_screens=latest_expected_screens,
             )
             if recovered.observation is not None:
                 return ObservedActionExecutionResult(
                     observation=recovered.observation,
                     selector_interactions=tuple(selector_interactions),
                     update_recovered=recovered.update_recovered,
+                    expected_screens=latest_expected_screens,
                 )
         return ObservedActionExecutionResult(
             observation=current_observation,
             selector_interactions=tuple(selector_interactions),
+            expected_screens=latest_expected_screens,
         )
 
     def recover_interruption_if_required(
@@ -408,6 +469,7 @@ class ObservedActionExecutor:
                 observation,
                 label_prefix=label_prefix,
                 observe=observe,
+                expected_screens=expected_screens,
             )
         recovered = self._recover_required_update(
             observation,
@@ -618,31 +680,21 @@ class ObservedActionExecutor:
         *,
         label_prefix: str,
         observe: ObservationCallback,
+        expected_screens: frozenset[ScreenType] = frozenset(),
     ) -> _InterruptionRecoveryResult:
         """Dismisses only newly fingerprinted safe transient popups in one bounded episode."""
 
         current = observation
         dismissed_fingerprints: set[str] = set()
         dismissed_identities: set[tuple[object, ...]] = set()
-        while self._is_popup_observation(current):
+        recovery_observe = _observer_preserving_expected_screens(observe, expected_screens)
+        while True:
             decision = decide_popup_recovery(
                 screen_type=current.screen_type,
                 blocking_popup=current.blocking_popup,
                 visible_selector_ids=frozenset(current.visible_elements),
                 popup_overlay=current.popup_overlay,
             )
-            if self.policy.read_only_policy.enabled and not (
-                self.policy.read_only_policy.allow_system_popup_recovery
-                and decision is not None
-                and decision.control_kind in {
-                    PopupControlKind.RECONNECT_CONFIRM,
-                    PopupControlKind.UPDATE_CONFIRM,
-                }
-            ):
-                raise SelectorResolutionError(
-                    "Read-only probe refuses popup recovery without typed reconnect or required-update evidence.",
-                    screen_type=current.screen_type,
-                )
             if decision is not None and decision.control_kind == PopupControlKind.UPDATE_CONFIRM:
                 recovered = self._recover_required_update(
                     current,
@@ -650,6 +702,19 @@ class ObservedActionExecutor:
                     observe=observe,
                 )
                 return _InterruptionRecoveryResult(recovered, update_recovered=True)
+            if current.screen_type in expected_screens:
+                return _InterruptionRecoveryResult(current)
+            if not self._is_popup_observation(current):
+                return _InterruptionRecoveryResult(current)
+            if self.policy.read_only_policy.enabled and not (
+                self.policy.read_only_policy.allow_system_popup_recovery
+                and decision is not None
+                and decision.control_kind == PopupControlKind.RECONNECT_CONFIRM
+            ):
+                raise SelectorResolutionError(
+                    "Read-only probe refuses popup recovery without typed reconnect or required-update evidence.",
+                    screen_type=current.screen_type,
+                )
             selector = self._transient_popup_selector(current)
             if selector is None:
                 raise self._transient_recovery_error(
@@ -709,7 +774,7 @@ class ObservedActionExecutor:
             dismissed_fingerprints.add(fingerprint)
             if typed_identity is not None:
                 dismissed_identities.add(typed_identity)
-            current = observe(
+            current = recovery_observe(
                 f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
                 request=ObservationRequest.full_runtime_default(),
             )
@@ -733,13 +798,13 @@ class ObservedActionExecutor:
                     current,
                     typed_identity=typed_identity,
                     label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
-                    observe=observe,
+                    observe=recovery_observe,
                 )
             else:
                 current = self._settle_popup_dismissal_observation(
                     current,
                     label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
-                    observe=observe,
+                    observe=recovery_observe,
                 )
             if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
                 recovered = self._recover_required_update(
@@ -748,9 +813,6 @@ class ObservedActionExecutor:
                     observe=observe,
                 )
                 return _InterruptionRecoveryResult(recovered, update_recovered=True)
-            if not self._is_popup_observation(current):
-                return _InterruptionRecoveryResult(current)
-        return _InterruptionRecoveryResult(current)
 
     def _settle_same_typed_popup(
         self,
@@ -1097,7 +1159,9 @@ class ObservedActionExecutor:
         ):
             final_after = observe(
                 f"{label_prefix}_runtime_retry",
-                request=ObservationRequest.full_runtime_default(),
+                request=_full_runtime_request_with_expected_screens(
+                    follow_up_request.candidate_screen_types
+                ),
             )
         fallback_attempted = False
         fallback_used = False

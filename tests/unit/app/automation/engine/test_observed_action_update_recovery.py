@@ -30,7 +30,7 @@ class ObservedActionUpdateRecoveryTests(AutomationFrameworkFixtures, unittest.Te
     """Proves observed action update recovery."""
 
     def test_observed_action_executor_recovers_initial_required_update_without_running_planned_action(self) -> None:
-        """Confirms an initial update once, waits through loading, and skips the stale action plan."""
+        """An expected screen cannot suppress a required update or revive the stale action plan."""
 
         before = make_observation(
             ScreenType.PNC_POPUP,
@@ -55,6 +55,7 @@ class ObservedActionUpdateRecoveryTests(AutomationFrameworkFixtures, unittest.Te
             ),
             before,
             observe=fake_observer.observe,
+            expected_screens=frozenset({ScreenType.PNC_POPUP}),
         )
 
         self.assertTrue(execution.update_recovered)

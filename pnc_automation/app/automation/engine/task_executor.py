@@ -9,6 +9,7 @@ from pnc_automation.app.automation.engine.observed_action_executor import Observ
 from pnc_automation.app.automation.engine.task import AutomationTask, TaskResult, TaskStatus
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.domain.observation_policy import ObservationArtifactKind, observation_artifact_selection
@@ -47,6 +48,7 @@ class TaskExecutor:
         attempts = 0
         replans = 0
         current_before = before
+        expected_screens: frozenset[ScreenType] = frozenset()
         while True:
             recovered = self.action_executor.recover_interruption_if_required(
                 current_before,
@@ -55,6 +57,7 @@ class TaskExecutor:
                     f"{task.id.value}_{label}",
                     request=request,
                 ),
+                expected_screens=expected_screens,
             )
             if recovered is not None:
                 current_before = recovered
@@ -75,6 +78,7 @@ class TaskExecutor:
             )
             actions = task.plan(context, current_before)
             after = current_before
+            execution = None
             if actions:
                 execution = self.action_executor.execute_actions(
                     actions,
@@ -83,6 +87,7 @@ class TaskExecutor:
                         f"{task.id.value}_{label}",
                         request=request,
                     ),
+                    expected_screens=expected_screens,
                 )
                 after = execution.observation
                 if execution.update_recovered:
@@ -120,8 +125,14 @@ class TaskExecutor:
                         replans=replans,
                     )
                 current_before = after
+                expected_screens = (
+                    frozenset()
+                    if execution is None
+                    else execution.expected_screens
+                )
                 continue
             if result.retryable and attempts <= self.max_retries_per_step:
+                expected_screens = frozenset()
                 current_before = self.observation_service.observe(f"{task.id.value}_retry_{attempts}")
                 continue
             self._raise_failure(

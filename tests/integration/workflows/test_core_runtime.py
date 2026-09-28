@@ -36,6 +36,12 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+)
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
@@ -523,9 +529,10 @@ class CoreRuntimeTests(unittest.TestCase):
         perception.build.side_effect = [popup, home]
         executor = Mock()
 
-        def recover(observation, *, label_prefix, observe):
+        def recover(observation, *, label_prefix, observe, expected_screens):
             self.assertIs(popup, observation)
             self.assertIn("interruption", label_prefix)
+            self.assertEqual(frozenset(), expected_screens)
             return observe("followup", request=ObservationRequest.full_runtime_default())
 
         executor.recover_interruption_if_required.side_effect = recover
@@ -552,6 +559,141 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(2, trace.count('"event": "capture"'))
             self.assertEqual(2, trace.count('"event": "observation"'))
 
+    def test_nested_core_observation_preserves_expected_join_destination(self) -> None:
+        """A core observer called during outer recovery keeps the scoped Join destination intact."""
+
+        captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
+        overlay = PopupOverlayObservation(
+            image_size=(540, 960),
+            layout_id="alliance_join_landing",
+            candidates=(
+                PopupDismissCandidate(
+                    control_kind=PopupControlKind.BACKGROUND_DISMISS,
+                    bounds=Bounds(30, 830, 140, 70),
+                    action_point=(100, 865),
+                    confidence=1.0,
+                    evidence_kind=PopupEvidenceKind.GEOMETRY,
+                    reason="visual_anchor:alliance_join_landing",
+                ),
+            ),
+            confidence=1.0,
+            evidence_kind=PopupEvidenceKind.KNOWN_LAYOUT,
+            reason="visual_anchor:alliance_join_landing",
+        )
+        unrelated = replace(
+            make_observation(
+                ScreenType.PNC_POPUP,
+                visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+                blocking_popup=True,
+                frame_fingerprint="outer-unrelated-popup",
+            ),
+            captured_at=captured_at,
+        )
+        expected_join = replace(
+            make_observation(
+                ScreenType.PNC_ALLIANCE_JOIN,
+                visible_ids=(UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,),
+                source_kinds={
+                    UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK: VisibleElementSourceKind.GEOMETRY
+                },
+                popup_overlay=overlay,
+                blocking_popup=True,
+                image_size=(540, 960),
+                frame_fingerprint="nested-expected-join",
+            ),
+            captured_at=captured_at + timedelta(seconds=1),
+        )
+        home = replace(
+            _frame_at(ScreenType.PNC_HOME_CITY, captured_at + timedelta(seconds=2)),
+            frame_fingerprint="home-after-stray-join-dismissal",
+        )
+
+        def screenshot(name: str, offset: int) -> CapturedScreenshot:
+            timestamp = captured_at + timedelta(seconds=offset)
+            return CapturedScreenshot(
+                artifact=ArtifactRecord(
+                    path=Path(f"{name}.png"),
+                    label=name,
+                    captured_at=timestamp,
+                    size_bytes=1,
+                    sha256=name,
+                ),
+                image=Image.new("RGB", (540, 960)),
+                image_format="PNG",
+                frame_ref=FrameRef(
+                    session_id="nested-core-recovery",
+                    session_epoch=1,
+                    capture_sequence=offset + 1,
+                    input_sequence=0,
+                    captured_at=timestamp,
+                ),
+            )
+
+        screenshot_service = Mock()
+        screenshot_service.capture.side_effect = [
+            screenshot("expected_join", 1),
+            screenshot("home", 2),
+        ]
+        perception = Mock()
+        perception.build.side_effect = [expected_join, home]
+        session = FakeSession()
+        registry = build_default_selector_registry()
+        observed_executor = ObservedActionExecutor(
+            selector_registry=registry,
+            action_executor=ActionExecutor(
+                session=session,
+                selector_registry=registry,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                chat_stable_click_delay_ms=0,
+                chat_post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(
+                    session=session,
+                    observation_service=SimpleNamespace(screenshot_service=screenshot_service),
+                ),
+                navigation=_SettleNavigation(_FakeClock()),
+                artifact_directory="account",
+                trace_path=Path(temporary_directory) / "trace.jsonl",
+                _perception=perception,
+                _run_id="nested-join",
+                _observed_action_executor=observed_executor,
+            )
+
+            def observe(label: str, request: ObservationRequest | None = None) -> Observation:
+                return runtime.observe(
+                    label,
+                    include_content=True,
+                    request=request or ObservationRequest.full_runtime_default(),
+                )
+
+            recovered = observed_executor.recover_interruption_if_required(
+                unrelated,
+                label_prefix="outer_recovery",
+                observe=observe,
+                expected_screens=frozenset({ScreenType.PNC_ALLIANCE_JOIN}),
+            )
+
+        self.assertIs(expected_join, recovered)
+        self.assertEqual([(5, 5)], session.taps)
+        self.assertEqual(1, screenshot_service.capture.call_count)
+        recovery_request = perception.build.call_args.kwargs["request"]
+        self.assertEqual(
+            frozenset({ScreenType.PNC_ALLIANCE_JOIN}),
+            recovery_request.candidate_screen_types,
+        )
+        self.assertEqual(
+            ObservationRequest.full_runtime_default().ocr_screen_types,
+            recovery_request.ocr_screen_types,
+        )
+
     def test_world_yolo_request_reacquires_after_popup_recovery(self) -> None:
         """Recovery uses its own scope, then reacquires YOLO on a clear World frame."""
 
@@ -569,7 +711,7 @@ class CoreRuntimeTests(unittest.TestCase):
         perception.build.side_effect = [popup, world, fresh_world]
         executor = Mock()
         executor.recover_interruption_if_required.side_effect = (
-            lambda observation, *, label_prefix, observe: observe(
+            lambda observation, *, label_prefix, observe, expected_screens: observe(
                 "recovery", request=ObservationRequest.full_runtime_default(),
             )
         )

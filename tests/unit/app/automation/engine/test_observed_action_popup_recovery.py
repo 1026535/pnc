@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 
+from pnc_automation.app.automation.engine.task_executor import TaskExecutor
+from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
@@ -18,6 +23,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.vision.image.models import Bounds
 
 from tests.support.automation.session import FakeSession
+from tests.support.core.logging import build_logger
 from tests.support.pnc.observations import make_observation
 from tests.support.runtime.observation_service import FakeObservationService
 from tests.support.automation.engine.automation_framework_fixtures import (
@@ -323,3 +329,86 @@ class ObservedActionPopupRecoveryTests(AutomationFrameworkFixtures, unittest.Tes
         )
         self.assertEqual([], no_element_session.taps)
         self.assertEqual([], no_element_session.key_events)
+
+    def test_expected_join_survives_unrelated_popup_recovery(self) -> None:
+        """Stops one bounded recovery episode when closing a popup reveals expected Join."""
+
+        unrelated = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+            frame_fingerprint="unrelated-before-join",
+        )
+        expected_join = make_observation(
+            ScreenType.PNC_ALLIANCE_JOIN,
+            visible_ids=(UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,),
+            source_kinds={UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK: VisibleElementSourceKind.GEOMETRY},
+            popup_overlay=_join_landing_overlay(),
+            blocking_popup=True,
+            image_size=(540, 960),
+            frame_fingerprint="expected-join-after-unrelated",
+        )
+        observer = FakeObservationService(observations=[expected_join])
+        session = FakeSession()
+        executor = _make_observed_action_executor(session)
+
+        recovered = executor.recover_interruption_if_required(
+            unrelated,
+            label_prefix="nested_expected_join",
+            observe=observer.observe,
+            expected_screens=frozenset({ScreenType.PNC_ALLIANCE_JOIN}),
+        )
+
+        self.assertIsNotNone(recovered)
+        assert recovered is not None
+        self.assertEqual(ScreenType.PNC_ALLIANCE_JOIN, recovered.screen_type)
+        self.assertEqual([(5, 5)], session.taps)
+        self.assertEqual(
+            frozenset({ScreenType.PNC_ALLIANCE_JOIN}),
+            observer.requests[0].candidate_screen_types,
+        )
+        self.assertEqual(
+            ObservationRequest.full_runtime_default().ocr_screen_types,
+            observer.requests[0].ocr_screen_types,
+        )
+
+    def test_send_mail_replan_keeps_expected_join_for_shared_executor(self) -> None:
+        """The real task loop reaches its existing Join error without dismissing or retrying navigation."""
+
+        task = SendMailTask()
+        context = SimpleNamespace(
+            params=task.parse_params(
+                {"recipient_kind": "alliance", "subject": "offline only", "body": "not sent"}
+            ),
+            runtime_state={},
+            flows=ScreenFlowPlanner(),
+            logger=build_logger(),
+            step=SimpleNamespace(task=task.id),
+        )
+        home = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_ALLIANCE,),
+        )
+        join = make_observation(
+            ScreenType.PNC_ALLIANCE_JOIN,
+            visible_ids=(UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,),
+            source_kinds={UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK: VisibleElementSourceKind.GEOMETRY},
+            popup_overlay=_join_landing_overlay(),
+            image_size=(540, 960),
+            artifact_path=Path("offline-synthetic.png"),
+        )
+        observer = FakeObservationService(observations=[join, home, join])
+        session = FakeSession()
+        executor = TaskExecutor(
+            observation_service=observer,
+            action_executor=_make_observed_action_executor(session),
+            logger=build_logger(),
+            max_replans_per_step=1,
+            max_retries_per_step=0,
+        )
+
+        with self.assertRaisesRegex(SelectorResolutionError, "join-alliance screen"):
+            executor.execute(task=task, context=context, before=home)
+
+        self.assertEqual([(5, 5)], session.taps)
+        self.assertEqual([], session.texts)
