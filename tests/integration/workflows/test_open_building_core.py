@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     primary_screen_type_for_home_city_object,
 )
 from pnc_automation.app.pnc.domain.building_details import BuildingDetail, BuildingDetailPhase
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -83,7 +84,63 @@ class OpenBuildingCoreTests(unittest.TestCase):
             ),
             result,
         )
-        context.open_building.assert_called_once_with(HomeCityObjectId.INSTITUTE)
+        context.open_building.assert_called_once_with(
+            HomeCityObjectId.INSTITUTE, home_city_slot=None
+        )
+
+    def test_workflow_forwards_exact_slot_selector_to_context(self) -> None:
+        """Carries an authored exact slot through the workflow into the shared navigator."""
+
+        workflow = build_open_building_workflow(
+            {"building": HomeCityObjectId.BLACKSMITH.value, "home_city_slot": 12}
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_BLACKSMITH,
+            visible_elements={},
+            captured_at=datetime(2026, 9, 11, 12, 0, tzinfo=UTC),
+        )
+        context = Mock()
+        context.open_building.return_value = observation
+
+        result = workflow.execute(context)
+
+        self.assertEqual(
+            HomeCitySlotSelector(slot_index=12), workflow.policy.home_city_slot
+        )
+        context.open_building.assert_called_once_with(
+            HomeCityObjectId.BLACKSMITH,
+            home_city_slot=HomeCitySlotSelector(slot_index=12),
+        )
+        self.assertEqual(ScreenType.PNC_BLACKSMITH, result.screen_type)
+        self.assertEqual(HomeCityObjectId.BLACKSMITH, result.building)
+
+    def test_context_forwards_exact_selector_to_navigation_core(self) -> None:
+        """The constrained context forwards one selector unchanged to NavigationCore."""
+
+        runtime = Mock()
+        runtime.observation_count = 0
+        runtime.navigation.open_building.return_value = make_observation(
+            ScreenType.PNC_BLACKSMITH
+        )
+        context = WorkflowContext(
+            runtime,
+            last_observation=Observation(
+                screen_type=ScreenType.PNC_HOME_CITY,
+                visible_elements={},
+                captured_at=datetime(2026, 9, 11, 12, 0, tzinfo=UTC),
+            ),
+        )
+
+        context.open_building(
+            HomeCityObjectId.BLACKSMITH,
+            home_city_slot=HomeCitySlotSelector(slot_index=12),
+        )
+
+        runtime.navigation.open_building.assert_called_once_with(
+            HomeCityObjectId.BLACKSMITH,
+            observe_content=context._observe_home_city_navigation,
+            home_city_slot=HomeCitySlotSelector(slot_index=12),
+        )
 
     def test_campaign_uses_canonical_primary_screen_and_workflow_endpoint(self) -> None:
         workflow = build_open_building_workflow({"building": HomeCityObjectId.CAMPAIGN.value})

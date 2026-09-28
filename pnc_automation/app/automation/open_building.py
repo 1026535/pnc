@@ -76,7 +76,9 @@ class OpenBuildingWorkflow(CoreWorkflow[OpenBuildingResult]):
     def execute(self, context: WorkflowContext) -> OpenBuildingResult:
         """Delegates building targeting and observed completion to NavigationCore."""
 
-        observation = context.open_building(self.policy.building)
+        observation = context.open_building(
+            self.policy.building, home_city_slot=self.policy.home_city_slot
+        )
         expected_screen = self.spec.exit_screen
         if observation.screen_type != expected_screen:
             raise RuntimeError(

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, TypeVar
 
-from pnc_automation.core.errors import ScriptValidationError
+from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     HomeCityObjectRole,
@@ -16,6 +16,10 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_definition,
 )
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
+from pnc_automation.app.pnc.domain.home_city_slots import (
+    HomeCitySlotSelector,
+    validate_home_city_slot_selector,
+)
 from pnc_automation.app.pnc.domain.campaign import CampaignMode
 from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId
 from pnc_automation.app.pnc.domain.match3 import Match3Mode
@@ -131,11 +135,21 @@ class OpenBuildingPolicy:
     """Task parameters for opening one exact home-city building screen."""
 
     building: HomeCityObjectId = HomeCityObjectId.CASTLE
+    home_city_slot: HomeCitySlotSelector | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects an exact slot that cannot host the requested building."""
+
+        validate_home_city_slot_selector(self.building, self.home_city_slot)
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any]) -> "OpenBuildingPolicy":
         """Builds a typed policy from raw script params."""
 
+        unexpected = set(params) - {"building", "home_city_slot"}
+        if unexpected:
+            field = sorted(unexpected)[0]
+            raise ScriptValidationError(f"Unexpected open-building parameter '{field}'.", field=field)
         raw_building = params.get("building")
         if not isinstance(raw_building, str):
             raise ScriptValidationError("Expected 'building' to be a string.", field="building")
@@ -154,7 +168,23 @@ class OpenBuildingPolicy:
                 field="building",
                 value=raw_building,
             )
-        return cls(building=building)
+        raw_slot = params.get("home_city_slot")
+        selector: HomeCitySlotSelector | None = None
+        if raw_slot is not None:
+            if not isinstance(raw_slot, int) or isinstance(raw_slot, bool):
+                raise ScriptValidationError(
+                    "Expected 'home_city_slot' to be an integer slot index in 1..54.",
+                    field="home_city_slot",
+                    value=raw_slot,
+                )
+            try:
+                selector = HomeCitySlotSelector(slot_index=raw_slot)
+                validate_home_city_slot_selector(building, selector)
+            except SelectorResolutionError as error:
+                raise ScriptValidationError(
+                    str(error), field="home_city_slot", value=raw_slot
+                ) from error
+        return cls(building=building, home_city_slot=selector)
 
 
 @dataclass(frozen=True, slots=True)

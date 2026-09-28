@@ -342,12 +342,15 @@ class ApplicationRunner:
         *,
         account_id: str,
         building: str,
+        home_city_slot: int | None = None,
         required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> CoreWorkflowResult[OpenBuildingResult]:
         """Prevalidates and opens one modeled building through the replacement core."""
 
-        workflow = build_open_building_workflow({"building": building})
+        workflow = build_open_building_workflow(
+            {"building": building, "home_city_slot": home_city_slot}
+        )
         account = self.script_runner.config.require_account(account_id)
         core_runtime = build_core_runtime(
             self.script_runner,

@@ -21,6 +21,7 @@ This folder contains authored automation runbooks grouped by intent.
 - For authored recurring mail, define reusable payloads in `config/mail_definitions.yaml`, schedules in `config/mail_schedules.yaml`, and invoke `run-mail-schedules` hourly from the external scheduler.
 - Reusable building-upgrade batches belong under `scripts/manual/build_batches/` as ordered building-id files, not as duplicated multi-step run scripts.
 - The catalog-synchronized Home City classification and reusable construction/upgrade target lists live under `scripts/manual/building_inventory/`.
+- For ad hoc building opens, prefer the direct `open-building` CLI entry point instead of one-off YAML wrappers; pass `--home-city-slot <1..54>` only when the exact ordinary slot instance is required.
 
 ## Selector Catalog Authoring
 
@@ -44,6 +45,16 @@ steps:
 ```
 
 When resources are sufficient, construction starts directly without a resource popup. An unmet-resource popup is handled only as the insufficient-resources failure branch; this task never spends premium currency or uses speedups.
+
+Open one modeled building with `open_building` (or the direct `open-building --building ...` CLI command). `home_city_slot` is optional and pins the request to one exact ordinary slot index `1..54`; the slot must be statically eligible for the requested building or the step fails before connection:
+
+```yaml
+steps:
+  - task: open_building
+    params:
+      building: blacksmith
+      home_city_slot: 12
+```
 
 ## Multi-Castle Pattern
 

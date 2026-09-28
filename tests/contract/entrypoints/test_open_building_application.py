@@ -13,7 +13,8 @@ from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResul
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
 from pnc_automation.app.automation.open_building import OpenBuildingResult
-from pnc_automation.app.entrypoints.api import AutomationApi
+from pnc_automation.app.entrypoints import api as api_module
+from pnc_automation.app.entrypoints.api import AutomationApi, AutomationSession
 from pnc_automation.app.entrypoints.app import ApplicationRunner
 from pnc_automation.app.entrypoints.cli import main
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
@@ -31,6 +32,34 @@ class OpenBuildingApplicationTests(unittest.TestCase):
                 ApplicationRunner(script_runner).run_open_building(
                     account_id="account",
                     building=HomeCityObjectId.BANK.value,
+                )
+        factory.assert_not_called()
+        script_runner.config.require_account.assert_not_called()
+
+    def test_ineligible_exact_slot_rejects_before_factory_or_preflight(self) -> None:
+        """A slot that cannot host the requested building fails before runtime creation."""
+
+        script_runner = Mock()
+        with patch("pnc_automation.app.entrypoints.app.build_core_runtime") as factory:
+            with self.assertRaises(ScriptValidationError):
+                ApplicationRunner(script_runner).run_open_building(
+                    account_id="account",
+                    building=HomeCityObjectId.INSTITUTE.value,
+                    home_city_slot=12,
+                )
+        factory.assert_not_called()
+        script_runner.config.require_account.assert_not_called()
+
+    def test_out_of_range_exact_slot_rejects_before_factory_or_preflight(self) -> None:
+        """An integer outside the ordinary slot range fails before runtime creation."""
+
+        script_runner = Mock()
+        with patch("pnc_automation.app.entrypoints.app.build_core_runtime") as factory:
+            with self.assertRaises(ScriptValidationError):
+                ApplicationRunner(script_runner).run_open_building(
+                    account_id="account",
+                    building=HomeCityObjectId.BLACKSMITH.value,
+                    home_city_slot=55,
                 )
         factory.assert_not_called()
         script_runner.config.require_account.assert_not_called()
@@ -207,12 +236,77 @@ class OpenBuildingApplicationTests(unittest.TestCase):
         application.run_open_building.assert_called_once_with(
             account_id="account",
             building=HomeCityObjectId.INSTITUTE.value,
+            home_city_slot=None,
             required_role=LiveAutomationRole.LIVE_TESTING,
         )
         application.run_task.assert_not_called()
         document = json.loads(output.call_args.args[0])
         self.assertEqual("open_building", document["workflow_name"])
         self.assertEqual(HomeCityObjectId.INSTITUTE.value, document["value"]["building"])
+
+    def test_cli_forwards_exact_home_city_slot_to_application(self) -> None:
+        """The open-building CLI carries --home-city-slot into the application call."""
+
+        result = CoreWorkflowResult(
+            workflow_name="open_building",
+            succeeded=True,
+            value=OpenBuildingResult(
+                building=HomeCityObjectId.WALL,
+                screen_type=ScreenType.PNC_WALL,
+                captured_at=datetime(2026, 9, 11, 12, 0, tzinfo=UTC),
+            ),
+            exit_screen=ScreenType.PNC_WALL,
+            trace_path="trace.jsonl",
+        )
+        application = Mock()
+        application.reserve_accounts.return_value.__enter__ = lambda self_: self_
+        application.reserve_accounts.return_value.__exit__ = lambda *args: None
+        application.run_open_building.return_value = result
+
+        with (
+            patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=application),
+            patch("builtins.print"),
+        ):
+            exit_code = main([
+                "open-building",
+                "--config",
+                "accounts.yaml",
+                "--account",
+                "account",
+                "--building",
+                HomeCityObjectId.WALL.value,
+                "--home-city-slot",
+                "2",
+            ])
+
+        self.assertEqual(0, exit_code)
+        application.run_open_building.assert_called_once_with(
+            account_id="account",
+            building=HomeCityObjectId.WALL.value,
+            home_city_slot=2,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        )
+
+    def test_cli_rejects_ineligible_home_city_slot_before_reservation(self) -> None:
+        """CLI prevalidation fails an incompatible slot before any account reservation."""
+
+        application = Mock()
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=application):
+            with self.assertRaises(ScriptValidationError):
+                main([
+                    "open-building",
+                    "--config",
+                    "accounts.yaml",
+                    "--account",
+                    "account",
+                    "--building",
+                    HomeCityObjectId.INSTITUTE.value,
+                    "--home-city-slot",
+                    "12",
+                ])
+
+        application.reserve_accounts.assert_not_called()
+        application.run_open_building.assert_not_called()
 
     def test_python_api_routes_to_application_and_closes_temporary_reservation_on_success(self) -> None:
         application = Mock()
@@ -226,6 +320,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
         application.run_open_building.assert_called_once_with(
             account_id="account",
             building=HomeCityObjectId.INSTITUTE.value,
+            home_city_slot=None,
             session_cleanup_policy=None,
         )
         application.reserve_accounts.assert_called_once_with(("account",))
@@ -259,6 +354,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
         application.run_open_building.assert_called_once_with(
             account_id="account",
             building=HomeCityObjectId.INSTITUTE.value,
+            home_city_slot=None,
             session_cleanup_policy=None,
         )
 
@@ -271,6 +367,65 @@ class OpenBuildingApplicationTests(unittest.TestCase):
                 api.open_building(account_id="other", building=HomeCityObjectId.INSTITUTE.value)
 
         application.run_open_building.assert_not_called()
+
+    def test_python_api_forwards_exact_home_city_slot_to_application(self) -> None:
+        """The Python API carries one exact slot into the application call."""
+
+        application = Mock()
+        expected = Mock(spec=CoreWorkflowResult)
+        application.run_open_building.return_value = expected
+        api = AutomationApi(application=application)
+
+        result = api.open_building(
+            account_id="account",
+            building=HomeCityObjectId.WALL.value,
+            home_city_slot=2,
+        )
+
+        self.assertIs(expected, result)
+        application.run_open_building.assert_called_once_with(
+            account_id="account",
+            building=HomeCityObjectId.WALL.value,
+            home_city_slot=2,
+            session_cleanup_policy=None,
+        )
+
+    def test_prepared_session_forwards_exact_home_city_slot(self) -> None:
+        """The prepared-session facade carries one exact slot to the bound API call."""
+
+        api = Mock()
+        session = AutomationSession(api=api, account_id="account")
+
+        session.open_building(
+            building=HomeCityObjectId.WALL.value, home_city_slot=2
+        )
+
+        api.open_building.assert_called_once_with(
+            account_id="account",
+            building=HomeCityObjectId.WALL.value,
+            home_city_slot=2,
+        )
+
+    def test_module_api_forwards_exact_home_city_slot(self) -> None:
+        """The module-level facade carries one exact slot to the default API."""
+
+        api = Mock()
+        expected = Mock(spec=CoreWorkflowResult)
+        api.open_building.return_value = expected
+
+        with patch("pnc_automation.app.entrypoints.api._default_api", return_value=api):
+            result = api_module.open_building(
+                account_id="account",
+                building=HomeCityObjectId.WALL.value,
+                home_city_slot=2,
+            )
+
+        self.assertIs(expected, result)
+        api.open_building.assert_called_once_with(
+            account_id="account",
+            building=HomeCityObjectId.WALL.value,
+            home_city_slot=2,
+        )
 
     def test_python_api_rejects_cross_api_call_during_active_reservation(self) -> None:
         first_application = Mock()

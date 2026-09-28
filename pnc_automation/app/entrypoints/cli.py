@@ -174,7 +174,9 @@ def _run_cli(argv: Sequence[str] | None = None) -> int:
         return 0
     if parsed.command == "open-building":
         # Validate before optional castle preparation can connect to the configured runtime.
-        build_open_building_workflow({"building": parsed.building})
+        build_open_building_workflow(
+            {"building": parsed.building, "home_city_slot": parsed.home_city_slot}
+        )
         castle = _parse_optional_castle(parser, parsed)
         with application.reserve_accounts((parsed.account,)):
             if castle is not None:
@@ -188,6 +190,7 @@ def _run_cli(argv: Sequence[str] | None = None) -> int:
             result = application.run_open_building(
                 account_id=parsed.account,
                 building=parsed.building,
+                home_city_slot=parsed.home_city_slot,
                 required_role=required_role,
             )
         print(json.dumps(asdict(result), indent=2, default=str))
@@ -393,6 +396,12 @@ def _add_open_building_arguments(parser: argparse.ArgumentParser) -> None:
         "--building",
         required=True,
         help="Exact home-city building id to open, such as infantry_barracks or sanctum.",
+    )
+    parser.add_argument(
+        "--home-city-slot",
+        type=int,
+        default=None,
+        help="Exact ordinary Home-city slot index 1..54 hosting the requested building.",
     )
 
 

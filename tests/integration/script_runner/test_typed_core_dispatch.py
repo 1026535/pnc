@@ -68,13 +68,14 @@ from pnc_automation.app.pnc.domain.mail import (
     MailboxAvailability,
     MailboxType,
 )
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
-from pnc_automation.core.errors import ScriptValidationError
+from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 
@@ -349,6 +350,51 @@ class TypedCoreDispatchTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             definition.id = TaskId.COLLECT_MAIL  # type: ignore[misc]
 
+    def test_registry_parses_exact_home_city_slot_for_open_building(self) -> None:
+        """An authored exact slot parses into the shared HomeCitySlotSelector once."""
+
+        definition = build_default_task_registry().require(TaskId.OPEN_BUILDING)
+
+        policy = definition.parse_params(
+            {"building": HomeCityObjectId.BLACKSMITH.value, "home_city_slot": 12}
+        )
+
+        self.assertEqual(
+            OpenBuildingPolicy(
+                building=HomeCityObjectId.BLACKSMITH,
+                home_city_slot=HomeCitySlotSelector(slot_index=12),
+            ),
+            policy,
+        )
+
+    def test_registry_rejects_malformed_open_building_slot_params(self) -> None:
+        """Non-integer, out-of-range, ineligible, and unknown slot inputs fail closed."""
+
+        definition = build_default_task_registry().require(TaskId.OPEN_BUILDING)
+        malformed = (
+            {"building": "blacksmith", "home_city_slot": True},
+            {"building": "blacksmith", "home_city_slot": "12"},
+            {"building": "blacksmith", "home_city_slot": 12.5},
+            {"building": "blacksmith", "home_city_slot": 0},
+            {"building": "blacksmith", "home_city_slot": 55},
+            {"building": "institute", "home_city_slot": 12},
+            {"building": "blacksmith", "home_city_slot": 12, "slots": 12},
+            {"building": "bank", "home_city_slot": 5},
+        )
+        for params in malformed:
+            with self.subTest(params=params):
+                with self.assertRaises(ScriptValidationError):
+                    definition.parse_params(params)
+
+    def test_typed_open_building_policy_rejects_system_target_exact_slot(self) -> None:
+        """A system object with no ordinary slot cannot carry an explicit selector."""
+
+        with self.assertRaises(SelectorResolutionError):
+            OpenBuildingPolicy(
+                building=HomeCityObjectId.BANK,
+                home_city_slot=HomeCitySlotSelector(slot_index=5),
+            )
+
     def test_script_runner_rejects_unmodeled_open_building_before_connection(self) -> None:
         """Rejects a legacy-only generic building endpoint during typed pre-connect validation."""
 
@@ -358,6 +404,22 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 script_runner._run_script_for_account(
                     account=_account(),
                     script=_run_open_building_script(building=HomeCityObjectId.BANK.value),
+                )
+
+        build_runner.assert_not_called()
+
+    def test_script_runner_rejects_ineligible_open_building_slot_before_connection(self) -> None:
+        """Rejects an authored exact slot incompatible with the target before connection."""
+
+        script_runner = _minimal_script_runner(archive_store=None)
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaises(ScriptValidationError):
+                script_runner._run_script_for_account(
+                    account=_account(),
+                    script=_run_open_building_script(
+                        building=HomeCityObjectId.INSTITUTE.value,
+                        home_city_slot=12,
+                    ),
                 )
 
         build_runner.assert_not_called()
@@ -1074,6 +1136,50 @@ class TypedCoreDispatchTests(unittest.TestCase):
         core_runtime.preflight_active_castle_identity.assert_called_once_with()
         runtime_factory.assert_called_once_with()
         core_runtime.close.assert_not_called()
+
+    def test_dispatcher_open_building_carries_exact_slot_selector(self) -> None:
+        """The typed dispatcher hands the authored slot selector to the workflow unchanged."""
+
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = CastleIdentity("K1", "Castle", 12)
+        typed_result = CoreWorkflowResult(
+            workflow_name="open_building",
+            succeeded=True,
+            value=OpenBuildingResult(
+                building=HomeCityObjectId.BLACKSMITH,
+                screen_type=ScreenType.PNC_BLACKSMITH,
+                captured_at=datetime(2026, 9, 12, tzinfo=UTC),
+            ),
+            exit_screen=ScreenType.PNC_BLACKSMITH,
+            trace_path="trace.jsonl",
+        )
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=Mock(return_value=core_runtime),
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            Mock(return_value=workflow_runner),
+        ):
+            result = dispatcher.execute(
+                step=_prepared_open_building_step(
+                    policy=OpenBuildingPolicy(
+                        HomeCityObjectId.BLACKSMITH,
+                        HomeCitySlotSelector(slot_index=12),
+                    ),
+                )
+            )
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, OpenBuildingWorkflow)
+        self.assertEqual(
+            HomeCitySlotSelector(slot_index=12), workflow.policy.home_city_slot
+        )
 
     def test_dispatcher_open_building_rejects_requested_castle_mismatch(self) -> None:
         """Rejects a typed open-building step when exact preflight identity differs from its target."""
@@ -1811,13 +1917,16 @@ def _run_mail_script() -> RunScript:
     )
 
 
-def _run_open_building_script(*, building: str) -> RunScript:
+def _run_open_building_script(*, building: str, home_city_slot: int | None = None) -> RunScript:
     """Builds one authored open-building script for pre-connect validation tests."""
 
+    params: dict[str, object] = {"building": building}
+    if home_city_slot is not None:
+        params["home_city_slot"] = home_city_slot
     return RunScript(
         name="open_building",
         path=Path("open_building.yaml"),
-        steps=(ScriptStep(task=TaskId.OPEN_BUILDING, params={"building": building}),),
+        steps=(ScriptStep(task=TaskId.OPEN_BUILDING, params=params),),
     )
 
 

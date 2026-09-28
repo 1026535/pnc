@@ -215,10 +215,14 @@ class AutomationSession:
 
         return self.api.building_construct(account_id=self.account_id, building=building)
 
-    def open_building(self, *, building: str) -> CoreWorkflowResult[OpenBuildingResult]:
+    def open_building(
+        self, *, building: str, home_city_slot: int | None = None
+    ) -> CoreWorkflowResult[OpenBuildingResult]:
         """Runs one direct open-building step against the prepared session."""
 
-        return self.api.open_building(account_id=self.account_id, building=building)
+        return self.api.open_building(
+            account_id=self.account_id, building=building, home_city_slot=home_city_slot
+        )
 
     def research(
         self,
@@ -488,6 +492,7 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         building: str,
+        home_city_slot: int | None = None,
     ) -> CoreWorkflowResult[OpenBuildingResult]:
         """Runs one direct open-building step using current-castle semantics."""
 
@@ -497,6 +502,7 @@ class AutomationApi:
             lambda: self.application.run_open_building(
                 account_id=resolved_account_id,
                 building=building,
+                home_city_slot=home_city_slot,
                 session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
             ),
         )
@@ -907,11 +913,13 @@ def building_construct(
 
 
 def open_building(
-    *, account_id: str | None = None, building: str
+    *, account_id: str | None = None, building: str, home_city_slot: int | None = None
 ) -> CoreWorkflowResult[OpenBuildingResult]:
     """Runs one direct open-building step through the default application facade."""
 
-    return _default_api().open_building(account_id=account_id, building=building)
+    return _default_api().open_building(
+        account_id=account_id, building=building, home_city_slot=home_city_slot
+    )
 
 
 def research(
