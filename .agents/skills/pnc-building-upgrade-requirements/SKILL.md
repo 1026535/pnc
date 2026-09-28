@@ -56,7 +56,7 @@ return basedata
 Consequences:
 
 - The map key `["1001"]` is the **row `id`, not the building id**. Rows for one building share `buildingId` but have distinct `id`/`level`.
-- Row fields that are absent resolve through `__default_values` via `__index`. Castle rows omit `buildingId` and inherit `1001`; a row that omits `preconditions`, `cost`, `time`, `suitTipType`, `upgradeTips`, etc. silently inherits the default (`preconditions=__rt_88`, `cost=__rt[390]`, `suitTipType=5`, `time=3000`, `upgradeTips=""`). **Merge defaults before reporting**, and mark which values came from defaults.
+- Row fields that are absent resolve through `__default_values` via `__index`. Castle rows omit `buildingId` and inherit `1001`; a row that omits `preconditions`, `cost`, `time`, `suitTipType`, `upgradeTips`, etc. silently inherits the default (`preconditions=__rt_88`, `cost=__rt[390]`, `suitTipType=5`, `time=3000`, `upgradeTips=""`). Note the inherited value is itself often an `__rt` alias — merge defaults **and expand the inherited alias** before reporting (`find_row`'s `resolved_fields` does both), and mark which values came from defaults.
 - `__rt_N` / `__rt[N]` tokens inside a row (or inside another `__rt` entry) are shared references — expand them before quoting.
 
 ## Lookup method
@@ -71,7 +71,7 @@ Consequences:
    - `getSingleBaseDataByAttr` iterates `data.data` and requires every filter key to match; because rows carry the `__default_values` metatable, `v.buildingId` resolves to `1001` on Castle rows even though the literal omits it.
    - So "requirements for Castle 40→41" = the row with `buildingId==1001, level==41` — row `id` 1001 in this build (the id collision is coincidence, not semantics).
    - Missing row → `CheckBuildPreconditionIsPass` returns `false` (nil-safe fail), i.e. the level does not exist in this build (`buildingdata.lua:623-627`).
-6. **Extract fields with defaults merged and refs expanded** (`id`, `level`, `buildingId`, `cost`, `preconditions`, `time`, `removeTime`, `suitTipType`, `ability`, `ability2`, `buildingIcon`, `upReward`, `upReward2`, `soulStoneReward`, `upgradeTips`, `formulaId`, `mailId`).
+6. **Extract fields with defaults merged and refs expanded** (`id`, `level`, `buildingId`, `cost`, `preconditions`, `time`, `removeTime`, `suitTipType`, `ability`, `ability2`, `buildingIcon`, `upReward`, `upReward2`, `soulStoneReward`, `upgradeTips`, `formulaId`, `mailId`) — use `find_row`'s `resolved_fields`, where every value is already the real number/string/table with `__rt` aliases expanded.
 7. **Map type codes** through `gameplay-lua/reward/type/rewardtype.lua`: `1` food, `2` wood, `3` stone, `4` mine/iron, `5` gold, `6` crystal, `9` item, `10` player EXP, `11` power, `12` energy, `16` spirit (see the file for the rest). For `type=9` entries the sibling `id` is the **Item base-table id** — resolve names/icons through the `Item` asset in the same inventory; do not invent names. Negative `count` = cost consumed; positive = reward granted.
 8. **Classify every requirement** as hard gate / advisory / runtime state (below).
 9. **Cross-check the UI** if the question is about what is displayed.
@@ -116,26 +116,38 @@ def build_refs(src: str):
     refs["__default_values"], _ = lua_block(src, src.index("{", m.end()))
     return refs
 
-def strip_nested(row: str):
-    """Drop the row's outer braces and collapse each nested {...} to {} (string-aware)."""
-    s, out, i = row.strip()[1:-1], [], 0
-    while i < len(s):
-        c = s[i]
-        if c == "{":
-            _, i = lua_block(s, i)
-            out.append("{}")
-        elif c == '"':
-            j = i + 1
-            while s[j] != '"': j += 2 if s[j] == "\\" else 1
-            out.append(s[i:j + 1]); i = j + 1
-        else:
-            out.append(c); i += 1
-    return "".join(out)
-
 def fields(row: str):
-    # Row-level keys only; nested cost/precondition literals collapse to "{}".
-    return dict(re.findall(r"(\w+)=(-?\d+|\"[^\"]*\"|__rt_\d+|__rt\[\d+\]|\{\})",
-                           strip_nested(row)))
+    """Top-level key -> raw value of a {...} literal: numbers, "strings",
+    __rt aliases, or whole nested {...} tables (kept verbatim, not collapsed)."""
+    s = row.strip()
+    if s.startswith("{"):
+        s = s[1:-1]                                # drop the outer braces
+    out, i = {}, 0
+    while i < len(s):
+        m = re.match(r"(\w+)\s*=", s[i:])
+        if not m:                                  # separator or positional value
+            if s[i] == "{":
+                _, i = lua_block(s, i)
+            elif s[i] == '"':
+                j = i + 1
+                while s[j] != '"': j += 2 if s[j] == "\\" else 1
+                i = j + 1
+            else:
+                i += 1
+            continue
+        j = i + m.end()
+        if s[j] == "{":
+            val, j = lua_block(s, j)
+        elif s[j] == '"':
+            k = j + 1
+            while s[k] != '"': k += 2 if s[k] == "\\" else 1
+            val, j = s[j:k + 1], k + 1
+        else:
+            m2 = re.match(r"[^,}]+", s[j:])
+            val, j = m2.group(0).strip(), j + m2.end()
+        out[m.group(1)] = val
+        i = j
+    return out
 
 def expand(text: str, refs):
     def sub(m):
@@ -144,7 +156,12 @@ def expand(text: str, refs):
     return re.sub(r"__rt_\d+|__rt\[\d+\]", sub, text)
 
 def find_row(src: str, building_id: int, level: int):
-    """Match on row-level keys after default merge; returns (row_id, expanded_row, fields)."""
+    """Return (row_id, expanded_row, resolved_fields) for (buildingId, target level).
+
+    resolved_fields = __default_values merged under the row's own fields, with
+    every __rt alias expanded to its actual table text — so an inherited
+    table-valued default (e.g. cost=__rt[390]) reports the real table, not an
+    alias the caller cannot resolve."""
     m = re.search(r"local BuildingUpgrade\s*=\s*", src)
     body, _ = lua_block(src, src.index("{", m.end()))
     refs = build_refs(src)
@@ -153,11 +170,12 @@ def find_row(src: str, building_id: int, level: int):
         row, _ = lua_block(body, rm.end() - 1)
         f = {**defaults, **fields(row)}                  # literal fields win over defaults
         if int(f.get("buildingId", -1)) == building_id and int(f.get("level", -1)) == level:
-            return rm.group(1), expand(row, refs), f
+            resolved = {k: expand(v, refs) for k, v in f.items()}
+            return rm.group(1), expand(row, refs), resolved
     return None
 ```
 
-`find_row(src, 1001, 41)` resolves the Castle 40→41 row. The same `load_asset` + decode + `lua_block` helpers work for any `name` in the inventory (`Item`, `Building`, `TargetDesc`, `BuildBufferClient`, ...).
+`find_row(src, 1001, 41)` resolves the Castle 40→41 row. `resolved_fields` is self-contained: every value is the actual number, string, or expanded table — row `915` (1027→35) omits `cost` yet reports the expanded `__rt[390]` list `{{count=-21408579,type=2},{count=-6325057,type=4},{count=-3160932,type=5}}` rather than an alias. The same `load_asset` + decode + `lua_block` helpers work for any `name` in the inventory (`Item`, `Building`, `TargetDesc`, `BuildBufferClient`, ...).
 
 ## Precondition semantics (hard gates)
 
