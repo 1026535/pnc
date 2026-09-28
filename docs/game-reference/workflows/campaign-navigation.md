@@ -125,11 +125,11 @@ formation proof remain pending with the lead.
 
 ## Native stage ownership and map animation, September 22
 
-**Artifact-observed:** M1 runtime `20260922T234747Z_82d60eea`, capture0045
+**Artifact-observed:** M1 runtime `20260922T234747Z_82d60eea`, capture 0045
 (`tests/data/screen_recognition/campaign_stage_6_5_20260922.png`), shows the
 opened `[6-5] Marsh of Tear` detail, AP126/120 and Challenge cost12. The trace
-classified it as `PNC_POPUP`, then recovery tapped its Close at812,370;
-capture0046 shows the chapter after dismissal. The stage-entry tap succeeded
+classified it as `PNC_POPUP`, then recovery tapped its Close at 812,370;
+capture 0046 shows the chapter after dismissal. The stage-entry tap succeeded
 visually. Missing feature identity caused the task-owned modal to be dismissed;
 the post-recovery chapter screenshot is not evidence that the tap did nothing.
 Installed build was not recorded. Confidence is high for this captured sequence,
