@@ -68,3 +68,17 @@ class SafeRootRecoveryTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+
+    def test_return_to_safe_root_screen_uses_top_left_back_for_cash_mall(self) -> None:
+        """Uses the reviewed Voucher Mall top-left Back target to leave the captured Cash Mall entry."""
+
+        observation = make_observation(
+            ScreenType.PNC_CASH_MALL,
+            visible_ids=(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,),
+        )
+
+        actions = self.flows.return_to_safe_root_screen(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BACK_BUTTON_TOP_LEFT)

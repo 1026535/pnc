@@ -1779,13 +1779,13 @@
     {
       "image": "vip_daily_reset_pre_dismiss_20260928.png",
       "screen": "PNC_VIP_DAILY_RESET",
-      "split": "validation",
+      "split": "reference",
       "group": "2026-09-28/testing/m1_v14_corridor_correction_539e2503",
       "sha256": "b0ec2fd7046073953e9212df79dddd6bd8a4952a472129d6838ed4981e96d5ff",
       "expected_visual_screens": [
         "PNC_VIP_DAILY_RESET"
       ],
-      "annotation": "VIP daily-reset takeover immediately before the retained INC-20260928-m1-v14-corridor-correction dismissal failure; the measured Close control still matches its original appearance. Same-session frame 0001 paired with the post-dispatch frame.",
+      "annotation": "VIP daily-reset takeover immediately before the retained INC-20260928-m1-v14-corridor-correction dismissal failure; the measured Close control still matches its original appearance. Same-session frame 0001 paired with the post-dispatch frame. Reference evidence only: the pressed-state Close control anchor is derived from this capture group, so neither frame is an independent validation holdout.",
       "provenance": {
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-28/testing/20260928T030243Z_core_20260928T030239Z_539e2503_0001_takeover_pre.png",
         "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002. Installed build not recorded."
@@ -1794,13 +1794,13 @@
     {
       "image": "vip_daily_reset_pressed_state_20260928.png",
       "screen": "PNC_VIP_DAILY_RESET",
-      "split": "validation",
+      "split": "reference",
       "group": "2026-09-28/testing/m1_v14_corridor_correction_539e2503",
       "sha256": "8a46d186e3e421ba419071e9505f4dfa0b38658d45baa5920492a3b70a4c65bf",
       "expected_visual_screens": [
         "PNC_VIP_DAILY_RESET"
       ],
-      "annotation": "VIP daily-reset takeover after one dispatched Close dispatch in retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002; the panel persisted with the Close rendered in its pressed/post-touch appearance, scoring 0.78 under the original 0.95 control template. Same-session frame 0002 correlated with the pre-dispatch frame, not independent validation.",
+      "annotation": "VIP daily-reset takeover after one dispatched Close dispatch in retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002; the panel persisted with the Close rendered in its pressed/post-touch appearance, scoring 0.78 under the original 0.95 control template. Same-session frame 0002 correlated with the pre-dispatch frame. Reference evidence only: the catalog's pressed-state Close control anchor was extracted from this frame, so it cannot serve as independent pressed-state or live validation.",
       "provenance": {
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-28/testing/20260928T030259Z_core_20260928T030239Z_539e2503_0002_core_20260928T030239Z_539e2503_takeover_pre_interruption_popup_1.png",
         "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002. Installed build not recorded."
@@ -1834,6 +1834,21 @@
       "provenance": {
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-23/157_farm/20260923T105033Z_core_20260923T103812Z_5b464db7_0061_core_20260923T103812Z_5b464db7_preflight_settle_0_interruption_wait_60.png",
         "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260923-v44-a89fb729-157farm-final034-002. Installed build not recorded."
+      }
+    },
+    {
+      "image": "voucher_mall_20260927.png",
+      "screen": "PNC_CASH_MALL",
+      "split": "reference",
+      "group": "2026-09-27/main/pw_main_manual_voucher_mall_001",
+      "sha256": "8be5621206946f304744fb1396dd1371c4db31b07aed4df633bf116615e7aa13",
+      "expected_visual_screens": [
+        "PNC_CASH_MALL"
+      ],
+      "annotation": "Auto-opened Voucher Mall 'Daily Sale' store frame from retained incident INC-20260927-pw-main-manual-voucher-mall-001; the screen classified unknown and owned no dismiss control until the lead's manual top-left Back returned Home. Reference evidence: the voucher_mall profile anchors and its saved-frame regression derive from this capture, not an independent or live validation.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/pw-main-manual-20260927/20260927T055157Z_post_launch_probe.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260927-pw-main-manual-voucher-mall-001 sources/voucher_mall_frame.png (record sha256 297e6911). Installed build not recorded."
       }
     }
   ]

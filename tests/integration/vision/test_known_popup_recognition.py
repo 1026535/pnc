@@ -35,8 +35,10 @@ from pnc_automation.app.pnc.vision.selectors import build_default_selector_regis
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot, FrameRef
 from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.support.paths import TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import update_modal_lines, with_update_modal
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
 from tests.support.automation.engine.make_observed_action_executor import _make_observed_action_executor
@@ -86,7 +88,7 @@ def _native_capture(name: str, *, session: str, capture_sequence: int) -> Captur
     )
 
 
-def _wire() -> tuple[ObservationBuilder, NavigationPerception]:
+def _wire(ocr: _RecordingOcrService | None = None) -> tuple[ObservationBuilder, NavigationPerception]:
     registry = build_default_selector_registry()
     matcher = OpenCvTemplateMatcher()
     enricher = PncObservationEnricher(selector_registry=registry)
@@ -95,7 +97,7 @@ def _wire() -> tuple[ObservationBuilder, NavigationPerception]:
         selector_engine=ImageSelectorEngine(matcher),
         screen_classifier=ScreenClassifier(),
         enricher=enricher,
-        ocr_service=_RecordingOcrService(lines=()),
+        ocr_service=ocr if ocr is not None else _RecordingOcrService(lines=()),
         visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
     )
     return builder, NavigationPerception(
@@ -734,6 +736,7 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     self.assertIsNotNone(overlay)
                     assert overlay is not None
                     self.assertEqual("vip_daily_reset", overlay.layout_id)
+                    self.assertEqual(1, len(overlay.candidates))
                     close = observation.require(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON)
                     candidate = overlay.candidate(PopupControlKind.CLOSE_TEXT)
                     self.assertIsNotNone(candidate)
@@ -749,6 +752,34 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     self.assertEqual(
                         UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON, decision.selector_id
                     )
+
+    def test_vip_close_variants_share_one_owned_dismiss_contract(self) -> None:
+        """Normal and pressed Close renders are one measured dismiss control and one candidate."""
+
+        builder, _navigation = _wire()
+        recognizer = builder.visual_recognizer
+        assert recognizer is not None
+        for name in (
+            "vip_daily_reset_pre_dismiss_20260928.png",
+            "vip_daily_reset_pressed_state_20260928.png",
+        ):
+            recognition = recognizer.recognize(_capture(name).image)
+            with self.subTest(name=name):
+                dismiss_controls = [
+                    control
+                    for control in recognition.dismiss_controls
+                    if control.selector_id == UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON
+                ]
+                self.assertEqual(1, len(dismiss_controls))
+                overlay = recognition.popup_overlay
+                self.assertIsNotNone(overlay)
+                assert overlay is not None
+                self.assertEqual("vip_daily_reset", overlay.layout_id)
+                self.assertEqual(1, len(overlay.candidates))
+                candidate = overlay.candidates[0]
+                self.assertEqual(PopupControlKind.CLOSE_TEXT, candidate.control_kind)
+                self.assertEqual(dismiss_controls[0].bounds, candidate.bounds)
+                self.assertEqual(dismiss_controls[0].action_point, candidate.action_point)
 
     def test_vip_pressed_state_keeps_one_typed_identity_after_dispatch(self) -> None:
         """The pressed Close render retains the same typed popup; the consumed identity settles passively."""
@@ -884,6 +915,39 @@ class KnownPopupRecognitionTests(unittest.TestCase):
         self.assertEqual([confirm.action_point], session.taps)
         self.assertEqual([], session.key_events)
 
+    def test_competing_update_and_reconnect_guards_stay_unresolved_on_both_paths(self) -> None:
+        """Two strong modal guards must abstain instead of silently selecting one family."""
+
+        image = with_update_modal(Image.new("RGB", (540, 960), (28, 30, 44)))
+        lines = (
+            *update_modal_lines(image.size),
+            OcrLine("Disconnected. Reconnect now.", Bounds(58, 470, 420, 28), 1.0),
+        )
+        ocr = _RecordingOcrService(lines=lines)
+        builder, navigation = _wire(ocr=ocr)
+        capture = CapturedScreenshot(
+            None, image, "PNG", ephemeral_captured_at=datetime.now(UTC)
+        )
+        for observation in (builder.build(capture), navigation.build(capture)):
+            with self.subTest(path=type(observation).__name__):
+                self.assertEqual(GuardVerdict.UNRESOLVED, observation.decision.guard)
+                self.assertEqual(
+                    {"guard:ocr_update_required_popup", "guard:ocr_reconnect_popup"},
+                    {item.layout_id for item in observation.decision.evidence},
+                )
+                self.assertFalse(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+                self.assertFalse(observation.has(UiElementId.PNC_RECONNECT_CONFIRM_BUTTON))
+                self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                overlay = observation.popup_overlay
+                self.assertTrue(overlay is None or not overlay.candidates)
+                decision = decide_popup_recovery(
+                    screen_type=observation.screen_type,
+                    blocking_popup=observation.blocking_popup,
+                    visible_selector_ids=frozenset(observation.visible_elements),
+                    popup_overlay=overlay,
+                )
+                self.assertTrue(decision is None or decision.selector_id is None)
+
     def test_savannah_post_update_variant_publishes_one_measured_close_on_both_paths(self) -> None:
         """The retained post-update offer render resolves to its qualified close control."""
 
@@ -920,6 +984,36 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                     popup_overlay=overlay,
                 )
                 self.assertEqual(UiElementId.PNC_POPUP_CLOSE_BUTTON, decision.selector_id)
+
+    def test_savannah_post_update_missing_close_x_refuses_input_on_both_paths(self) -> None:
+        """The post-update offer stays blocking without an action when its measured X is absent."""
+
+        source = _native_capture(
+            "savannah_hero_offer_post_update_20260923.png",
+            session="savannah-post-update-missing-x:2026-09-23",
+            capture_sequence=1,
+        )
+        image = source.image.copy()
+        ImageDraw.Draw(image).rectangle((770, 70, 900, 200), fill=(18, 24, 38))
+        capture = replace(source, image=image)
+        builder, navigation = _wire()
+        for observation in (builder.build(capture), navigation.build(capture)):
+            with self.subTest(path=type(observation).__name__):
+                self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+                self.assertEqual(observation.decision.guard, GuardVerdict.BLOCKED)
+                self.assertEqual("hero_offer_full_height", observation.decision.layout_id)
+                self.assertTrue(observation.blocking_popup)
+                self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                self.assertIsNotNone(observation.popup_overlay)
+                assert observation.popup_overlay is not None
+                self.assertEqual((), observation.popup_overlay.candidates)
+                decision = decide_popup_recovery(
+                    screen_type=observation.screen_type,
+                    blocking_popup=observation.blocking_popup,
+                    visible_selector_ids=frozenset(observation.visible_elements),
+                    popup_overlay=observation.popup_overlay,
+                )
+                self.assertIsNone(decision.selector_id)
 
     def test_recognized_home_keeps_ownership_over_generic_like_hud_x_on_both_paths(self) -> None:
         image_path = FIXTURES / "home_city_popup_x_regression.png"

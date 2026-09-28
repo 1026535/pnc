@@ -57,7 +57,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(90, len(catalog["profiles"]))
+        self.assertEqual(91, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -109,13 +109,14 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 expected_revision = (
                     4
                     if profile["id"] in {"bag", "world_map"}
+                    else 3
+                    if profile["id"] == "vip_daily_reset"
                     else 2
                     if profile["id"] in {
                         "institute",
                         "hero_hall",
                         "alliance_invitation",
                         "savannah_hero_offer",
-                        "vip_daily_reset",
                         "campaign_map",
                         "campaign_chapter_10",
                         "campaign_map_southern_view",
@@ -144,7 +145,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
         # PNC_PET_WORKSHOP is occluded by its four modal surfaces in this
         # all-match degeneration; only the retained Wall profile adds a screen.
-        self.assertEqual(58, len({item.screen_type for item in recognition.evidence}))
+        self.assertEqual(59, len({item.screen_type for item in recognition.evidence}))
         # Alternate appearances can share a layout and retain separate source
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}

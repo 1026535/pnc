@@ -1098,7 +1098,7 @@
       "id": "vip_daily_reset",
       "layout_id": "vip_daily_reset",
       "screen": "PNC_VIP_DAILY_RESET",
-      "revision": 2,
+      "revision": 3,
       "source": {
         "fixture": "vip_daily_reset.png",
         "decoded_sha256": "bae29ded34f50f968b391dc7004b1ebd032702d45077c980487be5e32114a40f",
@@ -1106,7 +1106,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. The same selector keeps a measured pressed/post-touch anchor so the persisted panel stays dismissible after one dispatch. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
+        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. Both the normal and pressed/post-touch renders are one measured dismiss selector sharing CLOSE_TEXT semantics, so the persisted panel stays dismissible after one dispatch. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -1136,6 +1136,7 @@
       "controls": [
         {
           "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
+          "popup_control_kind": "close_text",
           "anchor": {
             "image": "screen_anchors/popup/vip_daily_reset_close_pressed.png",
             "search_region": [
@@ -1146,7 +1147,7 @@
             ],
             "threshold": 0.95
           },
-          "dismisses_surface": false
+          "dismisses_surface": true
         },
         {
           "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
@@ -6161,6 +6162,64 @@
               55
             ],
             "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "voucher_mall",
+      "layout_id": "voucher_mall",
+      "screen": "PNC_CASH_MALL",
+      "revision": 1,
+      "source": {
+        "fixture": "voucher_mall_20260927.png",
+        "decoded_sha256": "8be5621206946f304744fb1396dd1371c4db31b07aed4df633bf116615e7aa13",
+        "capture_group": "2026-09-27/main/pw_main_manual_voucher_mall_001"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_CASH_MALL identity for the retained Voucher Mall 'Daily Sale' entry (GiftWin over CommonWinBase): the localized title text and the voucher-balance chrome icon qualify the captured store while mutable stock rows, price bars, and the voucher amount stay excluded. The top-left Back arrow is the only measured control; the retained manual Back at that location reached Home for this entry. Purchase bars, intra-store tabs, and the voucher '+' control remain unowned. Saved-frame regression only, not a live-build or whole-feature acceptance claim.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/voucher_mall_title.png",
+          "search_region": [
+            80,
+            5,
+            170,
+            60
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/voucher_mall_voucher_icon.png",
+          "search_region": [
+            370,
+            5,
+            80,
+            60
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
           }
         }
       ],
