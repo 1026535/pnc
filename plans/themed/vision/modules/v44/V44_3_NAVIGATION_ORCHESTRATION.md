@@ -1,7 +1,7 @@
 # V44-3 — Normalization and navigation orchestration
 
 Parent: [V44](../V44_FULL_HOME_CITY_NAVIGATION.md#5-implementation-stages-and-integration-ownership).
-Status: **specified core slice accepted on `5edeb042`; isolated publication validation pending. Whole V44 is incomplete.**
+Status: **specified core slice accepted on `5edeb042`; isolated publication runtime validated on `d5e74688`. Whole V44 is incomplete.**
 One cohesive Devin implementation package. State transitions, public APIs and
 budget/invalidation rules are fixed in the
 [binding interface agreement, sections 2 and 5–7](V44_INTERFACE_CONTRACT.md).

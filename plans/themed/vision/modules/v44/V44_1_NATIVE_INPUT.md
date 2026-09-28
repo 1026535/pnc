@@ -1,7 +1,7 @@
 # V44-1 — Native input and dispatch evidence
 
 Parent: [V44](../V44_FULL_HOME_CITY_NAVIGATION.md#5-implementation-stages-and-integration-ownership).
-Status: **specified slice accepted in private integration; isolated publication validation pending**. One substantial Devin implementation package; lead owns
+Status: **specified slice accepted; isolated publication runtime validated on `d5e74688`**. One substantial Devin implementation package; lead owns
 transport design, interfaces, review and acceptance. Planning alone does not dispatch it.
 
 ## Outcome and dependency
