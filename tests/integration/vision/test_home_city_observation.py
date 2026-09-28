@@ -2,19 +2,43 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 import unittest
 
-from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
+from pnc_automation.app.pnc.domain.observation import (
+    SpatialObjectKind,
+    SpatialSurfaceType,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_builder import (
+    ImageSelectorEngine,
+    ObservationBuilder,
+)
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition
+from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.pnc.capture_vision.navigation_semantic_parsers import (
     _build_home_city_semantic_additions,
 )
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 from tests.support.pnc.capture_vision.spatial_query import _spatial_query
+from tests.support.pnc.mail.build_chat_fixture_image import _build_chat_fixture_image
 from tests.support.pnc.mail.build_observation import _build_observation
+from tests.support.pnc.mail.encode_png import _encode_png
+from tests.support.pnc.mail.fake_ocr_service import _FakeOcrService
+from tests.support.pnc.mail.fake_screenshot_session import _FakeScreenshotSession
 
 
 class HomeCityObservationTests(unittest.TestCase):
@@ -125,3 +149,100 @@ class HomeCityObservationTests(unittest.TestCase):
             )
         )
         self.assertEqual(wall.level, 6)
+
+    def test_visually_proved_clear_home_city_keeps_measured_navigation_controls(self) -> None:
+        """A visually-proved CLEAR home city keeps OCR-anchored nav the profile lacks.
+
+        The ``home_city`` visual profile owns template controls for the bottom
+        nav tabs that match (Quest/Bag/Mail/More), but Alliance and Hero have no
+        stable icon template — they only exist as semantic selectors derived
+        from footer OCR anchors. The CLEAR-screen rebuild once discarded them,
+        which hid ``PNC_BOTTOM_NAV_ALLIANCE`` from the canonical navigation
+        planner on exactly the visually-proved path it relies on. Measured
+        navigation controls now ride alongside the visual controls while the
+        profile keeps ownership of every control it claims.
+        """
+
+        class _HomeCityVisualRecognizer:
+            """Publishes the home-city profile shape: template nav, no Alliance/Hero."""
+
+            def recognize(self, image, **kwargs):
+                del image, kwargs
+                controls = tuple(
+                    VisibleElement(
+                        selector_id=selector_id,
+                        bounds=bounds,
+                        confidence=0.99,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                        action_point=(bounds.x + bounds.width // 2, bounds.y + bounds.height // 2),
+                    )
+                    for selector_id, bounds in (
+                        (UiElementId.PNC_HOME_BUILD_BUTTON, Bounds(20, 1380, 100, 80)),
+                        (UiElementId.PNC_HOME_RESEARCH_BUTTON, Bounds(140, 1380, 100, 80)),
+                        (UiElementId.PNC_HOME_WORLD_SWITCH, Bounds(20, 1480, 90, 100)),
+                        (UiElementId.PNC_BOTTOM_NAV_QUEST, Bounds(280, 1440, 130, 140)),
+                        (UiElementId.PNC_BOTTOM_NAV_BAG, Bounds(390, 1440, 130, 140)),
+                        (UiElementId.PNC_BOTTOM_NAV_MORE, Bounds(700, 1440, 130, 140)),
+                        (UiElementId.PNC_BOTTOM_NAV_MAIL, Bounds(520, 1440, 130, 140)),
+                    )
+                )
+                return VisualRecognition(
+                    evidence=(
+                        ScreenEvidence(
+                            ScreenType.PNC_HOME_CITY,
+                            "visual_anchor:home_city",
+                            layout_id="home_city",
+                        ),
+                    ),
+                    profile_ids=("home_city",),
+                    controls=controls,
+                    control_selector_ids=frozenset(
+                        element.selector_id for element in controls
+                    ),
+                )
+
+        image = _build_chat_fixture_image(image_size=(900, 1600))
+        payload = _encode_png(image)
+        with tempfile.TemporaryDirectory() as temp_directory:
+            screenshot_service = ScreenshotService(
+                artifact_store=ArtifactStore(root=Path(temp_directory) / "artifacts"),
+            )
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(payload),
+                artifact_directory="home_city_test",
+                label="visual_home_city",
+            )
+            registry = build_default_selector_registry()
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=ImageSelectorEngine(template_matcher=OpenCvTemplateMatcher()),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(selector_registry=registry),
+                visual_recognizer=_HomeCityVisualRecognizer(),
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("Hero", x=219, y=1567, width=62, height=25),
+                        _ocr_line("Bag", x=455, y=1565, width=54, height=32),
+                        _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                        _ocr_line("Quest", x=333, y=1571, width=69, height=20),
+                        _ocr_line("Mail", x=571, y=1568, width=57, height=24),
+                        _ocr_line("More", x=795, y=1568, width=70, height=25),
+                    )
+                ),
+            )
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.full_runtime_default(),
+            )
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, observation.screen_type)
+        self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+        # Hero carries no reviewed click outcome, so it is not a dispatchable
+        # navigation selector and stays unpublished here even though its OCR
+        # anchor was read.
+        self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_HERO))
+        # Profile-owned controls keep their measured template geometry; OCR
+        # content cannot replace them.
+        bag = observation.visible_elements[UiElementId.PNC_BOTTOM_NAV_BAG]
+        self.assertEqual(Bounds(390, 1440, 130, 140), bag.bounds)
+        self.assertEqual(VisibleElementSourceKind.TEMPLATE, bag.source_kind)

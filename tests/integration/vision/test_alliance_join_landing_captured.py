@@ -7,7 +7,14 @@ import unittest
 
 from PIL import Image, ImageDraw
 
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupEvidenceKind,
+    decide_popup_recovery,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.image.models import Bounds
@@ -51,7 +58,7 @@ def _scaled(bounds: Bounds, size: tuple[int, int]) -> tuple[int, int, int, int]:
 
 
 class AllianceJoinLandingCapturedTests(unittest.TestCase):
-    """Keep Join landing identity independent of its unqualified actions."""
+    """Keep Join landing identity anchored while the reviewed mask dismissal ships."""
 
     def _observe(
         self,
@@ -81,9 +88,21 @@ class AllianceJoinLandingCapturedTests(unittest.TestCase):
         )
         return observation, capture
 
-    def test_captured_join_landing_is_exact_and_passive_in_both_paths(self) -> None:
-        """Odin and the banner establish Join landing without publishing actions."""
+    def test_captured_join_landing_stays_clear_and_publishes_mask_dismissal(self) -> None:
+        """Odin and the banner establish Join landing and own its reviewed mask dismissal.
 
+        UnionGuide binds only the mutating Join/Create buttons, but its embedded
+        CommonModelWin chrome binds the ScreenShotMask dimmer to
+        OnBgClickHandler -> BackToLastWindow -> CloseWin (isClickBgClose
+        defaults true), so the landing publishes the reviewed fixed_region mask
+        band as a typed BACKGROUND_DISMISS candidate. The screen stays CLEAR and
+        non-blocking; Join/Create remain unpublished.
+        """
+
+        expected = {
+            REFERENCE_SIZE: ((30, 830, 140, 70), (100, 865)),
+            NATIVE_SIZE: ((50, 1383, 233, 117), (166, 1441)),
+        }
         for size in (REFERENCE_SIZE, NATIVE_SIZE):
             with self.subTest(size=size):
                 image = _image(FIXTURE, size)
@@ -93,9 +112,54 @@ class AllianceJoinLandingCapturedTests(unittest.TestCase):
                         self.assertEqual(observation.screen_type, SCREEN)
                         self.assertEqual(observation.decision.layout_id, PROFILE_ID)
                         self.assertEqual(observation.decision.guard, GuardVerdict.CLEAR)
+                        self.assertFalse(observation.blocking_popup)
                         self.assertEqual(observation.frame_ref, capture.frame_ref)
-                        self.assertEqual(observation.visible_elements, {})
                         self.assertFalse(observation.list_entries)
+                        (bounds_tuple, action_point) = expected[size]
+                        dismissal = observation.visible_elements[
+                            UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK
+                        ]
+                        self.assertEqual(Bounds(*bounds_tuple), dismissal.bounds)
+                        self.assertEqual(action_point, dismissal.action_point)
+                        self.assertEqual(
+                            VisibleElementSourceKind.GEOMETRY, dismissal.source_kind
+                        )
+                        self.assertFalse(dismissal.identity_evidence)
+                        overlay = observation.popup_overlay
+                        self.assertIsNotNone(overlay)
+                        assert overlay is not None
+                        self.assertEqual(overlay.layout_id, PROFILE_ID)
+                        self.assertEqual(
+                            PopupEvidenceKind.KNOWN_LAYOUT, overlay.evidence_kind
+                        )
+                        candidate = overlay.candidate(PopupControlKind.BACKGROUND_DISMISS)
+                        self.assertIsNotNone(candidate)
+                        assert candidate is not None
+                        self.assertEqual(Bounds(*bounds_tuple), candidate.bounds)
+                        self.assertEqual(action_point, candidate.action_point)
+                        decision = decide_popup_recovery(
+                            screen_type=observation.screen_type,
+                            blocking_popup=observation.blocking_popup,
+                            visible_selector_ids=frozenset(observation.visible_elements),
+                            popup_overlay=overlay,
+                        )
+                        self.assertIsNotNone(decision)
+                        assert decision is not None
+                        self.assertEqual(
+                            UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
+                            decision.selector_id,
+                        )
+                        self.assertEqual(
+                            PopupControlKind.BACKGROUND_DISMISS, decision.control_kind
+                        )
+                        self.assertFalse(
+                            any(
+                                element.action_point is not None
+                                for selector, element in observation.visible_elements.items()
+                                if selector is not UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK
+                            ),
+                            "Only the reviewed mask may be actionable; Join/Create stay unpublished.",
+                        )
 
     def test_erased_identity_anchor_abstains_in_both_paths(self) -> None:
         """Removing either independently measured identity crop cannot promote the surface."""

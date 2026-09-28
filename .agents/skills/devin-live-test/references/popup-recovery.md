@@ -7,7 +7,7 @@ Worker playbook for unrelated blocking popups that interrupt a live-test assignm
 Before recovering, check the assignment's expected screens:
 
 - A dialog the assigned workflow produces (a confirmation the feature under test raises, an expected detail panel) is **task-owned**, not a popup — do not dismiss it.
-- `alliance_join_landing` (`PNC_ALLIANCE_JOIN`) is the Join Alliance **landing** shown to an alliance-less account, not a completable popup: it occludes Home City and the profile deliberately owns no action (Join/Create are account mutations, never automation targets) and no dismissal control. If it blocks an unrelated check, no permitted dismissal exists — publish the incident and mark the check `not_run`; do not tap its Join/Create controls to clear it.
+- `alliance_join_landing` (`PNC_ALLIANCE_JOIN`) is the Join Alliance **landing** shown to an alliance-less account: it occludes Home City and owns no action besides the reviewed mask dismissal (Join/Create are account mutations, never automation targets). The extracted prefab `UI/UIModules/Union/UnionGuide.prefab` binds only those two buttons, but its embedded `ModelWinBg2` chrome (`CommonModelWin`) binds the `ScreenShotMask` dimmer to `BackToLastWindow`/`CloseWin` via `isClickBgClose` (default true — `uis/common/commonwin/commonmodelwin.lua`). Canonical recovery owns that dismissal through `PNC_ALLIANCE_JOIN_DISMISS_MASK`: the reviewed `fixed_region` band `[30,830,140,70]` at 540×960 (tap center ≈(100,865)), below the Join/Create row (~y≈777) and the panel edge (~y≈854), outside the scroll list. When the landing is an action's expected destination it is preserved; only an unrelated stray landing is dismissed. If canonical recovery does not fire and the band tap fails on a fresh frame, publish the incident and mark the check `not_run` — never tap Join/Create or an unverified region.
 - A popup that is itself a check's subject is the feature under test, not an interruption.
 
 ## Step 1 — Interpret the screenshot
@@ -40,7 +40,7 @@ Every popup interruption publishes an incident even when recovery succeeds — b
 
 ## Playbook
 
-Dismiss controls measured on captured frames; regions are 540×960 reference `[x, y, w, h]` from `screen_anchors.json` / `popup-recognition.md`. Reference taps are tagged with their capture's coordinate space — they are evidence of where the control sat, not tap coordinates for your frame; always tap the visible control's center on the frame you hold.
+Dismiss controls measured on captured frames; regions are 540×960 reference `[x, y, w, h]` from `screen_anchors.json` / [popup-recognition.md](../../../../docs/game-reference/workflows/popup-recognition.md) (the consolidated family reference — triggers, identity anchors, dismiss geometry — is its top table). Reference taps are tagged with their capture's coordinate space — they are evidence of where the control sat, not tap coordinates for your frame; always tap the visible control's center on the frame you hold.
 
 | Popup | Profile / screen | Recognize by | Dismiss control | Region | Reference tap |
 |---|---|---|---|---|---|
@@ -54,7 +54,7 @@ Dismiss controls measured on captured frames; regions are 540×960 reference `[x
 | King Return welcome | `king_return_welcome` | greeting text + one button | `king_return_get_started` | `[195, 485, 160, 80]` | ~(275, 525) 540×960 |
 | Game disconnected | `disconnect_reconnect` (OCR layout) | exact disconnect message + CONFIRM | `reconnect_confirm` | OCR-detected | CONFIRM center |
 | Update required | `required_game_update` (OCR layout) | "new version detected / confirm to update" + CONFIRM | `update_confirm` | OCR-detected | CONFIRM center |
-| Join Alliance landing | `alliance_join_landing` (screen `PNC_ALLIANCE_JOIN`) | Odin portrait + "Join Alliance" banner, occludes Home | **none owned** — report + `not_run` | — | — |
+| Join Alliance landing | `alliance_join_landing` (screen `PNC_ALLIANCE_JOIN`) | Odin portrait + "Join Alliance" banner, occludes Home | `background_dismiss` — `ScreenShotMask` → `BackToLastWindow` (UnionGuide/CommonModelWin binding) | reviewed `fixed_region` band `[30,830,140,70]` | ≈(100,865) 540×960 |
 
 Notes:
 
@@ -62,7 +62,7 @@ Notes:
 - **King Return Get Started** is the dismissal: client source verifies it closes the entry window with no purchase, claim, or request.
 - **Update required** — CONFIRM may route to a store/updater flow the worker cannot complete. If the game does not return to a usable screen after confirmation, that is not a transient popup: mark dependent checks `not_run`, publish the incident, and finish remaining safe checks.
 - **Reconnect confirm** returns through a loading transition; wait for a stable post-reconnect frame before resuming.
-- `alliance_join_landing` — the one known blocking surface with no owned dismissal; see Step 0.
+- `alliance_join_landing` — dismissal is the dimmed background band (bound to `BackToLastWindow` in client source); its Join/Create controls remain forbidden. See Step 0.
 
 ## Stop conditions
 

@@ -27,6 +27,7 @@ class PopupControlKind(StrEnum):
     UPDATE_CONFIRM = "update_confirm"
     RECONNECT_CONFIRM = "reconnect_confirm"
     KING_RETURN_GET_STARTED = "king_return_get_started"
+    BACKGROUND_DISMISS = "background_dismiss"
 
 
 class PopupEvidenceKind(StrEnum):
@@ -45,6 +46,7 @@ SAFE_TRANSIENT_POPUP_CONTROL_KINDS = (
     PopupControlKind.NEGATIVE_ACTION,
     PopupControlKind.CLOSE_X,
     PopupControlKind.POPUP_BACK,
+    PopupControlKind.BACKGROUND_DISMISS,
 )
 
 TASK_OWNED_POPUP_SELECTOR_IDS = frozenset(
@@ -103,7 +105,11 @@ def decide_popup_recovery(
     execution; callers remain responsible for constructing/dispatching actions.
     """
 
-    if not blocking_popup and screen_type not in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}:
+    if not blocking_popup and screen_type not in {
+        ScreenType.PNC_POPUP,
+        ScreenType.PNC_VIP_DAILY_RESET,
+        ScreenType.PNC_ALLIANCE_JOIN,
+    }:
         return None
     if screen_type in TASK_OWNED_POPUP_SCREEN_TYPES or visible_selector_ids.intersection(TASK_OWNED_POPUP_SELECTOR_IDS):
         return PopupRecoveryDecision(
@@ -138,6 +144,17 @@ def decide_popup_recovery(
                 selector_id=UiElementId.PNC_KING_RETURN_GET_STARTED_BUTTON,
                 control_kind=PopupControlKind.KING_RETURN_GET_STARTED,
                 reason="dismiss_king_return_welcome",
+            )
+        alliance_mask = popup_overlay.candidate(PopupControlKind.BACKGROUND_DISMISS)
+        if (
+            screen_type == ScreenType.PNC_ALLIANCE_JOIN
+            and alliance_mask is not None
+            and UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK in visible_selector_ids
+        ):
+            return PopupRecoveryDecision(
+                selector_id=UiElementId.PNC_ALLIANCE_JOIN_DISMISS_MASK,
+                control_kind=alliance_mask.control_kind,
+                reason="dismiss_alliance_join_landing_mask",
             )
         candidate = preferred_transient_popup_candidate(popup_overlay)
         if candidate is not None:

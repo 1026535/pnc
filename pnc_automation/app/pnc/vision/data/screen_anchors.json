@@ -5050,7 +5050,7 @@
       "id": "alliance_join_landing",
       "layout_id": "alliance_join_landing",
       "screen": "PNC_ALLIANCE_JOIN",
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "alliance_variants/alliance_join_landing.png",
         "decoded_sha256": "949922560e3607bd020fa07a23369f547ca20a4787fc107992d0810e55d78867",
@@ -5058,7 +5058,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned.",
+        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned. The landing is UI/UIModules/Union/UnionGuide.prefab (UNION_GUIDE, opened by UnionData:OpenUnionGuide in datas/uniondata.lua), whose prefab binds only the mutating Join/Create navigation buttons; its embedded CommonModelWin chrome binds the ScreenShotMask dimmer to OnBgClickHandler -> BackToLastWindow -> CloseWin (isClickBgClose defaults true, uis/common/commonwin/commonmodelwin.lua), so dismissal publishes as the reviewed fixed_region PNC_ALLIANCE_JOIN_DISMISS_MASK band [30,830,140,70] at 540x960, below the Join/Create row (~y777) and panel edge (~y854). RecomentUnionsView.prefab is the separate recommendation/invitation modal, not this landing.",
         "build": "5.2.77 / AppVersion 5.0.201.227",
         "locale": "English",
         "qualification": "guarded_reference_only"
@@ -5085,7 +5085,19 @@
           "threshold": 0.98
         }
       ],
-      "controls": [],
+      "controls": [
+        {
+          "selector": "PNC_ALLIANCE_JOIN_DISMISS_MASK",
+          "fixed_region": [
+            30,
+            830,
+            140,
+            70
+          ],
+          "dismisses_surface": true,
+          "popup_control_kind": "background_dismiss"
+        }
+      ],
       "occludes": [
         "PNC_HOME_CITY"
       ]

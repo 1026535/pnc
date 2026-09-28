@@ -20,6 +20,12 @@ All paths in the tables below are relative to `.local-data/apk-exploration/gamep
 
 The complete per-file discovery index is `.local-data/apk-exploration/gameplay-lua-index.json`: original asset path, exported path, size, and SHA-256. The wider TextAsset inventory is `lua-search/inventory.json`; it includes configuration/localization and must not be treated as gameplay code coverage.
 
+## Unity asset bundles (`ABAsset.pkglzma_*`)
+
+Beyond Lua, `split-1.apk` holds 22 `ABAsset.pkglzma_*` chunks — LZMA-compressed concatenated UnityFS bundles carrying prefabs, scenes, textures, meshes, and configuration TextAssets. `.local-data/apk-exploration/asset-index.json` maps all 387,503 objects (`chunk`, `bundle_offset`, `bundle`, `path_id`, `type`, `name`); `survey_bundles.py` rebuilds it. Extraction tooling sits beside it: `dump_prefab2.py <chunk> <offset>` decodes an NGUI prefab hierarchy (widget sizes, colliders, label text) and `extract_textasset.py <chunk> <offset> <path_id>` pulls one object. BaseData tables (`BuildingPosition`, etc.) are Lua source under the same `0x2C` XOR as the gameplay scripts — `BaseDataManager` consumers in `datas/` name the table to search.
+
+Proven extractions: `UI/UIModules/Union/RecomentUnionsView.prefab` (chunk 14, offset 486240 — [popup reference](workflows/popup-recognition.md)) and the home-city scene `BuildingPosition` (chunk 14, offset 17844917 — [layout reference](workflows/home-city-layout.md)).
+
 ## Common automation starting points
 
 | Question | Source entry points | Detailed status |

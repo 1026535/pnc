@@ -68,6 +68,48 @@ def select_content_labels(
     return selected
 
 
+def select_navigation_elements(
+    elements: Mapping[UiElementId, VisibleElement],
+    *,
+    selector_registry: SelectorRegistry | None,
+    reserved_selector_ids: frozenset[UiElementId] = frozenset(),
+) -> dict[UiElementId, VisibleElement]:
+    """Keep OCR-measured navigation controls the visual profile does not own.
+
+    On a CLEAR visually-proved screen, current visual evidence owns controls —
+    but bottom-nav selectors it has no template for (e.g. Alliance) are still
+    measured from real text anchors on this frame and dispatch-gated by
+    reviewed safe outcomes. Without them, visually-proved home cities lose the
+    same controls the OCR-only path publishes, breaking canonical navigation
+    actions. Profile-owned ids stay reserved to the measured controls.
+    """
+
+    if selector_registry is None:
+        return {}
+    navigation_selector_ids = {
+        selector.id
+        for selector in selector_registry.all()
+        if selector.interaction_kind == SelectorInteractionKind.NAVIGATION
+    }
+    selected: dict[UiElementId, VisibleElement] = {}
+    for selector_id, element in elements.items():
+        if (
+            selector_id not in navigation_selector_ids
+            or selector_id in reserved_selector_ids
+            or element.source_kind != VisibleElementSourceKind.OCR
+            or element.action_point is None
+        ):
+            continue
+        if element.selector_id != selector_id:
+            raise SelectorResolutionError(
+                "Navigation control mapping key does not match its visible selector proof.",
+                selector_id=selector_id,
+                element_selector_id=element.selector_id,
+            )
+        selected[selector_id] = element
+    return selected
+
+
 def bind_visible_elements(
     elements: Mapping[UiElementId, VisibleElement],
     *,

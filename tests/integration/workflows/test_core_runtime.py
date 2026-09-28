@@ -34,6 +34,7 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     VisibleElement,
+    VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -1078,6 +1079,92 @@ class CoreRuntimeTests(unittest.TestCase):
 
         self.assertIs(foreign, action_executor.input_dispatch_recorder)
         connected.close.assert_called_once_with()
+
+    def test_navigation_perception_clear_screen_keeps_measured_navigation_controls(self) -> None:
+        """CLEAR visually-proved screens keep OCR-anchored navigation selectors.
+
+        Parity with ObservationBuilder: the home-city profile owns template
+        controls for the nav tabs it can match, but semantic selectors such as
+        ``PNC_BOTTOM_NAV_ALLIANCE`` are measured from footer text anchors and
+        must survive the CLEAR-screen control rebuild or canonical navigation
+        actions cannot dispatch.
+        """
+
+        template_bag = VisibleElement(
+            selector_id=UiElementId.PNC_BOTTOM_NAV_BAG,
+            bounds=Bounds(390, 1440, 130, 140),
+            confidence=0.99,
+            source_kind=VisibleElementSourceKind.TEMPLATE,
+            action_point=(455, 1510),
+        )
+        ocr_alliance = VisibleElement(
+            selector_id=UiElementId.PNC_BOTTOM_NAV_ALLIANCE,
+            bounds=Bounds(560, 1400, 120, 150),
+            confidence=0.9,
+            source_kind=VisibleElementSourceKind.OCR,
+            action_point=(666, 1500),
+        )
+        ocr_bag = VisibleElement(
+            selector_id=UiElementId.PNC_BOTTOM_NAV_BAG,
+            bounds=Bounds(1, 1, 5, 5),
+            confidence=0.5,
+            source_kind=VisibleElementSourceKind.OCR,
+            action_point=(3, 3),
+        )
+
+        class _Recognizer:
+            def recognize(self, image: Image.Image) -> VisualRecognition:
+                del image
+                return VisualRecognition(
+                    evidence=(
+                        ScreenEvidence(
+                            ScreenType.PNC_HOME_CITY,
+                            "visual_anchor:home_city",
+                            layout_id="home_city",
+                        ),
+                    ),
+                    profile_ids=("home_city",),
+                    controls=(template_bag,),
+                    control_selector_ids=frozenset({UiElementId.PNC_BOTTOM_NAV_BAG}),
+                )
+
+        class _Guard:
+            ocr_service = Mock(spec=OcrService)
+            selector_registry = build_default_selector_registry()
+
+            def detect_interruption(
+                self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+            ):
+                del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
+                return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
+
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
+                del image, screen_type, visible_elements, request, ocr_context, ocr_regions, layout_id
+                return ObservationAdditions(
+                    visible_elements={
+                        UiElementId.PNC_BOTTOM_NAV_ALLIANCE: ocr_alliance,
+                        UiElementId.PNC_BOTTOM_NAV_BAG: ocr_bag,
+                    }
+                )
+
+        screenshot = CapturedScreenshot(
+            artifact=None,
+            image=Image.new("RGB", (540, 960)),
+            image_format="PNG",
+            ephemeral_captured_at=datetime.now(tz=UTC),
+        )
+        observation = NavigationPerception(
+            _Recognizer(), _Guard(), ScreenClassifier(),
+            lambda capture: ObservationOcrContext(capture.image, _Guard.ocr_service, capture.frame_ref, "test"),
+        ).build(screenshot, include_content=True)
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, observation.screen_type)
+        self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+        # The profile-owned control keeps its measured template geometry; OCR
+        # content cannot replace it.
+        bag = observation.visible_elements[UiElementId.PNC_BOTTOM_NAV_BAG]
+        self.assertEqual(template_bag.bounds, bag.bounds)
+        self.assertEqual(VisibleElementSourceKind.TEMPLATE, bag.source_kind)
 
 
 class _FakeClock:
