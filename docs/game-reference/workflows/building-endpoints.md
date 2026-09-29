@@ -198,17 +198,18 @@ shared observation report the Bank body but authorizes no tap, and
 because no `PNC_BANK` destination, entry menu, or return edge is modeled. The
 intermediate Home menu behavior above stays the governing uncertainty.
 
-### Military barracks — ordinary slots 5-8 bodies qualified
+### Military barracks — ordinary slots 5-8 body candidates
 
 The V44-4 military body package measured four fixed single-type slots from the
 same 2026-09-29 f1171ffa attempt1 session used for the Bank crop. All four
 crops are authored from baseline frame 0022 (camera translation (-24,45),
-zoom 0.75) and reproduce on the independent 0092 survey view
-(translation (-152,-21), zoom 0.75):
+zoom 0.75), with corresponding body regions visually measured on the independent
+0092 survey view (translation (-152,-21), zoom 0.75). Native source/holdout
+matching remains pending serialized validation:
 
 - `infantry_barracks_body` (slot 5, client 1020): white facade between the red
   columns, native (415,625,83,78) on 0022 and (287,559,83,78) on 0092; also
-  qualified on the 2026-09-22 zoom-1.0 f0 baseline at (53,995,111,104). The
+  visually measured on the 2026-09-22 zoom-1.0 f0 baseline at (53,995,111,104). The
   crop excludes the floating coin bubble and pennant above, the gold `Z`
   marker and level badge at the right, and the nameplate below. Action point
   (450,666) on 0022 sits on the interior parapet.

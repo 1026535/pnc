@@ -74,8 +74,8 @@ Existing V37/V27 menus, parsers and mutations remain feature-owned.
 
 These are pending coordinator-owned cases for the existing live worker. Add them
 to a released batch with explicit limits before execution; they are not added to
-the current integrated helper's scope by this note. Reuse the configured testing
-instance's active castle and established identity/lease authority. Do not move
+the current integrated helper's scope by this note. Reuse the batch-assigned
+`157_farm` instance's active castle and established identity/lease authority. Do not move
 buildings or switch castles to manufacture a permutation.
 
 | Case | Precondition and allowed action | Required evidence |
