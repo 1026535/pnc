@@ -34,14 +34,14 @@ from pnc_automation.app.pnc.domain.observation import (
     RowRecognitionStatus,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.bag_items import (
-    BagItemContentProducer,
-    _mark_duplicate_identities,
-    _military_identity,
-    _misc_identity,
-    _owned_count,
-    _speedup_identity,
-    _CardLine,
+from pnc_automation.app.pnc.vision.bag_items import BagItemContentProducer
+from pnc_automation.app.pnc.vision.bag_items.parsing import (
+    CardLine as _CardLine,
+    mark_duplicate_identities as _mark_duplicate_identities,
+    military_identity as _military_identity,
+    misc_identity as _misc_identity,
+    owned_count as _owned_count,
+    speedup_identity as _speedup_identity,
 )
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine

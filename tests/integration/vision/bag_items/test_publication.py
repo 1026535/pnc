@@ -58,13 +58,9 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
-from pnc_automation.app.pnc.vision.observation_builder import (
-    ImageSelectorEngine,
-    ObservationBuilder,
-)
+from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot, FrameRef
@@ -78,6 +74,7 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
+from tests.support.pnc.publication import make_publication_pair
 
 
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
@@ -238,21 +235,12 @@ def _wire(
     registry = build_default_selector_registry()
     matcher = OpenCvTemplateMatcher()
     enricher = PncObservationEnricher(selector_registry=registry)
-    builder = ObservationBuilder(
+    return make_publication_pair(
         selector_registry=registry,
-        selector_engine=ImageSelectorEngine(matcher),
-        screen_classifier=ScreenClassifier(),
         enricher=enricher,
+        matcher=matcher,
         ocr_service=ocr_service,
-        visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
     )
-    navigation = NavigationPerception(
-        builder.visual_recognizer,
-        enricher,
-        ScreenClassifier(),
-        builder.create_ocr_context,
-    )
-    return builder, navigation
 
 
 def _build_both(
