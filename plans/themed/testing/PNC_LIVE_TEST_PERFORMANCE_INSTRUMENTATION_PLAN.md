@@ -37,6 +37,14 @@ Reuse existing OCR metrics once per context (or as deltas), rather than summing 
 
 Do not add a metrics backend, required profiler dependency, broad event tracing, or extra screenshots. Keep profiler installations and exports optional and local.
 
+## Local use
+
+- Set `PNC_PERFORMANCE_REPORTS=1` before invoking a supported `build_application_runner` entry point to write one local report per connected workflow lifecycle. Reports default to `.local-data/reports/performance/` and remain disabled otherwise.
+- Run a representative saved-fixture baseline with `py tools/benchmark_screen_recognition.py --warm-replays 5 --measurement-profile post_d --sample home_city_core.png --sample world_map_core.png --sample bag.png --sample chat_alliance.png --sample quest_daily_sep09.png --output .local-data/reports/performance/screen-recognition-baseline.json`. This is host-only and does not use ADB; `--sample` validates all manifest metadata and split-isolation rules while decoding and hash-checking only selected images.
+- Add `--performance-report` to capture nested observation, OCR-backend, and Home-camera scale spans with thread CPU time. Reports also record the current Git revision, a content-only dirty-source fingerprint, host identity, and relevant image/OCR dependency versions.
+- For a separately authorized representative live P1 run, use `py tools/benchmark_world_map_p1_capture.py --performance-report`; all runtime-dependent measurements finish before the connected runtime closes.
+- Rank collected runs with `py tools/summarize_performance_reports.py --directory .local-data/reports/performance`.
+
 ## Phases and acceptance
 
 ### 1. Repair and make the existing benchmark runnable offline

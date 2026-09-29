@@ -27,6 +27,11 @@ from pnc_automation.app.automation.engine.navigation_core import (
     reviewed_navigation_edges,
 )
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
+from pnc_automation.core.infra.diagnostics.performance import (
+    current_performance_run,
+    performance_span,
+    performance_wait,
+)
 from pnc_automation.core.infra.emulator.input_dispatch import (
     InputDispatchEvent,
     InputDispatchFailure,
@@ -169,6 +174,34 @@ class CoreRuntime:
     ) -> Observation:
         """Captures and perceives one frame without recursively entering popup recovery."""
 
+        with performance_span(
+            "core.observation",
+            attributes={
+                "include_content": include_content,
+                "request": (
+                    "default"
+                    if request is None
+                    else "coordinate_only"
+                    if request.world_map_coordinate_only
+                    else "targeted"
+                ),
+            },
+        ):
+            return self._observe_once_unmeasured(
+                label,
+                include_content=include_content,
+                request=request,
+            )
+
+    def _observe_once_unmeasured(
+        self,
+        label: str,
+        *,
+        include_content: bool,
+        request: ObservationRequest | None = None,
+    ) -> Observation:
+        """Owns one core screenshot and its visual/OCR perception pass."""
+
         self._capture_count += 1
         capture_label = (
             f"core_{self._run_id}_{self._capture_count:04d}_{sanitize_artifact_segment(label)}"
@@ -208,7 +241,11 @@ class CoreRuntime:
     def record(self, entry: dict[str, object]) -> None:
         """Appends sanitized navigation metadata to the run's JSONL trace."""
 
-        safe_entry = _sanitize_trace_entry(entry)
+        run = current_performance_run()
+        correlated_entry = dict(entry)
+        if run is not None:
+            correlated_entry["measurement_run_id"] = run.run_id
+        safe_entry = _sanitize_trace_entry(correlated_entry)
         with self.trace_path.open("a", encoding="utf-8", newline="\n") as stream:
             stream.write(json.dumps(safe_entry, sort_keys=True, default=str) + "\n")
 
@@ -327,7 +364,11 @@ class CoreRuntime:
             previous_screen = observation.screen_type
             if self.navigation.clock() - started >= policy.max_seconds:
                 break
-            self.navigation.sleep(policy.poll_seconds)
+            performance_wait(
+                "initial_screen_settle",
+                policy.poll_seconds,
+                self.navigation.sleep,
+            )
         raise RuntimeError("Preflight loading settle budget exhausted without a stable known screen.")
 
 
@@ -378,6 +419,11 @@ def assemble_core_runtime(
     trace_path: Path | None,
 ) -> CoreRuntime:
     """Assembles replacement-core services while the caller owns the connected runtime."""
+
+    performance_run = current_performance_run()
+    if performance_run is not None:
+        performance_run.set_attribute("runner_path", "core_runtime")
+        performance_run.set_attribute("core_trace_available", True)
 
     observed_action_executor = connected_runtime.require_observed_action_executor(
         "Replacement navigation requires the canonical selector-backed action executor."
@@ -537,6 +583,7 @@ def _sanitize_trace_entry(entry: dict[str, object]) -> dict[str, object]:
             "event", "operation_id", "stage", "target", "slot", "reason",
             "zoom_status", "calibration_id", "zoom", "zoom_inputs", "gestures",
             "elapsed_seconds",
+            "measurement_run_id",
         }
         list_fields = {
             "translation", "group_ids", "inspected_slots", "remaining_slots",
@@ -570,6 +617,7 @@ def _sanitize_trace_entry(entry: dict[str, object]) -> dict[str, object]:
         "session_epoch",
         "capture_sequence",
         "input_sequence",
+        "measurement_run_id",
         "input_kind",
         "failure_phase",
         "dispatch",

@@ -12,6 +12,7 @@ from typing import Protocol
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import performance_span, performance_wait
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
     InputTextAction,
@@ -442,6 +443,34 @@ class ObservedActionExecutor:
         observe: ObservationCallback,
         expected_screens: frozenset[ScreenType] = frozenset(),
     ) -> _InterruptionRecoveryResult:
+        """Measures one bounded popup/update recovery decision and its outcome."""
+
+        with performance_span(
+            "recovery.interruption",
+            attributes={
+                "screen": observation.screen_type.name,
+                "blocking_popup": observation.blocking_popup,
+            },
+        ) as measured:
+            result = self._recover_interruption_unmeasured(
+                observation,
+                label_prefix=label_prefix,
+                observe=observe,
+                expected_screens=expected_screens,
+            )
+            if measured is not None:
+                measured.set_attribute("recovered", result.observation is not None)
+                measured.set_attribute("update_recovered", result.update_recovered)
+            return result
+
+    def _recover_interruption_unmeasured(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+        expected_screens: frozenset[ScreenType] = frozenset(),
+    ) -> _InterruptionRecoveryResult:
         """Returns an executor-owned interruption result for internal action-loop use."""
 
         decision = decide_popup_recovery(
@@ -539,7 +568,12 @@ class ObservedActionExecutor:
         current = observation
         required_newer_than = observation.captured_at
         for index in range(poll_count):
-            self.sleep(float(self.policy.update_poll_interval_seconds))
+            performance_wait(
+                "required_update_poll",
+                float(self.policy.update_poll_interval_seconds),
+                self.sleep,
+                span_name="recovery.wait",
+            )
             current = observe(
                 f"{label_prefix}_wait_{index + 1}",
                 request=ObservationRequest.full_runtime_default(),
@@ -1244,4 +1278,9 @@ class ObservedActionExecutor:
             delay_ms = self.action_executor._observe_delay_ms_for(action)
         if delay_ms <= 0:
             return
-        self.sleep(delay_ms / 1000.0)
+        performance_wait(
+            "post_action_observation_delay",
+            delay_ms / 1000.0,
+            self.sleep,
+            span_name="action.delay",
+        )

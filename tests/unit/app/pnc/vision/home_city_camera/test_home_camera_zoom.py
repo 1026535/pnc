@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from PIL import Image
@@ -25,6 +28,10 @@ from pnc_automation.app.pnc.vision.home_city_camera.localization import (
 )
 from pnc_automation.app.pnc.vision.home_city_camera.catalog import (
     load_home_city_camera_catalog,
+)
+from pnc_automation.core.infra.diagnostics.performance import (
+    PerformanceReportWriter,
+    performance_run_scope,
 )
 from pnc_automation.core.vision.image.models import TemplateMatch
 
@@ -68,6 +75,37 @@ class HomeCityCameraZoomTests(unittest.TestCase):
             {"institute_structure", "garden_terrace", "barracks_roofs"}
             <= proof.matched_group_ids
         )
+
+    def test_zoom_sweep_spans_keep_worker_identity_and_localize_parent(self) -> None:
+        """Opt-in localization reports every concurrent scale under its frame span."""
+        localizer = _zoomed_localizer(
+            {name: (1.25, (-200, -300)) for name in self._FIXED_FOUR}
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            writer = PerformanceReportWriter(Path(temporary_directory))
+            with performance_run_scope(writer, "home_camera_fixture"):
+                proof = localizer.localize(Image.new("RGB", (900, 1600)))
+
+            self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
+            report_path = next(Path(temporary_directory).glob("*.json"))
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            localize = next(
+                span for span in report["spans"] if span["name"] == "home_camera.localize"
+            )
+            hypotheses = [
+                span for span in report["spans"]
+                if span["name"] == "home_camera.zoom_hypothesis"
+            ]
+            self.assertEqual(15, len(hypotheses))
+            self.assertEqual(
+                {localize["span_id"]},
+                {span["parent_id"] for span in hypotheses},
+            )
+            self.assertTrue(all(span["thread_id"] != localize["thread_id"] for span in hypotheses))
+            self.assertEqual(
+                15,
+                len({span["attributes"]["zoom_scale"] for span in hypotheses}),
+            )
 
     def test_off_grid_zoom_fits_positions_instead_of_quantizing(self) -> None:
         """A scene at zoom 1.275 fits from landmark pairs, not the 0.05 grid."""

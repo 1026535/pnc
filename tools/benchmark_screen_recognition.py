@@ -37,6 +37,11 @@ from pnc_automation.app.pnc.vision.selectors import (
     build_default_selector_registry,
 )
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.diagnostics.performance import (
+    PerformanceReportWriter,
+    performance_run_scope,
+    performance_span,
+)
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition
@@ -49,7 +54,18 @@ _MANIFEST_VERSION = 2
 _HASH_FORMAT = "sha256(width.to_bytes(8, 'big') + height.to_bytes(8, 'big') + decoded RGB bytes)"
 _REQUIRED_SPLITS = frozenset({"reference", "validation", "holdout"})
 _REQUIRED_SAMPLE_FIELDS = frozenset({"image", "screen", "split", "group", "sha256"})
-_OPTIONAL_SAMPLE_FIELDS = frozenset({"expected_visual_screens"})
+_OPTIONAL_SAMPLE_FIELDS = frozenset(
+    {
+        "annotation",
+        "build",
+        "expected_visual_screens",
+        "locale",
+        "note",
+        "provenance",
+        "source_artifact",
+        "source_sha256",
+    }
+)
 _HEX_DIGITS = frozenset("0123456789abcdef")
 _STATIC_REFERENCE_SUFFIXES = frozenset({".py", ".yaml", ".yml"})
 _STATIC_REFERENCE_ROOTS = ("pnc_automation", "scripts", "config", "tools", "tests")
@@ -86,7 +102,7 @@ class StaticSelectorReference:
 
 @dataclass(frozen=True, slots=True)
 class BenchmarkSample:
-    """One validated, decoded screenshot sample from the reviewed manifest."""
+    """One reviewed manifest entry with an optional decoded benchmark image."""
 
     image_name: str
     path: Path
@@ -94,8 +110,8 @@ class BenchmarkSample:
     split: str
     group: str
     sha256: str
-    decoded_sha256: str
-    image: Image.Image
+    decoded_sha256: str | None
+    image: Image.Image | None
     expected_visual_screens: tuple[ScreenType, ...] = ()
 
 
@@ -190,8 +206,12 @@ class FrameMetrics:
         }
 
 
-def load_manifest(path: Path) -> tuple[BenchmarkSample, ...]:
-    """Load and validate the reviewed screenshot manifest and its image files."""
+def load_manifest(
+    path: Path,
+    *,
+    decode_sample_names: Sequence[str] | None = None,
+) -> tuple[BenchmarkSample, ...]:
+    """Validate manifest metadata and decode only requested images when narrowed."""
 
     if not path.is_file():
         raise FileNotFoundError(f"screen-recognition manifest does not exist: {path}")
@@ -208,12 +228,28 @@ def load_manifest(path: Path) -> tuple[BenchmarkSample, ...]:
     raw_samples = document["samples"]
     if not isinstance(raw_samples, list) or not raw_samples:
         raise ValueError("manifest samples must be a non-empty list")
+    requested_names = None if decode_sample_names is None else tuple(decode_sample_names)
+    if requested_names is not None and (
+        not requested_names
+        or any(not isinstance(name, str) or not name for name in requested_names)
+    ):
+        raise ValueError("decode_sample_names must contain at least one non-empty image name")
+    if requested_names is not None and len(set(requested_names)) != len(requested_names):
+        raise ValueError("decode_sample_names cannot contain duplicates")
 
     root = path.parent.resolve()
+    requested_name_set = None if requested_names is None else set(requested_names)
     samples: list[BenchmarkSample] = []
     image_names: set[str] = set()
     for index, raw_sample in enumerate(raw_samples):
-        samples.append(_load_sample(raw_sample, index=index, root=root))
+        samples.append(
+            _load_sample(
+                raw_sample,
+                index=index,
+                root=root,
+                decode_image_names=requested_name_set,
+            )
+        )
         if samples[-1].image_name in image_names:
             raise ValueError(f"manifest repeats image: {samples[-1].image_name}")
         image_names.add(samples[-1].image_name)
@@ -223,16 +259,26 @@ def load_manifest(path: Path) -> tuple[BenchmarkSample, ...]:
     if missing_splits:
         raise ValueError(f"manifest is missing required split(s): {sorted(missing_splits)}")
     _validate_reference_holdout_isolation(samples)
+    if requested_name_set is not None:
+        missing_names = sorted(requested_name_set - image_names)
+        if missing_names:
+            raise ValueError(f"unknown screen-recognition sample name(s): {missing_names}")
     return tuple(samples)
 
 
-def _load_sample(raw_sample: object, *, index: int, root: Path) -> BenchmarkSample:
+def _load_sample(
+    raw_sample: object,
+    *,
+    index: int,
+    root: Path,
+    decode_image_names: set[str] | None = None,
+) -> BenchmarkSample:
     if not isinstance(raw_sample, dict) or not _REQUIRED_SAMPLE_FIELDS.issubset(raw_sample) or (
         set(raw_sample) - _REQUIRED_SAMPLE_FIELDS
     ) - _OPTIONAL_SAMPLE_FIELDS:
         raise ValueError(
             f"manifest sample {index} must contain exactly image, screen, split, group, and sha256 "
-            "plus optional expected_visual_screens"
+            "plus optional visual expectations and review metadata"
         )
     image_name = raw_sample["image"]
     screen_name = raw_sample["screen"]
@@ -271,6 +317,15 @@ def _load_sample(raw_sample: object, *, index: int, root: Path) -> BenchmarkSamp
         not isinstance(screen, str) for screen in raw_visual_screens
     ):
         raise ValueError(f"manifest sample {index} expected_visual_screens must be a list of screen names")
+    for field_name in ("annotation", "build", "locale", "note", "source_artifact", "source_sha256"):
+        if field_name in raw_sample and not isinstance(raw_sample[field_name], str):
+            raise ValueError(f"manifest sample {index} {field_name} must be a string")
+    provenance = raw_sample.get("provenance")
+    if provenance is not None and (
+        not isinstance(provenance, dict)
+        or any(not isinstance(key, str) or not isinstance(value, str) for key, value in provenance.items())
+    ):
+        raise ValueError(f"manifest sample {index} provenance must contain string fields")
     expected_visual_screens: list[ScreenType] = []
     for visual_screen in raw_visual_screens:
         try:
@@ -286,17 +341,21 @@ def _load_sample(raw_sample: object, *, index: int, root: Path) -> BenchmarkSamp
     sample_path = (root / image_name).resolve()
     if not sample_path.is_relative_to(root) or not sample_path.is_file():
         raise ValueError(f"manifest sample {index} image is missing or escapes its directory: {image_name}")
-    try:
-        with Image.open(sample_path) as opened:
-            opened.load()
-            image = opened.convert("RGB").copy()
-    except (OSError, UnidentifiedImageError) as error:
-        raise ValueError(f"manifest sample {index} image is not a valid image: {image_name}") from error
-    decoded_sha256 = _decoded_image_sha256(image)
-    if decoded_sha256 != expected_sha256:
-        raise ValueError(
-            f"manifest sample {index} decoded sha256 does not match image: {image_name}"
-        )
+    should_decode = decode_image_names is None or image_name in decode_image_names
+    image: Image.Image | None = None
+    decoded_sha256: str | None = None
+    if should_decode:
+        try:
+            with Image.open(sample_path) as opened:
+                opened.load()
+                image = opened.convert("RGB").copy()
+        except (OSError, UnidentifiedImageError) as error:
+            raise ValueError(f"manifest sample {index} image is not a valid image: {image_name}") from error
+        decoded_sha256 = _decoded_image_sha256(image)
+        if decoded_sha256 != expected_sha256:
+            raise ValueError(
+                f"manifest sample {index} decoded sha256 does not match image: {image_name}"
+            )
     return BenchmarkSample(
         image_name=image_name,
         path=sample_path,
@@ -333,8 +392,8 @@ def _validate_reference_holdout_isolation(samples: Sequence[BenchmarkSample]) ->
         raise ValueError(
             f"reference and holdout share reviewed group(s): {sorted(shared_groups)}"
         )
-    reference_hashes = {sample.decoded_sha256 for sample in references}
-    duplicate_hashes = reference_hashes & {sample.decoded_sha256 for sample in holdouts}
+    reference_hashes = {sample.sha256 for sample in references}
+    duplicate_hashes = reference_hashes & {sample.sha256 for sample in holdouts}
     if duplicate_hashes:
         raise ValueError("reference and holdout contain duplicate decoded image content")
 
@@ -347,13 +406,16 @@ def benchmark_manifest(
     raw_recognizer: VisualScreenRecognizer | None = None,
     warm_replays: int = 0,
     measurement_profile: str = "pre_d",
+    sample_names: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Evaluate reviewed samples and optionally replay each through the builder.
 
     ``warm_replays`` is zero by default so correctness and coverage runs remain
     quick. When enabled it must be at least five, matching the plan's warm
     measurement gate; replay timings are emitted only for canonical builder
-    runs, never synthesized from a single total duration.
+    runs, never synthesized from a single total duration. ``sample_names``
+    validates metadata and split isolation across the complete manifest while
+    decoding and hash-checking only the named fixture images.
     """
 
     if not isinstance(warm_replays, int) or isinstance(warm_replays, bool) or warm_replays < 0:
@@ -363,7 +425,10 @@ def benchmark_manifest(
     if measurement_profile not in {"pre_d", "post_d"}:
         raise ValueError("measurement_profile must be pre_d or post_d")
 
-    samples = load_manifest(manifest_path)
+    samples = _select_manifest_samples(
+        load_manifest(manifest_path, decode_sample_names=sample_names),
+        sample_names,
+    )
     visual = raw_recognizer or _load_visual_screen_recognizer()
     manual_annotations = _load_manual_annotations(manifest_path)
     baseline_builder: ObservationBuilder | None = None
@@ -418,6 +483,7 @@ def benchmark_manifest(
         "measurement_profile": measurement_profile,
         "baseline_label": "same revision without visual recognizer",
         "warm_replays": warm_replays,
+        "selected_samples": None if sample_names is None else list(sample_names),
         "frame_count": len(records),
         "wrong_actionable_classification_count": wrong_actionable,
         "manual_comparison_failure_count": manual_comparison_failures,
@@ -425,6 +491,27 @@ def benchmark_manifest(
         "splits": aggregate_metrics(records),
         "frames": [record.to_document() for record in records],
     }
+
+
+def _select_manifest_samples(
+    samples: Sequence[BenchmarkSample],
+    sample_names: Sequence[str] | None,
+) -> tuple[BenchmarkSample, ...]:
+    """Selects named fixtures in manifest order after full-manifest validation."""
+
+    if sample_names is None:
+        return tuple(samples)
+    requested = tuple(sample_names)
+    if not requested or any(not name for name in requested):
+        raise ValueError("sample_names must contain at least one non-empty image name")
+    if len(set(requested)) != len(requested):
+        raise ValueError("sample_names cannot contain duplicates")
+    available = {sample.image_name for sample in samples}
+    missing = sorted(set(requested) - available)
+    if missing:
+        raise ValueError(f"unknown screen-recognition sample name(s): {missing}")
+    selected = set(requested)
+    return tuple(sample for sample in samples if sample.image_name in selected)
 
 
 def _canonical_builder_factory(selector_registry: SelectorRegistry) -> ObservationBuilder:
@@ -461,6 +548,8 @@ def _evaluate_sample(
     manual_annotation: Mapping[str, object] | None = None,
     guarded_probe: "_StageProbe | None" = None,
 ) -> FrameMetrics:
+    if sample.image is None or sample.decoded_sha256 is None:
+        raise ValueError(f"benchmark sample was not decoded: {sample.image_name}")
     first_run = _run_pipeline(
         sample.image,
         visual_recognizer=visual_recognizer,
@@ -551,6 +640,8 @@ def _evaluate_sample(
                 sample.image,
                 guarded_builder=guarded_builder,
                 probe=guarded_probe,
+                fixture_name=sample.image_name,
+                fixture_sha256=sample.decoded_sha256,
             ).metrics
             for _ in range(warm_replays)
         ),
@@ -690,6 +781,8 @@ def _run_warm_replay(
     *,
     guarded_builder: ObservationBuilder,
     probe: _StageProbe | None,
+    fixture_name: str,
+    fixture_sha256: str,
 ) -> _PipelineRun:
     """Run one warm replay through the guarded canonical builder only."""
 
@@ -698,9 +791,13 @@ def _run_warm_replay(
     capture = _captured_screenshot(image.copy())
     ocr_context = guarded_builder.create_ocr_context(capture)
     before = _ocr_context_snapshot(ocr_context)
-    observation, total_latency_ms = _timed(
-        lambda: guarded_builder.build(capture, ocr_context=ocr_context)
-    )
+    with performance_span(
+        "screen_recognition.warm_replay",
+        attributes={"fixture": fixture_name, "fixture_sha256": fixture_sha256},
+    ):
+        observation, total_latency_ms = _timed(
+            lambda: guarded_builder.build(capture, ocr_context=ocr_context)
+        )
     after = _ocr_context_snapshot(ocr_context)
     if probe is None:
         visual_latency_ms = None
@@ -1921,10 +2018,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Run this many warm guarded ObservationBuilder replays per frame (0 or at least 5).",
     )
     parser.add_argument(
+        "--sample",
+        action="append",
+        default=None,
+        help="Limit measured execution to this manifest image name; repeat for multiple fixtures.",
+    )
+    parser.add_argument(
         "--measurement-profile",
         choices=("pre_d", "post_d"),
         default="pre_d",
         help="Label the measured canonical pipeline revision in the report.",
+    )
+    parser.add_argument(
+        "--performance-report",
+        action="store_true",
+        help="Write local nested timing spans under .local-data/reports/performance/.",
     )
     arguments = parser.parse_args(argv)
     if arguments.coverage_audit:
@@ -1936,12 +2044,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         output_path = arguments.output or arguments.root / "artifacts" / "non_yolo_recognition" / "coverage_audit.json"
     else:
-        document = benchmark_manifest(
-            arguments.manifest,
-            visual_only=arguments.visual_only,
-            warm_replays=arguments.warm_replays,
-            measurement_profile=arguments.measurement_profile,
+        writer = (
+            PerformanceReportWriter(ROOT / ".local-data" / "reports" / "performance")
+            if arguments.performance_report
+            else None
         )
+        with performance_run_scope(
+            writer,
+            "screen_recognition_benchmark",
+            attributes={
+                "runner_path": "offline_saved_fixture",
+                "measurement_profile": arguments.measurement_profile,
+                "warm_replays": arguments.warm_replays,
+                "selected_sample_count": (
+                    len(arguments.sample) if arguments.sample is not None else -1
+                ),
+            },
+        ) as performance_run:
+            document = benchmark_manifest(
+                arguments.manifest,
+                visual_only=arguments.visual_only,
+                warm_replays=arguments.warm_replays,
+                measurement_profile=arguments.measurement_profile,
+                sample_names=arguments.sample,
+            )
+            if performance_run is not None:
+                performance_run.set_attribute(
+                    "selected_samples",
+                    None if arguments.sample is None else ",".join(arguments.sample),
+                )
         output_path = arguments.output or ROOT / "artifacts" / "screen_recognition" / "benchmark.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(

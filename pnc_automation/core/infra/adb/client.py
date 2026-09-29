@@ -9,6 +9,25 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from pnc_automation.core.infra.adb.command_result import CommandResult
+from pnc_automation.core.infra.diagnostics.performance import performance_span
+
+_ADB_OPERATION_FAMILIES = frozenset(
+    {
+        "connect",
+        "devices",
+        "disconnect",
+        "exec-out",
+        "forward",
+        "get-state",
+        "install",
+        "kill-server",
+        "reverse",
+        "shell",
+        "start-server",
+        "version",
+        "wait-for-device",
+    }
+)
 
 
 class CommandRunner(Protocol):
@@ -52,7 +71,16 @@ class AdbClient:
     def run_global(self, *arguments: str, timeout_seconds: float | None = 10) -> CommandResult:
         """Runs an ADB command that is not device-scoped."""
 
-        return self.runner.run((self.adb_path, *arguments), timeout_seconds=timeout_seconds)
+        with performance_span(
+            "adb.command",
+            attributes={"scope": "global", "family": _operation_family(arguments)},
+        ) as measured:
+            result = self.runner.run((self.adb_path, *arguments), timeout_seconds=timeout_seconds)
+            if measured is not None:
+                measured.set_attribute("returncode", result.returncode)
+                measured.set_attribute("stdout_bytes", len(result.stdout))
+                measured.set_attribute("stderr_bytes", len(result.stderr))
+            return result
 
     def run_device(
         self,
@@ -62,10 +90,19 @@ class AdbClient:
     ) -> CommandResult:
         """Runs an ADB command scoped to one device target."""
 
-        return self.runner.run(
-            (self.adb_path, "-s", device_id, *arguments),
-            timeout_seconds=timeout_seconds,
-        )
+        with performance_span(
+            "adb.command",
+            attributes={"scope": "device", "family": _operation_family(arguments)},
+        ) as measured:
+            result = self.runner.run(
+                (self.adb_path, "-s", device_id, *arguments),
+                timeout_seconds=timeout_seconds,
+            )
+            if measured is not None:
+                measured.set_attribute("returncode", result.returncode)
+                measured.set_attribute("stdout_bytes", len(result.stdout))
+                measured.set_attribute("stderr_bytes", len(result.stderr))
+            return result
 
     def shell(self, device_id: str, *arguments: str, timeout_seconds: float | None = 10) -> CommandResult:
         """Runs one `adb shell` command against the selected device."""
@@ -91,3 +128,12 @@ class AdbClient:
         """Lists known ADB devices."""
 
         return self.run_global("devices", timeout_seconds=timeout_seconds)
+
+
+def _operation_family(arguments: Sequence[str]) -> str:
+    """Returns only the low-cardinality ADB operation verb, never its arguments."""
+
+    if not arguments:
+        return "unspecified"
+    operation = arguments[0]
+    return operation if operation in _ADB_OPERATION_FAMILIES else "other"

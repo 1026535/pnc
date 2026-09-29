@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image
 
@@ -24,6 +24,10 @@ from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import SpatialSurfaceType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.infra.diagnostics.performance import (
+    PerformanceReportWriter,
+    performance_run_scope,
+)
 from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactRoutine,
     resolve_routine_artifact_selection,
@@ -74,71 +78,105 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=5)
     parser.add_argument("--label", default="world_map_p1_capture_benchmark")
     parser.add_argument("--skip-prepare", action="store_true")
+    parser.add_argument(
+        "--performance-report",
+        action="store_true",
+        help="Write a run-scoped report beneath .local-data/reports/performance.",
+    )
     arguments = parser.parse_args()
     if arguments.iterations <= 0:
         raise ValueError("iterations must be positive.")
 
-    application = build_application_runner(Path(arguments.config))
-    account = application.script_runner.config.require_account(arguments.account)
-    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
-    with application.script_runner.reserve_accounts((arguments.account,)):
-        if not arguments.skip_prepare:
-            require_successful_preparation(
-                application.script_runner.prepare_account_session(
-                    account_id=arguments.account,
-                    required_role=LiveAutomationRole.LIVE_TESTING,
+    performance_directory = root / ".local-data" / "reports" / "performance"
+    writer = (
+        PerformanceReportWriter(performance_directory)
+        if arguments.performance_report
+        else PerformanceReportWriter.from_environment(performance_directory)
+    )
+    benchmark_report: dict[str, object]
+    with performance_run_scope(
+        writer,
+        "world_map_p1_capture",
+        attributes={"runner_path": "p1_calibration", "iterations": arguments.iterations},
+    ) as performance_run:
+        application = build_application_runner(
+            Path(arguments.config),
+            performance_report_writer=writer,
+        )
+        account = application.script_runner.config.require_account(arguments.account)
+        account.require_live_role(LiveAutomationRole.LIVE_TESTING)
+        with application.script_runner.reserve_accounts((arguments.account,)):
+            if not arguments.skip_prepare:
+                require_successful_preparation(
+                    application.script_runner.prepare_account_session(
+                        account_id=arguments.account,
+                        required_role=LiveAutomationRole.LIVE_TESTING,
+                    )
                 )
+            connected_context = application.script_runner.build_connected_runtime_bundle(
+                account=account,
+                required_role=LiveAutomationRole.LIVE_TESTING,
             )
-        with application.script_runner.build_connected_runtime_bundle(
-            account=account,
-            required_role=LiveAutomationRole.LIVE_TESTING,
-        ) as connected:
-            runtime = connected.runtime
-            service = runtime.observation_service
-            screenshot_service = service.screenshot_service
-            builder = service.observation_builder
-            session = runtime.session
-
-            start = connected.runner.prove_preflight_state(
-                account,
-                TaskPreflight.WORLD_MAP,
-                label_prefix=f"{arguments.label}_preflight",
-                max_steps=20,
-            )
-            coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-            if coordinate is None:
-                raise AssertionError("World-map preflight did not expose a coordinate-addressable viewport.")
-
-            request = ObservationRequest.world_map_movement_proof_follow_up()
-            artifact_selection = resolve_routine_artifact_selection(
-                mode=service.mode,
-                routine=ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF,
-            )
-            coordinate_bar_selector = builder.selector_registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR)
-            if coordinate_bar_selector.relative_bounds is None:
-                raise AssertionError("Coordinate-bar selector must define relative bounds.")
-
-            _warm_live_paths(
-                account_artifact_directory=account.artifact_directory_name,
-                builder=builder,
-                request=request,
-                screenshot_service=screenshot_service,
-                session=session,
-                label=arguments.label,
+            benchmark_report = _with_connected_runtime(
+                connected_context,
+                lambda connected: _measure_connected_runtime(connected, arguments, account),
             )
 
+    benchmark_report["account"] = arguments.account
+    if performance_run is not None and performance_run.report_path is not None:
+        benchmark_report["performance_report"] = str(performance_run.report_path)
+    print(json.dumps(benchmark_report, indent=2, sort_keys=True))
+
+
+def _measure_connected_runtime(connected: Any, arguments: argparse.Namespace, account: Any) -> dict[str, object]:
+    """Runs every measurement while the connected runtime still owns its session."""
+
+    runtime = connected.runtime
+    service = runtime.observation_service
+    screenshot_service = service.screenshot_service
+    builder = service.observation_builder
+    session = runtime.session
+    account_artifact_directory = account.artifact_directory_name
+
+    start = connected.runner.prove_preflight_state(
+        account,
+        TaskPreflight.WORLD_MAP,
+        label_prefix=f"{arguments.label}_preflight",
+        max_steps=20,
+    )
+    coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+    if coordinate is None:
+        raise AssertionError("World-map preflight did not expose a coordinate-addressable viewport.")
+
+    request = ObservationRequest.world_map_movement_proof_follow_up()
+    artifact_selection = resolve_routine_artifact_selection(
+        mode=service.mode,
+        routine=ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF,
+    )
+    coordinate_bar_selector = builder.selector_registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR)
+    if coordinate_bar_selector.relative_bounds is None:
+        raise AssertionError("Coordinate-bar selector must define relative bounds.")
+
+    _warm_live_paths(
+        account_artifact_directory=account_artifact_directory,
+        builder=builder,
+        request=request,
+        screenshot_service=screenshot_service,
+        session=session,
+        label=arguments.label,
+    )
     payloads, adb_bytes_ms = _benchmark_adb_bytes(session=session, iterations=arguments.iterations)
     png_decode_ms = _benchmark_png_decode(payloads)
     artifact_persist_ms = _benchmark_artifact_persist(
         screenshot_service=screenshot_service,
-        account_artifact_directory=account.artifact_directory_name,
+        account_artifact_directory=account_artifact_directory,
         label=arguments.label,
         payloads=payloads,
     )
     ocr_screenshots, screenshot_capture_no_persist_ms = _benchmark_screenshot_capture(
         screenshot_service=screenshot_service,
         session=session,
-        account_artifact_directory=account.artifact_directory_name,
+        account_artifact_directory=account_artifact_directory,
         label=arguments.label,
         iterations=arguments.iterations,
         persist=False,
@@ -146,7 +184,7 @@ def main() -> None:
     _persisted_screenshots, screenshot_capture_persist_ms = _benchmark_screenshot_capture(
         screenshot_service=screenshot_service,
         session=session,
-        account_artifact_directory=account.artifact_directory_name,
+        account_artifact_directory=account_artifact_directory,
         label=arguments.label,
         iterations=arguments.iterations,
         persist=True,
@@ -159,16 +197,12 @@ def main() -> None:
     builder_screenshots, _builder_input_capture_ms = _benchmark_screenshot_capture(
         screenshot_service=screenshot_service,
         session=session,
-        account_artifact_directory=account.artifact_directory_name,
+        account_artifact_directory=account_artifact_directory,
         label=f"{arguments.label}_builder_input",
         iterations=arguments.iterations,
         persist=False,
     )
-    coordinate_builder_ms = _benchmark_builder(
-        builder=builder,
-        screenshots=builder_screenshots,
-        request=request,
-    )
+    coordinate_builder_ms = _benchmark_builder(builder=builder, screenshots=builder_screenshots, request=request)
     p2_builder_ms = _benchmark_builder(
         builder=builder,
         screenshots=builder_screenshots,
@@ -182,47 +216,46 @@ def main() -> None:
         iterations=arguments.iterations,
     )
     service_total_mean = statistics.mean(service_timings["total_ms"])
+    return {
+        "iterations": arguments.iterations,
+        "preflight_coordinate": coordinate,
+        "movement_proof_artifact_selection": sorted(kind.value for kind in artifact_selection),
+        "adb_capture_screenshot_bytes": _summary(adb_bytes_ms),
+        "png_decode_existing_payload": _summary(png_decode_ms),
+        "artifact_persist_existing_payload_debug_only": _summary(artifact_persist_ms),
+        "screenshot_service_capture_no_persist": _summary(screenshot_capture_no_persist_ms),
+        "screenshot_service_capture_with_persist_debug_only": _summary(screenshot_capture_persist_ms),
+        "coordinate_bar_ocr_only_existing_screenshot": _summary(coordinate_ocr_ms),
+        "observation_builder_coordinate_only_existing_screenshot": _summary(coordinate_builder_ms),
+        "p2_checkpoint_builder_existing_screenshot": _summary(p2_builder_ms),
+        "observation_service_capture_total": _summary(service_timings["total_ms"]),
+        "observation_service_internal_screenshot_capture": _summary(service_timings["screenshot_ms"]),
+        "observation_service_internal_builder": _summary(service_timings["builder_ms"]),
+        "observation_service_residual_side_effects": _summary(service_timings["residual_ms"]),
+        "mean_percent_of_service_total": {
+            "screenshot_capture": round(
+                statistics.mean(service_timings["screenshot_ms"]) / service_total_mean * 100,
+                1,
+            ),
+            "builder": round(statistics.mean(service_timings["builder_ms"]) / service_total_mean * 100, 1),
+            "residual_side_effects": round(
+                statistics.mean(service_timings["residual_ms"]) / service_total_mean * 100,
+                1,
+            ),
+        },
+        "service_coordinates": service_timings["coordinates"],
+        "service_artifact_paths": service_timings["artifact_paths"],
+    }
 
-            print(
-                json.dumps(
-                    {
-                        "account": arguments.account,
-                        "iterations": arguments.iterations,
-                        "preflight_coordinate": coordinate,
-                        "movement_proof_artifact_selection": sorted(kind.value for kind in artifact_selection),
-                        "adb_capture_screenshot_bytes": _summary(adb_bytes_ms),
-                        "png_decode_existing_payload": _summary(png_decode_ms),
-                        "artifact_persist_existing_payload_debug_only": _summary(artifact_persist_ms),
-                        "screenshot_service_capture_no_persist": _summary(screenshot_capture_no_persist_ms),
-                        "screenshot_service_capture_with_persist_debug_only": _summary(screenshot_capture_persist_ms),
-                        "coordinate_bar_ocr_only_existing_screenshot": _summary(coordinate_ocr_ms),
-                        "observation_builder_coordinate_only_existing_screenshot": _summary(coordinate_builder_ms),
-                        "p2_checkpoint_builder_existing_screenshot": _summary(p2_builder_ms),
-                        "observation_service_capture_total": _summary(service_timings["total_ms"]),
-                        "observation_service_internal_screenshot_capture": _summary(service_timings["screenshot_ms"]),
-                        "observation_service_internal_builder": _summary(service_timings["builder_ms"]),
-                        "observation_service_residual_side_effects": _summary(service_timings["residual_ms"]),
-                        "mean_percent_of_service_total": {
-                            "screenshot_capture": round(
-                                statistics.mean(service_timings["screenshot_ms"]) / service_total_mean * 100,
-                                1,
-                            ),
-                            "builder": round(
-                                statistics.mean(service_timings["builder_ms"]) / service_total_mean * 100,
-                                1,
-                            ),
-                            "residual_side_effects": round(
-                                statistics.mean(service_timings["residual_ms"]) / service_total_mean * 100,
-                                1,
-                            ),
-                        },
-                        "service_coordinates": service_timings["coordinates"],
-                        "service_artifact_paths": service_timings["artifact_paths"],
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
+
+def _with_connected_runtime(
+    connected_context: Any,
+    measure: Callable[[Any], dict[str, object]],
+) -> dict[str, object]:
+    """Keeps every runtime-dependent benchmark measurement inside its live lease."""
+
+    with connected_context as connected:
+        return measure(connected)
 
 
 def _warm_live_paths(

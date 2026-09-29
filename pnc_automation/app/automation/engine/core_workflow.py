@@ -12,6 +12,7 @@ from pnc_automation.app.automation.daily_maintenance.coordinator import (
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationResult
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.core.infra.diagnostics.performance import performance_span
 from pnc_automation.app.automation.engine.navigation_core import require_resource_inventory_surface
 from pnc_automation.app.automation.tasks.building_workflow_support import (
     build_queue_first_slot_is_idle,
@@ -1200,6 +1201,15 @@ class CoreWorkflowRunner(Generic[T]):
 
     def run(self, workflow: CoreWorkflow[T]) -> CoreWorkflowResult[T]:
         """Run a bounded workflow, requiring exact authority for supported mutations."""
+
+        with performance_span(
+            "core.workflow",
+            attributes={"workflow_type": type(workflow).__name__},
+        ):
+            return self._run_unmeasured(workflow)
+
+    def _run_unmeasured(self, workflow: CoreWorkflow[T]) -> CoreWorkflowResult[T]:
+        """Owns workflow entry, execution, and exit under one measured boundary."""
 
         spec = workflow.spec
         if not isinstance(spec, WorkflowSpec):
