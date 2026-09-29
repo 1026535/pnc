@@ -6087,6 +6087,64 @@
       "occludes": [
         "PNC_HOME_CITY"
       ]
+    },
+    {
+      "id": "building_ranged_barracks",
+      "layout_id": "building_ranged_barracks",
+      "screen": "PNC_RANGED_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/ranged_barracks_reference_20260922.png",
+        "decoded_sha256": "ffec454b16bc7a764daf7718cd7e5f18272d067ddc82977ebbbeb37125c6de2d",
+        "capture_group": "2026-09-22/v08_final_6e6f4d9/20260922T003339Z_a5948a9b/0007_c4_final"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Ranged Barracks primary identity from the static title and family-specific training description; mutable unit, tier, and training controls are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_ranged_barracks_title.png",
+          "search_region": [
+            95,
+            15,
+            255,
+            75
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_ranged_barracks_description.png",
+          "search_region": [
+            275,
+            140,
+            265,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_ranged_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     }
   ]
 }

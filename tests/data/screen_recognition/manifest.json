@@ -1775,6 +1775,24 @@
         "file_sha256": "2926e931aef1a9308e1dcc353cda0c97bc10e953bac36f058e801b56d371296d",
         "derivative": "Native RGBA 900x1600 session frame captured 2026-09-23T03:17:45Z at the end of the V19 live003 World Castle trial turn-003 run; only chat strip rows y=1395:1485 filled opaque black (0,0,0,255), all other pixels preserved. Same live session as the 03:12 route-source frame (run 20260923T031214Z_c43ce246); the two same-session frames are one correlated group, not independent validation. Installed build not recorded."
       }
+    },
+    {
+      "image": "building_routes/ranged_barracks_reference_20260922.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-22/v08_final_6e6f4d9/20260922T003339Z_a5948a9b/0007_c4_final",
+      "sha256": "ffec454b16bc7a764daf7718cd7e5f18272d067ddc82977ebbbeb37125c6de2d",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ]
+    },
+    {
+      "image": "building_routes/infantry_barracks_20260917.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-17/3xx_spies/v20_infantry_menu",
+      "sha256": "f60db73446efa3eb98cecab905e3d9b2ca45a635ddf77c4143bdd58b7766b288",
+      "expected_visual_screens": []
     }
   ]
 }

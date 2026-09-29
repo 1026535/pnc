@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -104,6 +104,33 @@ CASES = (
         "building_hall_of_war",
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT, UiElementId.PNC_HALL_OF_WAR_UPGRADE_BUTTON},
     ),
+    (
+        "ranged_barracks_reference_20260922.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+)
+
+
+RANGED_REFERENCE = "ranged_barracks_reference_20260922.png"
+RANGED_TITLE_BOX = (95, 15, 350, 90)
+RANGED_DESCRIPTION_BOX = (275, 140, 540, 185)
+RANGED_BACK_BOX = (0, 0, 100, 55)
+RANGED_MUTATION_SELECTORS = frozenset(
+    {
+        UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
+        UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+        UiElementId.PNC_BARRACKS_UNIT_ADVANTAGE_BUTTON,
+        UiElementId.PNC_BARRACKS_UNIT_TIER_SLOT,
+        UiElementId.PNC_BARRACKS_QUANTITY_LOCK_BUTTON,
+        UiElementId.PNC_BARRACKS_QUANTITY_SLIDER,
+        UiElementId.PNC_BARRACKS_TRAIN_BUTTON,
+        UiElementId.PNC_BARRACKS_TRAIN_NOW_BUTTON,
+        UiElementId.PNC_BARRACKS_SPEEDUP_BUTTON,
+        UiElementId.PNC_BARRACKS_COLLECT_BUTTON,
+        UiElementId.PNC_BARRACKS_EFFECT_TABLE_ROW,
+    }
 )
 
 
@@ -117,49 +144,113 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
             with self.subTest(fixture=fixture_name):
                 fixture = FIXTURE_ROOT / fixture_name
                 with Image.open(fixture) as source:
-                    image = source.convert("RGB")
-                capture = CapturedScreenshot(
-                    artifact=None,
-                    image=image,
-                    image_format="PNG",
-                    payload=fixture.read_bytes(),
-                    ephemeral_captured_at=datetime.now(tz=UTC),
-                )
-                registry = build_default_selector_registry()
-                matcher = OpenCvTemplateMatcher()
-                recognizer = load_visual_screen_recognizer(CATALOG_PATH, matcher=matcher)
-                enricher = PncObservationEnricher(selector_registry=registry)
-                builder = ObservationBuilder(
-                    selector_registry=registry,
-                    selector_engine=ImageSelectorEngine(matcher),
-                    screen_classifier=ScreenClassifier(),
-                    enricher=enricher,
-                    visual_recognizer=recognizer,
-                    ocr_service=_require_rapid_ocr_service(self),
-                    ocr_backend_revision=f"a02:{layout_id}",
-                )
-                navigation = NavigationPerception(
-                    recognizer,
-                    enricher,
-                    ScreenClassifier(),
-                    builder.create_ocr_context,
-                )
-
-                observations = (
-                    (
-                        "observation_builder",
-                        builder.build(
-                            capture,
-                            request=ObservationRequest.source_screen_retry(screen),
-                        ),
-                    ),
-                    ("navigation_perception", navigation.build(capture, include_content=True)),
-                )
+                    image = source.copy()
+                if fixture_name == RANGED_REFERENCE:
+                    self.assertEqual(("RGBA", (540, 960)), (image.mode, image.size))
+                observations = self._both_observations(image, screen, layout_id)
                 for observer_name, observation in observations:
                     with self.subTest(observer=observer_name):
                         self.assertEqual(observation.screen_type, screen)
                         self.assertEqual(observation.decision.layout_id, layout_id)
                         self.assertTrue(expected_controls.issubset(observation.visible_elements))
+
+    def _both_observations(self, image, screen, layout_id):
+        """Build the production ObservationBuilder and NavigationPerception outputs."""
+        capture = CapturedScreenshot(
+            artifact=None,
+            image=image,
+            image_format="PNG",
+            # Synthetic erased images must not retain the original PNG payload.
+            payload=None,
+            ephemeral_captured_at=datetime.now(tz=UTC),
+        )
+        registry = build_default_selector_registry()
+        matcher = OpenCvTemplateMatcher()
+        recognizer = load_visual_screen_recognizer(CATALOG_PATH, matcher=matcher)
+        enricher = PncObservationEnricher(selector_registry=registry, template_matcher=matcher)
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=ImageSelectorEngine(matcher),
+            screen_classifier=ScreenClassifier(),
+            enricher=enricher,
+            visual_recognizer=recognizer,
+            ocr_service=_require_rapid_ocr_service(self),
+            ocr_backend_revision=f"a02:{layout_id}",
+        )
+        navigation = NavigationPerception(
+            recognizer,
+            enricher,
+            ScreenClassifier(),
+            builder.create_ocr_context,
+        )
+        return (
+            (
+                "observation_builder",
+                builder.build(
+                    capture,
+                    request=ObservationRequest.source_screen_retry(screen),
+                ),
+            ),
+            ("navigation_perception", navigation.build(capture, include_content=True)),
+        )
+
+    def test_ranged_barracks_publishes_no_mutation_controls(self) -> None:
+        """Identity plus measured Back only; training and amount controls stay unpublished."""
+        fixture = FIXTURE_ROOT / RANGED_REFERENCE
+        with Image.open(fixture) as source:
+            image = source.copy()
+        for observer_name, observation in self._both_observations(
+            image, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
+        ):
+            with self.subTest(observer=observer_name):
+                self.assertIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
+                self.assertTrue(
+                    RANGED_MUTATION_SELECTORS.isdisjoint(observation.visible_elements)
+                )
+
+    def test_foreign_family_frame_does_not_reach_ranged_identity(self) -> None:
+        """The shared barracks layout cannot stand in for the Ranged family anchors."""
+        fixture = FIXTURE_ROOT / "infantry_barracks_20260917.png"
+        with Image.open(fixture) as source:
+            image = source.copy()
+        for observer_name, observation in self._both_observations(
+            image, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
+        ):
+            with self.subTest(observer=observer_name):
+                self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+                self.assertFalse(observation.visible_elements)
+
+    def test_erased_identity_anchor_blocks_ranged_identity(self) -> None:
+        """Both independent anchors are required; neither banner text alone proves family."""
+        fixture = FIXTURE_ROOT / RANGED_REFERENCE
+        with Image.open(fixture) as source:
+            image = source.copy()
+        for label, box in (
+            ("title", RANGED_TITLE_BOX),
+            ("description", RANGED_DESCRIPTION_BOX),
+        ):
+            erased = image.copy()
+            ImageDraw.Draw(erased).rectangle(box, fill=(10, 20, 40))
+            for observer_name, observation in self._both_observations(
+                erased, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
+            ):
+                with self.subTest(erased=label, observer=observer_name):
+                    self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+                    self.assertFalse(observation.visible_elements)
+
+    def test_erased_back_anchor_preserves_identity_but_withholds_control(self) -> None:
+        """A missing measured Back cannot be recovered from geometry or content."""
+        fixture = FIXTURE_ROOT / RANGED_REFERENCE
+        with Image.open(fixture) as source:
+            image = source.copy()
+        erased = image.copy()
+        ImageDraw.Draw(erased).rectangle(RANGED_BACK_BOX, fill=(10, 20, 40))
+        for observer_name, observation in self._both_observations(
+            erased, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
+        ):
+            with self.subTest(observer=observer_name):
+                self.assertEqual(observation.screen_type, ScreenType.PNC_RANGED_BARRACKS)
+                self.assertNotIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
 
 
 if __name__ == "__main__":
