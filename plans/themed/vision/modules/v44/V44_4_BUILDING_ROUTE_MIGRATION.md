@@ -1,7 +1,8 @@
 # V44-4 — Building-route migration and coverage
 
 Parent: [V44](../V44_FULL_HOME_CITY_NAVIGATION.md#5-implementation-stages-and-integration-ownership).
-Status: **not started; source migration depends on reviewed V44-3**.
+Status: **in progress; consumes the accepted V44-1/2/3 publication and independently reviewed follow-up corrections**.
+Exact route candidates, owners and pending proof remain in the coordinator ledger.
 Delegate substantial building groups with disjoint target keys/caller symbols;
 the lead owns ownership reconciliation, integration and whole-V44 acceptance.
 Use the [binding interface agreement](V44_INTERFACE_CONTRACT.md), especially
@@ -64,6 +65,51 @@ one worker per building or run duplicate acceptance for equivalent instances.
    live batch for the group's distinct missing use cases. Report unavailable,
    unresolved and externally owned boundaries explicitly rather than expanding
    into another feature's implementation or unrelated popup/host repairs.
+
+## Entry semantics and non-collecting preconditions
+
+September 29 source review: use the existing canonical building catalog,
+feature screen identities and reviewed return edges. Extend those owners only
+when a route has evidence; do not create a parallel destination registry.
+
+- **Qualified point:** a body template and safe HUD band do not exclude every
+  interactive overlay. Native source/holdout evidence must establish the action
+  point on the intended entry body, clear of visible status/collection/training
+  completion/help bubbles and area/unlock controls. Current ambiguous overlap
+  refuses the tap. Recovered `citymoveitem.lua:129-168` dispatches area, button,
+  then building colliders; actual hidden collider bounds are not inferred from
+  those names or from atlas pivots. Use existing observation/body qualification,
+  not a speculative scene-wide collider reconstruction.
+- **Destination identity:** shared `CAMP_PANEL` artwork does not distinguish the
+  four military families. Retain exact pre-tap slot/body and observe the intended
+  family's native title plus independent identity evidence; Back is independently
+  measured. Apply the same selected-family requirement to `RES_BUILD_WIN` if
+  resource entry becomes qualified. Asynchronous responses or observed intermediate
+  menus use the existing bounded observation/transition contract within one
+  operation deadline. An unobserved intermediary is a pending dependency, not
+  permission to add guessed clicks or another retry loop.
+- **Resource entry:** Farm, Lumber Camp, Moon Well, Iron Mine and Gold Mine body
+  handlers can divert to collection. The normal collection handler enumerates
+  all harvestable same-type IDs, so exact slot selection does not bound mutation
+  to that slot. An off-bubble body point or failure to detect a bubble is not a
+  bypass. Keep public entry refused until a current positive non-collecting
+  precondition or a separately evidenced safe control is qualified, including
+  actual primary identity and return. Collection needs explicit action/target/
+  family-scope budget authority; none is granted by this plan amendment.
+- **Coverage:** record the five resource types' shared entry-state gap once and
+  link their rows. Slots17-51 also allow Recruiting/Infirmary types; their entry
+  cases are not blocked merely because they share resource eligibility. Geometry,
+  semantic binding, presence and accepted entry remain separate columns.
+- **Unbound/no-op evidence:** empty packaged dispatcher branches for VALKYRIE or
+  TREASURE do not prove current unavailability, a universal no-panel outcome or
+  a successful route. Keep unbound16/52/53/54 and undeclared system13 unresolved
+  until their actual handlers and current UI establish semantics; do not invent
+  identities to make the coverage total green.
+
+Evidence, rejected consultation claims and the smallest remaining observations
+are documented in [the reviewed knowledge memo](V44_NAVIGATION_KNOWLEDGE_REVIEW.md).
+This clarifies R1/R5/RL1; it neither removes a route gate nor requests another
+normalization run for unchanged accepted behavior.
 
 ## Inventory and dispatch manifest
 
