@@ -158,6 +158,8 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             ],
         )
 
+
+
     def test_select_chat_channel_returns_without_tap_when_requested_channel_is_active(self):
         now = datetime(2026, 9, 12, tzinfo=UTC)
         source = chat_frame(ChatChannel.ALLIANCE, captured_at=now)

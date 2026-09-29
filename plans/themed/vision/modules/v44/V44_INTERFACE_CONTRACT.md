@@ -1,11 +1,12 @@
 # V44 — Binding interface and implementation agreement
 
-Design revision: **2026-09-25 / contract 1**. Status: **specified, not implemented**.
+Design revision: **2026-09-25 / contract 1, with dated amendments below**. Status: **shared V44-1/2/3 publication accepted for its recorded cases; V44-4 in progress**.
 Parent: [V44](../V44_FULL_HOME_CITY_NAVIGATION.md). Implementation owners:
 [V44-1](V44_1_NATIVE_INPUT.md), [V44-2](V44_2_NORMALIZED_VIEW_PERCEPTION.md),
 [V44-3](V44_3_NAVIGATION_ORCHESTRATION.md), [V44-4](V44_4_BUILDING_ROUTE_MIGRATION.md).
 This reference is shared by exactly four slices; it is not another delivery slice.
-The queue remains idle. This document does not dispatch workers or authorize a new live run.
+The user has resumed V44 and the dependent queue. The coordinator ledger owns
+current dispatch and candidates; this reference does not release a new live run.
 
 ## 1. Decisions already made
 
@@ -28,6 +29,9 @@ The queue remains idle. This document does not dispatch workers or authorize a n
    and generic paths publish actual dispatch.
 6. A current body match authorizes the final tap; a projected slot never does.
    A fresh destination observation proves arrival. Feature owners prove return.
+   This requires the [reviewed entry semantics](V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-non-collecting-preconditions):
+   current action-point qualification, family-specific destination evidence and
+   resource non-collecting preconditions are not supplied by a body match alone.
 7. Required live proof runs through the actual production candidate after lead
    review, under a separate bounded Devin assignment. Offline success is not live acceptance.
 
@@ -67,6 +71,26 @@ may remain a request-local fact across a qualified pan only while fresh measured
 scale still agrees with the endpoint profile and instance/castle continuity holds.
 Reentry, unexpected zoom, session epoch change or lost identity discards that fact.
 No cache of actionable points or normalized state survives a public operation.
+
+**2026-09-29 endpoint-first amendment:** A public Home operation carries a typed
+camera scan mode with each capture. Its initial and post-wheel captures probe
+only the two template rungs bracketing the calibrated endpoint band, using
+current fixed landmarks and a current matched wheel anchor. An endpoint
+candidate is not yet permission
+to pan or tap: the next fresh Home capture runs the unrestricted scale sweep
+to reject cross-scale rivals and confirm the endpoint. An already-widest
+start may pass this two-frame gate without wheel movement. After certification,
+same-operation pan reacquisition uses those endpoint rungs for a fresh
+translation and body/slot match on each new frame, while retaining the
+calibration and session continuity checks above. This intentionally still pays
+an unrestricted sweep for a successful endpoint candidate; a failed candidate
+may lead to another sweep later in the same operation, subject to its passive,
+wheel-input and deadline limits. It avoids repeating that sweep for every
+normalized pan. Unrestricted localization remains available to other callers.
+An unresolved arbitrary-scale view may authorize another outward wheel only
+from its current qualified anchor; an unchanged or shifted-but-not-shrinking
+anchor is not measured zoom-out progress. Lost anchor/pose, ambiguous fixed
+votes, or calibration departure stops dependent input.
 
 ## 3. V44-1: input requests and actual dispatch
 

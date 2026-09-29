@@ -27,6 +27,8 @@ missing defaults skip without reading machine-local fixture configuration.
 # A tier, component, qualified tier/component, or the api/vision aliases.
 .venv/Scripts/python.exe tools/run_tests.py group unit
 .venv/Scripts/python.exe tools/run_tests.py group unit.core.vision
+.venv/Scripts/python.exe tools/run_tests.py group unit.app.pnc.vision.bag_items
+.venv/Scripts/python.exe tools/run_tests.py group integration.vision.research
 .venv/Scripts/python.exe tools/run_tests.py group api
 .venv/Scripts/python.exe tools/run_tests.py group test_harness
 
@@ -126,6 +128,22 @@ surface and view behavior. Navigation tests separate transitions, buildings,
 Campaign, Manor, chat, mail, research, trial and Workshop routes. Shared
 doubles live in support modules; tests should not import another test suite.
 
+Home Camera, Pet Workshop, Bag, Research and Campaign use feature subpackages
+under their production, unit and integration owners. Their focused group names
+end in `home_city_camera`, `pet_workshop`, `bag_items`, `research` and `campaign`.
+Units import the canonical internal owner for parsing, geometry or localization;
+external callers keep the supported feature facade. Module creation/deletion and
+package-root changes still require conservative migration validation.
+
+Use verified assets and independently specified geometry for deterministic
+calculation tests. Retain saved captures for observed rendering and matching
+regressions, running them directly against the feature producer/localizer when
+publisher wiring is not part of the assertion. Both-publisher integration proves
+agreement, frame provenance, guards and bounded OCR at those boundaries. Moving
+a case must preserve its meaningful assertions; a resized crop-source image is
+not an independent holdout. Cache only immutable setup, keeping each frame,
+OCR context and mutable recording state fresh.
+
 Selection broadens to the full portable suite when it cannot establish safe
 ownership: shared test infrastructure, packaging/dependencies, added/deleted
 production modules, unresolved dynamic imports, unknown
@@ -133,7 +151,7 @@ resources, or unavailable base/analysis evidence. The selection JSON records
 each module's reasons and every full fallback. Static imports cannot completely
 describe reflection, plugins, source-as-data, or arbitrary external resources;
 affected success is the merge-candidate gate, with the residual risk that an
-unmodeled dependency could be missed until the post-merge full run.
+unmodeled dependency could be missed until a separately assigned complete audit.
 
 `measure` always runs the full portable inventory and writes branch coverage and
 timing evidence. It does not switch per-test Coverage contexts or manipulate

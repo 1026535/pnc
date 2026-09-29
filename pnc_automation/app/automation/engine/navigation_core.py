@@ -31,7 +31,9 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraScanMode,
     HomeCityCameraProof,
+    HomeCityCameraStatus,
     HomeCityViewEvidence,
     HomeCityZoomStatus,
 )
@@ -103,11 +105,13 @@ from pnc_automation.app.pnc.vision.home_city_camera import (
     load_home_city_camera_catalog,
 )
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import performance_wait
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
     HOME_CITY_HUD_SAFE_MAX_X_RATIO,
     HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
     HOME_CITY_HUD_SAFE_MIN_X_RATIO,
     HOME_CITY_HUD_SAFE_MIN_Y_RATIO,
+    HomeCityCameraPanStep,
     home_city_scan_step_budget,
     plan_home_city_camera_step,
 )
@@ -177,13 +181,21 @@ class NavigationPolicy:
             raise ValueError("Home zoom and pose observation budgets must be positive integers.")
 
 
+@dataclass(frozen=True, slots=True)
+class HomeCityObservationRequest:
+    """One capture label and its scoped camera measurement contract."""
+
+    label: str
+    camera_mode: HomeCityCameraScanMode
+
+
 @dataclass(slots=True)
 class _HomeCityOperation:
     """One Home request's deadline, input counts and current evidence lifetime."""
 
     core: NavigationCore
     targets: tuple[HomeCityCameraTarget, ...]
-    observe_content: Callable[[str], Observation]
+    observe_content: Callable[[HomeCityObservationRequest], Observation]
     label: str
     started: float
     state: HomeCityScanState = field(default_factory=HomeCityScanState)
@@ -208,13 +220,26 @@ class _HomeCityOperation:
             self.stop(HomeCityScanStopReason.DEADLINE_EXHAUSTED,
                       "Home navigation exhausted its operation deadline; no further input sent.")
 
-    def capture(self, previous: Observation | None, stage: str) -> Observation:
+    def capture(
+        self,
+        previous: Observation | None,
+        stage: str,
+        *,
+        camera_mode: HomeCityCameraScanMode | None = None,
+    ) -> Observation:
         """Capture fresh content without hiding extra captures in another observer."""
         self.check_deadline()
         if previous is not None:
-            self.core.sleep(self.core.policy.poll_seconds)
+            self.core.wait("home_city_poll", self.core.policy.poll_seconds)
         self.check_deadline()
-        frame = self.observe_content(f"{self.label}_{stage}")
+        mode = camera_mode or (
+            HomeCityCameraScanMode.NORMALIZED_ENDPOINT
+            if self.calibration_id is not None
+            else HomeCityCameraScanMode.ENDPOINT_PROBE
+        )
+        frame = self.observe_content(
+            HomeCityObservationRequest(f"{self.label}_{stage}", mode)
+        )
         self.check_deadline()
         if previous is not None:
             if frame.captured_at <= previous.captured_at:
@@ -299,6 +324,10 @@ class _HomeCityOperation:
         pending_wheel: Observation | None = None
         while True:
             view = self.view(current)
+            proof = current.spatial_surface.camera_proof
+            if proof is not None and proof.status is HomeCityCameraStatus.AMBIGUOUS:
+                self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
+                          "Home fixed landmarks disagree; no dependent wheel or building input sent.")
             if view is not None and view.zoom_status == HomeCityZoomStatus.UNSUPPORTED:
                 self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
                           "This Home view has no supported endpoint calibration; no wheel input sent.")
@@ -307,7 +336,10 @@ class _HomeCityOperation:
                 if passive >= self.core.policy.max_home_pose_observations:
                     self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
                               "Endpoint confirmation exceeded its passive observation allowance.")
-                after = self.capture(current, "endpoint_confirmation")
+                after = self.capture(
+                    current, "endpoint_confirmation",
+                    camera_mode=HomeCityCameraScanMode.UNRESTRICTED,
+                )
                 passive += 1
                 if self.endpoint(after) and self.view(after).calibration_id == view.calibration_id:
                     self.calibration_id = view.calibration_id
@@ -318,8 +350,8 @@ class _HomeCityOperation:
                 HomeCityZoomStatus.UNRESOLVED, HomeCityZoomStatus.UNSUPPORTED,
             ):
                 # A current positively qualified anchor may normalize an unlocalized
-                # start. After input, unresolved scale only permits passive captures.
-                if pending_wheel is not None or view is None or view.zoom_anchor is None:
+                # start. After input, it must shrink before another wheel is allowed.
+                if view is None or view.zoom_anchor is None:
                     if passive >= self.core.policy.max_home_pose_observations:
                         self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
                                   "Current Home zoom could not be qualified within its passive allowance.")
@@ -329,9 +361,20 @@ class _HomeCityOperation:
             if pending_wheel is not None:
                 before_proof = pending_wheel.spatial_surface.camera_proof
                 after_proof = current.spatial_surface.camera_proof
+                before_anchor = self.view(pending_wheel).zoom_anchor
+                after_anchor = view.zoom_anchor
+                anchor_shrank = (
+                    before_anchor is not None and after_anchor is not None
+                    and before_anchor.qualification_id == after_anchor.qualification_id
+                    and after_anchor.bounds.width <= before_anchor.bounds.width
+                    and after_anchor.bounds.height <= before_anchor.bounds.height
+                    and (after_anchor.bounds.width < before_anchor.bounds.width
+                         or after_anchor.bounds.height < before_anchor.bounds.height)
+                )
                 progressed = (before_proof is not None and after_proof is not None
-                              and after_proof.localized
-                              and (not before_proof.localized or after_proof.zoom < before_proof.zoom))
+                               and before_proof.localized and after_proof.localized
+                               and after_proof.zoom < before_proof.zoom)
+                progressed = progressed or anchor_shrank
                 if not progressed:
                     unchanged = (before_proof is not None and after_proof is not None
                                  and before_proof.localized and after_proof.localized
@@ -396,6 +439,11 @@ class NavigationCore:
     observe_ready: Callable[[str], Observation] | None = None
     _sequence: int = field(default=0, init=False)
 
+    def wait(self, reason: str, seconds: float) -> None:
+        """Measures one explicit passive navigation wait without patching global sleep."""
+
+        performance_wait(reason, seconds, self.sleep)
+
     def transition(self, edge: NavigationEdge) -> Observation:
         """Reacquire the source, tap once, and require a stable observed destination."""
         if edge not in self.edges:
@@ -417,7 +465,7 @@ class NavigationCore:
         self,
         target: HomeCityObjectId,
         *,
-        observe_content: Callable[[str], Observation],
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
         require_measured: bool = False,
         home_city_slot: HomeCitySlotSelector | None = None,
@@ -438,7 +486,7 @@ class NavigationCore:
         self,
         target: HomeCityObjectId,
         *,
-        observe_content: Callable[[str], Observation],
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
         home_city_slot: HomeCitySlotSelector | None = None,
     ) -> Observation:
@@ -473,7 +521,7 @@ class NavigationCore:
         return result
 
     def discover_home_city(
-        self, *, observe_content: Callable[[str], Observation],
+        self, *, observe_content: Callable[[HomeCityObservationRequest], Observation],
     ) -> HomeCityScanResult:
         """Survey qualified candidates within one budget, without tapping occupants."""
         operation = self._home_operation(observe_content, load_home_city_camera_catalog().targets)
@@ -486,7 +534,7 @@ class NavigationCore:
         return result
 
     def _home_operation(
-        self, observe_content: Callable[[str], Observation],
+        self, observe_content: Callable[[HomeCityObservationRequest], Observation],
         targets: tuple[HomeCityCameraTarget, ...],
     ) -> _HomeCityOperation:
         """Allocate one request lifetime; internal reacquisition never starts another."""
@@ -507,7 +555,16 @@ class NavigationCore:
         state = operation.state
         targets = operation.targets
         avoid_direction: str | None = None
-        attempted_routes: set[tuple[object, ...]] = set()
+        # (target, slot, direction, zoom, atlas camera center x/y).  The pose is
+        # kept in atlas camera-center units so a noisy revisit still matches the
+        # localization allowance instead of exact floating-point equality.
+        attempted_routes: list[
+            tuple[HomeCityObjectId, HomeCitySlotSelector | None, str, float, float, float]
+        ] = []
+        # Request-local retained candidate: replanned from every fresh frame and
+        # released once it is inspected or no qualified route remains.  It is a
+        # selection preference, never persisted route authority for a stale action.
+        preferred: tuple[HomeCityCameraTarget, HomeCitySlotSelector | None] | None = None
         stop = operation.stop
         proof = _require_localized_camera(current)
         state.observe(current, targets=targets, usable_region=_usable_home_region(proof))
@@ -526,48 +583,99 @@ class NavigationCore:
                     on_target_acquired=on_target_acquired,
                     home_city_slot=home_city_slot or resolved[0].home_city_slot,
                 )
-            proposals = []
-            unplanned_candidates = False
-            unsafe_candidates = False
-            for spec in targets:
-                if (acquire_target is None and spec.reference_slot is None
-                        and spec.object_id in state.inspected_targets):
-                    continue
-                candidates = ((resolved[0].home_city_slot,) if resolved is not None
-                              else state.candidate_slots(spec, proof, exact=home_city_slot))
-                for slot in candidates:
+            chosen: (
+                tuple[HomeCityCameraTarget, HomeCitySlotSelector | None, HomeCityCameraPanStep]
+                | None
+            ) = None
+            if acquire_target is None and preferred is not None:
+                spec, preferred_slot = preferred
+                if state.candidate_inspected(spec, preferred_slot):
+                    preferred = None
+                else:
                     try:
                         step = plan_home_city_camera_step(
-                            observation=current, target=spec.object_id, home_city_slot=slot,
-                            avoid_direction=avoid_direction,
+                            observation=current, target=spec.object_id,
+                            home_city_slot=preferred_slot, avoid_direction=avoid_direction,
+                            inspect_body=True,
                         )
                     except SelectorResolutionError:
-                        unplanned_candidates = True
-                        continue
-                    if not _qualified_home_pan(step.action, current):
-                        unsafe_candidates = True
-                        continue
-                    proposals.append((step.distance_to_goal(proof), spec.object_id.value, spec, slot, step))
-                    break  # Preserve each family's candidate priority.
-            if not proposals:
-                return stop(
-                    HomeCityScanStopReason.NO_SAFE_GESTURE if unsafe_candidates else (
-                    HomeCityScanStopReason.NO_PROGRESS if avoid_direction is not None else (
-                        HomeCityScanStopReason.NO_QUALIFIED_ROUTE if unplanned_candidates
-                        else HomeCityScanStopReason.CANDIDATES_INSPECTED
-                    )),
-                    "No qualified pan remains after no camera movement or unresolved body evidence; "
-                    "remaining slots are unknown, not absent.",
-                )
-            if state.gestures >= budget:
+                        preferred = None
+                    else:
+                        if not _qualified_home_pan(step.action, current) or _attempted_home_route(
+                            attempted_routes, proof, spec.object_id, preferred_slot,
+                            step.action.direction,
+                        ):
+                            preferred = None
+                        else:
+                            chosen = (spec, preferred_slot, step)
+            if chosen is None:
+                proposals = []
+                unplanned_candidates = False
+                unsafe_candidates = False
+                repeated_route = False
+                for spec in targets:
+                    candidates = ((resolved[0].home_city_slot,) if resolved is not None
+                                  else state.candidate_slots(spec, proof, exact=home_city_slot))
+                    for slot in candidates:
+                        if acquire_target is None and state.candidate_inspected(spec, slot):
+                            continue
+                        try:
+                            step = plan_home_city_camera_step(
+                                observation=current, target=spec.object_id, home_city_slot=slot,
+                                avoid_direction=avoid_direction,
+                                inspect_body=acquire_target is None,
+                            )
+                        except SelectorResolutionError:
+                            unplanned_candidates = True
+                            continue
+                        if not _qualified_home_pan(step.action, current):
+                            unsafe_candidates = True
+                            continue
+                        # Discovery skips a route already attempted at a
+                        # materially same pose and considers other candidates;
+                        # acquisition fails closed after selection instead.
+                        if acquire_target is None and _attempted_home_route(
+                            attempted_routes, proof, spec.object_id, slot, step.action.direction,
+                        ):
+                            repeated_route = True
+                            continue
+                        proposals.append(
+                            (step.distance_to_goal(proof), spec.object_id.value, spec, slot, step)
+                        )
+                        break  # Preserve each family's candidate priority.
+                if not proposals:
+                    return stop(
+                        HomeCityScanStopReason.NO_SAFE_GESTURE if unsafe_candidates else (
+                        HomeCityScanStopReason.NO_PROGRESS
+                        if avoid_direction is not None or repeated_route else (
+                            HomeCityScanStopReason.NO_QUALIFIED_ROUTE if unplanned_candidates
+                            else HomeCityScanStopReason.CANDIDATES_INSPECTED
+                        )),
+                        "No qualified pan remains after no camera movement or unresolved body evidence; "
+                        "remaining slots are unknown, not absent.",
+                    )
+                if state.gestures >= budget:
+                    return stop(HomeCityScanStopReason.BUDGET_EXHAUSTED,
+                                "Measured Home-city scan exhausted its canonical gesture budget.")
+                _, _, spec, slot, step = min(proposals, key=lambda item: (item[0], item[1]))
+                if _attempted_home_route(
+                    attempted_routes, proof, spec.object_id, slot, step.action.direction,
+                ):
+                    return stop(
+                        HomeCityScanStopReason.NO_PROGRESS,
+                        "Home scan revisited the same pose/candidate/direction; no repeated pan sent.",
+                    )
+                if acquire_target is None:
+                    preferred = (spec, slot)
+                chosen = (spec, slot, step)
+            elif state.gestures >= budget:
                 return stop(HomeCityScanStopReason.BUDGET_EXHAUSTED,
                             "Measured Home-city scan exhausted its canonical gesture budget.")
-            _, _, spec, slot, step = min(proposals, key=lambda item: (item[0], item[1]))
-            route = (proof.translation, proof.zoom, spec.object_id, slot, step.action.direction)
-            if route in attempted_routes:
-                stop(HomeCityScanStopReason.NO_PROGRESS,
-                     "Home scan revisited the same pose/candidate/direction; no repeated pan sent.")
-            attempted_routes.add(route)
+            spec, slot, step = chosen
+            center = camera_view_center_atlas(proof)
+            attempted_routes.append(
+                (spec.object_id, slot, step.action.direction, proof.zoom, center[0], center[1])
+            )
             state.gestures += 1
             operation.trace(current, "pan", target=spec.object_id, slot=slot)
             self.record({
@@ -1573,7 +1681,7 @@ class NavigationCore:
         for index in range(self.policy.max_observations):
             if self.clock() - started >= self.policy.max_seconds:
                 break
-            self.sleep(self.policy.poll_seconds)
+            self.wait("content_confirmation_poll", self.policy.poll_seconds)
             after = observe_content(f"{label}_after_{index}")
             self.record({"event": "observed", "screen": after.screen_type.name,
                          "artifact": str(after.artifact_path), "blocked": after.blocking_popup})
@@ -1619,7 +1727,7 @@ class NavigationCore:
                 home_operation.check_deadline()
             if self.clock() - started >= self.policy.max_seconds:
                 break
-            self.sleep(self.policy.poll_seconds)
+            self.wait("navigation_transition_poll", self.policy.poll_seconds)
             after = self.observe(f"{label}_after_{index}")
             self.record({"event": "observed", "screen": after.screen_type.name,
                          "artifact": str(after.artifact_path), "blocked": after.blocking_popup})
@@ -1942,6 +2050,35 @@ def _qualified_home_pan(action: SwipeAction, observation: Observation) -> bool:
             and (x1, y1) != (x2, y2))
 
 
+def _attempted_home_route(
+    routes: list[
+        tuple[HomeCityObjectId, HomeCitySlotSelector | None, str, float, float, float]
+    ],
+    proof: HomeCityCameraProof,
+    object_id: HomeCityObjectId,
+    slot: HomeCitySlotSelector | None,
+    direction: str,
+) -> bool:
+    """Whether this candidate's direction already ran at a materially same pose.
+
+    Poses compare in atlas camera-center units under the same localization
+    allowance the stall detector uses, plus the existing zoom tolerance, so a
+    noisy return to the same corridor/candidate/direction still counts as a
+    repeat while a different target or moved pose stays eligible.
+    """
+
+    center = camera_view_center_atlas(proof)
+    for candidate_id, candidate_slot, candidate_direction, zoom, center_x, center_y in routes:
+        if (candidate_id, candidate_slot, candidate_direction) != (object_id, slot, direction):
+            continue
+        if abs(zoom - proof.zoom) > 0.02:
+            continue
+        if (max(abs(center_x - center[0]), abs(center_y - center[1]))
+                <= _CAMERA_STALL_TOLERANCE_REFERENCE_PX):
+            return True
+    return False
+
+
 def _template_control(observation: Observation, selector_id: UiElementId) -> bool:
     """Return whether one selector was matched by a current-frame template."""
 
@@ -2223,6 +2360,10 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER, screen.PNC_TRIAL_CHALLENGE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
         screen.PNC_BLACKSMITH, screen.PNC_WALL,
+        screen.PNC_RANGED_BARRACKS, screen.PNC_INFANTRY_BARRACKS,
+        # Only the captured voucher_mall producer qualifies this entry's
+        # measured Back; other store contexts remain unreviewed.
+        screen.PNC_CASH_MALL,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))
     return tuple(edges)

@@ -367,6 +367,7 @@ selectors:
   - PNC_ILLUSORY_BEAST_MANOR
   - PNC_PET_WORKSHOP
   - PNC_PET_WORKSHOP_STORAGE
+  - PNC_CASH_MALL
   status: screenshot_seeded
   detection_kind: guarded_geometry
   relative_bounds:

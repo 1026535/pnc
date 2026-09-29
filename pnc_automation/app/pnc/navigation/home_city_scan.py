@@ -254,6 +254,25 @@ class HomeCityScanState:
         ))
         return tuple(HomeCitySlotSelector(slot.slot_index) for slot in ordered)
 
+    def candidate_inspected(
+        self,
+        target: HomeCityCameraTarget,
+        slot: HomeCitySlotSelector | None,
+    ) -> bool:
+        """Whether this request already completed inspecting that exact candidate.
+
+        One request-local lookup serves fixed targets and ordinary slot
+        candidates so discovery never revisits a body it already exposed,
+        whichever family the candidate came from.  An observed occupant hint
+        stays useful for acquisition, but a hint never un-inspects a candidate,
+        and an inspected candidate still carries unknown occupancy --
+        inspection never means absent.
+        """
+
+        if slot is None:
+            return target.object_id in self.inspected_targets
+        return (target.object_id, slot) in self.inspected_candidates
+
     def result(
         self, reason: HomeCityScanStopReason, *, targets: tuple[HomeCityCameraTarget, ...] = (),
     ) -> HomeCityScanResult:

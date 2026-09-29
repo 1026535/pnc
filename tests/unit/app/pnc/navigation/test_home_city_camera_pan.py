@@ -299,7 +299,97 @@ class HomeCityCameraPanTests(unittest.TestCase):
                         observation=observation, target=HomeCityObjectId.CAMPAIGN, avoid_direction="left",
                     )
 
+    def test_turn016_western_sky_left_lane_proposes_for_offscreen_targets(self):
+        # Turn015 stopped without input at (-35,45); turn016 confirmed this
+        # exact sky stroke and a changed, freshly localized Home camera.
+        for translation, safe_bounds, points in (
+            ((-35, 45), Bounds(186, 255, 218, 49), (351, 279, 237, 279)),
+            ((-49, 44), Bounds(172, 254, 218, 49), (337, 278, 223, 278)),
+        ):
+            for target, slot in (
+                (HomeCityObjectId.CAMPAIGN, None),
+                (HomeCityObjectId.WAREHOUSE, HomeCitySlotSelector(3)),
+            ):
+                for inspect_body in (False, True):
+                    with self.subTest(translation=translation, target=target,
+                                      inspect_body=inspect_body):
+                        step = plan_home_city_camera_step(
+                            observation=_observation(translation=translation),
+                            target=target, home_city_slot=slot, inspect_body=inspect_body,
+                        )
+                        self.assertEqual("pan_home_city_western_sky_left", step.action.reason)
+                        self.assertEqual(safe_bounds, step.action.safe_bounds)
+                        self.assertEqual(points, _points(step.action))
+                        self.assertEqual(429, step.action.duration_ms)
+                        self.assertTrue(step.action.exact_geometry)
+                        self.assertEqual("x", step.axis)
+
+    def test_western_sky_lane_refuses_intrusion_or_invalid_current_proof(self):
+        observation = _observation(translation=(-35, 45))
+        intruder = _body(bounds=Bounds(250, 270, 35, 30))
+        cases = (
+            _observation(translation=(-35, 45), objects=(intruder,)),
+            _observation(translation=(-35, 45), status=HomeCityZoomStatus.NOT_AT_ENDPOINT),
+            _observation(translation=(-35, 45), size=(540, 960)),
+            _observation(translation=(-165, 45)),  # Clipped strip is shorter than 114px plus margins.
+        )
+        for candidate in cases:
+            with self.subTest(candidate=candidate), self.assertRaises(SelectorResolutionError):
+                plan_home_city_camera_step(observation=candidate,
+                                           target=HomeCityObjectId.CAMPAIGN)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_step(observation=observation,
+                                       target=HomeCityObjectId.CAMPAIGN,
+                                       avoid_direction="left")
+
     def test_thin_clipped_region_cannot_lose_perpendicular_margin(self):
         with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(observation=_observation(translation=(-886, -796)),
                                       target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+
+    def test_inspection_moves_until_the_whole_body_region_is_exposed(self):
+        """At this pose the institute slot-9 anchor is inside the band while its
+        projected body region still protrudes past the right edge. Acquisition
+        refuses -- there is no current-frame body match to tap -- but discovery
+        inspection still moves the canonical region into the safe band."""
+        observation = _observation(translation=(-760, -460), zoom=.74)
+        with self.assertRaisesRegex(SelectorResolutionError, "no current-frame match"):
+            plan_home_city_camera_step(
+                observation=observation, target=HomeCityObjectId.INSTITUTE,
+                home_city_slot=HomeCitySlotSelector(9))
+
+        step = plan_home_city_camera_step(
+            observation=observation, target=HomeCityObjectId.INSTITUTE,
+            home_city_slot=HomeCitySlotSelector(9), inspect_body=True)
+
+        self.assertEqual("right", step.action.direction)
+        self.assertEqual("pan_home_city_eastern_return_right", step.action.reason)
+        x1, y1, x2, y2 = _points(step.action)
+        self.assertTrue(step.action.safe_bounds.contains_point((x1, y1)))
+        self.assertTrue(step.action.safe_bounds.contains_point((x2, y2)))
+
+    def test_inspection_refuses_once_the_whole_region_is_exposed(self):
+        """A fully-exposed projected region is a refusal, not another pan."""
+        with self.assertRaisesRegex(SelectorResolutionError, "already fully inside"):
+            plan_home_city_camera_step(
+                observation=_observation(translation=(-720, -460), zoom=.74),
+                target=HomeCityObjectId.INSTITUTE,
+                home_city_slot=HomeCitySlotSelector(9), inspect_body=True)
+
+    def test_inspection_uses_the_projected_region_not_an_observed_body(self):
+        """Inspection exposure is decided by canonical region geometry; a
+        measured body elsewhere inside the band cannot satisfy it (and the
+        observed body keeps acquisition at its own no-pan refusal)."""
+        body = _body()
+        observation = _observation(translation=(-760, -460), zoom=.74, objects=(body,))
+        with self.assertRaisesRegex(SelectorResolutionError, "no pan is needed"):
+            plan_home_city_camera_step(
+                observation=observation, target=HomeCityObjectId.INSTITUTE,
+                home_city_slot=HomeCitySlotSelector(9))
+
+        step = plan_home_city_camera_step(
+            observation=observation, target=HomeCityObjectId.INSTITUTE,
+            home_city_slot=HomeCitySlotSelector(9), inspect_body=True)
+
+        self.assertEqual("right", step.action.direction)
+        self.assertTrue(step.action.safe_bounds.contains_point(_points(step.action)[:2]))

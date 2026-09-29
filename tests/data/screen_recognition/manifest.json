@@ -538,6 +538,16 @@
       ]
     },
     {
+      "image": "chat_kingdom_two_tab_20260927.png",
+      "screen": "PNC_CHAT",
+      "split": "reference",
+      "group": "2026-09-27/testing/sanitized-chat-chrome",
+      "sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
+    },
+    {
       "image": "chat_kingdom_normal_empty.png",
       "screen": "PNC_CHAT",
       "split": "validation",
@@ -958,7 +968,7 @@
       "screen": "PNC_VERSUS_CENTER",
       "split": "validation",
       "group": "2026-09-14/a02_buildings/20260914T283000Z/arena_validation",
-      "sha256": "cc1b65ca309284c6581ccc8f15b4e70c3c64cfd3021c4b81b9d0ac2f2cc6aa7c",
+      "sha256": "16c1b384f60dd3de2dd6345c3dd80e270b95d71c55ae39af0b06e64727cfd922",
       "expected_visual_screens": [
         "PNC_VERSUS_CENTER"
       ]
@@ -1264,6 +1274,32 @@
       ]
     },
     {
+      "image": "campaign_chapter_6_path_20260922.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-22/testing/m1_campaign_preentry",
+      "sha256": "6f344fa3df81311a599e2344bacb02f14a52e3bfe728b5bca7915eac6d6ebe32",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260922T203549Z_core_20260922T202247Z_d3962b64_0037_core_6_campaign_chapter_after_7.png",
+      "source_sha256": "c9847cca704c6f759cd8fdcfcd7e60fdc6d5b12fc2b9055009c54d9bb723abd4",
+      "annotation": "Unmodified 900x1600 RGBA Chapter 6 Marsh of Tear path capture from the parked M1 pre-entry run; this exact frame returned UNKNOWN before the scoped 0.92 terrain calibration. No anchor assets came from this frame."
+    },
+    {
+      "image": "campaign_chapter_6_path_holdout_20260922.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-22/testing/m1_campaign_preentry",
+      "sha256": "f6132f1e6fcb41041c28cbba3024872fc98d2030230d9922ff690be529fd9d38",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
+      "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
+      "annotation": "Later correlated 900x1600 RGBA Chapter 6 path frame from the same parked M1 run, captured seconds later before the refused Back dispatch. It checks temporal consistency, not independent-session generalization; no anchor assets came from this frame."
+    },
+    {
       "image": "campaign_chapter_10_unmasked.png",
       "screen": "PNC_CAMPAIGN_CHAPTER",
       "split": "validation",
@@ -1371,7 +1407,7 @@
       "screen": "PNC_RESEARCH_TREE",
       "split": "validation",
       "group": "2026-09-16/mega_old_acc/research_acceptance_a02dbcf6",
-      "sha256": "67c55fc963167b81e10051820e69009cedc5bb7bc1636fca307ad1a88eb04b46",
+      "sha256": "63465d68cb388249ced583b58b72fc338ad2ac90c798f73b9cc34112c392a8f3",
       "expected_visual_screens": [
         "PNC_RESEARCH_TREE"
       ]
@@ -1721,6 +1757,43 @@
       ]
     },
     {
+      "image": "player_territory_20260923.png",
+      "screen": "PNC_PLAYER_TERRITORY",
+      "split": "reference",
+      "group": "2026-09-23/157_farm/v19_castle_trial_20260923T072602Z",
+      "sha256": "650fdbdb80e1ab95db49d141bcde8449f76e23571da996c1b1b053603ebefa4c",
+      "expected_visual_screens": [
+        "PNC_PLAYER_TERRITORY"
+      ],
+      "annotation": "Measured remote Player Territory detail opened by final007 live005. Variable player name, Might value and coordinates values are masked; static labels, title, Player Info and all other pixels are preserved. Reference-only same-frame regression evidence, not unseen evaluation or live acceptance.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-23/157_farm/20260923T072626Z_core_20260923T072602Z_de9afc98_0010_world_yolo_castle_post_action_1.png",
+        "source_sha256": "be33499fc29c176cd627737c7cc75e2c232314516ba5c1c8197c4609c7ccd7a3",
+        "source_decoded_sha256": "f2a0cfef22d9a70dfdf14d06190cdcb239c1f06ec09e218e7091c20a93f036a1",
+        "file_sha256": "450a2d6261e4eb27420e04c3746b871bc31a1b52ab89b82d1a246e43e325b9ea",
+        "derivative": "Native900x1600 RGBA; only opaque masks on variable player name, Might value and coordinates values; static labels and all other pixels preserved. Reference-only same-frame evidence.",
+        "mask_rectangles_xyxy": "[[158, 280, 630, 341], [318, 374, 714, 431], [379, 434, 714, 484]]"
+      }
+    },
+    {
+      "image": "player_profile_variants/remote_player_profile_gear_20260923.png",
+      "screen": "PNC_PLAYER_PROFILE",
+      "split": "validation",
+      "group": "2026-09-23/157_farm/v19_castle_trial_20260923T090804Z",
+      "sha256": "1ae3fb959fecc7d450f07968f87fd4ca5d34851d19f92d266a73d9ca6ebbfe64",
+      "expected_visual_screens": [
+        "PNC_PLAYER_PROFILE"
+      ],
+      "annotation": "Remote Player Profile opened by final008 live006 after the named Castle tap and Player Info follow-up; the displayed name 'another NPC' (world label '[NGF]another NPC') is the intentional regression input and stays unmasked. Native RGBA frame preserved unchanged; observed same-frame regression evidence, not an unseen holdout or identity-anchor reference.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-23/157_farm/20260923T090834Z_core_20260923T090804Z_5ccba1e3_0011_world_yolo_castle_profile_post_action_1.png",
+        "source_sha256": "53fffec28d1caf1d9905e6c7cb2adf56515ed7ef7a9b66c1aa8e79bbbb4bce01",
+        "source_decoded_sha256": "1ae3fb959fecc7d450f07968f87fd4ca5d34851d19f92d266a73d9ca6ebbfe64",
+        "file_sha256": "53fffec28d1caf1d9905e6c7cb2adf56515ed7ef7a9b66c1aa8e79bbbb4bce01",
+        "derivative": "Native 900x1600 RGBA frame copied unaltered; no masks. Validation-only same-frame evidence for the gear-layout title assembly; not linked as a profile source."
+      }
+    },
+    {
       "image": "building_routes/home_city_illusory_beast_manor_20260921.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",
@@ -1777,40 +1850,79 @@
       }
     },
     {
-      "image": "chat_kingdom_two_tab_20260927.png",
-      "screen": "PNC_CHAT",
+      "image": "vip_daily_reset_pre_dismiss_20260928.png",
+      "screen": "PNC_VIP_DAILY_RESET",
       "split": "reference",
-      "group": "2026-09-27/testing/sanitized-chat-chrome",
-      "sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+      "group": "2026-09-28/testing/m1_v14_corridor_correction_539e2503",
+      "sha256": "b0ec2fd7046073953e9212df79dddd6bd8a4952a472129d6838ed4981e96d5ff",
       "expected_visual_screens": [
-        "PNC_CHAT"
-      ]
+        "PNC_VIP_DAILY_RESET"
+      ],
+      "annotation": "VIP daily-reset takeover immediately before the retained INC-20260928-m1-v14-corridor-correction dismissal failure; the measured Close control still matches its original appearance. Same-session frame 0001 paired with the post-dispatch frame. Reference evidence only: the pressed-state Close control anchor is derived from this capture group, so neither frame is an independent validation holdout.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-28/testing/20260928T030243Z_core_20260928T030239Z_539e2503_0001_takeover_pre.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002. Installed build not recorded."
+      }
     },
     {
-      "image": "campaign_chapter_6_path_20260922.png",
-      "screen": "PNC_CAMPAIGN_CHAPTER",
-      "split": "validation",
-      "group": "2026-09-22/testing/m1_campaign_preentry",
-      "sha256": "6f344fa3df81311a599e2344bacb02f14a52e3bfe728b5bca7915eac6d6ebe32",
+      "image": "vip_daily_reset_pressed_state_20260928.png",
+      "screen": "PNC_VIP_DAILY_RESET",
+      "split": "reference",
+      "group": "2026-09-28/testing/m1_v14_corridor_correction_539e2503",
+      "sha256": "8a46d186e3e421ba419071e9505f4dfa0b38658d45baa5920492a3b70a4c65bf",
       "expected_visual_screens": [
-        "PNC_CAMPAIGN_CHAPTER"
+        "PNC_VIP_DAILY_RESET"
       ],
-      "source_artifact": "20260922T203549Z_core_20260922T202247Z_d3962b64_0037_core_6_campaign_chapter_after_7.png",
-      "source_sha256": "c9847cca704c6f759cd8fdcfcd7e60fdc6d5b12fc2b9055009c54d9bb723abd4",
-      "annotation": "Unmodified 900x1600 RGBA Chapter 6 Marsh of Tear path capture from the parked M1 pre-entry run; this exact frame returned UNKNOWN before the scoped 0.92 terrain calibration. No anchor assets came from this frame."
+      "annotation": "VIP daily-reset takeover after one dispatched Close dispatch in retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002; the panel persisted with the Close rendered in its pressed/post-touch appearance, scoring 0.78 under the original 0.95 control template. Same-session frame 0002 correlated with the pre-dispatch frame. Reference evidence only: the catalog's pressed-state Close control anchor was extracted from this frame, so it cannot serve as independent pressed-state or live validation.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-28/testing/20260928T030259Z_core_20260928T030239Z_539e2503_0002_core_20260928T030239Z_539e2503_takeover_pre_interruption_popup_1.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260928-m1-v14-corridor-correction-20260928-06-002. Installed build not recorded."
+      }
     },
     {
-      "image": "campaign_chapter_6_path_holdout_20260922.png",
-      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "image": "update_over_hero_offer_20260923.png",
+      "screen": "PNC_POPUP",
       "split": "validation",
-      "group": "2026-09-22/testing/m1_campaign_preentry",
-      "sha256": "f6132f1e6fcb41041c28cbba3024872fc98d2030230d9922ff690be529fd9d38",
+      "group": "2026-09-23/157_farm/v44_final034",
+      "sha256": "53160aad3ac38b6ccb1b596bd8b6fb626e1d2daf58eb910199db00c2939fe363",
       "expected_visual_screens": [
-        "PNC_CAMPAIGN_CHAPTER"
+        "PNC_POPUP"
       ],
-      "source_artifact": "20260922T203554Z_core_20260922T202247Z_d3962b64_0038_l4_return_source.png",
-      "source_sha256": "4e210e6bb640290cf9f9ed25e07b497670eed24207f4f3e6e1fd90c3a1e1c4e3",
-      "annotation": "Later correlated 900x1600 RGBA Chapter 6 path frame from the same parked M1 run, captured seconds later before the refused Back dispatch. It checks temporal consistency, not independent-session generalization; no anchor assets came from this frame."
+      "annotation": "Required-update modal rendered in front of a Savannah hero offer, retained incident INC-20260923-v44-a89fb729-157farm-final034-003; the foreground dialog owns the actionable Confirm while the offer X visible behind it is background evidence only.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-23/157_farm/20260923T103416Z_setup_14_pre.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260923-v44-a89fb729-157farm-final034-003. Installed build not recorded."
+      }
+    },
+    {
+      "image": "savannah_hero_offer_post_update_20260923.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-09-23/157_farm/v44_final034",
+      "sha256": "4c5da25998c4c6d25fa5a951f950ea11b69871379bfb824638667700feb4f3df",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ],
+      "annotation": "Standalone Savannah hero offer rendered after the required-update download completed, retained incident INC-20260923-v44-a89fb729-157farm-final034-002 terminal wait frame; the post-update icon and X render score below the original 0.98/0.94 anchors, motivating the measured alternate-appearance profile.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-23/157_farm/20260923T105033Z_core_20260923T103812Z_5b464db7_0061_core_20260923T103812Z_5b464db7_preflight_settle_0_interruption_wait_60.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260923-v44-a89fb729-157farm-final034-002. Installed build not recorded."
+      }
+    },
+    {
+      "image": "voucher_mall_20260927.png",
+      "screen": "PNC_CASH_MALL",
+      "split": "reference",
+      "group": "2026-09-27/main/pw_main_manual_voucher_mall_001",
+      "sha256": "8be5621206946f304744fb1396dd1371c4db31b07aed4df633bf116615e7aa13",
+      "expected_visual_screens": [
+        "PNC_CASH_MALL"
+      ],
+      "annotation": "Auto-opened Voucher Mall 'Daily Sale' store frame from retained incident INC-20260927-pw-main-manual-voucher-mall-001; the screen classified unknown and owned no dismiss control until the lead's manual top-left Back returned Home. Reference evidence: the voucher_mall profile anchors and its saved-frame regression derive from this capture, not an independent or live validation.",
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/pw-main-manual-20260927/20260927T055157Z_post_launch_probe.png",
+        "derivative": "Unmodified native RGBA 900x1600 session frame copied from retained incident INC-20260927-pw-main-manual-voucher-mall-001 sources/voucher_mall_frame.png (record sha256 297e6911). Installed build not recorded."
+      }
     },
     {
       "image": "campaign_stage_6_5_20260922.png",
@@ -1853,10 +1965,7 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/testing/20260927T161532Z_core_20260927T161139Z_cb7d3149_0057_c2_64_stage_after_0.png",
         "source_file_sha256": "762a6842017e541dee49c64dcf80c6645cb1bea4b81136ce1513981275b6a3ea",
         "candidate": "d07b2d8f",
-        "native_size": [
-          900,
-          1600
-        ],
+        "native_size": "900x1600",
         "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
       }
     },
@@ -1873,12 +1982,94 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/testing/20260927T161557Z_core_20260927T161139Z_cb7d3149_0069_c2_65_stage_after_0.png",
         "source_file_sha256": "bb48af090876a9db53baa926f402b2862fe9a09c6101a84683f70b86f5e3e137",
         "candidate": "d07b2d8f",
-        "native_size": [
-          900,
-          1600
-        ],
+        "native_size": "900x1600",
         "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
       }
+    },
+    {
+      "image": "building_routes/ranged_barracks_reference_20260922.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-22/v08_final_6e6f4d9/20260922T003339Z_a5948a9b/0007_c4_final",
+      "sha256": "ffec454b16bc7a764daf7718cd7e5f18272d067ddc82977ebbbeb37125c6de2d",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ]
+    },
+    {
+      "image": "building_routes/ranged_barracks_native_20260929.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn012/bab266e9",
+      "sha256": "63c53bb27103030f30ab5bec0339401183ce549d0cd974e993d6617c73171882",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA turn012 terminal frame0072, visibly Ranged Barracks after a slot-7 body tap but classified UNKNOWN by the old 0.94 description gate. Profile source for the guarded native description variant; installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn012-20260929/20260929T190604Z_core_20260929T190337Z_bab266e9_0072_final_screen_09.png",
+      "source_sha256": "bd472a5559c80afd5f3ca54e8963cca6c9eb1b86dbf30428c47a5361f18317ce"
+    },
+    {
+      "image": "building_routes/ranged_barracks_native_correlated_20260929.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn012/bab266e9",
+      "sha256": "00f07062d3a3810b68521c7a0fbabfac71f5f591d43415d3c95f1b8039b59f6c",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA turn012 frame0070. Same-session correlated validation of the new appearance, not an independent holdout.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn012-20260929/20260929T190601Z_core_20260929T190337Z_bab266e9_0070_core_11_home_after_7.png",
+      "source_sha256": "75ea77e829fa384ddeb1912ecc22e69d46cafb6de897aa75bfa44ca3c92de519"
+    },
+    {
+      "image": "building_routes/ranged_barracks_native_prior_20260929.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526",
+      "sha256": "ae9f3514124b3b573f6959a56550285db2d40340098436218ce2c0d7bc321b2b",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA separate turn010 frame0070, independently accepted Ranged destination and Back return. Its old description scores 0.99267 and new description 0.93625; retains the old guarded variant and is an independent appearance/session validation, not a holdout of the new variant.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn010-20260929/20260929T173931Z_core_20260929T173559Z_c3c3b526_0070_core_11_home_after_1.png",
+      "source_sha256": "d7a82c413986d9e7805f43301e605184dacca4daefe5453f46de956cad858907"
+    },
+    {
+      "image": "building_routes/infantry_barracks_20260917.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-17/3xx_spies/v20_infantry_menu",
+      "sha256": "f60db73446efa3eb98cecab905e3d9b2ca45a635ddf77c4143bdd58b7766b288",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ]
+    },
+    {
+      "image": "building_routes/infantry_barracks_native_20260929.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526",
+      "sha256": "700890de9180c0dad2a5c21e47b0a3b914461558995afb81ed899ef868bee8c4",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ],
+      "annotation": "Same-session correlated native regression captures0087/0086. The validation frame is not an independent holdout; installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn010-20260929/20260929T174022Z_core_20260929T173559Z_c3c3b526_0087_core_13_home_after_7.png",
+      "source_sha256": "024633ed6d85a6a3bfc93ffb803a13fae8d4c4b256dffd11857ed44a77ff4012"
+    },
+    {
+      "image": "building_routes/infantry_barracks_native_holdout_20260929.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526",
+      "sha256": "b38560dcfe02423db8e136179a27b3db026a99083516e4aee0b25d08c341fee1",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ],
+      "annotation": "Same-session correlated native regression captures0087/0086. The validation frame is not an independent holdout; installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn010-20260929/20260929T174018Z_core_20260929T173559Z_c3c3b526_0086_core_13_home_after_6.png",
+      "source_sha256": "d408e03850262191e43e29dcf8648b5af02e06723107189b9214b1fb323e257d"
     },
     {
       "image": "hero_formation_challenge_preparation_20260929.png",

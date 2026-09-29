@@ -214,8 +214,8 @@ class HomeCityMeasuredScanTests(unittest.TestCase):
             frames = iter((initial, confirm, lost, lost_again, passive))
             labels = []
 
-            def capture(label):
-                labels.append(label)
+            def capture(request):
+                labels.append(request.label)
                 return next(frames)
 
             steps = (
@@ -252,3 +252,127 @@ class HomeCityMeasuredScanTests(unittest.TestCase):
             result = core.discover_home_city(observe_content=lambda _: next(frames))
         self.assertEqual(1, len(actions))
         self.assertIs(HomeCityScanStopReason.LOCALIZATION_UNRESOLVED, result.stop_reason)
+
+    def test_inspected_hint_is_never_replanned_for_discovery(self):
+        """A measured occupancy hint cannot reintroduce an inspected candidate.
+
+        At zoom .74 / translation (-500,-880) the usable band fully contains
+        slot 12's canonical blacksmith body region, so the first observation
+        both inspects it and records its measured OCCUPIED hint; the hint
+        keeps it first in ``candidate_slots`` ordering.  Discovery must still
+        never plan it: each later frame replans the retained candidate under
+        the measured atlas-pose tolerance and moves on to the family's
+        remaining uninspected slots.
+        """
+        core, actions = _core()
+        pose, jittered = (-500, -880), (-497, -878)
+        frames = [
+            camera_home_frame((_body(12),), translation=pose if i < 2 else jittered,
+                              zoom=.74, image_size=(900, 1600),
+                              captured_at=_NOW + timedelta(seconds=i))
+            for i in range(4)
+        ]
+        planned = []
+
+        def plan(**kwargs):
+            planned.append((kwargs["home_city_slot"], kwargs["observation"],
+                            kwargs["inspect_body"]))
+            return qualified_pan_step("up", axis="y", goal_atlas=(982, 1800),
+                                      reason="qualified_lane")
+
+        with patch('pnc_automation.app.automation.engine.navigation_core.load_home_city_camera_catalog',
+                   return_value=SimpleNamespace(targets=(_BLACKSMITH,))), \
+             patch('pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step',
+                   side_effect=plan):
+            frames_iter = iter(frames)
+            result = core.discover_home_city(observe_content=lambda _: next(frames_iter))
+
+        self.assertIs(HomeCityScanStopReason.NO_PROGRESS, result.stop_reason)
+        self.assertEqual(2, result.gestures)
+        self.assertEqual(['up', 'up'], [action.direction for action in actions])
+        # Slot 12 is hinted, nearest to the prior corridor, and inspected, so
+        # the pre-correction ordering planned it first every pass.  The
+        # inspected filter skips it without a planner call; the jittered
+        # revisit then suppresses the retained slot-11 route under the
+        # atlas-pose tolerance, so slot 13 is tried once instead.
+        self.assertEqual(
+            [11, 11, 11, 13],
+            [slot.slot_index for slot, _observation, _inspect in planned],
+        )
+        # The retained slot-11 route replanned from the fresh jittered frame,
+        # not from the pose it was originally qualified on.
+        self.assertIs(frames[1], planned[0][1])
+        self.assertIs(frames[2], planned[1][1])
+        self.assertTrue(all(inspect for _slot, _observation, inspect in planned))
+        self.assertEqual(HomeCitySlotOccupancyState.OCCUPIED, result.occupancy[0].state)
+        self.assertEqual(12, result.occupancy[0].slot_index)
+        self.assertIn((HomeCityObjectId.BLACKSMITH, HomeCitySlotSelector(12)),
+                      result.inspected_candidates)
+
+    def test_retained_candidate_is_replanned_from_each_fresh_observation(self):
+        """A preferred slot follows fresh poses until its route is attempted.
+
+        The retained (target, slot) preference survives across poses: it is
+        replanned on every fresh observation, so a jittered pose can route it
+        on a different axis and a materially moved pose can dispatch it on the
+        original axis again.  Once the same candidate/direction was already
+        attempted at that pose, the preference is released and the family's
+        next uninspected candidate is considered instead.
+        """
+        core, actions = _core()
+        # These poses keep every blacksmith body region outside the usable
+        # band, so no candidate is inspected and the same slot stays
+        # retained; pose_b jitters within the localization allowance while
+        # pose_c moves the camera center ~80 atlas px from pose_a.
+        poses = ((-100, -900), (-100, -900), (-97, -898),
+                 (-160, -900), (-160, -900), (-160, -900), (-160, -900))
+        frames = [
+            camera_home_frame(translation=poses[i], zoom=.74, image_size=(900, 1600),
+                              captured_at=_NOW + timedelta(seconds=i))
+            for i in range(7)
+        ]
+        directions = {
+            _NOW + timedelta(seconds=1): "up",
+            _NOW + timedelta(seconds=2): "left",
+            _NOW + timedelta(seconds=3): "up",
+            _NOW + timedelta(seconds=4): "up",
+        }
+        planned = []
+
+        def plan(**kwargs):
+            observation = kwargs["observation"]
+            direction = directions[observation.captured_at]
+            planned.append((kwargs["home_city_slot"], observation, kwargs["inspect_body"]))
+            axis = "x" if direction in ("left", "right") else "y"
+            return qualified_pan_step(
+                direction, axis=axis,
+                goal_atlas=(1400, 578) if axis == "x" else (982, 1800),
+                reason="qualified_lane",
+            )
+
+        with patch('pnc_automation.app.automation.engine.navigation_core.load_home_city_camera_catalog',
+                   return_value=SimpleNamespace(targets=(_BLACKSMITH,))), \
+             patch('pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step',
+                   side_effect=plan):
+            frames_iter = iter(frames)
+            result = core.discover_home_city(observe_content=lambda _: next(frames_iter))
+
+        self.assertIs(HomeCityScanStopReason.NO_PROGRESS, result.stop_reason)
+        self.assertEqual(4, result.gestures)
+        self.assertEqual(['up', 'left', 'up', 'up'],
+                         [action.direction for action in actions])
+        # The preferred slot-12 candidate is replanned on each fresh frame:
+        # 'left' at the jittered pose_b is a new route, 'up' at pose_c is
+        # dispatched because the pose moved ~80 atlas px, and the second 'up'
+        # at pose_c is suppressed as a repeat -- releasing the preference so
+        # the family's next uninspected candidate (slot 11) is tried.
+        self.assertEqual(
+            [12, 12, 12, 12, 12, 11],
+            [slot.slot_index for slot, _observation, _inspect in planned],
+        )
+        self.assertIs(frames[1], planned[0][1])
+        self.assertIs(frames[2], planned[1][1])
+        self.assertIs(frames[3], planned[2][1])
+        self.assertIs(frames[4], planned[3][1])
+        self.assertIs(frames[4], planned[5][1])
+        self.assertTrue(all(inspect for _slot, _observation, inspect in planned))

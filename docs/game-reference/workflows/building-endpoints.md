@@ -103,3 +103,152 @@ qualify a current non-collecting entry state before tapping. A visible harvest
 state leaves that entry case pending unless collection is separately authorized;
 it is neither unavailable nor a passed route. This source rule does not authorize
 collecting, upgrading or spending to create a test precondition.
+
+### Resource collection scope and non-collecting entry — September 29 recheck
+
+`citybuildinfotopitem.lua:145-163` resolves the tapped building's type, enumerates
+every building of that type, includes each ID for which
+`GainData:CheckResCanPopTip` is true, and calls `GainSend.RequireTake(bidList)`.
+`commands/gain/gaincommand.lua:91-104` sends those IDs together in the `TAKE`
+request. Consequently, a body tap on one exact slot can collect multiple
+same-type buildings. An exact `HomeCitySlotSelector` constrains acquisition; it
+does not constrain the client's collection scope.
+
+The source-supported non-collecting body path is conditional. When the collection
+branch is inactive, `BuildClickComponent:ClickHandler` at lines 17-21 dispatches
+the selected DTO through `BuildTableData:OpenBuildWin`. The five resource branches
+in `vo/buildtabledata.lua:174-183` open `RES_BUILD_WIN`, whose title is derived
+from the selected building type (`uis/resbuild/resbuildwin.lua:98-108`).
+`buildresourcepoptipcomponent.lua:105-177` sets `hasResPop` from current resource
+state, except while a build-free or build-help popup has priority. These are
+client-state conditions, not qualified visual controls. The harvest threshold
+depends on elapsed production time and buffs (`datas/gaindata.lua:103-134`), so
+the non-collecting state must remain current at dispatch. Absence of a visible
+bubble in a cropped, occluded or transient frame does not prove the collection
+branch is inactive. Moon Well's capacity branch is likewise not a qualified
+visual precondition; do not create or assume a full-capacity state to bypass it.
+
+No separate non-collecting resource entry control was established by the
+inspected Home body handlers and dispatcher. The current shared `open_building`
+contract taps one positively measured body; it has no typed resource-entry state
+or reviewed `RES_BUILD_WIN` endpoint/return for these types. The Farm upgrade and
+construction detail fixtures qualify different phases, not this primary window.
+Keep resource acquisition pending. The smallest next evidence is a passive,
+unoccluded native Home view of one existing resource building and its complete
+popup area, followed by qualification of a current non-collecting state. Only
+after that precondition is established may an authorized capture obtain its
+primary window, independently measured Back and fresh Home return. If only
+harvestable states are present, collection authority or evidence of a distinct
+safe control is required; repeated taps and off-bubble points are not a bypass.
+
+### Military body and endpoint prerequisites — September 29 recheck
+
+The recovered body handlers for types 1020-1022
+(`builditem_1020.lua:129-150`, `builditem_1021.lua:129-149`,
+`builditem_1022.lua:129-149`) and Siege 1023 (`builditem_1023.lua:102-110`)
+delegate to `BuildClickComponent` after package/tutorial guards. They do not
+execute the resource collection branch. The common dispatcher opens `CAMP_PANEL`
+with the selected DTO (`vo/buildtabledata.lua:184-191`); Hall 1011 opens
+`WAR_HALL_WIN` at lines 165-166. This proves the packaged entry chain, not the
+current native appearance or return.
+
+The September 29 route-contract candidate has distinct Infantry/Ranged primary
+identities and measured Back controls, alongside the existing Hall identity/Back
+contract. Public `NavigationCore.open_building` still requires a fresh measured
+Home body and exact requested slot, then observes the exact primary destination;
+canonical Home return separately requires its current template Back control.
+Cavalry and Siege have semantic primary screen mappings but no qualified native
+endpoint/Back contract in this candidate, so both public entry methods refuse
+them before observation or input. Body qualification alone cannot promote those
+routes. Their next prerequisite is a native primary-panel capture with visible
+family identity and Back, plus an independent capture/return group; labels or the
+shared prefab do not authorize copying a sibling's identity or Back geometry.
+
+## Measured body evidence — September 29, 2026
+
+The V44-4 sepia-taleggio package measured two Home-city bodies from the
+2026-09-29 driver-correction sessions (157_farm castle, normalized zoom
+0.739-0.75, 900x1600 frames). Each binding pairs a native source frame with an
+independent holdout; scores and projection errors come from the production
+localizer and matcher.
+
+### Warehouse — ordinary slot 3 body qualified
+
+`warehouse_body` is authored from frame 0047 (camera translation (-777,55),
+zoom ~0.739) and reproduces on independent holdout frame 0084
+(translation (-389,-427), zoom 0.75, sidebar-cleared crop) at score ~0.956,
+projection error ~3.9. The measured body is bound to `HomeCitySlotSelector(3)`;
+slot 3 is Warehouse-only, so the same appearance across castles is a correct
+slot-3 observation, not a false positive. The body also requalified on the
+pan_07, mega_castle, northeast_holdout, and zoom_rung saved views. This feeds
+Warehouse's existing shared route through `PNC_WAREHOUSE`; destination and
+return remain the reviewed contract described above — the body evidence does
+not re-prove live entry.
+
+### Bank — fixed sys_1/5001 body qualified for perception only
+
+`bank_body` is authored from frame 0022 (camera translation (-24,45), zoom 0.75)
+and reproduces on independent survey frame 0092 (translation (-152,-21)) at
+score ~0.972, projection error ~1.3. The crop covers the golden facade and blue
+roof and deliberately excludes the floating `!` badge pointer and the
+nameplate. On both views the measured action point lands below the conservative
+HUD-safe tap band, so this evidence is perception/discovery only: it lets
+shared observation report the Bank body but authorizes no tap, and
+`open_building`/`open_visible_building` still refuse the unsupported route
+because no `PNC_BANK` destination, entry menu, or return edge is modeled. The
+intermediate Home menu behavior above stays the governing uncertainty.
+
+### Military barracks — ordinary slots 5-8 body candidates
+
+The V44-4 military body package measured four fixed single-type slots from the
+same 2026-09-29 f1171ffa attempt1 session used for the Bank crop. All four
+crops are authored from baseline frame 0022 (camera translation (-24,45),
+zoom 0.75), with corresponding body regions visually measured on the independent
+0092 survey view (translation (-152,-21), zoom 0.75). Native source/holdout
+matching remains pending serialized validation:
+
+- `infantry_barracks_body` (slot 5, client 1020): white facade between the red
+  columns, native (415,625,83,78) on 0022 and (287,559,83,78) on 0092; also
+  visually measured on the 2026-09-22 zoom-1.0 f0 baseline at (53,995,111,104). The
+  crop excludes the floating coin bubble and pennant above, the gold `Z`
+  marker and level badge at the right, and the nameplate below. Action point
+  (450,666) on 0022 sits on the interior parapet.
+- `cavalry_barracks_body` (slot 6, client 1021): blue awning and tower under
+  the radar dome, (252,690,100,42) on 0022 and (124,624,100,42) on 0092; the
+  `Cavalry Barracks` nameplate corroborates on 0092. The crop excludes the
+  `Z` marker grazing the upper-right and the statue/nameplate below. Action
+  point (308,722) on 0022 sits on the awning.
+- `ranged_barracks_body` (slot 7, client 1022): gong, towers and platform
+  band, (390,800,120,34) on 0022 and (262,734,120,34) on 0092. The crop
+  excludes the `6` badge above, the red `0` badges and `Z` marker at the
+  right, and the nameplate below. On the zoom-1.0 f0 baseline the predicted
+  band lies under the chapter banner and must stay an occlusion no-match.
+  Action point (445,818) on 0022 sits on the platform step.
+- `siege_factory_body` (slot 8, client 1023): factory front wall between the
+  blue-topped towers, (212,806,72,84) on 0022 and (84,740,72,84) on 0092.
+  The crop excludes the `Z` marker at the upper-right and the cavalry
+  nameplate above. On 0092 the projected action point (117,789) lands inside
+  that view's left-HUD exclusion band — a view-specific limitation, not a
+  target defect. Action point (245,855) on 0022 sits on the interior front
+  wall.
+
+Every action point was visually checked on both saved views against floating
+training-completion bubbles, help/status bubbles, gold/`Z` markers, level
+badges, nameplates and nearby area controls; all four sit on clear current
+body pixels. Packaged click routing prioritizes area/button colliders over
+bodies, so a body match or slot pivot alone does not prove the selected
+point opens the panel — destination qualification remains a live gate, and
+no military tap is authorized by this evidence.
+
+### Hall of War — slot 14 pending native capture
+
+Slot 14 (client type 1011, `WARID`) is a fixed single-type slot with a
+calibrated pivot, but no saved frame shows the body unclipped: on 0022 the
+Hall of War remains cut at the left viewport edge (~x0-95), exposing the
+dome, the golden winged statue and a clipped `...of War` nameplate — enough
+to corroborate identity, not enough to author a crop. The catalog therefore
+carries no Hall of War target. The minimal missing capture is one native
+Home view at zoom 0.75-1.0 with the Hall14 body fully inside the frame and
+free of floating bubbles/area controls, its camera translation recorded, plus
+one independent holdout pose; a readable `Hall of War` nameplate or a paired
+endpoint/tap receipt supplies identity.

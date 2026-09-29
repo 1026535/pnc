@@ -30,9 +30,12 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
         for source, selector, destination in (
             (ScreenType.PNC_BLACKSMITH, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_WALL, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
+            (ScreenType.PNC_RANGED_BARRACKS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
+            (ScreenType.PNC_INFANTRY_BARRACKS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_TRIAL_APPLICABLE_STATS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_TRIAL_CHALLENGE),
             (ScreenType.PNC_BAG_CHEST_PREVIEW, UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE, ScreenType.PNC_BAG),
+            (ScreenType.PNC_CASH_MALL, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
         ):
             for present in (True, False):
                 with self.subTest(source=source, present=present):
@@ -53,6 +56,24 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
                         with self.assertRaisesRegex(RuntimeError, "current-frame visual evidence"):
                             core.transition(edge)
                         self.assertEqual([], actuator.actions)
+
+
+    def test_cash_mall_return_stops_on_unexpected_destination(self):
+        edge = next(
+            item for item in reviewed_navigation_edges() if item.source == ScreenType.PNC_CASH_MALL
+        )
+        self.assertEqual(frozenset({ScreenType.PNC_HOME_CITY}), edge.destinations)
+        now = datetime.now(UTC)
+        frames = iter((
+            mail_frame(ScreenType.PNC_CASH_MALL, selector=UiElementId.PNC_BACK_BUTTON_TOP_LEFT, captured_at=now),
+            mail_frame(ScreenType.PNC_WORLD_MAP, captured_at=now + timedelta(seconds=1)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(actuator, lambda _: next(frames), reviewed_navigation_edges(), sleep=lambda _: None)
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            core.transition(edge)
+        self.assertEqual([UiElementId.PNC_BACK_BUTTON_TOP_LEFT], [action.selector_id for action in actuator.actions])
 
 
     def test_route_uses_ready_source_for_initial_and_reviewed_edge_reacquisition(self):

@@ -591,3 +591,72 @@ Wheel qualification does not authorize a tap or drag on the fountain. A missing
 current patch still stops input. Broad all-pose coverage, completion of widest
 normalization and exact measured-lane pan/post-pan proof remain live gates on
 the corrected candidate. Canonical54-slot map geometry is unchanged.
+
+## Endpoint-first observation amendment, 2026-09-29
+
+**User-confirmed behavior goal:** Before a public Home body/pan action, zoom
+out until the city agrees with the calibrated minimum, including when the
+first frame is already at that minimum. A still frame after a wheel can mean
+an ineffective input; it cannot itself prove saturation.
+
+**Repository-proven design on this candidate:** The same Home camera catalog
+and fixed-landmark localizer first test the two template-search rungs bracketing
+the calibrated endpoint band. Native endpoint captures fit a measured zoom
+near .74, but the stronger template votes occur at rung .70; selecting only
+.75 shifted one saved endpoint pose and lost the independent groups on a
+Warehouse post-pan frame. A qualified current scenery anchor permits one
+bounded outward wheel when that probe has not proved the endpoint. The next
+frame must either fit the endpoint or show a shrinking same-patch anchor or
+measured scale change before another wheel. An endpoint candidate receives a
+fresh unrestricted
+localization to reject cross-scale rivals. Only then does the request retain
+the normalization fact. Subsequent pans acquire fresh landmark translation,
+body pixels, action bounds and slot identity at the endpoint scale on each
+new frame; no old point is reused. Session, frame, Home identity, calibration,
+input budget and interruption gates remain in the core operation.
+
+The endpoint interval `[0.738,0.744]`, nearest non-endpoint rung at `0.74692`,
+and qualified fountain/moat wheel patches come from
+`pnc_automation/app/pnc/vision/data/home_city_camera/normalization.json` and
+the native 2026-09-25/27 captures described above. The first endpoint
+certification still runs a broad scale sweep. A failed candidate can prompt
+another fresh certification within the operation's passive, wheel-input and
+deadline limits; a successful operation uses bounded-rung fresh reacquisition
+after certification, including later pans. Native trajectory fixtures prove
+only observed segments:
+the 2026-09-27 fountain .935 to .879 pair and the 2026-09-25 moat .871 to
+.824 pair are within-run, while the saved endpoint and Warehouse post-pan
+frames come from other sessions. The authored native regression therefore
+does not claim a continuous wheel-to-endpoint or same-operation pan trace.
+The narrow 2026-09-29 offline check passed 31 tests: endpoint native frames,
+within-run anchor shrink, same-pixel nonprogress, changed-pose Warehouse
+body agreement, and lightweight normalizer cases. A complete same-operation
+wheel-to-endpoint and pan trace, timing acceptance, and live input acceptance
+remain pending.
+
+## Western root-view left lane, 2026-09-29
+
+**Live-observed on `157_farm`:** Turn016
+`v44-western-lane-qualification016-20260929` started on clear, widest Home at
+zoom .75 and translation (-35,45). Native confirmation frame0024 shows the
+empty sky left of Castle at `Bounds(185,255,220,50)`, clear of HUD, detected
+bodies, Mystery Shop and its floating control. The decoded 5.0.203
+`citymoveitem.lua` routes a press/drag on `CityMoveArea` separately from the
+building-click collider path. A typed exact LEFT swipe from (351,279) to
+(237,279), 114px/429ms, had an actual matching input receipt; fresh frame0025
+remained Home at translation (-292,44). A later canonical courtyard RIGHT
+restored the camera to (-49,44) on frame0027. No building tap or spending was
+part of the qualification. The adapter and receipts are retained in the
+turn016 `qualification.json` and `evidence.json` under ignored
+`.local-data/devin-live-test/runs/v44-publication-20260928/turn-016/`.
+
+The inward atlas region `Bounds(294,280,292,66)` is a LEFT-only fallback after
+existing mapped lanes. It projects the same full stroke inside the conservative
+input window at the qualified pose and the restored pose. Each use still
+requires a fresh localized endpoint frame, native display, an inward-clipped
+region containing the full fixed stroke and no detected body intrusion. Later
+pan results must be measured
+before further input or any body tap. The single measured movement does not
+establish a universal camera gain, a western clamp, rightward use, or final
+Campaign/Warehouse entry. Those routes remain pending on the corrected
+candidate's live workflow.

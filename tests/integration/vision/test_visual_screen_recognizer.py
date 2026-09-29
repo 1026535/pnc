@@ -359,6 +359,78 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 self.assertEqual({item.selector_id for item in result.controls}, selectors)
                 self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in result.controls))
 
+    def test_voucher_mall_frame_types_cash_mall_and_publishes_measured_back(self) -> None:
+        """The retained Voucher Mall frame types PNC_CASH_MALL and exposes only its measured Back."""
+
+        builder = _builder(_RecordingOcrService(lines=()))
+        registry = build_default_selector_registry()
+        navigation = NavigationPerception(
+            builder.visual_recognizer,
+            PncObservationEnricher(selector_registry=registry),
+            ScreenClassifier(),
+            builder.create_ocr_context,
+        )
+        capture = _capture("voucher_mall_20260927.png")
+        recognizer = builder.visual_recognizer
+        assert recognizer is not None
+        recognition = recognizer.recognize(capture.image)
+        self.assertEqual(("voucher_mall",), recognition.profile_ids)
+        self.assertEqual(
+            {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+            {control.selector_id for control in recognition.controls},
+        )
+        self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in recognition.controls))
+        for observation in (builder.build(capture), navigation.build(capture)):
+            with self.subTest(path=type(observation).__name__):
+                self.assertEqual(ScreenType.PNC_CASH_MALL, observation.screen_type)
+                self.assertEqual("voucher_mall", observation.decision.layout_id)
+                self.assertFalse(observation.blocking_popup)
+                self.assertIsNone(observation.popup_overlay)
+                back = observation.require(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+                center_x, center_y = back.bounds.center()
+                self.assertTrue(0 <= center_x <= 120)
+                self.assertTrue(0 <= center_y <= 120)
+                for selector_id in (
+                    UiElementId.PNC_CASH_MALL_TAB_DAILY_SALE,
+                    UiElementId.PNC_CASH_MALL_TAB_MONTHLY_GIFT,
+                    UiElementId.PNC_CASH_MALL_TAB_TIME_LIMITED_SPECIAL_OFFER,
+                    UiElementId.PNC_CASH_MALL_TAB_HERO,
+                    UiElementId.PNC_CASH_MALL_ENTRY_PRICE_BUTTON,
+                ):
+                    self.assertFalse(observation.has(selector_id))
+
+    def test_voucher_mall_identity_and_back_require_their_measured_anchors(self) -> None:
+        """Missing title/voucher anchors must abstain from Cash Mall; a missing Back is withheld."""
+
+        recognizer = load_visual_screen_recognizer()
+        for region in ((120, 0, 430, 115), (600, 0, 770, 115)):
+            image = _capture("voucher_mall_20260927.png").image.copy()
+            image.paste((18, 24, 38), region)
+            with self.subTest(erased_region=region):
+                recognition = recognizer.recognize(image)
+                self.assertNotIn("voucher_mall", recognition.profile_ids)
+                self.assertNotIn(
+                    ScreenType.PNC_CASH_MALL,
+                    {item.screen_type for item in recognition.evidence},
+                )
+
+        image = _capture("voucher_mall_20260927.png").image.copy()
+        image.paste((18, 24, 38), (20, 0, 150, 90))
+        recognition = recognizer.recognize(image)
+        self.assertIn("voucher_mall", recognition.profile_ids)
+        self.assertFalse(
+            any(
+                control.selector_id == UiElementId.PNC_BACK_BUTTON_TOP_LEFT
+                for control in recognition.controls
+            )
+        )
+        observation = _builder(_RecordingOcrService(lines=())).build(
+            CapturedScreenshot(None, image, "PNG", ephemeral_captured_at=datetime.now(UTC))
+        )
+        self.assertEqual(ScreenType.PNC_CASH_MALL, observation.screen_type)
+        self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+
+
     def test_two_tab_chat_is_actionable_from_cold_observation(self) -> None:
         """The current Chat chrome must qualify its owned Back before navigation."""
 

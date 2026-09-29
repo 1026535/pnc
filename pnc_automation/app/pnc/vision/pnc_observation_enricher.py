@@ -2024,6 +2024,7 @@ class PncObservationEnricher:
                     lines=(),
                     selector_registry=self.selector_registry,
                     camera=self.home_city_camera,
+                    camera_mode=request.home_city_camera_mode,
                 ),
             )
         if (
@@ -3323,12 +3324,24 @@ def _build_player_profile_additions(
         # Only the title between Back and Stats is the displayed remote name.
         name_bounds = Bounds(round(image.width * 0.18), 0,
                              round(image.width * 0.70), round(image.height * 0.055))
-        names = tuple(line for line in lines if name_bounds.contains_bounds(line.bounds)
-                      and line.text.strip())
-        if len(names) != 1:
+        names = sorted(
+            (line for line in lines if name_bounds.contains_bounds(line.bounds)
+             and line.text.strip()),
+            key=lambda line: line.bounds.x,
+        )
+        if not names:
             return None
-        name_line = names[0]
-        return ObservationAdditions(profile_player_name=name_line.text.strip())
+        # OCR may split a single title into adjacent words (live "another" /
+        # "NPC"). Require a common text row, preserving refusal when the
+        # bounded header contains competing rows instead of one name.
+        row_overlap = min(line.bounds.y + line.bounds.height for line in names) - max(
+            line.bounds.y for line in names
+        )
+        if row_overlap < min(line.bounds.height for line in names) / 2:
+            return None
+        return ObservationAdditions(
+            profile_player_name=" ".join(line.text.strip() for line in names)
+        )
 
     header = _find_header_line(lines=lines, header_texts=_PLAYER_PROFILE_HEADER_TEXTS, max_y=int(image.height * 0.18))
     if header is None and not _has_remote_profile_layout_support(lines):

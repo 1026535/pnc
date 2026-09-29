@@ -851,6 +851,72 @@
       ]
     },
     {
+      "id": "savannah_hero_offer_post_update",
+      "layout_id": "hero_offer_full_height",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "savannah_hero_offer_post_update_20260923.png",
+        "decoded_sha256": "4c5da25998c4c6d25fa5a951f950ea11b69871379bfb824638667700feb4f3df",
+        "capture_group": "2026-09-23/157_farm/v44_final034"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Retained 2026-09-23 post-update render of the Savannah full-height hero offer from its updated icon artwork and the shared lower panel structure; the separately measured X keeps the same upper-right bounds. Missing-X and purchase negatives remain non-actionable.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/savannah_offer_icon_20260923.png",
+          "search_region": [
+            5,
+            85,
+            110,
+            100
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/popup/savannah_offer_panel_structure.png",
+          "search_region": [
+            10,
+            780,
+            250,
+            150
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "popup_control_kind": "close_x",
+          "anchor": {
+            "image": "screen_anchors/popup/savannah_offer_close_20260923.png",
+            "search_region": [
+              470,
+              45,
+              65,
+              70
+            ],
+            "threshold": 0.94
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        18,
+        0,
+        504,
+        890
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "king_return_welcome",
       "layout_id": "king_return_welcome",
       "screen": "PNC_POPUP",
@@ -870,12 +936,22 @@
       "anchors": [
         {
           "image": "screen_anchors/popup/king_return_welcome_face.png",
-          "search_region": [78, 225, 115, 130],
+          "search_region": [
+            78,
+            225,
+            115,
+            130
+          ],
           "threshold": 0.95
         },
         {
           "image": "screen_anchors/popup/king_return_welcome_staff.png",
-          "search_region": [330, 120, 150, 145],
+          "search_region": [
+            330,
+            120,
+            150,
+            145
+          ],
           "threshold": 0.95
         }
       ],
@@ -885,14 +961,26 @@
           "popup_control_kind": "king_return_get_started",
           "anchor": {
             "image": "screen_anchors/popup/king_return_welcome_start.png",
-            "search_region": [195, 485, 160, 80],
+            "search_region": [
+              195,
+              485,
+              160,
+              80
+            ],
             "threshold": 0.9
           },
           "dismisses_surface": true
         }
       ],
-      "modal_bounds": [0, 0, 540, 960],
-      "occludes": ["PNC_HOME_CITY"]
+      "modal_bounds": [
+        0,
+        0,
+        540,
+        960
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "lucifer_special_offer",
@@ -1032,7 +1120,7 @@
       "id": "vip_daily_reset",
       "layout_id": "vip_daily_reset",
       "screen": "PNC_VIP_DAILY_RESET",
-      "revision": 1,
+      "revision": 3,
       "source": {
         "fixture": "vip_daily_reset.png",
         "decoded_sha256": "bae29ded34f50f968b391dc7004b1ebd032702d45077c980487be5e32114a40f",
@@ -1040,7 +1128,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
+        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control. Both the normal and pressed/post-touch renders are one measured dismiss selector sharing CLOSE_TEXT semantics, so the persisted panel stays dismissible after one dispatch. Modal bounds follow the extracted VipLoginWin BottomBg panel (640x498 at design y=85.38) scaled from the 640x1136 design space.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -1068,6 +1156,21 @@
         }
       ],
       "controls": [
+        {
+          "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
+          "popup_control_kind": "close_text",
+          "anchor": {
+            "image": "screen_anchors/popup/vip_daily_reset_close_pressed.png",
+            "search_region": [
+              160,
+              525,
+              230,
+              90
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        },
         {
           "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
           "popup_control_kind": "close_text",
@@ -2821,6 +2924,104 @@
         "qualification": "guarded_reference_only"
       },
       "layout_id": "chat_kingdom"
+    },
+    {
+      "id": "chat_kingdom_two_tab_20260927",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [
+            90,
+            0,
+            220,
+            52
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+          "search_region": [
+            0,
+            52,
+            275,
+            62
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [
+              0,
+              0,
+              90,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+            "search_region": [
+              0,
+              52,
+              275,
+              62
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_two_tab_alliance_inactive.png",
+            "search_region": [
+              265,
+              52,
+              275,
+              62
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_INPUT_FIELD",
+          "anchor": {
+            "image": "screen_anchors/chat_input_field.png",
+            "search_region": [
+              45,
+              890,
+              225,
+              60
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_kingdom_two_tab_20260927.png",
+        "decoded_sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
+        "capture_group": "2026-09-27/testing/sanitized-chat-chrome"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Current two-tab Kingdom Chat chrome after VIP popup recovery; private messages removed from fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "chat_kingdom_two_tab_20260927"
     },
     {
       "id": "collect_mail_hub",
@@ -4765,6 +4966,74 @@
       ]
     },
     {
+      "id": "remote_player_territory",
+      "layout_id": "remote_player_territory",
+      "screen": "PNC_PLAYER_TERRITORY",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/player_territory_20260923.png",
+        "decoded_sha256": "650fdbdb80e1ab95db49d141bcde8449f76e23571da996c1b1b053603ebefa4c",
+        "capture_group": "2026-09-23/157_farm/v19_castle_trial_20260923T072602Z"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Remote Player Territory identity requires two independent appearance patches: the title strip and static Coordinates label. Variable name, coordinate values, Might value, portrait art and action availability do not own identity. Player Info is independently measured and optional. Reference-only saved-frame proof from final007 live005; no independent-account or final live acceptance claim.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/territory_title.png",
+          "search_region": [
+            165,
+            111,
+            214,
+            50
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/territory_coordinates_label.png",
+          "search_region": [
+            116,
+            256,
+            120,
+            40
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_PLAYER_TERRITORY_HEADER",
+          "anchor": {
+            "image": "screen_anchors/territory_title.png",
+            "search_region": [
+              165,
+              111,
+              214,
+              50
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/territory_player_info.png",
+            "search_region": [
+              15,
+              705,
+              100,
+              82
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
       "id": "coordinate_dialog_captured",
       "layout_id": "coordinate_dialog_captured",
       "screen": "PNC_WORLD_COORDINATE_DIALOG",
@@ -6087,105 +6356,64 @@
       "occludes": [
         "PNC_HOME_CITY"
       ]
-    }
-  ,
+    },
     {
-      "id": "chat_kingdom_two_tab_20260927",
-      "screen": "PNC_CHAT",
+      "id": "voucher_mall",
+      "layout_id": "voucher_mall",
+      "screen": "PNC_CASH_MALL",
+      "revision": 1,
+      "source": {
+        "fixture": "voucher_mall_20260927.png",
+        "decoded_sha256": "8be5621206946f304744fb1396dd1371c4db31b07aed4df633bf116615e7aa13",
+        "capture_group": "2026-09-27/main/pw_main_manual_voucher_mall_001"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_CASH_MALL identity for the retained Voucher Mall 'Daily Sale' entry (GiftWin over CommonWinBase): the localized title text and the voucher-balance chrome icon qualify the captured store while mutable stock rows, price bars, and the voucher amount stay excluded. The top-left Back arrow is the only measured control; the retained manual Back at that location reached Home for this entry. Purchase bars, intra-store tabs, and the voucher '+' control remain unowned. Saved-frame regression only, not a live-build or whole-feature acceptance claim.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "anchors": [
         {
-          "image": "screen_anchors/chat_identity_header.png",
+          "image": "screen_anchors/voucher_mall_title.png",
           "search_region": [
-            90,
-            0,
-            220,
-            52
+            80,
+            5,
+            170,
+            60
           ],
-          "threshold": 0.93
+          "threshold": 0.95
         },
         {
-          "image": "screen_anchors/chat_two_tab_kingdom_active.png",
+          "image": "screen_anchors/voucher_mall_voucher_icon.png",
           "search_region": [
-            0,
-            52,
-            275,
-            62
+            370,
+            5,
+            80,
+            60
           ],
-          "threshold": 0.93
+          "threshold": 0.95
         }
-      ],
-      "occludes": [
-        "PNC_HOME_CITY",
-        "PNC_WORLD_MAP"
       ],
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
           "anchor": {
-            "image": "screen_anchors/chat_back_button.png",
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
             "search_region": [
-              0,
-              0,
-              90,
-              60
+              22,
+              8,
+              58,
+              38
             ],
             "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_TAB_KINGDOM",
-          "anchor": {
-            "image": "screen_anchors/chat_two_tab_kingdom_active.png",
-            "search_region": [
-              0,
-              52,
-              275,
-              62
-            ],
-            "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_TAB_ALLIANCE",
-          "anchor": {
-            "image": "screen_anchors/chat_two_tab_alliance_inactive.png",
-            "search_region": [
-              265,
-              52,
-              275,
-              62
-            ],
-            "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_INPUT_FIELD",
-          "anchor": {
-            "image": "screen_anchors/chat_input_field.png",
-            "search_region": [
-              45,
-              890,
-              225,
-              60
-            ],
-            "threshold": 0.95
           }
         }
       ],
-      "revision": 1,
-      "source": {
-        "fixture": "chat_kingdom_two_tab_20260927.png",
-        "decoded_sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
-        "capture_group": "2026-09-27/testing/sanitized-chat-chrome"
-      },
-      "review": {
-        "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Current two-tab Kingdom Chat chrome after VIP popup recovery; private messages removed from fixture.",
-        "build": null,
-        "locale": null,
-        "qualification": "guarded_reference_only"
-      },
-      "layout_id": "chat_kingdom_two_tab_20260927"
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "campaign_stage_chapter_6",
@@ -6254,6 +6482,238 @@
             "threshold": 0.95
           }
         }
+      ]
+    },
+    {
+      "id": "building_ranged_barracks",
+      "layout_id": "building_ranged_barracks",
+      "screen": "PNC_RANGED_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/ranged_barracks_reference_20260922.png",
+        "decoded_sha256": "ffec454b16bc7a764daf7718cd7e5f18272d067ddc82977ebbbeb37125c6de2d",
+        "capture_group": "2026-09-22/v08_final_6e6f4d9/20260922T003339Z_a5948a9b/0007_c4_final"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Ranged Barracks primary identity from the static title and family-specific training description; mutable unit, tier, and training controls are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_ranged_barracks_title.png",
+          "search_region": [
+            95,
+            15,
+            255,
+            75
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_ranged_barracks_description.png",
+          "search_region": [
+            275,
+            140,
+            265,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_ranged_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "building_ranged_barracks_native",
+      "layout_id": "building_ranged_barracks",
+      "screen": "PNC_RANGED_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/ranged_barracks_native_20260929.png",
+        "decoded_sha256": "63c53bb27103030f30ab5bec0339401183ce549d0cd974e993d6617c73171882",
+        "capture_group": "2026-09-29/devin-live-test_v44-4-integrated-turn012/bab266e9"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Native RGBA 900x1600 Ranged Barracks frame0072 from live turn012. The prior description anchor scores 0.92838 below its 0.94 gate while the Ranged title and Back pass. This guarded variant pairs the shared title with the current description cropped in canonical 540x960 LANCZOS reference space. The old profile remains for its independent 2026-09-22 and turn010 appearances. Only the measured Back control is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_ranged_barracks_title.png",
+          "search_region": [
+            95,
+            15,
+            255,
+            75
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_ranged_barracks_native_description.png",
+          "search_region": [
+            275,
+            140,
+            265,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_ranged_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "building_infantry_barracks",
+      "layout_id": "building_infantry_barracks",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/infantry_barracks_20260917.png",
+        "decoded_sha256": "f60db73446efa3eb98cecab905e3d9b2ca45a635ddf77c4143bdd58b7766b288",
+        "capture_group": "2026-09-17/3xx_spies/v20_infantry_menu"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Infantry family identity requires both its title and training description. Templates use canonical 540x960 LANCZOS normalization of the preserved native 900x1600 reference; only independently measured Back is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_infantry_barracks_title.png",
+          "search_region": [
+            105,
+            8,
+            300,
+            40
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_infantry_barracks_description.png",
+          "search_region": [
+            280,
+            140,
+            260,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_infantry_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "building_infantry_barracks_native",
+      "layout_id": "building_infantry_barracks",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/infantry_barracks_native_20260929.png",
+        "decoded_sha256": "700890de9180c0dad2a5c21e47b0a3b914461558995afb81ed899ef868bee8c4",
+        "capture_group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Current native RGBA 900x1600 Infantry Barracks capture from live turn010 (session c3c3b526, frame 0087). The current captured description scores 0.931 against the 2026-09-17 reference, so this variant pairs the shared Infantry title anchor with a description patch re-measured in canonical 540x960 LANCZOS reference space. Identity still requires title + Infantry description and only the independently measured Back control is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_infantry_barracks_title.png",
+          "search_region": [
+            105,
+            8,
+            300,
+            40
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_infantry_barracks_native_description.png",
+          "search_region": [
+            280,
+            140,
+            260,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_infantry_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
       ]
     },
     {

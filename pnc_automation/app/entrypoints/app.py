@@ -46,6 +46,7 @@ from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
 from pnc_automation.app.pnc.domain.policy_models import ResearchPolicy
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
+from pnc_automation.core.infra.diagnostics.performance import PerformanceReportWriter
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.vision.home_city_camera import HomeCityCameraLocalizer
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -421,6 +422,7 @@ def build_application_runner(
     catalog_path: Path | None = None,
     observation_mode: ObservationMode | None = None,
     world_yolo_producer: WorldYoloProducer | None = None,
+    performance_report_writer: PerformanceReportWriter | None = None,
 ) -> ApplicationRunner:
     """Builds the configured application runtime for the provided config and selector catalog."""
 
@@ -430,6 +432,12 @@ def build_application_runner(
     app_config = loaded_config if observation_mode is None else _override_observation_mode(
         loaded_config,
         observation_mode=observation_mode,
+    )
+    workspace_root = app_config.config_path.parent
+    if workspace_root.name == "config":
+        workspace_root = workspace_root.parent
+    resolved_performance_writer = performance_report_writer or PerformanceReportWriter.from_environment(
+        workspace_root / ".local-data" / "performance-metrics" / "runs"
     )
     if world_yolo_producer is None and app_config.runtime.world_yolo_model_path is not None:
         world_yolo_producer = load_world_yolo_producer(app_config.runtime.world_yolo_model_path)
@@ -462,6 +470,7 @@ def build_application_runner(
             selector_registry,
             world_yolo_producer=world_yolo_producer,
         ),
+        performance_report_writer=resolved_performance_writer,
     )
     return ApplicationRunner(script_runner=script_runner, world_yolo_producer=world_yolo_producer)
 

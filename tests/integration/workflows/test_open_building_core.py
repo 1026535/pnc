@@ -2,32 +2,47 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+import tempfile
 import unittest
 from unittest.mock import Mock
 
+from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import WorkflowContext
-from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy
+from pnc_automation.app.automation.engine.navigation_core import (
+    NavigationCore,
+    NavigationPolicy,
+    reviewed_navigation_edges,
+)
 from pnc_automation.app.automation.open_building import (
     OpenBuildingResult,
     OpenBuildingWorkflow,
     build_open_building_workflow,
 )
-from pnc_automation.app.pnc.domain.action_requests import TapAction
+from pnc_automation.app.pnc.domain.action_requests import TapAction, TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_for_screen,
     primary_screen_type_for_home_city_object,
 )
 from pnc_automation.app.pnc.domain.building_details import BuildingDetail, BuildingDetailPhase
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraScanMode
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.home_city_scan import (
+    HomeCityScanError,
+    HomeCityScanStopReason,
+)
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 
+from tests.support.pnc.navigation.core_home import camera_home_frame, measured_building_object
 from tests.support.pnc.observations import make_observation
 
 
@@ -362,6 +377,170 @@ class OpenBuildingUpgradeDetailTests(unittest.TestCase):
             )
 
         self.assertEqual(1, len(dispatched))
+
+
+_COMPOSED_EPOCH = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
+
+
+def _campaign_home(*, blocked: bool = False) -> Observation:
+    """One localized Home endpoint frame carrying the measured Campaign portal body."""
+
+    return camera_home_frame(
+        (measured_building_object(HomeCityObjectId.CAMPAIGN),),
+        captured_at=_COMPOSED_EPOCH,
+        blocked=blocked,
+    )
+
+
+class _ScriptedObservationBoundary:
+    """Fake capture/perception seam that stamps scripted frames on one fake clock."""
+
+    def __init__(self, frames: list[tuple[Observation, float]]) -> None:
+        self._frames = deque(frames)
+        self.capture_labels: list[str] = []
+        self.builds: list[tuple[bool, ObservationRequest | None]] = []
+        self.now = 0.0
+
+    def capture(
+        self, _session: object, *, artifact_directory: str, label: str, persist: bool
+    ) -> CapturedScreenshot:
+        self.capture_labels.append(label)
+        return CapturedScreenshot(artifact=None, image=Mock(), image_format="PNG")
+
+    def build(
+        self, _screenshot: CapturedScreenshot, *, include_content: bool, request
+    ) -> Observation:
+        frame, advance = self._frames.popleft()
+        self.now += advance
+        self.builds.append((include_content, request))
+        return replace(frame, captured_at=_COMPOSED_EPOCH + timedelta(seconds=self.now))
+
+
+class OpenBuildingComposedInterruptionTests(unittest.TestCase):
+    """Public open_building keeps one operation clock through popup interruption.
+
+    Only the capture, perception and recovery-executor boundaries are faked; the
+    public workflow, CoreRuntime.observe interruption routing and NavigationCore
+    are the real owners, and the fake executor genuinely calls its observe
+    callback so recovery consumes the same scripted clock as everything else.
+    """
+
+    def _compose(self, frames, temporary_directory: str):
+        boundary = _ScriptedObservationBoundary(frames)
+        dispatched: list = []
+        recoveries: list[tuple[str, frozenset]] = []
+
+        def recover(observation, *, label_prefix, observe, expected_screens):
+            if not observation.blocking_popup:
+                return None
+            recoveries.append((label_prefix, expected_screens))
+            current = observation
+            polls = 0
+            while current.blocking_popup:
+                polls += 1
+                current = observe(f"{label_prefix}_poll_{polls}")
+            return current
+
+        executor = Mock()
+        executor.recover_interruption_if_required.side_effect = recover
+        holder: dict = {}
+        navigation = NavigationCore(
+            SimpleNamespace(
+                execute_action=lambda action, _before: dispatched.append(action) or True
+            ),
+            lambda label: holder["runtime"].observe(label),
+            reviewed_navigation_edges(),
+            policy=NavigationPolicy(max_seconds=45.0, max_home_seconds=45.0),
+            sleep=lambda seconds: setattr(boundary, "now", boundary.now + seconds),
+            clock=lambda: boundary.now,
+        )
+        runtime = CoreRuntime(
+            runtime=SimpleNamespace(
+                session=object(),
+                observation_service=SimpleNamespace(screenshot_service=boundary),
+            ),
+            navigation=navigation,
+            artifact_directory="pf5-composed",
+            trace_path=Path(temporary_directory) / "trace.jsonl",
+            _perception=boundary,
+            _run_id="pf5",
+            _observed_action_executor=executor,
+        )
+        holder["runtime"] = runtime
+        context = WorkflowContext(runtime, last_observation=_campaign_home())
+        return context, runtime, boundary, dispatched, recoveries
+
+    def _narrow_requests(self, boundary: _ScriptedObservationBoundary) -> list:
+        return [request for include_content, request in boundary.builds if include_content]
+
+    def test_interruption_reacquires_narrow_home_and_opens_on_one_operation_clock(self):
+        frames = [
+            (_campaign_home(blocked=True), 1.0),  # entry capture is interrupted
+            (_campaign_home(), 1.0),              # executor poll clears the popup
+            (_campaign_home(), 1.0),              # fresh narrow reacquisition
+            (_campaign_home(), 1.0),              # endpoint confirmation
+            (make_observation(ScreenType.PNC_CAMPAIGN_MAP), 1.0),
+            (make_observation(ScreenType.PNC_CAMPAIGN_MAP), 1.0),
+        ]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            context, runtime, boundary, dispatched, recoveries = self._compose(
+                frames, temporary_directory
+            )
+            result = context.open_building(HomeCityObjectId.CAMPAIGN)
+
+        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, result.screen_type)
+        self.assertIs(runtime.last_observation, result)
+        self.assertEqual(1, len(dispatched))
+        self.assertIsInstance(dispatched[0], TapSpatialObjectAction)
+        self.assertEqual((154, 193), dispatched[0].target_point)
+        # Recovery ran once inside the operation with the narrow Home scope.
+        self.assertEqual(1, len(recoveries))
+        self.assertIn("interruption", recoveries[0][0])
+        self.assertEqual(frozenset({ScreenType.PNC_HOME_CITY}), recoveries[0][1])
+        # Every content build used the canonical narrow Home request, including
+        # the executor's poll and the post-interruption reacquisition; the two
+        # destination confirmations carried no content scope.
+        self.assertEqual(6, len(boundary.builds))
+        self.assertEqual(4, len(self._narrow_requests(boundary)))
+        self.assertEqual(
+            [ObservationRequest.home_city_navigation(mode=HomeCityCameraScanMode.ENDPOINT_PROBE)] * 3
+            + [ObservationRequest.home_city_navigation()],
+            self._narrow_requests(boundary),
+        )
+        # One operation label owned every capture: no renewed operation clock.
+        self.assertTrue(all("core_1" in label for label in boundary.capture_labels))
+        self.assertGreater(45.0, boundary.now)
+
+    def test_blocking_recovery_past_deadline_sends_no_input_and_stops_typed(self):
+        frames = [
+            (_campaign_home(blocked=True), 1.0),   # entry popup at t=1
+            (_campaign_home(blocked=True), 25.0),  # first poll still blocked at t=26
+            (_campaign_home(), 25.0),              # second poll clears at t=51
+            (_campaign_home(), 1.0),               # narrow reacquisition at t=52
+        ]
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            context, runtime, boundary, dispatched, recoveries = self._compose(
+                frames, temporary_directory
+            )
+            with self.assertRaises(HomeCityScanError) as raised:
+                context.open_building(HomeCityObjectId.CAMPAIGN)
+
+        self.assertEqual(
+            HomeCityScanStopReason.DEADLINE_EXHAUSTED,
+            raised.exception.result.stop_reason,
+        )
+        # The clock crossed the 45s operation deadline during blocking recovery:
+        # no late building input, no success, and no renewed operation.
+        self.assertEqual([], dispatched)
+        self.assertTrue(all("core_1" in label for label in boundary.capture_labels))
+        self.assertGreaterEqual(boundary.now, 45.0)
+        self.assertEqual(1, len(recoveries))
+        self.assertEqual(
+            [ObservationRequest.home_city_navigation(mode=HomeCityCameraScanMode.ENDPOINT_PROBE)]
+            * len(self._narrow_requests(boundary)),
+            self._narrow_requests(boundary),
+        )
+        self.assertEqual(ScreenType.PNC_HOME_CITY, runtime.last_observation.screen_type)
 
 
 if __name__ == "__main__":

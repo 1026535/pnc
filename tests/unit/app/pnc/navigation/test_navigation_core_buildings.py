@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     TapSpatialObjectAction,
 )
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedSpatialObject,
@@ -180,6 +181,70 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             (0.45, 0.54, 0.45, 0.26),
             (steps[-1].start_x_ratio, steps[-1].start_y_ratio, steps[-1].end_x_ratio, steps[-1].end_y_ratio),
         )
+
+
+    def test_military_public_entry_preserves_exact_slot_and_returns_home(self) -> None:
+        """The reviewed military routes compose with public body acquisition."""
+        for target, slot, screen in (
+            (HomeCityObjectId.INFANTRY_BARRACKS, 5, ScreenType.PNC_INFANTRY_BARRACKS),
+            (HomeCityObjectId.RANGED_BARRACKS, 7, ScreenType.PNC_RANGED_BARRACKS),
+            (HomeCityObjectId.HALL_OF_WAR, 14, ScreenType.PNC_HALL_OF_WAR),
+        ):
+            with self.subTest(target=target):
+                selector = HomeCitySlotSelector(slot)
+                body = replace(
+                    measured_building_object(
+                        target,
+                        bounds=Bounds(220, 470, 100, 100),
+                        action_point=(270, 520),
+                        action_bounds=Bounds(264, 514, 12, 12),
+                    ),
+                    home_city_slot=selector,
+                )
+                now = datetime(2026, 9, 29, tzinfo=UTC)
+                content_frames = iter(
+                    camera_home_frame((body,), captured_at=now + timedelta(seconds=index))
+                    for index in (1, 2)
+                )
+                back = VisibleElement(
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                    Bounds(22, 8, 58, 38),
+                    0.99,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                )
+                endpoint = replace(
+                    observation(screen),
+                    visible_elements={UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back},
+                    image_size=(540, 960),
+                )
+                frames = iter(
+                    [replace(endpoint, captured_at=now + timedelta(seconds=index))
+                     for index in (3, 4, 5, 6)]
+                    + [replace(observation(ScreenType.PNC_HOME_CITY),
+                               captured_at=now + timedelta(seconds=index))
+                       for index in (7, 8)]
+                )
+                actuator = Actuator()
+                core = NavigationCore(
+                    actuator, lambda _: next(frames), reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4), sleep=lambda _: None,
+                )
+
+                opened = core.open_building(
+                    target, home_city_slot=selector,
+                    observe_content=lambda _: next(content_frames),
+                )
+                returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+                self.assertEqual(screen, opened.screen_type)
+                self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+                self.assertEqual(2, len(actuator.actions))
+                self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+                self.assertEqual(body, actuator.actions[0].expected_object)
+                self.assertEqual(selector, actuator.actions[0].expected_object.home_city_slot)
+                self.assertEqual(body.action_point, actuator.actions[0].target_point)
+                self.assertEqual(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                                 actuator.actions[1].selector_id)
 
 
     def test_open_building_visible_target_uses_no_scan_gesture(self):
@@ -359,20 +424,32 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
                 self.assertIsInstance(actuator.actions[0], SwipeAction)
 
 
-    def test_open_building_rejects_unsupported_route_before_observation(self):
-        observed = Mock()
-        core = NavigationCore(
-            Actuator(),
-            lambda _: observation(ScreenType.PNC_HOME_CITY),
-            reviewed_navigation_edges(),
-            NavigationPolicy(max_observations=4),
-            sleep=lambda _: None,
-        )
+    def test_open_building_rejects_unsupported_route_before_observation(self) -> None:
+        """An unqualified endpoint cannot dispatch its potentially mutating body tap."""
+        for target in (
+            HomeCityObjectId.BANK,
+            HomeCityObjectId.CAVALRY_BARRACKS,
+            HomeCityObjectId.SIEGE_FACTORY,
+            HomeCityObjectId.FARM,
+            HomeCityObjectId.LUMBER_CAMP,
+            HomeCityObjectId.MOON_WELL,
+            HomeCityObjectId.IRON_MINE,
+            HomeCityObjectId.GOLD_MINE,
+        ):
+            for method in ("open_building", "open_visible_building"):
+                with self.subTest(target=target, method=method):
+                    observed = Mock()
+                    actuator = Actuator()
+                    core = NavigationCore(
+                        actuator, observed, reviewed_navigation_edges(),
+                        NavigationPolicy(max_observations=4), sleep=lambda _: None,
+                    )
 
-        with self.assertRaisesRegex(ValueError, "return route"):
-            core.open_building(HomeCityObjectId.BANK, observe_content=observed)
+                    with self.assertRaisesRegex(ValueError, "return route"):
+                        getattr(core, method)(target, observe_content=observed)
 
-        observed.assert_not_called()
+                    observed.assert_not_called()
+                    self.assertEqual([], actuator.actions)
 
 
     def test_institute_measured_open_taps_body_verified_target_without_queue_detour(self):
