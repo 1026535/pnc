@@ -74,12 +74,13 @@ No cache of actionable points or normalized state survives a public operation.
 
 **2026-09-29 endpoint-first amendment:** A public Home operation carries a typed
 camera scan mode with each capture. Its initial and post-wheel captures probe
-only the calibrated endpoint-scale hypothesis, using current fixed landmarks
-and a current matched wheel anchor. An endpoint candidate is not yet permission
+only the two template rungs bracketing the calibrated endpoint band, using
+current fixed landmarks and a current matched wheel anchor. An endpoint
+candidate is not yet permission
 to pan or tap: the next fresh Home capture runs the unrestricted scale sweep
 to reject cross-scale rivals and confirm the endpoint. An already-widest
 start may pass this two-frame gate without wheel movement. After certification,
-same-operation pan reacquisition uses the endpoint hypothesis for a fresh
+same-operation pan reacquisition uses those endpoint rungs for a fresh
 translation and body/slot match on each new frame, while retaining the
 calibration and session continuity checks above. This intentionally still pays
 an unrestricted sweep for a successful endpoint candidate; a failed candidate

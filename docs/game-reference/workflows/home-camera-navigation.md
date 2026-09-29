@@ -600,11 +600,15 @@ first frame is already at that minimum. A still frame after a wheel can mean
 an ineffective input; it cannot itself prove saturation.
 
 **Repository-proven design on this candidate:** The same Home camera catalog
-and fixed-landmark localizer first test the calibrated endpoint-scale
-hypothesis. A qualified current scenery anchor permits one bounded outward
-wheel when that probe has not proved the endpoint. The next frame must either
-fit the endpoint or show a shrinking same-patch anchor/measured scale change
-before another wheel. An endpoint candidate receives a fresh unrestricted
+and fixed-landmark localizer first test the two template-search rungs bracketing
+the calibrated endpoint band. Native endpoint captures fit a measured zoom
+near .74, but the stronger template votes occur at rung .70; selecting only
+.75 shifted one saved endpoint pose and lost the independent groups on a
+Warehouse post-pan frame. A qualified current scenery anchor permits one
+bounded outward wheel when that probe has not proved the endpoint. The next
+frame must either fit the endpoint or show a shrinking same-patch anchor or
+measured scale change before another wheel. An endpoint candidate receives a
+fresh unrestricted
 localization to reject cross-scale rivals. Only then does the request retain
 the normalization fact. Subsequent pans acquire fresh landmark translation,
 body pixels, action bounds and slot identity at the endpoint scale on each
@@ -617,13 +621,15 @@ and qualified fountain/moat wheel patches come from
 the native 2026-09-25/27 captures described above. The first endpoint
 certification still runs a broad scale sweep. A failed candidate can prompt
 another fresh certification within the operation's passive, wheel-input and
-deadline limits; a successful operation uses fixed-scale fresh reacquisition
-after certification,
-including later pans. Native trajectory fixtures prove only observed segments:
+deadline limits; a successful operation uses bounded-rung fresh reacquisition
+after certification, including later pans. Native trajectory fixtures prove
+only observed segments:
 the 2026-09-27 fountain .935 to .879 pair and the 2026-09-25 moat .871 to
 .824 pair are within-run, while the saved endpoint and Warehouse post-pan
 frames come from other sessions. The authored native regression therefore
 does not claim a continuous wheel-to-endpoint or same-operation pan trace.
-This candidate has only lightweight fake/static checks so far. Native
-matching, timing, and actual wheel-to-endpoint acceptance remain pending after
-CPU/live release.
+The narrow 2026-09-29 offline check passed 31 tests: endpoint native frames,
+within-run anchor shrink, same-pixel nonprogress, changed-pose Warehouse
+body agreement, and lightweight normalizer cases. A complete same-operation
+wheel-to-endpoint and pan trace, timing acceptance, and live input acceptance
+remain pending.

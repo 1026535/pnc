@@ -84,13 +84,15 @@ Do not introduce a second map/matcher, synthetic navigation success, automatic
 input, an occupancy database, or feature-specific route branches.
 
 **2026-09-29 observation cost amendment:** The normalizer first asks the
-canonical camera localizer for one endpoint-scale hypothesis. It does not run
-the 15-scale search to classify every arbitrary intermediate zoom. A first
+canonical camera localizer for the two template rungs bracketing the measured
+endpoint band. A measured zoom need not match its best template search rung.
+It does not run the 15-scale search to classify every arbitrary intermediate
+zoom. A first
 endpoint candidate receives a fresh unrestricted certification so the
 existing cross-scale ambiguity/rival rule remains authoritative. Subsequent
 same-operation normalized observations remeasure fixed landmarks at the
-certified endpoint scale and resolve bodies/slots from their own frames. The
-fixed-scale path is request-scoped and cannot make a non-endpoint or unresolved
+certified endpoint band and resolve bodies/slots from their own frames. The
+bounded-rung path is request-scoped and cannot make a non-endpoint or unresolved
 frame actionable. A failed candidate may lead to another fresh certification
 within the operation's passive, wheel-input and deadline limits; after success,
 normalized pans do not repeat the sweep. Initial certification still incurs a
