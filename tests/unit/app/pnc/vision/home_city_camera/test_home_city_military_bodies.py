@@ -7,8 +7,8 @@ on the independent 0092 survey view plus the zoom-1.0 f0 baseline from the
 separate 2026-09-22 session.  Hall of War (slot 14) has no qualified
 native body evidence and publishes no target.  Distinct military bodies
 must never cross-match, and occluded or erased bodies stay honest
-no-matches.  Native fixtures stay RGBA 900x1600; measured frame literals
-record the reviewed analytic predictions pending serialized validation.
+no-matches.  Native fixtures stay RGBA 900x1600; frame literals are the
+serialized template-match measurements on the integrated candidate.
 """
 
 from __future__ import annotations
@@ -136,10 +136,10 @@ class NativeMilitaryBodyMatchTests(unittest.TestCase):
         self.assertEqual((-152, -21), proof.translation)
         self.assertAlmostEqual(0.75, proof.zoom, delta=0.01)
         for object_id, slot, bounds, action_point in (
-            (HomeCityObjectId.INFANTRY_BARRACKS, 5, Bounds(287, 559, 83, 78), (322, 600)),
-            (HomeCityObjectId.CAVALRY_BARRACKS, 6, Bounds(124, 624, 100, 42), (180, 656)),
-            (HomeCityObjectId.RANGED_BARRACKS, 7, Bounds(262, 734, 120, 34), (317, 752)),
-            (HomeCityObjectId.SIEGE_FACTORY, 8, Bounds(84, 740, 72, 84), (117, 789)),
+            (HomeCityObjectId.INFANTRY_BARRACKS, 5, Bounds(287, 560, 83, 78), (322, 600)),
+            (HomeCityObjectId.CAVALRY_BARRACKS, 6, Bounds(124, 625, 100, 42), (180, 657)),
+            (HomeCityObjectId.RANGED_BARRACKS, 7, Bounds(262, 735, 120, 34), (317, 753)),
+            (HomeCityObjectId.SIEGE_FACTORY, 8, Bounds(84, 741, 72, 84), (117, 790)),
         ):
             with self.subTest(object_id=object_id):
                 target = _catalog_target(object_id)
@@ -163,8 +163,8 @@ class NativeMilitaryBodyMatchTests(unittest.TestCase):
         self.assertEqual(1, len(matches))
         match = matches[0]
         self.assertEqual(HomeCitySlotSelector(5), match.home_city_slot)
-        self.assertEqual(Bounds(53, 995, 111, 104), match.bounds)
-        self.assertEqual((100, 1049), match.action_point)
+        self.assertEqual(Bounds(47, 994, 111, 104), match.bounds)
+        self.assertEqual((94, 1048), match.action_point)
         self.assertGreaterEqual(match.score, 0.9)
         self.assertLessEqual(match.projection_error, 12)
 

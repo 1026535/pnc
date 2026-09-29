@@ -60,7 +60,7 @@ _EXPECTED = {
         "translation": (-532, 222),
         "targets": {
             HomeCityObjectId.INSTITUTE: (HomeCitySlotSelector(9), (724, 1253)),
-            HomeCityObjectId.INFANTRY_BARRACKS: (HomeCitySlotSelector(5), (100, 1049)),
+            HomeCityObjectId.INFANTRY_BARRACKS: (HomeCitySlotSelector(5), (94, 1048)),
         },
     },
     "home_city_pan2_f5_20260922.png": {
@@ -104,9 +104,9 @@ _EXPECTED = {
         "translation": (-152, -21),
         "targets": {
             HomeCityObjectId.INFANTRY_BARRACKS: (HomeCitySlotSelector(5), (322, 600)),
-            HomeCityObjectId.CAVALRY_BARRACKS: (HomeCitySlotSelector(6), (180, 656)),
-            HomeCityObjectId.RANGED_BARRACKS: (HomeCitySlotSelector(7), (317, 752)),
-            HomeCityObjectId.SIEGE_FACTORY: (HomeCitySlotSelector(8), (117, 789)),
+            HomeCityObjectId.CAVALRY_BARRACKS: (HomeCitySlotSelector(6), (180, 657)),
+            HomeCityObjectId.RANGED_BARRACKS: (HomeCitySlotSelector(7), (317, 753)),
+            HomeCityObjectId.SIEGE_FACTORY: (HomeCitySlotSelector(8), (117, 790)),
             HomeCityObjectId.INSTITUTE: (HomeCitySlotSelector(9), (788, 752)),
             HomeCityObjectId.TOWER_OF_TRIAL: (None, (473, 1094)),
             HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (594, 764)),
