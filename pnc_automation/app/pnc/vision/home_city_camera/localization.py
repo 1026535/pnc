@@ -182,7 +182,7 @@ class HomeCityCameraLocalizer:
             return proof
 
     def localize_endpoint(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
-        """Measure one calibrated endpoint-scale hypothesis on the current frame.
+        """Measure the bracketing template rungs for the calibrated endpoint.
 
         This scoped probe is not the unrestricted ambiguity search. Navigation
         certifies its first endpoint candidate with ``localize`` before use.
@@ -205,15 +205,17 @@ class HomeCityCameraLocalizer:
             )
         proposal_frame = self._proposal_frame(frame)
         midpoint = sum(endpoint.zoom_interval) / 2
-        scale = min(self._zoom_search, key=lambda value: abs(value - midpoint))
-        hypothesis = self._evaluate_zoom(frame, proposal_frame, scale)
-        if not hypothesis.qualified:
-            if self._is_ambiguous(hypothesis):
-                return self._ambiguous("conflicting_landmark_clusters", hypothesis, frame_size)
-            return self._insufficient([hypothesis], frame_size)
-        if self._rival_cluster(hypothesis) is not None:
-            return self._ambiguous("conflicting_landmark_clusters", hypothesis, frame_size)
-        return self._publish(frame, hypothesis, frame_size, proposal_frame)
+        scales = tuple(sorted(self._zoom_search))
+        # A measured camera zoom is not necessarily its best template-search
+        # rung. Retained native endpoint views qualify at .70, while .75 can
+        # either shift the pose or lose independent fixed-landmark groups.
+        lower = max((scale for scale in scales if scale <= midpoint), default=scales[0])
+        upper = min((scale for scale in scales if scale >= midpoint), default=scales[-1])
+        hypotheses = [
+            self._evaluate_zoom(frame, proposal_frame, scale)
+            for scale in dict.fromkeys((lower, upper))
+        ]
+        return self._localize_hypotheses(frame, proposal_frame, hypotheses)
 
     def _localize(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
         """Compute one camera proof; ``localize`` owns optional timing."""
@@ -230,6 +232,17 @@ class HomeCityCameraLocalizer:
         # this localization; it is immutable prepared data, not matcher state.
         proposal_frame = self._proposal_frame(frame)
         hypotheses = self._evaluate_zoom_sweep(frame, proposal_frame)
+        return self._localize_hypotheses(frame, proposal_frame, hypotheses)
+
+    def _localize_hypotheses(
+        self,
+        frame: PreparedFrame,
+        proposal_frame: PreparedFrame,
+        hypotheses: list[_CameraHypothesis],
+    ) -> HomeCityCameraProof:
+        """Apply the same qualifying and rival rules to any scoped scale set."""
+
+        frame_size = frame.original_size
         qualifying = [
             hypothesis for hypothesis in hypotheses if hypothesis.qualified
         ]

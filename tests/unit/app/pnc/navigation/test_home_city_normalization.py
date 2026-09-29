@@ -70,7 +70,7 @@ def operation(frames, *, policy=None, actuator=None, clock=lambda: 0.0):
 
 
 class HomeNormalizationTests(unittest.TestCase):
-    def test_endpoint_probe_is_certified_once_then_pan_uses_fixed_scale(self):
+    def test_endpoint_probe_is_certified_once_then_pan_uses_bounded_endpoint_mode(self):
         frames = iter((home(0), home(1), home(2, translation=(-288, 100))))
         requests = []
         op = operation([])

@@ -47,7 +47,7 @@ _CAPTURED_AT = datetime(2026, 9, 29, tzinfo=UTC)
 class EndpointProbeShapeTests(unittest.TestCase):
     """Cheap static/fake checks do not invoke native image matching."""
 
-    def test_endpoint_probe_evaluates_one_calibrated_scale(self) -> None:
+    def test_endpoint_probe_evaluates_bracketing_template_rungs(self) -> None:
         localizer = HomeCityCameraLocalizer(matcher=Mock())
         frame = SimpleNamespace(original_size=(900, 1600))
         empty = _CameraHypothesis(.75, .75, (0.0, 0.0), (), (), frozenset(), 0.0)
@@ -58,8 +58,7 @@ class EndpointProbeShapeTests(unittest.TestCase):
         ):
             proof = localizer.localize_endpoint(Image.new("RGB", (1, 1)))
         self.assertEqual(HomeCityCameraStatus.INSUFFICIENT, proof.status)
-        self.assertEqual(1, evaluate.call_count)
-        self.assertEqual(.75, evaluate.call_args.args[-1])
+        self.assertEqual([.70, .75], [call.args[-1] for call in evaluate.call_args_list])
 
     def test_probe_withholds_bodies_until_normalized_mode_and_current_endpoint(self) -> None:
         camera = Mock(spec=HomeCityCameraLocalizer)
@@ -216,8 +215,8 @@ class EndpointProbeNativeTests(unittest.TestCase):
         self.assertEqual(1, operation.state.zoom_inputs)
         self.assertEqual(1, len(actuator.actions))
 
-    def test_native_changed_pose_fixed_reacquisition_agrees_with_unrestricted(self) -> None:
-        """A saved post-pan endpoint body keeps its identity and point at fixed scale."""
+    def test_native_changed_pose_bounded_reacquisition_agrees_with_unrestricted(self) -> None:
+        """A saved post-pan endpoint body keeps its identity and point across modes."""
         camera = HomeCityCameraLocalizer(matcher=OpenCvTemplateMatcher())
         source = self._native("home_city_zoom_endpoint_20260925.png")
         with Image.open(_SLOT_BODY_FIXTURES / "home_city_warehouse_slot3_0047_20260929.png") as fixture:
