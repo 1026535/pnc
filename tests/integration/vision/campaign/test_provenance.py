@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import unittest
-from PIL import Image
 from pnc_automation.app.automation.engine.navigation_core import reviewed_navigation_edges
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, RowRecognitionStatus, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -189,64 +188,6 @@ class CampaignFrameAndProvenanceTests(unittest.TestCase):
                     ],
                 )
 
-    def test_native_chapter6_frames_qualify_with_owned_return_on_both_publishers(self) -> None:
-        """Retained 2026-09-22 captures resolve to chapter 6 and keep its owned Back."""
-        backend = _require_rapid_ocr_service(self)
-        for name in (
-            "campaign_chapter_6_path_20260922.png",
-            "campaign_chapter_6_path_holdout_20260922.png",
-        ):
-            capture = _capture(_image(name))
-            for publisher in ("builder", "navigation"):
-                with self.subTest(frame=name, publisher=publisher):
-                    observation = (
-                        _builder_with_backend(backend).build(
-                            capture, request=ObservationRequest.campaign_map_follow_up()
-                        )
-                        if publisher == "builder"
-                        else _navigation_perception_with_backend(backend).build(
-                            capture, include_content=True
-                        )
-                    )
-                    self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_CHAPTER)
-                    self.assertIsNotNone(observation.campaign_chapter)
-                    self.assertEqual(observation.campaign_chapter.chapter_number, 6)
-                    self.assertEqual(
-                        observation.campaign_chapter.source_layout_id, "campaign_chapter_6"
-                    )
-                    back = observation.visible_elements.get(UiElementId.PNC_CAMPAIGN_BACK_BUTTON)
-                    self.assertIsNotNone(back)
-                    assert back is not None
-                    self.assertEqual(back.source_layout_id, "campaign_chapter_6")
-                    self.assertEqual(back.frame_ref, capture.frame_ref)
-                    rows = observation.entries(ListEntryKind.CAMPAIGN_STAGE)
-                    self.assertTrue(
-                        any(
-                            row.row_status is RowRecognitionStatus.COMPLETE
-                            and row.campaign_node.stage_number == 4
-                            for row in rows
-                        ),
-                        "the 4th stage must publish on the retained path",
-                    )
-
-        scaled = _capture(
-            _image("campaign_chapter_6_path_20260922.png").resize(
-                (540, 960), Image.Resampling.LANCZOS
-            )
-        )
-        for publisher in ("builder", "navigation"):
-            with self.subTest(frame="scaled-20260922", publisher=publisher):
-                observation = (
-                    _builder_with_backend(backend).build(
-                        scaled, request=ObservationRequest.campaign_map_follow_up()
-                    )
-                    if publisher == "builder"
-                    else _navigation_perception_with_backend(backend).build(
-                        scaled, include_content=True
-                    )
-                )
-                self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_CHAPTER)
-                self.assertIsNotNone(observation.campaign_chapter)
 
     def test_stage_detail_facts_publish_through_both_publishers_with_provenance(self) -> None:
         """Both observation paths bind the reviewed stage facts to the stage frame."""

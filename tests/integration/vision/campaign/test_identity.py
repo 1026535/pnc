@@ -12,7 +12,8 @@ from pnc_automation.app.pnc.vision.campaign_ocr_regions import CAMPAIGN_CHAPTER_
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine
-from tests.support.pnc.campaign import _CampaignCropOcrService, _builder, _builder_with_backend, _capture, _image, _navigation_perception, _navigation_perception_with_backend
+from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
+from tests.support.pnc.campaign import FIXTURES, _CampaignCropOcrService, _builder, _builder_with_backend, _capture, _image, _navigation_perception, _navigation_perception_with_backend
 
 
 class CampaignIdentityTests(unittest.TestCase):
@@ -408,6 +409,102 @@ class CampaignIdentityTests(unittest.TestCase):
             "a blacked-out badge must not publish a stage row",
         )
 
+    def test_native_chapter6_frames_qualify_with_owned_return_on_both_publishers(self) -> None:
+        """The current-build Chapter 6 appearance keeps its typed rows and owned Back.
+
+        The unmodified 900x1600 RGBA frames from the parked M1 run previously
+        returned UNKNOWN; the scoped 0.92 terrain bound restores them without
+        weakening the 0.95 title identity or 0.85 Back control requirements.
+        """
+        backend = _require_rapid_ocr_service(self)
+        for name in (
+            "campaign_chapter_6_path_20260922.png",
+            "campaign_chapter_6_path_holdout_20260922.png",
+        ):
+            with Image.open(FIXTURES / name) as source:
+                image = source.copy()
+            self.assertEqual("RGBA", image.mode)
+            capture = _capture(image)
+            for publisher in ("builder", "navigation"):
+                with self.subTest(frame=name, publisher=publisher):
+                    observation = (
+                        _builder_with_backend(backend).build(
+                            capture, request=ObservationRequest.campaign_map_follow_up()
+                        )
+                        if publisher == "builder"
+                        else _navigation_perception_with_backend(backend).build(
+                            capture, include_content=True
+                        )
+                    )
+                    self.assertEqual(
+                        ScreenType.PNC_CAMPAIGN_CHAPTER, observation.screen_type
+                    )
+                    self.assertEqual("clear", observation.decision.guard.value)
+                    self.assertFalse(observation.blocking_popup)
+                    back = observation.get(UiElementId.PNC_CAMPAIGN_BACK_BUTTON)
+                    self.assertIsNotNone(back)
+                    self.assertEqual(
+                        VisibleElementSourceKind.TEMPLATE, back.source_kind
+                    )
+                    self.assertEqual(capture.frame_ref, back.frame_ref)
+                    self.assertIsNotNone(observation.campaign_chapter)
+                    self.assertEqual(6, observation.campaign_chapter.chapter_number)
+                    self.assertEqual(
+                        capture.frame_ref, observation.campaign_chapter.frame_ref
+                    )
+                    self.assertEqual(
+                        "campaign_chapter_6",
+                        observation.campaign_chapter.source_layout_id,
+                    )
+                    rows = observation.entries(ListEntryKind.CAMPAIGN_STAGE)
+                    complete = {
+                        row.campaign_node.stage_number
+                        for row in rows
+                        if row.row_status is RowRecognitionStatus.COMPLETE
+                    }
+                    self.assertEqual({1, 2, 3, 4}, complete)
+                    locked = [
+                        row
+                        for row in rows
+                        if row.row_status is RowRecognitionStatus.NO_ACTION
+                    ]
+                    self.assertEqual(4, len(locked))
+                    for row in rows:
+                        self.assertEqual(
+                            ScreenType.PNC_CAMPAIGN_CHAPTER, row.source_screen
+                        )
+                        self.assertEqual("campaign_chapter_6", row.source_layout_id)
+                        self.assertEqual(capture.frame_ref, row.frame_ref)
+                        if row.row_status is RowRecognitionStatus.COMPLETE:
+                            self.assertIs(row.campaign_node.locked, False)
+                            self.assertIsNotNone(row.action_point)
+                        else:
+                            self.assertIs(row.campaign_node.locked, True)
+                            self.assertIsNone(row.campaign_node.stage_number)
+                            self.assertIsNone(row.action_point)
+
+    def test_scaled_chapter6_20260922_frame_keeps_chapter_identity(self) -> None:
+        """The retained frame resized to reference geometry still resolves chapter 6."""
+        backend = _require_rapid_ocr_service(self)
+        scaled = _capture(
+            _image("campaign_chapter_6_path_20260922.png").resize(
+                (540, 960), Image.Resampling.LANCZOS
+            )
+        )
+        for publisher in ("builder", "navigation"):
+            with self.subTest(publisher=publisher):
+                observation = (
+                    _builder_with_backend(backend).build(
+                        scaled, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if publisher == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        scaled, include_content=True
+                    )
+                )
+                self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_CHAPTER)
+                self.assertIsNotNone(observation.campaign_chapter)
+
     def test_native_stage_identity_requires_both_independent_anchors(self) -> None:
         """Neither a title alone nor a generic lineup modal qualifies a stage."""
         recognizer = load_visual_screen_recognizer()
@@ -423,20 +520,27 @@ class CampaignIdentityTests(unittest.TestCase):
                     self.assertNotIn("campaign_stage_chapter_6", result.profile_ids)
 
     def test_chapter6_terrain_calibration_does_not_admit_other_screens(self) -> None:
-        """Calibration profiles only refine the path screens that carry them."""
+        """The scoped 0.92 terrain bound must not leak Chapter 6 onto other surfaces."""
         recognizer = load_visual_screen_recognizer()
         for name in (
+            "campaign_chapter_5_path_20260916.png",
+            "campaign_chapter_5_loading_20260916.png",
+            "campaign_chapter_10.png",
+            "campaign_chapter_10_unmasked.png",
             "campaign_map.png",
             "campaign_map_chapter_6.png",
+            "campaign_map_chapter_6_pulse.png",
+            "campaign_map_southern_view_20260916.png",
+            "campaign_map_recentered_20260916.png",
             "campaign_stage_10_3.png",
-            "campaign_chapter_10.png",
+            "world_map_core.png",
+            "home_city_core.png",
+            "vip_daily_reset.png",
+            "update_over_bag.png",
         ):
-            result = recognizer.recognize(_image(name))
-            self.assertNotIn(
-                "campaign_chapter_6",
-                {item.layout_id for item in result.evidence},
-                f"{name} must not adopt the chapter-6 path calibration",
-            )
+            with self.subTest(name=name):
+                result = recognizer.recognize(_image(name))
+                self.assertNotIn("campaign_chapter_6", result.profile_ids)
 
     def test_campaign_anchor_gate_fails_closed_when_identity_is_partial(self) -> None:
         recognizer = load_visual_screen_recognizer()
