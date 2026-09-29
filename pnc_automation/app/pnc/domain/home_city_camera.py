@@ -182,6 +182,14 @@ class HomeCityZoomStatus(StrEnum):
     UNSUPPORTED = "unsupported"
 
 
+class HomeCityCameraScanMode(StrEnum):
+    """Select the camera evidence needed by one Home observation."""
+
+    UNRESTRICTED = "unrestricted"
+    ENDPOINT_PROBE = "endpoint_probe"
+    NORMALIZED_ENDPOINT = "normalized_endpoint"
+
+
 @dataclass(frozen=True, slots=True)
 class HomeCityZoomAnchor:
     """One qualified pre-normalization gesture point in native frame pixels.

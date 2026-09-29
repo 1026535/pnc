@@ -13,7 +13,10 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.core.infra.diagnostics.performance import performance_span
-from pnc_automation.app.automation.engine.navigation_core import require_resource_inventory_surface
+from pnc_automation.app.automation.engine.navigation_core import (
+    HomeCityObservationRequest,
+    require_resource_inventory_surface,
+)
 from pnc_automation.app.automation.tasks.building_workflow_support import (
     build_queue_first_slot_is_idle,
     can_open_build_queue,
@@ -648,12 +651,12 @@ class WorkflowContext:
         self._last_observation = observation
         return observation
 
-    def _observe_home_city_navigation(self, label: str) -> Observation:
+    def _observe_home_city_navigation(self, request: HomeCityObservationRequest) -> Observation:
         """Acquire current Home scene proof through the guarded narrow scope."""
 
         return self._runtime.observe(
-            label, include_content=True,
-            request=ObservationRequest.home_city_navigation(),
+            request.label, include_content=True,
+            request=ObservationRequest.home_city_navigation(mode=request.camera_mode),
         )
 
     def discover_home_city(self) -> HomeCityScanResult:
