@@ -13,6 +13,7 @@ from pnc_automation.app.pnc.vision.research.tree import build_tree_additions, no
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrTextOrientation
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+from tests.support.paths import TEST_DATA_ROOT
 
 
 class ResearchCategoryFactsTests(unittest.TestCase):
@@ -123,9 +124,18 @@ class ResearchCategoryFactsTests(unittest.TestCase):
 
     def test_contradictory_header_cannot_override_qualified_category(self):
         context = Mock()
+        context.read_lines.side_effect = AssertionError(
+            "qualified category guard must precede node OCR"
+        )
+        context.read_preprocessed_result.side_effect = AssertionError(
+            "qualified category guard must precede node OCR"
+        )
         lines = (OcrLine("Military", Bounds(100, 10, 100, 30), 1.0),)
+        fixture = TEST_DATA_ROOT / "screen_recognition" / "research_tree_economy_20260916.png"
+        with Image.open(fixture) as source:
+            image = source.convert("RGB")
         additions = build_tree_additions(
-            image=Image.new("RGB", (540, 960)),
+            image=image,
             lines=lines,
             ocr_context=context,
             category=ResearchCategory.ECONOMY,
@@ -133,3 +143,4 @@ class ResearchCategoryFactsTests(unittest.TestCase):
         )
         self.assertEqual((), additions.list_entries)
         context.read_lines.assert_not_called()
+        context.read_preprocessed_result.assert_not_called()
