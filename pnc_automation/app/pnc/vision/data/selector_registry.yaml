@@ -2582,6 +2582,14 @@ selectors:
   status: planned
   detection_kind: semantic
   interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_CAMPAIGN_STAGE
+      notes:
+      - Observed nonspending preparation Back return to the source Campaign stage; final typed navigation validation remains pending.
   materialize_relative_bounds: false
   notes:
   - Produced only by the reviewed hero_formation_challenge_preparation visual profile when its measured top-left gold diamond Back anchor is present.
