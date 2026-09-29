@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import hashlib
 import unittest
 
 from PIL import Image
@@ -15,8 +14,6 @@ from pnc_automation.core.infra.capture.screenshot_service import CapturedScreens
 from tests.support.pnc.home_city_camera.publication import (
     _CAMERA_TARGET_IDS,
     _BoundedRapidOcrService,
-    HomeCameraPublicationAssertions,
-    _capture,
     _wire,
 )
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import (
@@ -25,7 +22,7 @@ from tests.support.pnc.capture_vision.require_rapid_ocr_service import (
 from tests.support.paths import TEST_DATA_ROOT
 
 
-class HomeCameraNegativeProvenanceTests(HomeCameraPublicationAssertions, unittest.TestCase):
+class HomeCameraNegativeProvenanceTests(unittest.TestCase):
     """Retained captured assertions at the real two-publisher boundary."""
 
     def test_world_map_is_a_camera_negative_on_both_paths(self) -> None:
@@ -69,18 +66,6 @@ class HomeCameraNegativeProvenanceTests(HomeCameraPublicationAssertions, unittes
                 ),
                 "a World frame must not publish camera-qualified Home targets",
             )
-
-    def test_frame_fingerprint_and_provenance_match_the_capture(self) -> None:
-        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
-        builder, navigation = _wire(backend)
-        capture = _capture("home_city_pan_07.png", session_id="v02-home-camera", capture_sequence=5)
-
-        observations = self._build_both(builder, navigation, backend, capture)
-        fingerprint = hashlib.sha256(capture.image.tobytes()).hexdigest()
-        for observation in observations:
-            self.assertEqual(capture.frame_ref, observation.frame_ref)
-            self.assertEqual(fingerprint, observation.frame_fingerprint)
-
 
 if __name__ == "__main__":
     unittest.main()

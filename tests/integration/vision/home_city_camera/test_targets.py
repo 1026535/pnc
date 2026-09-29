@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
 import unittest
 
 from PIL import Image
@@ -24,7 +25,6 @@ from tests.support.pnc.home_city_camera.publication import (
     _capture,
     _wire,
 )
-from tests.support.pnc.home_city_camera.fixtures import _CAMERA_FIXTURES as FIXTURES
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import (
     _require_rapid_ocr_service,
 )
@@ -34,27 +34,32 @@ from tests.support.paths import TEST_DATA_ROOT
 class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest.TestCase):
     """Retained captured assertions at the real two-publisher boundary."""
 
-    def test_wall_and_native_zoom_goddess_reach_both_publishers(self) -> None:
-        for sequence, (root, name, identity, slot, translation, point) in enumerate((
-            (TEST_DATA_ROOT / "home_city_slot_bodies", "home_city_wall_slot2_f6_20260922.png",
-             HomeCityObjectId.WALL, 2, (-1635, -718), (118, 983)),
-            (FIXTURES, "home_city_native_zoom_holdout_20260922.png",
-             HomeCityObjectId.GODDESS_STATUE, 15, (-603, 78), (462, 1201)),
-        )):
-            with self.subTest(identity=identity):
-                backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
-                builder, navigation = _wire(backend)
-                capture = _capture(name, session_id="v44-ordinary-bodies",
-                                   capture_sequence=sequence, fixture_root=root)
-                self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
-                observations = self._build_both(builder, navigation, backend, capture)
-                for observation in observations:
-                    self._assert_camera_publication(observation, capture, translation, {identity: point})
-                    bodies = [item for item in observation.spatial_surface.objects
-                              if home_city_object_id_from_metadata(item.metadata) == identity]
-                    self.assertEqual(1, len(bodies))
-                    self.assertEqual(slot, bodies[0].home_city_slot.slot_index)
-                self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+    def test_wall_slot2_reaches_both_publishers(self) -> None:
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_wall_slot2_f6_20260922.png",
+            session_id="v44-ordinary-bodies",
+            capture_sequence=0,
+            fixture_root=TEST_DATA_ROOT / "home_city_slot_bodies",
+        )
+        self.assertEqual(("RGBA", (900, 1600)), (capture.image.mode, capture.image.size))
+        observations = self._build_both(builder, navigation, backend, capture)
+        for observation in observations:
+            self._assert_camera_publication(
+                observation,
+                capture,
+                (-1635, -718),
+                {HomeCityObjectId.WALL: (118, 983)},
+            )
+            bodies = [
+                item
+                for item in observation.spatial_surface.objects
+                if home_city_object_id_from_metadata(item.metadata) is HomeCityObjectId.WALL
+            ]
+            self.assertEqual(1, len(bodies))
+            self.assertEqual(2, bodies[0].home_city_slot.slot_index)
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_west_holdout_publishes_camera_and_tower_through_both_paths(self) -> None:
         """A current west view localizes without inventing the offscreen Institute."""
@@ -85,6 +90,7 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
 
         observations = self._build_both(builder, navigation, backend, capture)
         expected = _EXPECTED["home_city_pan_07.png"]
+        fingerprint = hashlib.sha256(capture.image.tobytes()).hexdigest()
         for name, observation in (
             ("observation_builder", observations[0]),
             ("navigation_perception", observations[1]),
@@ -96,6 +102,8 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
                     expected["translation"],
                     expected["targets"],
                 )
+                self.assertEqual(capture.frame_ref, observation.frame_ref)
+                self.assertEqual(fingerprint, observation.frame_fingerprint)
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_tower_capture_publishes_both_measured_targets_on_both_paths(self) -> None:

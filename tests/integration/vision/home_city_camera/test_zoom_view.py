@@ -83,6 +83,14 @@ class HomeCameraZoomPublicationTests(HomeCameraPublicationAssertions, unittest.T
                             ),
                             "the zoomed frame does not qualify the Institute body",
                         )
+                        goddess_bodies = [
+                            item
+                            for item in surface.objects
+                            if home_city_object_id_from_metadata(item.metadata)
+                            is HomeCityObjectId.GODDESS_STATUE
+                        ]
+                        self.assertEqual(1, len(goddess_bodies))
+                        self.assertEqual(15, goddess_bodies[0].home_city_slot.slot_index)
             self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_zoom_view_evidence_publishes_identically_through_both_paths(self) -> None:
