@@ -81,8 +81,11 @@ class HomeCityCameraPanTests(unittest.TestCase):
         self.assertTrue(action.safe_bounds.contains_point((x2, y2)))
 
     def test_too_little_remaining_horizontal_lane_is_refused(self):
+        # The independently mapped alternative is occupied; the planner must
+        # not shorten a courtyard stroke to fit its remaining capacity.
+        obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(320, 1110, 30, 25), slot=12)
         with self.assertRaisesRegex(SelectorResolutionError, "No safe fixed gesture"):
-            plan_home_city_camera_pan(observation=_observation(translation=(-800, 100)),
+            plan_home_city_camera_pan(observation=_observation(translation=(-800, 100), objects=(obstacle,)),
                                       target=HomeCityObjectId.CAMPAIGN)
 
     def test_hud_covered_ground_strip_is_never_dispatched(self):
@@ -257,7 +260,7 @@ class HomeCityCameraPanTests(unittest.TestCase):
         self.assertEqual((222, 659, 336, 659), _points(action))
         self.assertEqual(Bounds(200, 636, 159, 48), action.safe_bounds)
 
-    def test_eastern_return_does_not_authorize_left_or_cross_a_foreign_body(self):
+    def test_eastern_return_cannot_cross_a_foreign_body_in_either_direction(self):
         obstacle = _body(HomeCityObjectId.BLACKSMITH, bounds=Bounds(230, 642, 30, 30), slot=12)
         with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(
@@ -266,8 +269,35 @@ class HomeCityCameraPanTests(unittest.TestCase):
         campaign = _body(HomeCityObjectId.CAMPAIGN, bounds=Bounds(800, 450, 50, 50), slot=None)
         with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(
-                observation=_observation(translation=(-886, -372), objects=(campaign,)),
+                observation=_observation(translation=(-886, -372), objects=(campaign, obstacle)),
                 target=HomeCityObjectId.CAMPAIGN)
+
+    def test_m008_campaign_right_edge_uses_measured_eastern_lane_to_pan_left(self):
+        # Actual native M008 run4 frame0029 and run5 frame0028, independently
+        # replayed September29: bodies match .938/.949, but x766/761 is outside
+        # the x738 tap limit. Courtyard capacities100/92 cannot fit114px.
+        for translation, zoom, point, bounds in (
+            ((-773, 54), .739249339502473, (766, 883), Bounds(714, 856, 111, 52)),
+            ((-786, 50), .7429132891403993, (761, 883), Bounds(708, 856, 111, 52)),
+        ):
+            with self.subTest(translation=translation):
+                campaign = _body(HomeCityObjectId.CAMPAIGN, bounds=bounds, point=point, slot=None)
+                observation = _observation(translation=translation, zoom=zoom, objects=(campaign,))
+                step = plan_home_city_camera_step(observation=observation, target=HomeCityObjectId.CAMPAIGN)
+                action = step.action
+                self.assertEqual("pan_home_city_eastern_return_left", action.reason)
+                x1, y1, x2, y2 = _points(action)
+                self.assertEqual(114, x1 - x2)
+                self.assertEqual(y1, y2)
+                self.assertEqual(429, action.duration_ms)
+                self.assertTrue(action.exact_geometry)
+                self.assertTrue(action.safe_bounds.contains_point((x1, y1)))
+                self.assertTrue(action.safe_bounds.contains_point((x2, y2)))
+                self.assertEqual("x", step.axis)
+                with self.assertRaises(SelectorResolutionError):
+                    plan_home_city_camera_step(
+                        observation=observation, target=HomeCityObjectId.CAMPAIGN, avoid_direction="left",
+                    )
 
     def test_thin_clipped_region_cannot_lose_perpendicular_margin(self):
         with self.assertRaises(SelectorResolutionError):

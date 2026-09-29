@@ -75,7 +75,9 @@ _HOME_CITY_INSTITUTE_COURTYARD = Bounds(1152, 754, 258, 400)
 _HOME_CITY_PAVED_COURTYARD = Bounds(1216, 806, 194, 62)
 # Paved return strip west of Alliance Hall, independently inspected in turn009
 # frame0028: native x200..360,y635..685 at translation(-886,-372), zoom .75.
-# Rightward use was observed in turn010; leftward remains unqualified.
+# Rightward use was observed in turn010. The M008 Campaign frames also expose
+# this strip when the courtyard is too short; leftward use is a candidate
+# extension that must pass its own live movement/landing gate before acceptance.
 _HOME_CITY_EASTERN_RETURN_LANE = Bounds(1448, 1343, 213, 66)
 # Southern terrace between Sanctum and Manor, surveyed independently of the
 # stroke in turn013 frame0046: native x526..684,y928..978 at(-110,-414),
@@ -2385,7 +2387,7 @@ def plan_home_city_camera_step(
     # Preserve already qualified route choices on both axes before considering
     # the additional terrace. A new horizontal lane must not displace a usable
     # vertical correction on an accepted Campaign route.
-    for allow_southern_terrace in (False, True):
+    for allow_additional_lanes in (False, True):
         for axis in axes:
             if needed[axis] == 0:
                 continue
@@ -2394,7 +2396,7 @@ def plan_home_city_camera_step(
             if direction == avoid_direction:
                 continue
             action = _home_city_profile_action(
-                observation, direction, allow_southern_terrace=allow_southern_terrace,
+                observation, direction, allow_additional_lanes=allow_additional_lanes,
             )
             if action is not None:
                 center = camera_view_center_atlas(proof)
@@ -2433,7 +2435,7 @@ def _home_city_region_clear(surface: SpatialSurfaceObservation, region: Bounds,
 
 
 def _home_city_profile_action(
-    observation: Observation, direction: str, *, allow_southern_terrace: bool = False,
+    observation: Observation, direction: str, *, allow_additional_lanes: bool = False,
 ) -> SwipeAction | None:
     """Instantiate the courtyard, ground-strip or specific Institute profile.
 
@@ -2451,8 +2453,9 @@ def _home_city_profile_action(
         (_HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE, "ground_strip")]
     if direction == "right":
         regions.append((_HOME_CITY_EASTERN_RETURN_LANE, "eastern_return"))
-    if direction == "left" and allow_southern_terrace:
+    if direction == "left" and allow_additional_lanes:
         regions.append((_HOME_CITY_SOUTHERN_TERRACE, "southern_terrace"))
+        regions.append((_HOME_CITY_EASTERN_RETURN_LANE, "eastern_return"))
     length = 114 if horizontal else 179
     for atlas, profile in regions:
         region = _home_city_pan_region(proof, atlas)
