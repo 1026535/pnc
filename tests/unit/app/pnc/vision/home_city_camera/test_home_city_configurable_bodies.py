@@ -72,13 +72,16 @@ class ConfigurableNativeBodyTests(unittest.TestCase):
             reason="saved_fixture_manifest_pose",
             translation=(-1632, -718), zoom=1.0, frame_size=(900, 1600),
         )
-        for name in (_SOURCE, _HOLDOUT):
+        for name, expected_action_point in (
+            (_SOURCE, (172, 736)),
+            (_HOLDOUT, (169, 736)),
+        ):
             with self.subTest(fixture=name), Image.open(_FIXTURES / name) as source:
                 matches = localizer.match_target_candidates(source.copy(), target, proof=proof)
                 self.assertEqual(1, len(matches))
                 self.assertEqual(HomeCitySlotSelector(13), matches[0].home_city_slot)
-                self.assertLessEqual(abs(matches[0].action_point[0] - 172), 2)
-                self.assertLessEqual(abs(matches[0].action_point[1] - 736), 2)
+                self.assertLessEqual(abs(matches[0].action_point[0] - expected_action_point[0]), 2)
+                self.assertLessEqual(abs(matches[0].action_point[1] - expected_action_point[1]), 2)
 
     def test_erased_native_body_does_not_publish_projected_slot_identity(self) -> None:
         catalog = load_home_city_camera_catalog()

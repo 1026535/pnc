@@ -132,8 +132,9 @@ class HomeCityCameraNativeZoomTests(unittest.TestCase):
         """At the zoomed pose the Institute body crop stays unmatched.
 
         p6_path_right — the camera-qualified Institute body landmark — does
-        not match at scale 1.072. The independently qualified Goddess body
-        and Castle bodies remain visible without weakening the Institute match contract.
+        not match at scale 1.072. The independently qualified Goddess body,
+        Castle body, and slot-5 Infantry Barracks body remain visible
+        without weakening the Institute match contract.
         Baseline and restored views qualify Institute at their measured poses.
         """
         localizer = _localizer()
@@ -145,11 +146,17 @@ class HomeCityCameraNativeZoomTests(unittest.TestCase):
         self.assertIsNone(localizer.match_target(zoomed, target, proof=zoomed_proof))
         objects = localizer.matched_target_objects(zoomed, proof=zoomed_proof)
         self.assertEqual(
-            [HomeCityObjectId.GODDESS_STATUE.value, HomeCityObjectId.CASTLE.value],
+            [
+                HomeCityObjectId.GODDESS_STATUE.value,
+                HomeCityObjectId.CASTLE.value,
+                HomeCityObjectId.INFANTRY_BARRACKS.value,
+            ],
             [item.metadata["home_city_object_id"] for item in objects],
         )
-        self.assertEqual(1, objects[-1].home_city_slot.slot_index)
-        self.assertEqual((583, 649), objects[-1].action_point)
+        self.assertEqual(1, objects[1].home_city_slot.slot_index)
+        self.assertEqual((583, 649), objects[1].action_point)
+        self.assertEqual(5, objects[2].home_city_slot.slot_index)
+        self.assertEqual((68, 965), objects[2].action_point)
 
         for name, action_point in (
             (self._BASELINE, (724, 1253)),

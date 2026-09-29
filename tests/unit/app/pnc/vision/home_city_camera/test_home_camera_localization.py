@@ -68,9 +68,10 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
             proof.matched_group_ids,
         )
         objects = localizer.matched_target_objects(prepared, proof=proof)
-        # The offer rail hides Institute, while the Castle body remains visible.
+        # The offer rail hides Institute, while the Castle body and the
+        # slot-5 Infantry Barracks body remain visible.
         self.assertEqual(
-            [HomeCityObjectId.CASTLE.value],
+            [HomeCityObjectId.CASTLE.value, HomeCityObjectId.INFANTRY_BARRACKS.value],
             [item.metadata["home_city_object_id"] for item in objects],
         )
         self.assertIsNone(localizer.match_target(

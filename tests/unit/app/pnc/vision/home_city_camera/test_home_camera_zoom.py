@@ -476,16 +476,29 @@ class HomeCityCameraZoomTests(unittest.TestCase):
         # The movable Alliance Hall corroborates the fitted transform but
         # cannot establish it.
         self.assertIn("alliance_hall_structure", proof.matched_group_ids)
-        # The existing Wall slot-2 body qualifies under this transform; no
-        # new target or tap geometry is invented.
+        # The existing Wall slot-2 body qualifies under this transform and
+        # the genuinely present Alliance Hall publishes its slot-13 body.
         matches = localizer.matched_target_objects(prepared, proof=proof)
         self.assertEqual(
-            {HomeCityObjectId.WALL},
+            {HomeCityObjectId.WALL, HomeCityObjectId.ALLIANCE_HALL},
             {home_city_object_id_from_metadata(item.metadata) for item in matches},
         )
-        self.assertEqual(HomeCitySlotSelector(2), matches[0].home_city_slot)
-        self.assertEqual((456, 1057), matches[0].action_point)
-        self.assertTrue(matches[0].action_bounds.contains_point(matches[0].action_point))
+        wall = next(
+            item
+            for item in matches
+            if home_city_object_id_from_metadata(item.metadata) is HomeCityObjectId.WALL
+        )
+        self.assertEqual(HomeCitySlotSelector(2), wall.home_city_slot)
+        self.assertEqual((456, 1057), wall.action_point)
+        self.assertTrue(wall.action_bounds.contains_point(wall.action_point))
+        alliance_hall = next(
+            item
+            for item in matches
+            if home_city_object_id_from_metadata(item.metadata) is HomeCityObjectId.ALLIANCE_HALL
+        )
+        self.assertEqual(HomeCitySlotSelector(13), alliance_hall.home_city_slot)
+        self.assertEqual((507, 810), alliance_hall.action_point)
+        self.assertTrue(alliance_hall.action_bounds.contains_point(alliance_hall.action_point))
 
     def test_wall_corridor_pedestal_masked_cannot_establish_the_camera(self) -> None:
         """Masking the new pedestal leaves only east_fortification to vote."""
