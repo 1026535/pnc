@@ -1775,15 +1775,16 @@
         "file_sha256": "2926e931aef1a9308e1dcc353cda0c97bc10e953bac36f058e801b56d371296d",
         "derivative": "Native RGBA 900x1600 session frame captured 2026-09-23T03:17:45Z at the end of the V19 live003 World Castle trial turn-003 run; only chat strip rows y=1395:1485 filled opaque black (0,0,0,255), all other pixels preserved. Same live session as the 03:12 route-source frame (run 20260923T031214Z_c43ce246); the two same-session frames are one correlated group, not independent validation. Installed build not recorded."
       }
-    }
-  ,
+    },
     {
       "image": "chat_kingdom_two_tab_20260927.png",
       "screen": "PNC_CHAT",
       "split": "reference",
       "group": "2026-09-27/testing/sanitized-chat-chrome",
       "sha256": "f91c9140b51398b3ddcc9fcd95ff3cba7f2ab4fe76b2931b1961cdbba171671a",
-      "expected_visual_screens": ["PNC_CHAT"]
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
     },
     {
       "image": "campaign_chapter_6_path_20260922.png",
@@ -1898,7 +1899,7 @@
         ],
         "qualification": "Observed regression sample; C3 formation capture and reconcile frame are correlated in one invocation, not an independent holdout"
       },
-      "annotation": "Unmodified native 900x1600 Hero Formation preparation frame opened by the authorized non-spending stage 6-5 Challenge tap at candidate 8e1fa8dd; this exact frame returned UNKNOWN. All three anchor/control assets are cropped from this frame. Installed build not recorded."
+      "annotation": "Unmodified native 900x1600 Hero Formation preparation frame opened by the authorized non-spending stage 6-5 Challenge tap at candidate 8e1fa8dd; this exact frame returned UNKNOWN. All identity/control assets are cropped from this frame. Installed build not recorded."
     },
     {
       "image": "hero_formation_challenge_preparation_reconcile_20260929.png",

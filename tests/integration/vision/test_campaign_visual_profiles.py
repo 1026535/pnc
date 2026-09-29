@@ -612,11 +612,11 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertFalse(observation.has(UiElementId.PNC_HERO_FORMATION_HEADER))
                     self.assertIsNone(observation.campaign_stage)
 
-    def test_formation_preparation_identity_requires_both_independent_anchors(self) -> None:
+    def test_formation_preparation_identity_requires_its_headings_and_challenge_caption(self) -> None:
         recognizer = load_visual_screen_recognizer()
         image = _image("hero_formation_challenge_preparation_20260929.png").resize((540, 960))
 
-        for region in ((108, 10, 312, 38), (124, 58, 270, 82)):
+        for region in ((108, 10, 312, 38), (124, 58, 270, 82), (214, 897, 327, 922)):
             with self.subTest(erased=region):
                 negative = image.copy()
                 negative.paste((0, 0, 0), region)
@@ -626,6 +626,21 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON,
                     {item.selector_id for item in result.controls},
                 )
+
+    def test_save_form_caption_cannot_publish_the_campaign_preparation_back(self) -> None:
+        """Shared formation headings do not identify the preparation action variant."""
+        image = _image("hero_formation_challenge_preparation_20260929.png").resize(
+            (540, 960), Image.Resampling.LANCZOS
+        )
+        image.paste((185, 135, 55), (214, 897, 327, 922))
+        ImageDraw.Draw(image).text((223, 903), "Save Form", fill="white")
+        recognition = load_visual_screen_recognizer().recognize(image)
+        self.assertNotIn("hero_formation_challenge_preparation", recognition.profile_ids)
+        save_form = (OcrLine("Save Form", Bounds(223, 903, 90, 18), 0.99),)
+        capture = _capture(image)
+        for publisher in (_builder(save_form), _navigation_perception(save_form)):
+            observation = publisher.build(capture)
+            self.assertFalse(observation.has(UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON))
 
     def test_formation_preparation_missing_back_keeps_identity_without_control(self) -> None:
         recognizer = load_visual_screen_recognizer()

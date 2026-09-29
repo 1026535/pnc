@@ -214,7 +214,8 @@ correlated, not an independent holdout. Installed build was not recorded.
 
 The `hero_formation_challenge_preparation` profile now qualifies this variant
 on two independent invariant anchors — the `Hero Formation` title and the
-`Deployable Heroes` section heading — at the unchanged 0.95 floor, and
+`Deployable Heroes` section heading — plus the identity-only `Challenge`
+caption to distinguish it from Save Form, all at the unchanged 0.95 floor, and
 publishes only its measured Back control
 (`PNC_CAMPAIGN_FORMATION_BACK_BUTTON`), withheld on the OCR-driven SaveForm and
 any other Hero Formation appearance. The reviewed navigation graph gains the

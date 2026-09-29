@@ -6268,7 +6268,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Campaign stage Challenge opened the Hero Formation preparation variant on September29: the independent Hero Formation title and Deployable Heroes section heading qualify identity at unchanged0.95 thresholds, and the measured top-left gold diamond Back is the only published control. The OCR-driven SaveForm variant and any formation Challenge/Save/GoFight/edit/Auto controls stay unpublished in this slice. Final live acceptance remains pending.",
+        "description": "Campaign stage Challenge opened the Hero Formation preparation variant on September29: the independent Hero Formation title and Deployable Heroes section heading plus the identity-only Challenge caption distinguish this variant at unchanged0.95 thresholds. The measured top-left gold diamond Back is the only published control. SaveForm remains distinct; formation Challenge/Save/GoFight/edit/Auto controls stay unpublished. Final live acceptance remains pending.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -6291,6 +6291,16 @@
             58,
             146,
             24
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/hero_formation_challenge_caption.png",
+          "search_region": [
+            214,
+            897,
+            113,
+            25
           ],
           "threshold": 0.95
         }
