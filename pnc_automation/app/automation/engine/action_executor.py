@@ -19,6 +19,7 @@ from pnc_automation.core.infra.emulator.input_dispatch import (
     WheelDispatch,
 )
 from pnc_automation.core.errors import FrameProvenanceError, SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import performance_wait
 from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
 from pnc_automation.app.pnc.domain.chat import chat_channel_selector_id
 from pnc_automation.app.pnc.domain.mail import multiline_text_field_selector_ids
@@ -835,7 +836,12 @@ class ActionExecutor:
 
         if milliseconds <= 0:
             return
-        self.sleep(milliseconds / 1000.0)
+        performance_wait(
+            "action_dispatch_delay",
+            milliseconds / 1000.0,
+            self.sleep,
+            span_name="action.delay",
+        )
 
     def _stable_delay_ms_for(self, action: ActionRequest) -> int:
         """Returns the pacing delay applied after one concrete UI action.

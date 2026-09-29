@@ -16,6 +16,7 @@ from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecogni
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrResult
 from tests.support.pnc.observations import make_observation
+from tests.support.paths import REPOSITORY_ROOT
 
 from tools.benchmark_screen_recognition import (
     FrameMetrics,
@@ -25,6 +26,7 @@ from tools.benchmark_screen_recognition import (
     _evaluate_sample,
     _manual_comparison_failures,
     _instrument_builder,
+    _select_manifest_samples,
     _observation_targets,
     aggregate_metrics,
     build_recognition_coverage_audit,
@@ -67,6 +69,74 @@ class ScreenRecognitionBenchmarkTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "exactly image, screen, split, group, and sha256"):
             load_manifest(path)
+
+    def test_current_repository_manifest_accepts_its_review_metadata(self) -> None:
+        """Keeps the fixture benchmark compatible with tracked provenance annotations."""
+
+        samples = load_manifest(
+            REPOSITORY_ROOT / "tests" / "data" / "screen_recognition" / "manifest.json",
+            decode_sample_names=("home_city_core.png",),
+        )
+
+        self.assertGreater(len(samples), 0)
+        self.assertTrue(any(sample.expected_visual_screens for sample in samples))
+
+    def test_sample_filter_decodes_only_selected_image_and_keeps_manifest_checks(self) -> None:
+        selected_image = self._write_image("selected.png", (40, 50, 60))
+        reference_image = self.root / "reference.png"
+        reference_image.write_text("not an image", encoding="utf-8")
+        holdout_image = self.root / "holdout.png"
+        holdout_image.write_text("not an image", encoding="utf-8")
+        document = {
+            "version": 2,
+            "annotation": "reviewed",
+            "samples": [
+                {
+                    "image": reference_image.name,
+                    "screen": "pnc_bag",
+                    "split": "reference",
+                    "group": "reference-group",
+                    "sha256": "0" * 64,
+                },
+                {
+                    "image": selected_image.name,
+                    "screen": "pnc_bag",
+                    "split": "validation",
+                    "group": "validation-group",
+                    "sha256": _decoded_image_sha256(Image.open(selected_image).convert("RGB")),
+                },
+                {
+                    "image": holdout_image.name,
+                    "screen": "pnc_bag",
+                    "split": "holdout",
+                    "group": "holdout-group",
+                    "sha256": "1" * 64,
+                },
+            ],
+        }
+
+        samples = load_manifest(
+            self._write_manifest(document),
+            decode_sample_names=(selected_image.name,),
+        )
+        selected = _select_manifest_samples(samples, (selected_image.name,))
+
+        self.assertEqual(3, len(samples))
+        self.assertIsNone(samples[0].image)
+        self.assertIsNotNone(selected[0].image)
+        self.assertEqual(selected_image.name, selected[0].image_name)
+
+    def test_fixture_selection_is_deterministic_and_rejects_unknown_names(self) -> None:
+        """Filters measured frames without weakening full-manifest validation."""
+
+        samples = (SimpleNamespace(image_name="first.png"), SimpleNamespace(image_name="second.png"))
+        selected = _select_manifest_samples(samples, ("second.png", "first.png"))
+
+        self.assertEqual(("first.png", "second.png"), tuple(sample.image_name for sample in selected))
+        with self.assertRaisesRegex(ValueError, "unknown screen-recognition sample"):
+            _select_manifest_samples(samples, ("missing.png",))
+        with self.assertRaisesRegex(ValueError, "cannot contain duplicates"):
+            _select_manifest_samples(samples, ("first.png", "first.png"))
 
     def test_manifest_rejects_legacy_hash_version(self) -> None:
         image = self._write_image("reference.png", (12, 20, 30))

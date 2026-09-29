@@ -966,7 +966,7 @@
       "screen": "PNC_VERSUS_CENTER",
       "split": "validation",
       "group": "2026-09-14/a02_buildings/20260914T283000Z/arena_validation",
-      "sha256": "cc1b65ca309284c6581ccc8f15b4e70c3c64cfd3021c4b81b9d0ac2f2cc6aa7c",
+      "sha256": "16c1b384f60dd3de2dd6345c3dd80e270b95d71c55ae39af0b06e64727cfd922",
       "expected_visual_screens": [
         "PNC_VERSUS_CENTER"
       ]
@@ -1405,7 +1405,7 @@
       "screen": "PNC_RESEARCH_TREE",
       "split": "validation",
       "group": "2026-09-16/mega_old_acc/research_acceptance_a02dbcf6",
-      "sha256": "67c55fc963167b81e10051820e69009cedc5bb7bc1636fca307ad1a88eb04b46",
+      "sha256": "63465d68cb388249ced583b58b72fc338ad2ac90c798f73b9cc34112c392a8f3",
       "expected_visual_screens": [
         "PNC_RESEARCH_TREE"
       ]

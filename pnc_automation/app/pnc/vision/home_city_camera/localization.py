@@ -5,7 +5,10 @@ from __future__ import annotations
 import math
 import statistics
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from contextvars import copy_context
+from dataclasses import dataclass, replace
+from functools import lru_cache
+from pathlib import Path
 from threading import RLock
 
 from PIL import Image
@@ -31,6 +34,10 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectSourceKind,
 )
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import (
+    current_performance_run,
+    performance_span,
+)
 from pnc_automation.core.vision.image.models import TemplateMatch
 from pnc_automation.core.vision.template.template_matcher import (
     OpenCvTemplateMatcher,
@@ -167,6 +174,16 @@ class HomeCityCameraLocalizer:
     def localize(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
         """Publishes the current-frame camera verdict from scene correspondences only."""
 
+        with performance_span("home_camera.localize") as measured:
+            proof = self._localize(image)
+            if measured is not None:
+                measured.set_attribute("status", proof.status.value)
+                measured.set_attribute("localized", proof.localized)
+            return proof
+
+    def _localize(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
+        """Compute one camera proof; ``localize`` owns optional timing."""
+
         frame = self._coerce_frame(image)
         frame_size = frame.original_size if frame is not None else image.size
         if frame is None:
@@ -292,16 +309,49 @@ class HomeCityCameraLocalizer:
 
         zoom_search = self._zoom_search
         if len(zoom_search) == 1:
-            return [self._evaluate_zoom(frame, proposal_frame, zoom_search[0])]
+            return [self._evaluate_zoom_with_span(frame, proposal_frame, zoom_search[0])]
         with ThreadPoolExecutor(
             max_workers=min(_CAMERA_SWEEP_WORKERS, len(zoom_search)),
             thread_name_prefix="home-camera-zoom",
         ) as pool:
-            futures = [
-                pool.submit(self._evaluate_zoom, frame, proposal_frame, zoom)
-                for zoom in zoom_search
-            ]
+            if current_performance_run() is None:
+                futures = [
+                    pool.submit(
+                        self._evaluate_zoom_with_span,
+                        frame,
+                        proposal_frame,
+                        zoom,
+                    )
+                    for zoom in zoom_search
+                ]
+            else:
+                futures = []
+                for zoom in zoom_search:
+                    context = copy_context()
+                    futures.append(
+                        pool.submit(
+                            context.run,
+                            self._evaluate_zoom_with_span,
+                            frame,
+                            proposal_frame,
+                            zoom,
+                        )
+                    )
             return [future.result() for future in futures]
+
+    def _evaluate_zoom_with_span(
+        self,
+        frame: PreparedFrame,
+        proposal_frame: PreparedFrame,
+        zoom: float,
+    ) -> _CameraHypothesis:
+        """Measure one scale hypothesis while retaining worker-thread identity."""
+
+        with performance_span(
+            "home_camera.zoom_hypothesis",
+            attributes={"zoom_scale": zoom},
+        ):
+            return self._evaluate_zoom(frame, proposal_frame, zoom)
 
     def _evaluate_zoom(
         self,

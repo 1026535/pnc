@@ -11,6 +11,7 @@ from typing import Protocol
 from PIL import Image
 
 from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import performance_span
 from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactKind,
     ObservationArtifactOwner,
@@ -404,10 +405,48 @@ class ObservationBuilder:
     ) -> Observation:
         """Builds one observation from a screenshot through the decision pipeline."""
 
-        if ocr_context is None:
-            ocr_context = self.create_ocr_context(screenshot)
-        else:
-            ocr_context.validate_capture(screenshot.image, getattr(screenshot, "frame_ref", None))
+        active_ocr_context = ocr_context or self.create_ocr_context(screenshot)
+        with performance_span(
+            "observation.builder",
+            attributes={
+                "request": (
+                    "default"
+                    if request is None
+                    else "coordinate_only"
+                    if request.world_map_coordinate_only
+                    else "targeted"
+                ),
+                "width": screenshot.image.width,
+                "height": screenshot.image.height,
+            },
+        ) as measured:
+            try:
+                return self._build_with_context(
+                    screenshot,
+                    request=request,
+                    ocr_context=active_ocr_context,
+                )
+            finally:
+                if measured is not None:
+                    metrics = active_ocr_context.metrics
+                    measured.set_attribute("ocr_requests", metrics.requests)
+                    measured.set_attribute("ocr_engine_calls", metrics.engine_calls)
+                    measured.set_attribute("ocr_processed_pixels", metrics.processed_pixel_area)
+                    measured.set_attribute("ocr_cache_hits", metrics.cache_hits)
+                    measured.set_attribute("ocr_fullframe_reuses", metrics.fullframe_reuses)
+                    measured.set_attribute("ocr_engine_seconds", metrics.engine_seconds)
+                    measured.set_attribute("ocr_diagnostics_count", len(metrics.diagnostics))
+
+    def _build_with_context(
+        self,
+        screenshot: CapturedScreenshot,
+        *,
+        request: ObservationRequest | None = None,
+        ocr_context: ObservationOcrContext,
+    ) -> Observation:
+        """Builds one observation using the caller's frame-local OCR context."""
+
+        ocr_context.validate_capture(screenshot.image, getattr(screenshot, "frame_ref", None))
         ocr_context.require_bounded_regions()
         active_request = request or ObservationRequest.full_runtime_default()
         viewport_reviewed = is_reviewed_viewport(screenshot.image.size)
@@ -1119,6 +1158,33 @@ class ObservationService:
         artifact_selection: ObservationArtifactSelection | None = None,
     ) -> CapturedObservation:
         """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
+
+        with performance_span(
+            "observation.capture",
+            attributes={
+                "request": (
+                    "default"
+                    if request is None
+                    else "coordinate_only"
+                    if request.world_map_coordinate_only
+                    else "targeted"
+                ),
+            },
+        ):
+            return self._capture_observation_unmeasured(
+                label,
+                request,
+                artifact_selection=artifact_selection,
+            )
+
+    def _capture_observation_unmeasured(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+        *,
+        artifact_selection: ObservationArtifactSelection | None = None,
+    ) -> CapturedObservation:
+        """Owns side effects for one capture without adding a second timing boundary."""
 
         artifact_policy = self._resolve_artifact_policy(
             request=request,

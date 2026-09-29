@@ -47,6 +47,7 @@ from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     visual_controls_for_decision,
 )
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.diagnostics.performance import performance_span
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 
 
@@ -104,6 +105,41 @@ class NavigationPerception:
         request: ObservationRequest | None = None,
     ) -> Observation:
         """Return only controls actually matched on an independently identified frame."""
+
+        active_request = "default" if request is None else "targeted"
+        with performance_span(
+            "core.perception",
+            attributes={"include_content": include_content, "request": active_request},
+        ) as measured:
+            ocr_context = self.create_ocr_context(screenshot)
+            try:
+                return self._build_with_ocr_context(
+                    screenshot,
+                    include_content=include_content,
+                    request=request,
+                    ocr_context=ocr_context,
+                )
+            finally:
+                if measured is not None:
+                    metrics = ocr_context.metrics
+                    measured.set_attribute("ocr_requests", metrics.requests)
+                    measured.set_attribute("ocr_engine_calls", metrics.engine_calls)
+                    measured.set_attribute("ocr_processed_pixels", metrics.processed_pixel_area)
+                    measured.set_attribute("ocr_cache_hits", metrics.cache_hits)
+                    measured.set_attribute("ocr_fullframe_reuses", metrics.fullframe_reuses)
+                    measured.set_attribute("ocr_engine_seconds", metrics.engine_seconds)
+                    measured.set_attribute("ocr_diagnostics_count", len(metrics.diagnostics))
+
+    def _build_with_ocr_context(
+        self,
+        screenshot: CapturedScreenshot,
+        *,
+        include_content: bool,
+        request: ObservationRequest | None,
+        ocr_context: ObservationOcrContext,
+    ) -> Observation:
+        """Performs visual and OCR perception with a caller-owned frame context."""
+
         if request is not None and not include_content:
             raise ValueError("Explicit navigation observation requests require include_content=True.")
         image = screenshot.image
@@ -144,7 +180,6 @@ class NavigationPerception:
                 else {}
             )
             visual = self.recognizer.recognize(image, **popup_kwargs)
-        ocr_context = self.create_ocr_context(screenshot)
         ocr_context.validate_capture(image, screenshot.frame_ref)
         ocr_context.require_bounded_regions()
         matched_profiles = set(visual.profile_ids)

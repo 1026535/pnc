@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.adb.client import AdbClient
+from pnc_automation.core.infra.diagnostics.performance import (
+    PerformanceReportWriter,
+    PerformanceRun,
+    current_performance_run,
+    performance_run_scope,
+    performance_span,
+)
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
@@ -91,11 +99,38 @@ class ConnectedAccountRuntime:
     world_map_movement_calibration_service: WorldMapMovementCalibrationService
     world_map_movement_calibration_store: WorldMapMovementCalibrationStore
     observed_action_executor: ObservedActionExecutor | None
+    _performance_run: PerformanceRun | None = field(default=None, repr=False, compare=False)
+    _performance_activation: AbstractContextManager[PerformanceRun] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
+    _performance_finalized: list[bool] = field(default_factory=lambda: [False], repr=False, compare=False)
 
-    def close(self) -> None:
+    def close(self, *, outcome: str = "success") -> None:
         """Releases the connected session's operation lease."""
 
-        self.session.close()
+        try:
+            self.session.close()
+        except BaseException as error:
+            self._finish_performance("error", error)
+            raise
+        self._finish_performance(outcome)
+
+    def _finish_performance(self, outcome: str, error: BaseException | None = None) -> None:
+        """Resets an owned measurement context after session cleanup."""
+
+        if self._performance_finalized[0]:
+            return
+        self._performance_finalized[0] = True
+        if self._performance_activation is not None:
+            self._performance_activation.__exit__(
+                None if error is None else type(error),
+                error,
+                None if error is None else error.__traceback__,
+            )
+        if self._performance_run is not None:
+            self._performance_run.finish(outcome)
 
     def __enter__(self) -> "ConnectedAccountRuntime":
         """Enters an explicitly scoped connected runtime."""
@@ -107,7 +142,7 @@ class ConnectedAccountRuntime:
 
         active_error = _exception if isinstance(_exception, BaseException) else None
         close_preserving_error(
-            self.close,
+            lambda: self.close(outcome="error" if active_error is not None else "success"),
             active_error,
             message="Connected runtime operation and cleanup both failed.",
         )
@@ -169,6 +204,7 @@ class ScriptRunner:
     )
     instance_closer: BlueStacksInstanceCloser | None = field(default=None, repr=False)
     match3_component: Match3Component = field(default_factory=UnavailableMatch3Component, repr=False)
+    performance_report_writer: PerformanceReportWriter | None = field(default=None, repr=False)
 
     def reserve_accounts(
         self,
@@ -242,13 +278,43 @@ class ScriptRunner:
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
         mutation_boundary: CoreMutationBoundary | None = None,
     ) -> RunResult:
+        """Measures one authored run from script preparation through session cleanup."""
+
+        performance_writer = getattr(self, "performance_report_writer", None)
+        with performance_run_scope(
+            performance_writer,
+            "script_runner",
+            attributes={"runner_path": "authored_script"},
+        ) as run:
+            if run is not None:
+                run.set_attribute("runner_path", "authored_script")
+            return self._run_script_for_account_unmeasured(
+                account=account,
+                script=script,
+                castle_refs=castle_refs,
+                required_role=required_role,
+                session_cleanup_policy=session_cleanup_policy,
+                mutation_boundary=mutation_boundary,
+            )
+
+    def _run_script_for_account_unmeasured(
+        self,
+        *,
+        account: AccountConfig,
+        script: RunScript,
+        castle_refs: list[str] | None = None,
+        required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
+    ) -> RunResult:
         """Executes one already-loaded run script for one already-resolved account target."""
 
-        prepared_script = self.task_registry.prepare_script(
-            script,
-            castle_targets=self.config.find_castle_targets(account.id),
-            castle_refs=castle_refs,
-        )
+        with performance_span("script.prepare"):
+            prepared_script = self.task_registry.prepare_script(
+                script,
+                castle_targets=self.config.find_castle_targets(account.id),
+                castle_refs=castle_refs,
+            )
         self._require_match3_availability(prepared_script)
         core_steps = tuple(
             step
@@ -276,29 +342,33 @@ class ScriptRunner:
             else:
                 effective_role = required_role or LiveAutomationRole.LIVE_TESTING
             account.require_live_role(effective_role)
-        runner, castle_roster_provider = self._build_runner(
-            account,
-            required_role=effective_role,
-            session_cleanup_policy=session_cleanup_policy,
-            mutation_boundary=mutation_boundary,
-        )
-        try:
-            result = runner.run(
+        with performance_span("script.runtime_build"):
+            runner, castle_roster_provider = self._build_runner(
                 account,
-                prepared_script,
-                castle_roster_provider=castle_roster_provider,
-                castle_roster_store=self.castle_roster_store,
-                mail_archive_store=self.mail_archive_store,
-                chat_archive_store=self.chat_archive_store,
+                required_role=effective_role,
+                session_cleanup_policy=session_cleanup_policy,
+                mutation_boundary=mutation_boundary,
             )
+        try:
+            with performance_span("script.execution"):
+                result = runner.run(
+                    account,
+                    prepared_script,
+                    castle_roster_provider=castle_roster_provider,
+                    castle_roster_store=self.castle_roster_store,
+                    mail_archive_store=self.mail_archive_store,
+                    chat_archive_store=self.chat_archive_store,
+                )
         except BaseException as error:
-            close_preserving_error(
-                runner.close,
-                error,
-                message="Automation execution and BlueStacks phase cleanup both failed.",
-            )
+            with performance_span("script.cleanup"):
+                close_preserving_error(
+                    runner.close,
+                    error,
+                    message="Automation execution and BlueStacks phase cleanup both failed.",
+                )
             raise
-        runner.close()
+        with performance_span("script.cleanup"):
+            runner.close()
         return result
 
     def _require_match3_availability(self, prepared_script: PreparedRunScript) -> None:
@@ -443,18 +513,45 @@ class ScriptRunner:
     ) -> ConnectedAccountRuntime:
         """Builds the canonical connected runtime service graph shared by tooling and automation runs."""
 
-        session = self.build_connected_session(
-            account=account,
-            cleanup_policy=session_cleanup_policy,
-        )
-        try:
-            return self._build_connected_runtime_services_for_session(account=account, session=session)
-        except BaseException as error:
-            close_preserving_error(
-                session.close,
-                error,
-                message="Connected runtime construction and BlueStacks phase cleanup both failed.",
+        performance_writer = getattr(self, "performance_report_writer", None)
+        owns_performance_run = current_performance_run() is None and performance_writer is not None
+        performance_run = (
+            performance_writer.begin_run(
+                "connected_runtime",
+                attributes={"runner_path": "connected_runtime", "core_trace_available": False},
             )
+            if owns_performance_run and performance_writer is not None
+            else None
+        )
+        performance_activation = None if performance_run is None else performance_run.activate()
+        if performance_activation is not None:
+            performance_activation.__enter__()
+        session: BlueStacksSession | None = None
+        try:
+            session = self.build_connected_session(
+                account=account,
+                cleanup_policy=session_cleanup_policy,
+            )
+            runtime = self._build_connected_runtime_services_for_session(account=account, session=session)
+            if performance_run is not None:
+                runtime = replace(
+                    runtime,
+                    _performance_run=performance_run,
+                    _performance_activation=performance_activation,
+                )
+            return runtime
+        except BaseException as error:
+            try:
+                if session is not None:
+                    close_preserving_error(
+                        session.close,
+                        error,
+                        message="Connected runtime construction and BlueStacks phase cleanup both failed.",
+                    )
+            finally:
+                if performance_activation is not None and performance_run is not None:
+                    performance_activation.__exit__(type(error), error, error.__traceback__)
+                    performance_run.finish("error")
             raise
 
     def _build_connected_runtime_services_for_session(
