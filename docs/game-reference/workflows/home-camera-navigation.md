@@ -604,7 +604,7 @@ and fixed-landmark localizer first test the calibrated endpoint-scale
 hypothesis. A qualified current scenery anchor permits one bounded outward
 wheel when that probe has not proved the endpoint. The next frame must either
 fit the endpoint or show a shrinking same-patch anchor/measured scale change
-before another wheel. An endpoint candidate receives one fresh unrestricted
+before another wheel. An endpoint candidate receives a fresh unrestricted
 localization to reject cross-scale rivals. Only then does the request retain
 the normalization fact. Subsequent pans acquire fresh landmark translation,
 body pixels, action bounds and slot identity at the endpoint scale on each
@@ -615,7 +615,15 @@ The endpoint interval `[0.738,0.744]`, nearest non-endpoint rung at `0.74692`,
 and qualified fountain/moat wheel patches come from
 `pnc_automation/app/pnc/vision/data/home_city_camera/normalization.json` and
 the native 2026-09-25/27 captures described above. The first endpoint
-certification still runs the broad scale sweep once per public operation;
-later normalized pan observations do not. This candidate has only lightweight
-fake/static checks so far. Native endpoint/rung and post-pan matching, timing,
-and actual wheel-to-endpoint acceptance remain pending after CPU/live release.
+certification still runs a broad scale sweep. A failed candidate can prompt
+another fresh certification within the operation's passive, wheel-input and
+deadline limits; a successful operation uses fixed-scale fresh reacquisition
+after certification,
+including later pans. Native trajectory fixtures prove only observed segments:
+the 2026-09-27 fountain .935 to .879 pair and the 2026-09-25 moat .871 to
+.824 pair are within-run, while the saved endpoint and Warehouse post-pan
+frames come from other sessions. The authored native regression therefore
+does not claim a continuous wheel-to-endpoint or same-operation pan trace.
+This candidate has only lightweight fake/static checks so far. Native
+matching, timing, and actual wheel-to-endpoint acceptance remain pending after
+CPU/live release.

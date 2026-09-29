@@ -77,12 +77,14 @@ camera scan mode with each capture. Its initial and post-wheel captures probe
 only the calibrated endpoint-scale hypothesis, using current fixed landmarks
 and a current matched wheel anchor. An endpoint candidate is not yet permission
 to pan or tap: the next fresh Home capture runs the unrestricted scale sweep
-once to reject cross-scale rivals and confirm the endpoint. An already-widest
+to reject cross-scale rivals and confirm the endpoint. An already-widest
 start may pass this two-frame gate without wheel movement. After certification,
 same-operation pan reacquisition uses the endpoint hypothesis for a fresh
 translation and body/slot match on each new frame, while retaining the
 calibration and session continuity checks above. This intentionally still pays
-one broad sweep per public operation; it avoids repeating that sweep for every
+an unrestricted sweep for a successful endpoint candidate; a failed candidate
+may lead to another sweep later in the same operation, subject to its passive,
+wheel-input and deadline limits. It avoids repeating that sweep for every
 normalized pan. Unrestricted localization remains available to other callers.
 An unresolved arbitrary-scale view may authorize another outward wheel only
 from its current qualified anchor; an unchanged or shifted-but-not-shrinking
