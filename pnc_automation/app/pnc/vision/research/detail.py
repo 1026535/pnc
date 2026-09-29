@@ -39,7 +39,7 @@ from pnc_automation.app.pnc.vision.research.parsing import (
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrReadPurpose
-from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher, PreparedFrame
 
 
 def detail_additions(*, image: Image.Image, lines: tuple[OcrLine, ...], ocr_context: ObservationOcrContext, max_level_panel: bool, matcher: OpenCvTemplateMatcher) -> ObservationAdditions:
@@ -159,7 +159,7 @@ def detail_additions(*, image: Image.Image, lines: tuple[OcrLine, ...], ocr_cont
     )
 
 
-def match_cost_resource(*, image: Image.Image, prepared, line: OcrLine, matcher: OpenCvTemplateMatcher) -> ResourceType | None:
+def match_cost_resource(*, image: Image.Image, prepared: PreparedFrame | None, line: OcrLine, matcher: OpenCvTemplateMatcher) -> ResourceType | None:
     """Match the small resource icon left of a cost row when supported."""
 
     if prepared is None:

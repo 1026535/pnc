@@ -11,8 +11,7 @@ from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchNodeF
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.research.detail import detail_additions as build_detail_additions
 from pnc_automation.app.pnc.vision.research.queue import queue_additions as build_queue_additions
-from pnc_automation.app.pnc.vision.research.tree import NodeCandidate, build_tree_additions, node_candidate, read_node_level
-from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.app.pnc.vision.research.tree import build_tree_additions
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -88,30 +87,6 @@ class ResearchContentProducer:
         """Publish explicit idle/active/unknown queue rows."""
 
         return build_queue_additions(image=image, lines=lines)
-
-    def _node_candidate(
-        self,
-        *,
-        image: Image.Image,
-        component: Bounds,
-        ocr_context: ObservationOcrContext,
-        category: ResearchCategory | None,
-    ) -> NodeCandidate | None:
-        """Retain the tested private candidate seam on the producer facade."""
-
-        return node_candidate(image=image, component=component, ocr_context=ocr_context, category=category)
-
-    def _read_node_level(
-        self,
-        *,
-        image: Image.Image,
-        icon_bounds: Bounds,
-        ocr_context: ObservationOcrContext,
-    ) -> tuple[int | None, int | None, bool] | None:
-        """Retain the tested private level-reading seam on the facade."""
-
-        return read_node_level(image=image, icon_bounds=icon_bounds, ocr_context=ocr_context)
-
 
 __all__ = [
     "ResearchContentProducer",

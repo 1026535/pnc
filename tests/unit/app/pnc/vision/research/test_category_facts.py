@@ -9,10 +9,10 @@ from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.research import (
     ResearchNodeFacts, ResearchNodeId, research_node_for_label,
 )
-from pnc_automation.app.pnc.vision.research.parsing import header_category
-from pnc_automation.app.pnc.vision.research.tree import node_candidate, read_node_level
+from pnc_automation.app.pnc.vision.research.tree import build_tree_additions, node_candidate, read_node_level
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrTextOrientation
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 
 class ResearchCategoryFactsTests(unittest.TestCase):
@@ -123,10 +123,13 @@ class ResearchCategoryFactsTests(unittest.TestCase):
 
     def test_contradictory_header_cannot_override_qualified_category(self):
         context = Mock()
-        category = header_category(
-            (OcrLine("Military", Bounds(100, 10, 100, 30), 1.0),),
+        lines = (OcrLine("Military", Bounds(100, 10, 100, 30), 1.0),)
+        additions = build_tree_additions(
             image=Image.new("RGB", (540, 960)),
+            lines=lines,
+            ocr_context=context,
+            category=ResearchCategory.ECONOMY,
+            matcher=OpenCvTemplateMatcher(),
         )
-        self.assertEqual(ResearchCategory.MILITARY, category)
-        self.assertNotEqual(ResearchCategory.ECONOMY, category)
+        self.assertEqual((), additions.list_entries)
         context.read_lines.assert_not_called()
