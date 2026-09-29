@@ -10,6 +10,7 @@ from pnc_automation.app.pnc.domain.research import (
     ResearchQueueRow,
     ResearchQueueState,
 )
+from pnc_automation.app.pnc.vision.research.geometry import _HEADER_HEIGHT_RATIO
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
@@ -34,7 +35,7 @@ _DECORATION_LABEL_PREFIXES = ("MASTERRESEARCHER",)
 def header_category(lines: tuple[OcrLine, ...], *, image: Image.Image) -> ResearchCategory | None:
     """Resolve the proved tree category from its bounded header read."""
 
-    header_bottom = image.height * (0.065 + 0.02)
+    header_bottom = image.height * (_HEADER_HEIGHT_RATIO + 0.02)
     for line in lines:
         if line.bounds.y > header_bottom:
             continue
