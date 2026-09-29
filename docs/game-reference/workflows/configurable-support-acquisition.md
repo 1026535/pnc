@@ -64,13 +64,16 @@ qualify their feature actions or new public routes.
   independently shows a labeled Market at slot 11 on a different date, session
   and camera pose (`zoom=0.75`, translation `(-389,-427)`). The file SHA-256 is
   `7ef0c47ea6e7fa377d5b090cd54b18133ea0b2858467edaf3506dc7f82b12fee`.
-  This is the native Market holdout; projected point `(744,769)` is a geometry
-  prediction until matching measures it. The older reduced
+  Native matching on candidate `82730082` measured bounds `(678,708,116,82)`,
+  action `(740,764)`, score `0.9704` and projection error `6.40px`. The
+  camera-only point `(744,769)` differs from the measured body point; navigation
+  must use the latter. The older reduced
   `home_city_pan_07.png` shows an empty slot 11 between Blacksmith and Hall and
   supplies a real negative. These observations do not prove other placements,
   other skins, collider behavior, or an operational public route.
 - **Unknown:** Market's current native endpoint identity and actual return.
-  Native source/holdout matching and live body qualification remain pending.
+  Source/holdout matching and both negative checks pass; both-publisher checks
+  and final-candidate live body qualification remain pending.
   The old artifact
   `20260825T150419Z_phase1_upgrade_focus_market_post_action_3.png` shows foggy
   Home, not a Market body or endpoint; its filename is not identity evidence.

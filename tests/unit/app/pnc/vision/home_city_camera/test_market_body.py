@@ -142,7 +142,9 @@ class MarketBodyMatchTests(unittest.TestCase):
             matches = localizer.match_target_candidates(source.copy(), target, proof=proof)
         self.assertEqual(1, len(matches))
         self.assertEqual(HomeCitySlotSelector(11), matches[0].home_city_slot)
-        for observed, expected in zip(matches[0].action_point, (744, 769)):
+        # Native match: score .9704, projection error 6.40px. Use the measured
+        # body location, not the camera-only prediction (744, 769).
+        for observed, expected in zip(matches[0].action_point, (740, 764)):
             self.assertLessEqual(abs(observed - expected), 2)
 
     def test_empty_slot_between_blacksmith_and_hall_is_not_market(self) -> None:
