@@ -2169,7 +2169,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(
             screen.PNC_CHAT,
             selector.PNC_BACK_BUTTON_TOP_LEFT,
-            frozenset({screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP}),
+            frozenset({screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP, screen.PNC_MORE_MENU}),
         ),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_PLAYER_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),
@@ -2218,6 +2218,9 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER, screen.PNC_TRIAL_CHALLENGE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
         screen.PNC_BLACKSMITH, screen.PNC_WALL,
+        # Only the captured voucher_mall producer qualifies this entry's
+        # measured Back; other store contexts remain unreviewed.
+        screen.PNC_CASH_MALL,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))
     return tuple(edges)

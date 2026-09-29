@@ -337,6 +337,11 @@ class ScreenFlowPlanner:
                         follow_up_request=ObservationRequest.home_city_follow_up(observation.screen_type),
                     )
                 ]
+            if observation.screen_type == ScreenType.PNC_CASH_MALL:
+                raise SelectorResolutionError(
+                    "Cash Mall requires the measured top-left Back control; the generic key fallback is not reviewed for this screen.",
+                    screen_type=observation.screen_type,
+                )
             return [
                 KeyEventAction(
                     key_code="KEYCODE_BACK",

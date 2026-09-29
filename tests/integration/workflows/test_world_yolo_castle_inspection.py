@@ -106,6 +106,50 @@ class WorldYoloCastleInspectionTests(unittest.TestCase):
         self.assertEqual(first_action.expected_object, target)
         self.assertEqual(first_action.target_point, target.action_point)
 
+    def test_tagged_world_label_matches_untagged_profile_name(self) -> None:
+        """Alliance-tagged world labels still match the untagged profile title through existing normalization."""
+        previous = make_observation(ScreenType.PNC_WORLD_MAP)
+        source = _world_source(qualified=True, name="[NGF]another NPC")
+        detail = make_observation(
+            ScreenType.PNC_PLAYER_TERRITORY,
+            visible_ids=(
+                UiElementId.PNC_PLAYER_TERRITORY_HEADER,
+                UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON,
+            ),
+        )
+        profile = make_observation(
+            ScreenType.PNC_PLAYER_PROFILE,
+            profile_player_name="another NPC",
+        )
+        territory_return = make_observation(ScreenType.PNC_PLAYER_TERRITORY)
+        returned = make_observation(ScreenType.PNC_WORLD_MAP)
+        executor = Mock()
+        executor.execute_actions.side_effect = (
+            SimpleNamespace(observation=detail),
+            SimpleNamespace(observation=profile),
+            SimpleNamespace(observation=territory_return),
+            SimpleNamespace(observation=returned),
+        )
+        runtime = Mock()
+        runtime.observation_count = 2
+        runtime.observe.return_value = source
+        runtime.runtime.require_observed_action_executor.return_value = executor
+        context = WorkflowContext(runtime, last_observation=previous)
+
+        target, observed_source, observed_detail, observed_profile, observed_return = (
+            context.inspect_world_yolo_castle(active_castle=self.active_castle)
+        )
+
+        self.assertEqual(target.name_text, "[NGF]another NPC")
+        self.assertIs(observed_source, source)
+        self.assertIs(observed_detail, detail)
+        self.assertIs(observed_profile, profile)
+        self.assertIs(observed_return, returned)
+        self.assertEqual(executor.execute_actions.call_count, 4)
+        first_action = executor.execute_actions.call_args_list[0].args[0][0]
+        self.assertEqual(first_action.expected_object, target)
+        self.assertEqual(first_action.target_point, target.action_point)
+
     def test_unqualified_castle_stops_before_executor_access(self) -> None:
         previous = make_observation(ScreenType.PNC_WORLD_MAP)
         runtime = Mock()

@@ -9,12 +9,15 @@ _CAMPAIGN_FLOW_SCREEN_TYPES = frozenset(
         ScreenType.PNC_CAMPAIGN_MAP,
         ScreenType.PNC_CAMPAIGN_CHAPTER,
         ScreenType.PNC_CAMPAIGN_STAGE,
-        ScreenType.PNC_BATTLE_PREP,
     }
 )
 
 
 def campaign_flow_screen_types() -> frozenset[ScreenType]:
-    """Returns the canonical screens that prove the runtime is inside Campaign."""
+    """Returns the canonical screens that prove the runtime is inside Campaign.
+
+    Battle-preparation and Hero Formation surfaces are shared across game
+    modes, so they cannot prove Campaign context on their own.
+    """
 
     return _CAMPAIGN_FLOW_SCREEN_TYPES

@@ -411,6 +411,14 @@ class VisualScreenRecognizer:
         if blocking_profiles and len(blocking_layouts) == 1 and len(matched_screens) == 1:
             profile = blocking_profiles[0]
             matched_profile_ids = ",".join(item.id for item in blocking_profiles)
+            # Alternate visual entries may share one dismiss selector; the
+            # overlay keeps exactly one candidate per selector measured from
+            # whichever entry matched this frame.
+            dismiss_entries = {
+                control.selector_id: control
+                for control in profile.controls
+                if control.dismisses_surface and control.popup_control_kind is not None
+            }
             candidates = tuple(
                 PopupDismissCandidate(
                     control_kind=control.popup_control_kind,
@@ -424,12 +432,8 @@ class VisualScreenRecognizer:
                     ),
                     reason=f"visual_anchor:{matched_profile_ids}",
                 )
-                for control in profile.controls
-                if (
-                    control.dismisses_surface
-                    and control.popup_control_kind is not None
-                    and control.selector_id in controls
-                )
+                for selector_id, control in dismiss_entries.items()
+                if selector_id in controls
             )
             popup_overlay = PopupOverlayObservation(
                 image_size=image.size,
@@ -593,6 +597,20 @@ def load_visual_screen_recognizer(
                     ),
                 )
             )
+        selector_semantics: dict[UiElementId, tuple[bool, PopupControlKind | None, bool]] = {}
+        for control in controls:
+            semantics = (
+                control.dismisses_surface,
+                control.popup_control_kind,
+                control.fixed_region is not None,
+            )
+            prior = selector_semantics.setdefault(control.selector_id, semantics)
+            if prior != semantics:
+                raise ValueError(
+                    f"Visual profile {identifier} repeats control {control.selector_id.value} "
+                    "with different dismissal semantics; alternate appearances of one "
+                    "measured control must share them."
+                )
         raw_occludes = entry.get("occludes", [])
         if not isinstance(raw_occludes, list):
             raise ValueError(f"Visual profile {identifier} occludes must be a list.")
