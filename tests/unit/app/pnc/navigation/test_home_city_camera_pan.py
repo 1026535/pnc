@@ -299,6 +299,49 @@ class HomeCityCameraPanTests(unittest.TestCase):
                         observation=observation, target=HomeCityObjectId.CAMPAIGN, avoid_direction="left",
                     )
 
+    def test_turn016_western_sky_left_lane_proposes_for_offscreen_targets(self):
+        # Turn015 stopped without input at (-35,45); turn016 confirmed this
+        # exact sky stroke and a changed, freshly localized Home camera.
+        for translation, safe_bounds, points in (
+            ((-35, 45), Bounds(186, 255, 218, 49), (351, 279, 237, 279)),
+            ((-49, 44), Bounds(172, 254, 218, 49), (337, 278, 223, 278)),
+        ):
+            for target, slot in (
+                (HomeCityObjectId.CAMPAIGN, None),
+                (HomeCityObjectId.WAREHOUSE, HomeCitySlotSelector(3)),
+            ):
+                for inspect_body in (False, True):
+                    with self.subTest(translation=translation, target=target,
+                                      inspect_body=inspect_body):
+                        step = plan_home_city_camera_step(
+                            observation=_observation(translation=translation),
+                            target=target, home_city_slot=slot, inspect_body=inspect_body,
+                        )
+                        self.assertEqual("pan_home_city_western_sky_left", step.action.reason)
+                        self.assertEqual(safe_bounds, step.action.safe_bounds)
+                        self.assertEqual(points, _points(step.action))
+                        self.assertEqual(429, step.action.duration_ms)
+                        self.assertTrue(step.action.exact_geometry)
+                        self.assertEqual("x", step.axis)
+
+    def test_western_sky_lane_refuses_intrusion_or_invalid_current_proof(self):
+        observation = _observation(translation=(-35, 45))
+        intruder = _body(bounds=Bounds(250, 270, 35, 30))
+        cases = (
+            _observation(translation=(-35, 45), objects=(intruder,)),
+            _observation(translation=(-35, 45), status=HomeCityZoomStatus.NOT_AT_ENDPOINT),
+            _observation(translation=(-35, 45), size=(540, 960)),
+            _observation(translation=(-165, 45)),  # Clipped strip is shorter than 114px plus margins.
+        )
+        for candidate in cases:
+            with self.subTest(candidate=candidate), self.assertRaises(SelectorResolutionError):
+                plan_home_city_camera_step(observation=candidate,
+                                           target=HomeCityObjectId.CAMPAIGN)
+        with self.assertRaises(SelectorResolutionError):
+            plan_home_city_camera_step(observation=observation,
+                                       target=HomeCityObjectId.CAMPAIGN,
+                                       avoid_direction="left")
+
     def test_thin_clipped_region_cannot_lose_perpendicular_margin(self):
         with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(observation=_observation(translation=(-886, -796)),

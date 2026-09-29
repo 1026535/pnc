@@ -87,6 +87,11 @@ _HOME_CITY_EASTERN_RETURN_LANE = Bounds(1448, 1343, 213, 66)
 # zoom.738873. Its leftward profile needs candidate live qualification. Use
 # it only after the established routes fail, preserving their route choices.
 _HOME_CITY_SOUTHERN_TERRACE = Bounds(860, 1815, 215, 70)
+# Turn016 independently selected empty sky left of Castle at native
+# Bounds(185,255,220,50), zoom .75 and translation(-35,45). A typed exact
+# 114px/429ms LEFT stroke stayed on Home and moved the measured camera.
+# Inward atlas bounds reproduce that stroke without extending the surveyed sky.
+_HOME_CITY_WESTERN_SKY_LANE = Bounds(294, 280, 292, 66)
 # Qualification is currently native 900x1600 at the measured widest endpoint.
 # Exclude both side docks and the complete bottom quest/chat region.
 _HOME_CITY_PAN_WINDOW = Bounds(150, 250, 620, 920)
@@ -2469,12 +2474,13 @@ def _home_city_region_clear(surface: SpatialSurfaceObservation, region: Bounds,
 def _home_city_profile_action(
     observation: Observation, direction: str, *, allow_additional_lanes: bool = False,
 ) -> SwipeAction | None:
-    """Instantiate the courtyard, ground-strip or specific Institute profile.
+    """Instantiate a measured Home gesture inside a current safe scene region.
 
     Horizontal 114px/429ms was observed in both directions on 2026-09-28.
     The 179px/425ms ground profile was observed downward and upward. The
     turn011 surveyed road extension passed the turn012 Campaign route.
-    The additional southern terrace remains pending candidate live proof.
+    The western sky lane has one measured LEFT response at the western root
+    view; it supplies no rightward route or universal camera gain.
     The caller always remeasures pose instead of predicting displacement.
     """
     surface = observation.spatial_surface
@@ -2488,6 +2494,7 @@ def _home_city_profile_action(
     if direction == "left" and allow_additional_lanes:
         regions.append((_HOME_CITY_SOUTHERN_TERRACE, "southern_terrace"))
         regions.append((_HOME_CITY_EASTERN_RETURN_LANE, "eastern_return"))
+        regions.append((_HOME_CITY_WESTERN_SKY_LANE, "western_sky"))
     length = 114 if horizontal else 179
     for atlas, profile in regions:
         region = _home_city_pan_region(proof, atlas)
