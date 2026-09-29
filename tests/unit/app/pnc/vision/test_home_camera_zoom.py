@@ -16,7 +16,10 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraStatus,
 )
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
-from pnc_automation.app.pnc.domain.observation import Bounds
+from pnc_automation.app.pnc.domain.observation import Bounds, SpatialObjectSourceKind
+from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
+)
 from pnc_automation.app.pnc.vision.home_city_camera import (
     HomeCityCameraLandmark,
     HomeCityCameraLocalizer,
@@ -369,8 +372,21 @@ class HomeCityCameraZoomTests(unittest.TestCase):
             <= set(proof.matched_group_ids)
         )
         self.assertGreaterEqual(len(proof.evidence), 3)
-        # No qualified target is visible, so nothing publishes a body or tap.
-        self.assertFalse(localizer.matched_target_objects(prepared, proof=proof))
+        # Warehouse is visible in this native view. Its body may publish, but
+        # the measured action point remains below the HUD-safe tap band.
+        objects = localizer.matched_target_objects(prepared, proof=proof)
+        self.assertEqual(1, len(objects))
+        warehouse = objects[0]
+        self.assertEqual(
+            HomeCityObjectId.WAREHOUSE,
+            home_city_object_id_from_metadata(warehouse.metadata),
+        )
+        self.assertEqual(SpatialObjectSourceKind.TEMPLATE, warehouse.source_kind)
+        self.assertEqual(HomeCitySlotSelector(3), warehouse.home_city_slot)
+        self.assertEqual((250, 1038), warehouse.action_point)
+        self.assertGreater(
+            warehouse.action_point[1], int(HOME_CITY_HUD_SAFE_MAX_Y_RATIO * 1600),
+        )
 
     def test_northeast_moat_pair_alone_cannot_establish_the_camera(self) -> None:
         """The correlated moat crops share east_fortification and cannot localize."""
