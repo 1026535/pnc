@@ -17,13 +17,28 @@ trained. Upgrade to unlock more advanced units.", and a top-left Back arrow.
 both the title and the family description anchors; neither alone nor the shared
 prefab graphics establish identity. Through both production observation
 publishers the screen publishes only the measured `PNC_BACK_BUTTON_TOP_LEFT`
-control. The reviewed edge list adds the candidate
+control. The reviewed edge list includes
 `PNC_RANGED_BARRACKS -> PNC_HOME_CITY` Back return.
 
-**Not yet proven:** the Back return edge is a candidate awaiting a live capture
-that observes the transition to Home. Unit tiers, glory level, training
-quantities/costs, queue facts, and speedup/collect controls remain unqualified.
+**2026-09-29 native appearance, artifact-observed:** turn010 reached typed
+Ranged Barracks on native frame0070 and completed its reviewed Back return.
+Turn012 then tapped a freshly measured slot-7 body at `(182,818)` and showed
+the same Ranged panel on frames0070/0072, but classified it `UNKNOWN`. On
+turn012 frame0072 the old title score is `.96669 >= .95` and Back is
+`.98917 >= .94`; the old description scores `.92838 < .94`. The separate
+turn010 frame scores `.99267` on that description. A guarded native variant
+uses the current frame0072 description crop in canonical 540x960 LANCZOS
+space, retaining the old profile. The turn012 frame0070 is a correlated
+same-session validation; turn010 frame0070 is an independent session check
+of preserved older recognition, not an independent holdout for the new
+variant. Fixture paths, file/decoded hashes and capture groups are recorded
+in `tests/data/screen_recognition/manifest.json`. The installed client build
+was not recorded in those manifests.
+
+**Not yet proven:** a live return after recognition by the new native variant
+still needs observation. Unit tiers, glory level, training quantities/costs,
+queue facts, and speedup/collect controls remain unqualified.
 Infantry has a separate candidate identity/return prerequisite in
 `infantry-barracks.md`; Cavalry and Siege primary panels remain unqualified. This note grants no
-training, upgrade, spending, or live-route acceptance; the static reference is
-not live acceptance evidence.
+training, upgrade or spending authority. The current variant's offline proof
+does not replace live route acceptance.

@@ -111,6 +111,24 @@ CASES = (
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
     ),
     (
+        "ranged_barracks_native_20260929.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
+        "ranged_barracks_native_correlated_20260929.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
+        "ranged_barracks_native_prior_20260929.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
         "infantry_barracks_20260917.png",
         ScreenType.PNC_INFANTRY_BARRACKS,
         "building_infantry_barracks",
@@ -140,6 +158,22 @@ BARRACKS_REFERENCES = (
         ("RGBA", (540, 960)),
         ((95, 15, 350, 90), (275, 140, 540, 185)),
         (0, 0, 100, 55),
+    ),
+    (
+        "ranged_barracks_native_20260929.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        ("RGBA", (900, 1600)),
+        ((158, 25, 583, 150), (458, 233, 900, 308)),
+        (0, 0, 167, 92),
+    ),
+    (
+        "ranged_barracks_native_prior_20260929.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        ("RGBA", (900, 1600)),
+        ((158, 25, 583, 150), (458, 233, 900, 308)),
+        (0, 0, 167, 92),
     ),
     (
         "infantry_barracks_20260917.png",

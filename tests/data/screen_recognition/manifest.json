@@ -1997,6 +1997,45 @@
       ]
     },
     {
+      "image": "building_routes/ranged_barracks_native_20260929.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn012/bab266e9",
+      "sha256": "63c53bb27103030f30ab5bec0339401183ce549d0cd974e993d6617c73171882",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA turn012 terminal frame0072, visibly Ranged Barracks after a slot-7 body tap but classified UNKNOWN by the old 0.94 description gate. Profile source for the guarded native description variant; installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn012-20260929/20260929T190604Z_core_20260929T190337Z_bab266e9_0072_final_screen_09.png",
+      "source_sha256": "bd472a5559c80afd5f3ca54e8963cca6c9eb1b86dbf30428c47a5361f18317ce"
+    },
+    {
+      "image": "building_routes/ranged_barracks_native_correlated_20260929.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn012/bab266e9",
+      "sha256": "00f07062d3a3810b68521c7a0fbabfac71f5f591d43415d3c95f1b8039b59f6c",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA turn012 frame0070. Same-session correlated validation of the new appearance, not an independent holdout.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn012-20260929/20260929T190601Z_core_20260929T190337Z_bab266e9_0070_core_11_home_after_7.png",
+      "source_sha256": "75ea77e829fa384ddeb1912ecc22e69d46cafb6de897aa75bfa44ca3c92de519"
+    },
+    {
+      "image": "building_routes/ranged_barracks_native_prior_20260929.png",
+      "screen": "PNC_RANGED_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526",
+      "sha256": "ae9f3514124b3b573f6959a56550285db2d40340098436218ce2c0d7bc321b2b",
+      "expected_visual_screens": [
+        "PNC_RANGED_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA separate turn010 frame0070, independently accepted Ranged destination and Back return. Its old description scores 0.99267 and new description 0.93625; retains the old guarded variant and is an independent appearance/session validation, not a holdout of the new variant.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn010-20260929/20260929T173931Z_core_20260929T173559Z_c3c3b526_0070_core_11_home_after_1.png",
+      "source_sha256": "d7a82c413986d9e7805f43301e605184dacca4daefe5453f46de956cad858907"
+    },
+    {
       "image": "building_routes/infantry_barracks_20260917.png",
       "screen": "PNC_INFANTRY_BARRACKS",
       "split": "reference",

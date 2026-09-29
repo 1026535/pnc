@@ -6543,6 +6543,64 @@
       ]
     },
     {
+      "id": "building_ranged_barracks_native",
+      "layout_id": "building_ranged_barracks",
+      "screen": "PNC_RANGED_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/ranged_barracks_native_20260929.png",
+        "decoded_sha256": "63c53bb27103030f30ab5bec0339401183ce549d0cd974e993d6617c73171882",
+        "capture_group": "2026-09-29/devin-live-test_v44-4-integrated-turn012/bab266e9"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Native RGBA 900x1600 Ranged Barracks frame0072 from live turn012. The prior description anchor scores 0.92838 below its 0.94 gate while the Ranged title and Back pass. This guarded variant pairs the shared title with the current description cropped in canonical 540x960 LANCZOS reference space. The old profile remains for its independent 2026-09-22 and turn010 appearances. Only the measured Back control is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_ranged_barracks_title.png",
+          "search_region": [
+            95,
+            15,
+            255,
+            75
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_ranged_barracks_native_description.png",
+          "search_region": [
+            275,
+            140,
+            265,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_ranged_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "building_infantry_barracks",
       "layout_id": "building_infantry_barracks",
       "screen": "PNC_INFANTRY_BARRACKS",
