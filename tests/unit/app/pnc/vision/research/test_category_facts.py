@@ -9,7 +9,8 @@ from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.research import (
     ResearchNodeFacts, ResearchNodeId, research_node_for_label,
 )
-from pnc_automation.app.pnc.vision.research import ResearchContentProducer
+from pnc_automation.app.pnc.vision.research.parsing import header_category
+from pnc_automation.app.pnc.vision.research.tree import node_candidate, read_node_level
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrTextOrientation
 
@@ -29,7 +30,6 @@ class ResearchCategoryFactsTests(unittest.TestCase):
         ))
 
     def test_label_fragments_read_left_to_right_and_wrapped_rows_read_top_down(self):
-        producer = ResearchContentProducer()
         for lines, expected in (
             ((OcrLine("Speedi", Bounds(443, 289, 101, 33), .89),
               OcrLine("March", Bounds(366, 290, 90, 29), .85)), ResearchNodeId.MARCH_SPEED_I),
@@ -39,7 +39,7 @@ class ResearchCategoryFactsTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 context = Mock()
                 context.read_lines.return_value = lines
-                candidate = producer._node_candidate(
+                candidate = node_candidate(
                     image=Image.new("RGB", (900, 1600)), component=Bounds(365, 278, 179, 59),
                     ocr_context=context, category=None,
                 )
@@ -54,7 +54,7 @@ class ResearchCategoryFactsTests(unittest.TestCase):
         context.read_preprocessed_result.return_value = OcrResult(
             lines=context.read_lines.return_value, words=(),
         )
-        candidate = ResearchContentProducer()._node_candidate(
+        candidate = node_candidate(
             image=Image.new("RGB", (900, 1600)), component=Bounds(365, 294, 179, 55),
             ocr_context=context, category=ResearchCategory.ECONOMY,
         )
@@ -65,7 +65,6 @@ class ResearchCategoryFactsTests(unittest.TestCase):
 
     def test_level_badges_have_one_owned_coherent_interpretation(self):
         image = Image.new("RGB", (540, 960))
-        producer = ResearchContentProducer()
         for texts, expected in (
             (("MAX",), (None, None, True)),
             (("2/3",), (2, 3, False)),
@@ -81,7 +80,7 @@ class ResearchCategoryFactsTests(unittest.TestCase):
                 context.read_lines.return_value = tuple(
                     OcrLine(text, Bounds(100, 100, 45, 20), 1.0) for text in texts
                 )
-                actual = producer._read_node_level(
+                actual = read_node_level(
                     image=image, icon_bounds=Bounds(100, 100, 100, 100), ocr_context=context,
                 )
                 self.assertEqual(expected, actual)
@@ -89,7 +88,6 @@ class ResearchCategoryFactsTests(unittest.TestCase):
                 self.assertEqual(expected_reads, context.read_lines.call_count)
 
     def test_split_counter_and_one_bounded_retry_keep_maximum_semantics(self):
-        producer = ResearchContentProducer()
         split = (
             OcrLine("/3", Bounds(116, 100, 20, 20), 1.0),
             OcrLine("3", Bounds(100, 100, 16, 20), 1.0),
@@ -102,7 +100,7 @@ class ResearchCategoryFactsTests(unittest.TestCase):
             with self.subTest(expected_calls=expected_calls):
                 context = Mock()
                 context.read_lines.side_effect = reads
-                self.assertEqual((3, 3, True), producer._read_node_level(
+                self.assertEqual((3, 3, True), read_node_level(
                     image=Image.new("RGB", (540, 960)),
                     icon_bounds=Bounds(100, 100, 100, 100), ocr_context=context,
                 ))
@@ -124,12 +122,11 @@ class ResearchCategoryFactsTests(unittest.TestCase):
             ResearchNodeFacts(current_level=2, max_level=3, maximum_reached=True)
 
     def test_contradictory_header_cannot_override_qualified_category(self):
-        producer = ResearchContentProducer()
         context = Mock()
-        additions = producer.additions_for_tree(
+        category = header_category(
+            (OcrLine("Military", Bounds(100, 10, 100, 30), 1.0),),
             image=Image.new("RGB", (540, 960)),
-            lines=(OcrLine("Military", Bounds(100, 10, 100, 30), 1.0),),
-            ocr_context=context, layout_id="research_tree_economy",
         )
-        self.assertEqual((), additions.list_entries)
+        self.assertEqual(ResearchCategory.MILITARY, category)
+        self.assertNotEqual(ResearchCategory.ECONOMY, category)
         context.read_lines.assert_not_called()
