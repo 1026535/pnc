@@ -104,6 +104,66 @@ state leaves that entry case pending unless collection is separately authorized;
 it is neither unavailable nor a passed route. This source rule does not authorize
 collecting, upgrading or spending to create a test precondition.
 
+### Resource collection scope and non-collecting entry — September 29 recheck
+
+`citybuildinfotopitem.lua:145-163` resolves the tapped building's type, enumerates
+every building of that type, includes each ID for which
+`GainData:CheckResCanPopTip` is true, and calls `GainSend.RequireTake(bidList)`.
+`commands/gain/gaincommand.lua:91-104` sends those IDs together in the `TAKE`
+request. Consequently, a body tap on one exact slot can collect multiple
+same-type buildings. An exact `HomeCitySlotSelector` constrains acquisition; it
+does not constrain the client's collection scope.
+
+The source-supported non-collecting body path is conditional. When the collection
+branch is inactive, `BuildClickComponent:ClickHandler` at lines 17-21 dispatches
+the selected DTO through `BuildTableData:OpenBuildWin`. The five resource branches
+in `vo/buildtabledata.lua:174-183` open `RES_BUILD_WIN`, whose title is derived
+from the selected building type (`uis/resbuild/resbuildwin.lua:98-108`).
+`buildresourcepoptipcomponent.lua:105-177` sets `hasResPop` from current resource
+state, except while a build-free or build-help popup has priority. These are
+client-state conditions, not qualified visual controls. The harvest threshold
+depends on elapsed production time and buffs (`datas/gaindata.lua:103-134`), so
+the non-collecting state must remain current at dispatch. Absence of a visible
+bubble in a cropped, occluded or transient frame does not prove the collection
+branch is inactive. Moon Well's capacity branch is likewise not a qualified
+visual precondition; do not create or assume a full-capacity state to bypass it.
+
+No separate non-collecting resource entry control was established by the
+inspected Home body handlers and dispatcher. The current shared `open_building`
+contract taps one positively measured body; it has no typed resource-entry state
+or reviewed `RES_BUILD_WIN` endpoint/return for these types. The Farm upgrade and
+construction detail fixtures qualify different phases, not this primary window.
+Keep resource acquisition pending. The smallest next evidence is a passive,
+unoccluded native Home view of one existing resource building and its complete
+popup area, followed by qualification of a current non-collecting state. Only
+after that precondition is established may an authorized capture obtain its
+primary window, independently measured Back and fresh Home return. If only
+harvestable states are present, collection authority or evidence of a distinct
+safe control is required; repeated taps and off-bubble points are not a bypass.
+
+### Military body and endpoint prerequisites — September 29 recheck
+
+The recovered body handlers for types 1020-1022
+(`builditem_1020.lua:129-150`, `builditem_1021.lua:129-149`,
+`builditem_1022.lua:129-149`) and Siege 1023 (`builditem_1023.lua:102-110`)
+delegate to `BuildClickComponent` after package/tutorial guards. They do not
+execute the resource collection branch. The common dispatcher opens `CAMP_PANEL`
+with the selected DTO (`vo/buildtabledata.lua:184-191`); Hall 1011 opens
+`WAR_HALL_WIN` at lines 163-164. This proves the packaged entry chain, not the
+current native appearance or return.
+
+The September 29 route-contract candidate has distinct Infantry/Ranged primary
+identities and measured Back controls, alongside the existing Hall identity/Back
+contract. Public `NavigationCore.open_building` still requires a fresh measured
+Home body and exact requested slot, then observes the exact primary destination;
+canonical Home return separately requires its current template Back control.
+Cavalry and Siege have semantic primary screen mappings but no qualified native
+endpoint/Back contract in this candidate, so both public entry methods refuse
+them before observation or input. Body qualification alone cannot promote those
+routes. Their next prerequisite is a native primary-panel capture with visible
+family identity and Back, plus an independent capture/return group; labels or the
+shared prefab do not authorize copying a sibling's identity or Back geometry.
+
 ## Measured body evidence — September 29, 2026
 
 The V44-4 sepia-taleggio package measured two Home-city bodies from the
