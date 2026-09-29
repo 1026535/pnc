@@ -1,9 +1,10 @@
 """Publication tests for the optional ``workshop`` field on ``Observation``.
 
 Both production publishers must bind supplied Workshop content to the current
-frame and keep every other fact intact. All content is supplied through typed
-``ObservationAdditions`` test doubles; no Workshop parser exists yet (PW02),
-and nothing here is live game evidence.
+frame and keep every other fact intact. Composition cases use typed
+``ObservationAdditions`` test doubles; one bounded count case also exercises
+the Workshop producer wiring against a tracked capture. Nothing here is live
+game evidence.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.vision.pet_workshop import WorkshopContentProducer
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions,
@@ -36,6 +38,9 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc import pet_workshop as workshop_fixtures
 
 
@@ -157,6 +162,21 @@ def _entry() -> DetectedListEntry:
     )
 
 
+class _ScriptedCountOcrContext:
+    """Fresh frame-local OCR readings for the full producer wiring case."""
+
+    def read_lines(self, image, region, **kwargs):
+        del image, region, kwargs
+        return ()
+
+    def read_preprocessed_result(self, image, region, **kwargs):
+        del image, region, kwargs
+        return OcrResult(
+            lines=(OcrLine(text="1", bounds=Bounds(0, 0, 8, 8), confidence=1.0),),
+            words=(),
+        )
+
+
 class WorkshopPublicationTests(unittest.TestCase):
     """The optional workshop field survives both canonical publication paths."""
 
@@ -257,6 +277,27 @@ class WorkshopPublicationTests(unittest.TestCase):
             _screenshot(), request=ObservationRequest.source_screen_retry(SCREEN),
         )
         self.assertEqual(observation.workshop.view.frame_ref, FRAME)
+
+
+class PetWorkshopCountPublicationTests(unittest.TestCase):
+    """One complete producer case proves bounded OCR wiring and row output."""
+
+    def test_count_zone_retry_publishes_single_value(self) -> None:
+        fixture = TEST_DATA_ROOT / "screen_recognition" / "pet_workshop.png"
+        with Image.open(fixture) as source:
+            image = source.convert("RGB")
+        additions = WorkshopContentProducer(matcher=OpenCvTemplateMatcher()).additions_for_screen(
+            image=image,
+            screen_type=ScreenType.PNC_PET_WORKSHOP,
+            ocr_context=_ScriptedCountOcrContext(),
+            layout_id="pet_workshop_board",
+        )
+        assert additions is not None and additions.workshop is not None
+        orders = additions.workshop.state.order_survey.orders
+        self.assertEqual(
+            ((1,), (1, 1), (1,)),
+            tuple(tuple(reward.quantity for reward in order.rewards) for order in orders),
+        )
 
 
 if __name__ == "__main__":
