@@ -44,7 +44,6 @@ class ConfigurableBodyDataTests(unittest.TestCase):
         with self.assertRaisesRegex(SelectorResolutionError, "explicit selected slot"):
             target.atlas_action_point()
         self.assertTrue(next(item for item in catalog.landmarks if item.id == "alliance_hall_structure").movable)
-        self.assertIsNone(catalog.target_for(HomeCityObjectId.MARKET))
 
     def test_template_preserves_native_body_pixels_and_action_geometry(self) -> None:
         catalog = load_home_city_camera_catalog()

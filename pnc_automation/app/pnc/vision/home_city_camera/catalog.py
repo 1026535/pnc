@@ -356,6 +356,26 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_slot=HomeCitySlotSelector(13),
             ),
             HomeCityCameraTarget(
+                object_id=HomeCityObjectId.MARKET,
+                landmark_id="market_body",
+                file_name="market_body.png",
+                # Native wall-corridor capture (2026-09-23): slot 11,
+                # zoom 1, translation (-1298,-645), frame crop
+                # (130,875,155,110). The market stalls and central plinth
+                # exclude the nameplate, level badge and floating controls.
+                reference_bounds=Bounds(896, 1742, 155, 110),
+                # Native (213,949) is inside the central market plinth.
+                # This is visual body geometry; live entry/return remains
+                # unqualified and the public route continues to refuse.
+                reference_action_bounds=Bounds(969, 1806, 20, 20),
+                reference_action_point=(979, 1816),
+                min_score=0.90,
+                max_projection_error=12,
+                # Current matching, not this source placement, determines
+                # the occupant among configurable slots 11/12/13.
+                reference_slot=HomeCitySlotSelector(11),
+            ),
+            HomeCityCameraTarget(
                 object_id=HomeCityObjectId.ILLUSORY_BEAST_MANOR,
                 landmark_id="illusory_beast_manor_body",
                 file_name="illusory_beast_manor_body.png",

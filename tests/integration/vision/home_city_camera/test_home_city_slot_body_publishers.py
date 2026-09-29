@@ -86,6 +86,7 @@ _EXPECTED = {
             HomeCityObjectId.BLACKSMITH: (HomeCitySlotSelector(12), (542, 844)),
             HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (358, 360)),
             HomeCityObjectId.WAREHOUSE: (HomeCitySlotSelector(3), (733, 249)),
+            HomeCityObjectId.MARKET: (HomeCitySlotSelector(11), (740, 764)),
         },
     },
     "home_city_bank_sys1_0022_20260929.png": {

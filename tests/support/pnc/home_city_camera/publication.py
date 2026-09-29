@@ -152,13 +152,15 @@ _EXPECTED = {
     # view, frame 0064): the new campaign_left_pedestal landmark supplies the
     # second independent fixed group and the existing Wall slot-2 body
     # qualifies; the movable Alliance Hall at slot 13 is genuinely present and
-    # publishes its measured body as well. Diagnosis-derived live regression
+    # publishes its measured body as well. The labeled Market at slot 11 is
+    # the native source of its exact body crop. Diagnosis-derived live regression
     # sample, not a holdout.
     "home_city_wall_corridor_regression_20260923.png": {
         "translation": (-1298, -645),
         "targets": {
             HomeCityObjectId.WALL: (456, 1057),
             HomeCityObjectId.ALLIANCE_HALL: (507, 810),
+            HomeCityObjectId.MARKET: (213, 949),
         },
         "zoom": 1.0,
     },

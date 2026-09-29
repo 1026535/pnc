@@ -477,10 +477,10 @@ class HomeCityCameraZoomTests(unittest.TestCase):
         # cannot establish it.
         self.assertIn("alliance_hall_structure", proof.matched_group_ids)
         # The existing Wall slot-2 body qualifies under this transform and
-        # the genuinely present Alliance Hall publishes its slot-13 body.
+        # the genuinely present Hall and Market publish their slot-13/11 bodies.
         matches = localizer.matched_target_objects(prepared, proof=proof)
         self.assertEqual(
-            {HomeCityObjectId.WALL, HomeCityObjectId.ALLIANCE_HALL},
+            {HomeCityObjectId.WALL, HomeCityObjectId.ALLIANCE_HALL, HomeCityObjectId.MARKET},
             {home_city_object_id_from_metadata(item.metadata) for item in matches},
         )
         wall = next(
@@ -499,6 +499,13 @@ class HomeCityCameraZoomTests(unittest.TestCase):
         self.assertEqual(HomeCitySlotSelector(13), alliance_hall.home_city_slot)
         self.assertEqual((507, 810), alliance_hall.action_point)
         self.assertTrue(alliance_hall.action_bounds.contains_point(alliance_hall.action_point))
+        market = next(
+            item for item in matches
+            if home_city_object_id_from_metadata(item.metadata) is HomeCityObjectId.MARKET
+        )
+        self.assertEqual(HomeCitySlotSelector(11), market.home_city_slot)
+        self.assertEqual((213, 949), market.action_point)
+        self.assertTrue(market.action_bounds.contains_point(market.action_point))
 
     def test_wall_corridor_pedestal_masked_cannot_establish_the_camera(self) -> None:
         """Masking the new pedestal leaves only east_fortification to vote."""
