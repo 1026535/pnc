@@ -1,11 +1,12 @@
 # V44 — Binding interface and implementation agreement
 
-Design revision: **2026-09-25 / contract 1**. Status: **specified, not implemented**.
+Design revision: **2026-09-25 / contract 1, with dated amendments below**. Status: **shared V44-1/2/3 publication accepted for its recorded cases; V44-4 in progress**.
 Parent: [V44](../V44_FULL_HOME_CITY_NAVIGATION.md). Implementation owners:
 [V44-1](V44_1_NATIVE_INPUT.md), [V44-2](V44_2_NORMALIZED_VIEW_PERCEPTION.md),
 [V44-3](V44_3_NAVIGATION_ORCHESTRATION.md), [V44-4](V44_4_BUILDING_ROUTE_MIGRATION.md).
 This reference is shared by exactly four slices; it is not another delivery slice.
-The queue remains idle. This document does not dispatch workers or authorize a new live run.
+The user has resumed V44 and the dependent queue. The coordinator ledger owns
+current dispatch and candidates; this reference does not release a new live run.
 
 ## 1. Decisions already made
 
@@ -28,6 +29,9 @@ The queue remains idle. This document does not dispatch workers or authorize a n
    and generic paths publish actual dispatch.
 6. A current body match authorizes the final tap; a projected slot never does.
    A fresh destination observation proves arrival. Feature owners prove return.
+   This requires the [reviewed entry semantics](V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-non-collecting-preconditions):
+   current action-point qualification, family-specific destination evidence and
+   resource non-collecting preconditions are not supplied by a body match alone.
 7. Required live proof runs through the actual production candidate after lead
    review, under a separate bounded Devin assignment. Offline success is not live acceptance.
 

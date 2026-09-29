@@ -1,6 +1,6 @@
 # V44 — Full Home-city mapping, localization and building navigation
 
-Date: 2026-09-18; design and qualification reviewed 2026-09-25. **V44 remains unaccepted. Stage 0 now supports sampled native zoom normalization and deliberate drags; next implement normalized-zoom, landmark-based navigation within that evidence.** Retain the existing 54 ordinary slot pivots and 16 system markers. Earlier route/zoom evidence is historical and does not accept the revised navigation contract. The broader queue remains paused after this bounded planning and qualification assignment.
+Date: 2026-09-18; design and qualification reviewed 2026-09-25. **V44 remains unaccepted. Stage 0 now supports sampled native zoom normalization and deliberate drags; next implement normalized-zoom, landmark-based navigation within that evidence.** Retain the existing 54 ordinary slot pivots and 16 system markers. Earlier route/zoom evidence is historical and does not accept the revised navigation contract. Execution resumed by the user: finish V44 before the dependency-ready V queue, preserving external ownership. V44-1/2/3 shared publication is accepted for its recorded scope; V44-4 and the current scanner/perception corrections remain in progress. Exact candidates and per-case acceptance live in the coordinator ledger.
 
 [Index](../PNC_VISION_MODULAR_PLAN.md) · [Roadmap](../PNC_VISION_ROADMAP.md) ·
 [V02 baseline](V02_HOME_CAMERA_AND_NAVIGATION.md) · [Building coverage](BUILDING_MENU_COVERAGE.md)
@@ -13,6 +13,10 @@ verify zoom and locate the camera from landmarks → resolve candidate slots →
 pan → rescan/relocalize → verify the building → click once → verify the destination**.
 A full-city scan is a fallback or an explicit discovery request, not a prerequisite
 for every building request.
+
+The [September 29 game-knowledge review](v44/V44_NAVIGATION_KNOWLEDGE_REVIEW.md)
+reconciles this design with the extracted scene and packaged input/click handlers.
+Its reviewed entry clarifications apply to all four slices; it adds no fifth slice.
 
 “Minimum zoom” means the widest city view, not the smallest numeric camera size.
 The recovered client uses orthographic size 4–10, where 10 is widest. This is
@@ -310,6 +314,14 @@ Reacquire immediately before tapping. Require the requested identity/slot,
 unobstructed body and HUD-safe measured action geometry. Tap once through the
 existing actuator and require the known stable destination. Do not recover a wrong
 menu by guessed taps or Android Back. Use the feature-owned verified return route.
+
+A matched body alone does not establish a non-mutating entry. Qualify the current
+action point clear of visible floating completion/collection/help bubbles and
+area/unlock controls using native evidence; ambiguous overlap leaves the case
+pending. Do not infer collider rectangles from a slot pivot. Resource body
+handlers can themselves collect even at an off-bubble point. Apply the
+[V44-4 entry contract](v44/V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-non-collecting-preconditions)
+before dispatch; confirmation cannot undo an unintended action.
 
 ## 5. Implementation stages and integration ownership
 
