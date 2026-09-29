@@ -251,6 +251,8 @@ Consultation contract:
 - Do not use credentials, secrets, ignored local configuration, account data, emulator, ADB, or live-game actions unless the question itself explicitly authorizes one exact non-spending observation and target. Never spend resources.
 - Distinguish findings as user-confirmed, repository-proven, artifact-observed, live-observed, inferred, or unknown, each with high, medium, or low confidence.
 - If evidence is insufficient or the question crosses an authorization boundary, return NEEDS_LEAD with the smallest missing observation or decision; do not guess.
+- Prefer the file tools (read, grep/search, glob) for inspection; they are already permitted. Shell exec is limited to bare read-only verbs, and git only as `git <verb>` with the subcommand as the second token — the repository root is already the working directory, so forms like `git -C <path> show`, command separators, pipes, output redirections, and shell-specific cmdlets such as `Get-ChildItem` are all rejected by policy.
+- A rejected tool call is not terminal. Retry the same lookup with an allowed form or a file tool, batch exec calls sparingly (one rejection cancels the rest of the batch), and always end with the Handback line — even when part of the evidence stayed unread.
 
 Return a compact memo with exactly these sections:
 Answer
