@@ -694,6 +694,28 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_slot=HomeCitySlotSelector(12),
             ),
             HomeCityCameraTarget(
+                object_id=HomeCityObjectId.ALLIANCE_HALL,
+                landmark_id="alliance_hall_body",
+                file_name="alliance_hall_body.png",
+                # Native slot-13 body on 157_farm f5 (2026-09-22), with a
+                # separate f6 capture as holdout. At zoom 1 and translation
+                # (-1632,-718), this crops frame (106,610,162,180), below
+                # the spire tips and above the nameplate. The floating
+                # upgrade arrow/level badge lies outside the crop.
+                reference_bounds=Bounds(1206, 1550, 162, 180),
+                # Clear front-wall pixels at native (172,736), away from
+                # flags, help/upgrade controls and nameplate. This is a
+                # measured body candidate, not live collider qualification.
+                reference_action_bounds=Bounds(1262, 1666, 20, 20),
+                reference_action_point=(1272, 1676),
+                min_score=0.90,
+                max_projection_error=12,
+                # Reference geometry only: eligibility is 11/12/13 and
+                # matching must establish the current same-type occupant.
+                # The movable landmark cannot vote for camera pose.
+                reference_slot=HomeCitySlotSelector(13),
+            ),
+            HomeCityCameraTarget(
                 object_id=HomeCityObjectId.ILLUSORY_BEAST_MANOR,
                 landmark_id="illusory_beast_manor_body",
                 file_name="illusory_beast_manor_body.png",
