@@ -130,3 +130,25 @@ One focused Pro follow-up reviewed the revised design and audited Devin conclusi
 Document verification passed: UTF-8/whitespace checks, all cited full commit objects, consultation/report artifact existence and `git diff --check`. No new unit or live tests were needed for this document. The sole task-owned uncommitted file is `plans/reviewed/LIVE_FAILURE_FOLLOWUP_20260928.md`; no task commit or push was made.
 
 The completed audit phase made no production edit, incident closure, merge, push or live action. The subsequent implementation request is governed by amendment I1 and CS1–CS7 above; update outcomes and delivery evidence without rewriting historical incidents.
+
+## Implementation delivery outcome
+
+Source candidate: `9dfeff43ccfe6b35f97f9a1003570a70e3026fde`, rebased onto published `07563e98bc99fb10de00873b51dc8291484ea7ba`. One persistent Devin SWE-2 Max worker implemented the seven slices over four turns; Codex owned integration decisions and acceptance. No default-branch landing or live action occurred. This final documentation amendment leaves the tested runtime and tests unchanged.
+
+| Slice | Source / saved-frame outcome | Live acceptance |
+|---|---|---|
+| CS1 | Retained exact popup reference frames with decoded provenance; correlated VIP training frames correctly labeled reference | Missing historical chronology remains disclosed |
+| CS2 | Normal/pressed VIP Close share one measured dismiss selector/candidate; one-shot dispatch and absent-control refusal retained | Independent pressed-state holdout and current recovery unverified |
+| CS3 | Foreground update owns Confirm over the background offer; captured standalone Savannah variation qualifies its measured X; conflicts/missing X abstain | Rare stacked/update states unverified |
+| CS4 | Captured Voucher Mall uses canonical Cash Mall; only measured Back is exposed; core Back→Home edge and missing-control/incorrect-destination refusal covered | One retained entry supports this return; other store contexts unreviewed |
+| CS5 | Minimal Campaign reflow/stage facts and Chat→More corrections integrated; actual public Campaign context regression proves narrow recovery callbacks and one explicit45s operation clock | M-owner driver/route acceptance remains pending; no Challenge/formation action |
+| CS6 | Territory identity and same-row Profile name assembly reused; existing tag normalization and qualified return owner retained | Current automated Profile→World→Home acceptance pending |
+| CS7 | Devin bounded review and Codex adjudication complete; PF1–PF5 resolved; synchronized navigation-test ownership; final integrated gate passed | Branch delivery does not close historical incidents or claim whole-feature live acceptance |
+
+Validation: `py tools/run_tests.py affected --base 07563e98bc99fb10de00873b51dc8291484ea7ba --explain --json .test-impact/live-failure-final-selection.json --results .test-impact/live-failure-final-results.json` passed at source candidate9dfeff43:384modules,3468passed/7skipped/0failed, succeeded=true. The affected selector expanded to full because shared fixture contracts changed; no separate full was run. Source fingerprint `b8765eb63f05fde485c32c8301ecb6b71e4cca745706c1f91cae7d5dbba04b5d`. Actual skips: six unavailable optional saved fixtures and one Windows symlink-privilege limitation. The new Campaign/Profile and composed caller regressions ran.
+
+Review artifacts: lead `C:/Users/lebel/pnc/.local-data/live-failure-followup-20260928/review-findings.md`; worker `C:/Users/lebel/pnc/.local-data/worktrees/live-failure-followup-plan-20260928/.local-data/cs7-review/findings.md`. Exact gate artifacts are under the owned worktree's `.test-impact/`. Rebase preserved runtime feature changes; Cash Mall/Chat tests moved to the new published owner modules. Earlier planning and incident claims above remain historical.
+
+Live checkpoint: `C:/Users/lebel/pnc/.local-data/live-test-batches/live-failure-followup-20260928.md`. Canonical reservation-status reports configured testing reserved by `m-epic-coordinator`, scope `m-epic-01a0ca67`; its task lock is idle but the foreign long reservation still forbids admission. All dependent live cases stay pending. No task lease, ADB access, spending or castle/account switch was attempted. Resume only after that reservation is released and the clean candidate is repinned for one bounded Devin assignment.
+
+Delivery branch: `codex/live-failure-followup-plan-20260928`. Push the reviewed source plus this outcome-only document commit; retain the isolated worktree and ignored evidence. The primary checkout remains untouched. Final push receipt and any later live acceptance belong in the coordinator ledger/batch, without rewriting this source-validation record.
