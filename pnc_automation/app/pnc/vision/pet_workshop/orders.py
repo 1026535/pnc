@@ -21,7 +21,22 @@ from pnc_automation.core.vision.template.template_matcher import (
 )
 
 from . import geometry, matching, ocr
-from .constants import *  # noqa: F403 - measured constants are the data contract
+from .constants import (
+    _CARD_COMPLETE_OFFSET,
+    _CARD_REQ_ICON_BAND,
+    _CARD_REWARD_BAND,
+    _COMPLETE_TEMPLATES,
+    _COMPLETE_TEMPLATE_SIZE,
+    _CONTROL_THRESHOLD,
+    _OD_COUNT_ZONE_RIGHT_PAD,
+    _OD_COUNT_ZONE_Y,
+    _OD_PEDESTAL_PAD_X,
+    _OD_REWARD_TOKEN_BAND,
+    _REFERENCE_SIZE,
+    _STRIP_ICON_THRESHOLD,
+    _STRIP_REQUIREMENT_TEMPLATES,
+    _STRIP_REWARD_TEMPLATES,
+)
 
 
 def read_orders(

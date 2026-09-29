@@ -13,7 +13,34 @@ from PIL import Image
 from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 from pnc_automation.core.vision.template.template_matcher import PreparedFrame
 
-from .constants import *  # noqa: F403 - measured constants are the data contract
+from .constants import (
+    _BAR_EMPTY_EDGE_MAX,
+    _CARD_CLIP_LEFT_X,
+    _CARD_CLIP_RIGHT_X,
+    _CARD_FULL_MIN_WIDTH,
+    _CARD_MIN_WIDTH,
+    _CARD_PANEL_BAND,
+    _CARD_PANEL_TAIL_SCAN,
+    _CARD_TILE_BAND,
+    _CARD_TILE_SLOT_PITCH,
+    _CARD_TOP_SCAN,
+    _CARD_UNION_BAND,
+    _CELL_H,
+    _CELL_W,
+    _CELL_X0,
+    _CELL_Y0,
+    _OD_PEDESTAL_MIN_WIDTH,
+    _OD_PEDESTAL_PAD_X,
+    _REFERENCE_SIZE,
+    _REWARD_GROUP_GAP,
+    _REWARD_INK_BAND,
+    _REWARD_PANEL_BASELINE,
+    _SELECTION_BAR_REGION,
+    _STRIP_BOTTOM,
+    _STRIP_CHROME_BAND,
+    _STRIP_TOP_SCAN,
+    _TILE_RUN_MIN_WIDTH,
+)
 
 @dataclass(frozen=True, slots=True)
 class CardExtent:

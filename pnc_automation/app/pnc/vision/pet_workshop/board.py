@@ -24,7 +24,33 @@ from pnc_automation.core.vision.template.template_matcher import (
 from pnc_automation.app.pnc.pet_workshop_catalog import PetWorkshopCatalog
 
 from . import geometry, matching, ocr
-from .constants import *  # noqa: F403 - measured constants are the data contract
+from .constants import (
+    _BADGE_TEMPLATES,
+    _BOARD_REGION,
+    _BOLT_TEMPLATE,
+    _BOLT_THRESHOLD,
+    _CELL_EMPTY_THRESHOLD,
+    _CELL_H,
+    _CELL_ITEM_THRESHOLD,
+    _CELL_OVERLAY_THRESHOLD,
+    _CELL_STATE_TEMPLATES,
+    _CELL_STATE_THRESHOLD,
+    _CELL_W,
+    _CELL_X0,
+    _CELL_Y0,
+    _DATA_DIR,
+    _EMPTY_CELL_TEMPLATE,
+    _ENERGY_REGION,
+    _EXP_REGION,
+    _GAUGE_SEARCH,
+    _GRASS_TEMPLATE,
+    _ITEM_TEMPLATES,
+    _LEVEL_REGION,
+    _LEVEL_SEARCH,
+    _SELECTION_MIN_CORNERS,
+    _SELECTION_THRESHOLD,
+    _SEL_CORNER_TEMPLATES,
+)
 
 
 def read_cells(
