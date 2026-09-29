@@ -2217,7 +2217,8 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE, screen.PNC_HALL_OF_WAR,
         screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER, screen.PNC_TRIAL_CHALLENGE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
-        screen.PNC_BLACKSMITH, screen.PNC_WALL, screen.PNC_RANGED_BARRACKS,
+        screen.PNC_BLACKSMITH, screen.PNC_WALL,
+        screen.PNC_RANGED_BARRACKS, screen.PNC_INFANTRY_BARRACKS,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))
     return tuple(edges)

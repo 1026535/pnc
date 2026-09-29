@@ -110,14 +110,37 @@ CASES = (
         "building_ranged_barracks",
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
     ),
+    (
+        "infantry_barracks_20260917.png",
+        ScreenType.PNC_INFANTRY_BARRACKS,
+        "building_infantry_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
 )
 
 
-RANGED_REFERENCE = "ranged_barracks_reference_20260922.png"
-RANGED_TITLE_BOX = (95, 15, 350, 90)
-RANGED_DESCRIPTION_BOX = (275, 140, 540, 185)
-RANGED_BACK_BOX = (0, 0, 100, 55)
-RANGED_MUTATION_SELECTORS = frozenset(
+# Erasure boxes remain in each preserved native frame's coordinate space.
+BARRACKS_REFERENCES = (
+    (
+        "ranged_barracks_reference_20260922.png",
+        ScreenType.PNC_RANGED_BARRACKS,
+        "building_ranged_barracks",
+        ("RGBA", (540, 960)),
+        ((95, 15, 350, 90), (275, 140, 540, 185)),
+        (0, 0, 100, 55),
+    ),
+    (
+        "infantry_barracks_20260917.png",
+        ScreenType.PNC_INFANTRY_BARRACKS,
+        "building_infantry_barracks",
+        ("RGB", (900, 1600)),
+        ((175, 13, 675, 80), (466, 233, 900, 309)),
+        (0, 0, 167, 92),
+    ),
+)
+
+
+BARRACKS_MUTATION_SELECTORS = frozenset(
     {
         UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
         UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
@@ -145,8 +168,9 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
                 fixture = FIXTURE_ROOT / fixture_name
                 with Image.open(fixture) as source:
                     image = source.copy()
-                if fixture_name == RANGED_REFERENCE:
-                    self.assertEqual(("RGBA", (540, 960)), (image.mode, image.size))
+                for native_fixture, _, _, native_format, _, _ in BARRACKS_REFERENCES:
+                    if fixture_name == native_fixture:
+                        self.assertEqual(native_format, (image.mode, image.size))
                 observations = self._both_observations(image, screen, layout_id)
                 for observer_name, observation in observations:
                     with self.subTest(observer=observer_name):
@@ -194,63 +218,54 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
             ("navigation_perception", navigation.build(capture, include_content=True)),
         )
 
-    def test_ranged_barracks_publishes_no_mutation_controls(self) -> None:
-        """Identity plus measured Back only; training and amount controls stay unpublished."""
-        fixture = FIXTURE_ROOT / RANGED_REFERENCE
-        with Image.open(fixture) as source:
-            image = source.copy()
-        for observer_name, observation in self._both_observations(
-            image, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
-        ):
-            with self.subTest(observer=observer_name):
-                self.assertIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
-                self.assertTrue(
-                    RANGED_MUTATION_SELECTORS.isdisjoint(observation.visible_elements)
-                )
+    def test_barracks_publish_no_mutation_controls(self) -> None:
+        """Qualified family identity and Back do not enable training controls."""
+        for fixture_name, screen, layout_id, _, _, _ in BARRACKS_REFERENCES:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                image = source.copy()
+            for observer_name, observation in self._both_observations(image, screen, layout_id):
+                with self.subTest(fixture=fixture_name, observer=observer_name):
+                    self.assertEqual(screen, observation.screen_type)
+                    self.assertIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
+                    self.assertTrue(
+                        BARRACKS_MUTATION_SELECTORS.isdisjoint(observation.visible_elements)
+                    )
 
-    def test_foreign_family_frame_does_not_reach_ranged_identity(self) -> None:
-        """The shared barracks layout cannot stand in for the Ranged family anchors."""
-        fixture = FIXTURE_ROOT / "infantry_barracks_20260917.png"
-        with Image.open(fixture) as source:
-            image = source.copy()
-        for observer_name, observation in self._both_observations(
-            image, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
-        ):
-            with self.subTest(observer=observer_name):
-                self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-                self.assertFalse(observation.visible_elements)
+    def test_barracks_identity_does_not_follow_the_requested_family(self) -> None:
+        """The native frame determines identity even when another family is requested."""
+        for index, (fixture_name, screen, layout_id, _, _, _) in enumerate(BARRACKS_REFERENCES):
+            other_screen = BARRACKS_REFERENCES[1 - index][1]
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                image = source.copy()
+            for observer_name, observation in self._both_observations(image, other_screen, layout_id):
+                with self.subTest(fixture=fixture_name, observer=observer_name):
+                    self.assertEqual(screen, observation.screen_type)
+                    self.assertNotEqual(other_screen, observation.screen_type)
+                    self.assertEqual(layout_id, observation.decision.layout_id)
 
-    def test_erased_identity_anchor_blocks_ranged_identity(self) -> None:
-        """Both independent anchors are required; neither banner text alone proves family."""
-        fixture = FIXTURE_ROOT / RANGED_REFERENCE
-        with Image.open(fixture) as source:
-            image = source.copy()
-        for label, box in (
-            ("title", RANGED_TITLE_BOX),
-            ("description", RANGED_DESCRIPTION_BOX),
-        ):
-            erased = image.copy()
-            ImageDraw.Draw(erased).rectangle(box, fill=(10, 20, 40))
-            for observer_name, observation in self._both_observations(
-                erased, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
-            ):
-                with self.subTest(erased=label, observer=observer_name):
-                    self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-                    self.assertFalse(observation.visible_elements)
+    def test_erased_identity_anchor_blocks_barracks_identity(self) -> None:
+        """Neither family title nor description alone may qualify the shared panel."""
+        for fixture_name, screen, layout_id, _, identity_boxes, _ in BARRACKS_REFERENCES:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                image = source.copy()
+            for label, box in zip(("title", "description"), identity_boxes, strict=True):
+                erased = image.copy()
+                ImageDraw.Draw(erased).rectangle(box, fill=(10, 20, 40))
+                for observer_name, observation in self._both_observations(erased, screen, layout_id):
+                    with self.subTest(fixture=fixture_name, erased=label, observer=observer_name):
+                        self.assertEqual(ScreenType.UNKNOWN, observation.screen_type)
+                        self.assertFalse(observation.visible_elements)
 
     def test_erased_back_anchor_preserves_identity_but_withholds_control(self) -> None:
         """A missing measured Back cannot be recovered from geometry or content."""
-        fixture = FIXTURE_ROOT / RANGED_REFERENCE
-        with Image.open(fixture) as source:
-            image = source.copy()
-        erased = image.copy()
-        ImageDraw.Draw(erased).rectangle(RANGED_BACK_BOX, fill=(10, 20, 40))
-        for observer_name, observation in self._both_observations(
-            erased, ScreenType.PNC_RANGED_BARRACKS, "building_ranged_barracks"
-        ):
-            with self.subTest(observer=observer_name):
-                self.assertEqual(observation.screen_type, ScreenType.PNC_RANGED_BARRACKS)
-                self.assertNotIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
+        for fixture_name, screen, layout_id, _, _, back_box in BARRACKS_REFERENCES:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                erased = source.copy()
+            ImageDraw.Draw(erased).rectangle(back_box, fill=(10, 20, 40))
+            for observer_name, observation in self._both_observations(erased, screen, layout_id):
+                with self.subTest(fixture=fixture_name, observer=observer_name):
+                    self.assertEqual(screen, observation.screen_type)
+                    self.assertNotIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
 
 
 if __name__ == "__main__":

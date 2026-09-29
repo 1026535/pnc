@@ -22,7 +22,8 @@ control. The reviewed edge list adds the candidate
 
 **Not yet proven:** the Back return edge is a candidate awaiting a live capture
 that observes the transition to Home. Unit tiers, glory level, training
-quantities/costs, queue facts, speedup/collect controls, and the Infantry,
-Cavalry, and Siege family panels remain unqualified. This note grants no
+quantities/costs, queue facts, and speedup/collect controls remain unqualified.
+Infantry has a separate candidate identity/return prerequisite in
+`infantry-barracks.md`; Cavalry and Siege primary panels remain unqualified. This note grants no
 training, upgrade, spending, or live-route acceptance; the static reference is
 not live acceptance evidence.
