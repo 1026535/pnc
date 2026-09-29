@@ -1,8 +1,8 @@
 # Configurable support-building acquisition
 
 **Recheck:** 2026-09-29. **Client baseline:** PNC 5.0.203 / 233 from the accepted
-APK evidence map. Saved Home captures are from 2026-09-22; their installed build
-is not recorded. This note covers acquisition prerequisites for Alliance Hall and
+APK evidence map. Saved Home captures are from 2026-09-22, 23 and 29; their installed
+build is not recorded. This note covers acquisition prerequisites for Alliance Hall and
 Market, with Blacksmith as the existing third eligible occupant. It does not
 qualify their feature actions or new public routes.
 
@@ -48,9 +48,30 @@ qualify their feature actions or new public routes.
   top-left navigation Back control. `uis/fair/fairwin.lua:33–35` makes its main
   button open a Transport member list. These actions remain feature-owned and
   are outside acquisition/return capture scope.
-- **Unknown:** Market's native body crop, clear action region, endpoint identity
-  and actual return. None is supplied by the reviewed Home fixture index or
-  endpoint manifest. The old artifact
+- **Artifact-observed, high confidence:**
+  `tests/data/home_city_camera/home_city_wall_corridor_regression_20260923.png`
+  contains a labeled Market at slot 11. The exact native RGBA crop
+  `(130,875,155,110)` is `market_body.png`; it includes the stalls and central
+  plinth, excluding the nameplate, badge and floating controls. The candidate
+  body point `(213,949)` and 20×20 interior region map under the recorded
+  `zoom=1`, atlas translation `(-1298,-645)` to reference bounds
+  `(896,1742,155,110)`, reference point `(979,1816)` and atlas point `(1511,1594)`.
+  The source file SHA-256 is
+  `374949a21e6f30f40f02b6782bbad7db7ffd918470e908e915ed031a8fc804fa`.
+  This Wall diagnosis frame is template source evidence, not an unseen holdout.
+- **Artifact-observed, high confidence:**
+  `tests/data/home_city_slot_bodies/home_city_warehouse_slot3_0084_20260929.png`
+  independently shows a labeled Market at slot 11 on a different date, session
+  and camera pose (`zoom=0.75`, translation `(-389,-427)`). The file SHA-256 is
+  `7ef0c47ea6e7fa377d5b090cd54b18133ea0b2858467edaf3506dc7f82b12fee`.
+  This is the native Market holdout; projected point `(744,769)` is a geometry
+  prediction until matching measures it. The older reduced
+  `home_city_pan_07.png` shows an empty slot 11 between Blacksmith and Hall and
+  supplies a real negative. These observations do not prove other placements,
+  other skins, collider behavior, or an operational public route.
+- **Unknown:** Market's current native endpoint identity and actual return.
+  Native source/holdout matching and live body qualification remain pending.
+  The old artifact
   `20260825T150419Z_phase1_upgrade_focus_market_post_action_3.png` shows foggy
   Home, not a Market body or endpoint; its filename is not identity evidence.
   A missing body match does not establish unavailability.
@@ -60,9 +81,11 @@ building item/component paths start with `scenes/cityscene/buildings/`.
 
 ## Automation implications
 
-Alliance Hall can join measured discovery candidates once the new body tests are
-validated. Its target uses the existing fixed-landmark pose and slot matcher;
-it adds no pan implementation or localization vote. Final entry requires a fresh
+Alliance Hall and Market can join measured discovery candidates once their body
+tests are validated. Both use the existing fixed-landmark pose and slot matcher;
+neither adds a pan implementation or localization vote. Their reference slots
+translate body geometry only; current matches bind occupants to slots 11/12/13.
+Final entry requires a fresh
 same-type/same-slot template body and an unobstructed native action point.
 
 The public core still refuses Alliance Hall and Market before capture because
@@ -80,7 +103,7 @@ buildings or switch castles to manufacture a permutation.
 
 | Case | Precondition and allowed action | Required evidence |
 | --- | --- | --- |
-| CFG-P1 Market body | During one bounded shared discovery, passively inspect eligible slots 11/12/13. Camera movement uses the existing core only; no Market tap. | One full native body with readable Market identity, current fixed-landmark pose, observed slot, and clear interior point away from bubbles/help/area controls; one separate capture as holdout. If unresolved, keep availability unknown. |
+| CFG-P1 Market body | After the saved native matching checks pass, include Market in one bounded shared discovery. Use the existing core; no Market tap. Source and separate holdout are already available above. | Current passive match with readable Market identity, fixed-landmark pose, observed slot and clear interior point; bind the result to the exact final candidate. If unresolved, keep availability unknown. |
 | CFG-E1 Alliance Hall endpoint/return | After body-data acceptance, current measured Hall body at its observed slot, with a clear point. Coordinator may release one non-spending body entry and one measured **top-left Back** return through the existing capture workflow. | Exact body/slot/source and actual tap receipt, fresh native Alliance Hall title plus static description, independently measured top-left Back, its receipt and fresh Home completion. Do not tap Upgrade, Send Back, Reinforce or Join Alliance. A public-route refusal is not successful capture or permission to bypass its policy. |
 | CFG-E2 Market endpoint/return | Only after CFG-P1 supplies reviewed body/action evidence. Coordinator may release one non-spending body entry and one measured top-left Back return. | Exact body/slot/source and actual tap receipt, full native Market identity with static supporting content, measured Back and fresh Home completion. Capture any observed intermediate state and stop for review; do not guess a new control. Do not tap Upgrade, Resource Transport, Join Alliance or any claim/purchase. |
 
