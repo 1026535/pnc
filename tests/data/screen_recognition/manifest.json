@@ -2084,10 +2084,7 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-29/testing/20260929T051057Z_core_20260929T050725Z_37cfd0b9_0084_c3_formation_content.png",
         "source_file_sha256": "2debd635a39fcf13c93870ea0fdeef418f98dc91fbdc581db64ef9c129a15aab",
         "candidate": "8e1fa8dd",
-        "native_size": [
-          900,
-          1600
-        ],
+        "native_size": "900x1600",
         "qualification": "Observed regression sample; C3 formation capture and reconcile frame are correlated in one invocation, not an independent holdout"
       },
       "annotation": "Unmodified native 900x1600 Hero Formation preparation frame opened by the authorized non-spending stage 6-5 Challenge tap at candidate 8e1fa8dd; this exact frame returned UNKNOWN. All identity/control assets are cropped from this frame. Installed build not recorded."
@@ -2105,10 +2102,7 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-29/testing/m1-campaign-eastern-left-20260929-09_reconcile_0_20260929T051815.303410z0000.png",
         "source_file_sha256": "9f29e444ae0613064b8df69d216322f01b53692d65e04540c1fecf1782801569",
         "candidate": "8e1fa8dd",
-        "native_size": [
-          900,
-          1600
-        ],
+        "native_size": "900x1600",
         "qualification": "Observed regression sample; C3 formation capture and reconcile frame are correlated in one invocation, not an independent holdout"
       },
       "annotation": "Reconcile-phase capture of the same preparation surface immediately before the manually observed non-spending Back to the typed 6-5 stage detail; decodes identically to the reference frame. No anchor assets came from this file."
