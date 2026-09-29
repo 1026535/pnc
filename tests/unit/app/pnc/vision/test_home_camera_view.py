@@ -402,18 +402,25 @@ class HomeCityViewAnalysisTests(unittest.TestCase):
             }
         )
         barrier = threading.Barrier(2)
+        rendezvous = {
+            ("northeast_moat_slope_wheel.png", scale) for scale in moat_scales[:2]
+        }
+        rendezvous_calls: list[tuple[str, float]] = []
         overlapped = threading.Event()
         calls: list[tuple[str, float]] = []
         original = matcher.find_best_match
 
         def recorded(*args, **kwargs):
-            calls.append((args[1].name, kwargs.get("template_scale", 1.0)))
-            try:
-                barrier.wait(timeout=10)
-            except threading.BrokenBarrierError:
-                pass
-            else:
-                overlapped.set()
+            key = (args[1].name, kwargs.get("template_scale", 1.0))
+            calls.append(key)
+            if key in rendezvous:
+                rendezvous_calls.append(key)
+                try:
+                    barrier.wait(timeout=10)
+                except threading.BrokenBarrierError:
+                    pass
+                else:
+                    overlapped.set()
             return original(*args, **kwargs)
 
         created: list[int] = []
@@ -438,6 +445,8 @@ class HomeCityViewAnalysisTests(unittest.TestCase):
         self.assertEqual((270, 704), anchor.point)
         self.assertEqual(Bounds(190, 650, 170, 200), anchor.bounds)
         self.assertTrue(overlapped.is_set())
+        self.assertEqual(2, len(rendezvous_calls))
+        self.assertEqual(rendezvous, set(rendezvous_calls))
         self.assertEqual([8], created)
         self.assertEqual(
             set(moat_scales),

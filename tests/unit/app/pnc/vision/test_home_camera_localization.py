@@ -384,17 +384,21 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
         localizer = _localizer()
         catalog_targets = localizer.catalog.targets
         barrier = threading.Barrier(2)
+        rendezvous = {target.object_id for target in catalog_targets[:2]}
+        rendezvous_calls: list[HomeCityObjectId] = []
         overlapped = threading.Event()
         calls: list[HomeCityObjectId] = []
 
         def scripted(_frame, target, *, proof):
             calls.append(target.object_id)
-            try:
-                barrier.wait(timeout=10)
-            except threading.BrokenBarrierError:
-                pass
-            else:
-                overlapped.set()
+            if target.object_id in rendezvous:
+                rendezvous_calls.append(target.object_id)
+                try:
+                    barrier.wait(timeout=10)
+                except threading.BrokenBarrierError:
+                    pass
+                else:
+                    overlapped.set()
             return (
                 HomeCityCameraTargetMatch(
                     target=target,
@@ -434,6 +438,8 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
         # Every catalog target matched concurrently, capped at the shared bound.
         self.assertEqual(len(catalog_targets), len(calls))
         self.assertEqual({t.object_id for t in catalog_targets}, set(calls))
+        self.assertEqual(2, len(rendezvous_calls))
+        self.assertEqual(rendezvous, set(rendezvous_calls))
         self.assertTrue(overlapped.is_set())
         self.assertEqual([8], created)
         # ``map`` keeps catalog order, so each object is assembled against its

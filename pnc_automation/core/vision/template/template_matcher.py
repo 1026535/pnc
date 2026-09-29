@@ -409,22 +409,33 @@ class OpenCvTemplateMatcher:
         )
 
     def prepare_proposal_frame(self, frame: PreparedFrame) -> PreparedFrame:
-        """Returns a quarter-resolution proposal frame for coarse-to-fine matching.
+        """Returns an aspect-compatible proposal frame for coarse-to-fine matching.
 
-        The proposal frame is a fresh immutable downsample of ``frame`` that
+        The proposal frame is a fresh immutable copy or downsample of ``frame`` that
         keeps the original screenshot size, so coarse positions still project
         through the standard original/reference mapping.  One proposal frame
         serves every scale hypothesis of a localization; it carries no
         mutable scratch state — its pixels are owned and read-only like any
-        prepared frame.
+        prepared frame. Quarter resolution is preferred; integer rounding may
+        require half resolution or an immutable native-size copy to satisfy
+        the consumer's unchanged aspect tolerance.
         """
 
         if not isinstance(frame, PreparedFrame):
             raise TypeError("frame must be a PreparedFrame")
-        width = max(1, frame.reference_size[0] // 4)
-        height = max(1, frame.reference_size[1] // 4)
-        pixels = cv2.resize(
-            frame.pixels, (width, height), interpolation=cv2.INTER_AREA
+        for divisor in (4, 2, 1):
+            width = max(1, frame.reference_size[0] // divisor)
+            height = max(1, frame.reference_size[1] // divisor)
+            ratio_x = frame.reference_size[0] / width
+            ratio_y = frame.reference_size[1] / height
+            if _aspect_ratio_error(ratio_x, 1.0, ratio_y, 1.0) <= _MAX_ASPECT_RATIO_ERROR:
+                break
+        pixels = (
+            frame.pixels
+            if divisor == 1
+            else cv2.resize(
+                frame.pixels, (width, height), interpolation=cv2.INTER_AREA
+            )
         )
         return PreparedFrame(
             pixels=pixels,

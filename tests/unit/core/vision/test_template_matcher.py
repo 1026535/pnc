@@ -504,12 +504,12 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         self.assertEqual(result.bounds, Bounds(x=42, y=22, width=20, height=16))
 
     def test_coarse_to_fine_supports_off_grid_template_scale(self) -> None:
-        donor = _smooth_textured_image((120, 92))
+        donor = _smooth_textured_image((120, 90))
         patch = donor.crop((8, 8, 32, 32))
         scaled_values = cv2.resize(
             np.array(patch), (20, 20), interpolation=cv2.INTER_AREA
         )
-        image = Image.new("RGB", (120, 92), (24, 28, 32))
+        image = Image.new("RGB", (120, 90), (24, 28, 32))
         image.paste(Image.fromarray(scaled_values, mode="RGB"), (61, 44))
         path = self._save(patch)
         prepared = self.matcher.prepare_frame(image)
@@ -584,21 +584,53 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         self.assertEqual(small.original_size, (240, 184))
         self.assertTrue(np.all(small.pixels == (30, 40, 50)))
 
+    def test_proposal_frame_falls_back_to_half_for_incompatible_quarter_aspect(self) -> None:
+        prepared = self.matcher.prepare_frame(_smooth_textured_image((120, 90)))
+
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+
+        self.assertEqual((60, 45), proposal.reference_size)
+        self.assertEqual((120, 90), proposal.original_size)
+        self.assertEqual((45, 60, 3), proposal.pixels.shape)
+        self.assertFalse(proposal.pixels.flags.writeable)
+
+    def test_proposal_frame_uses_owned_native_copy_when_downscales_mismatch(self) -> None:
+        values = np.random.default_rng(9).integers(0, 256, (5, 7, 3), dtype=np.uint8)
+        image = Image.fromarray(values, mode="RGB")
+        prepared = self.matcher.prepare_frame(image)
+
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+
+        self.assertEqual((7, 5), proposal.reference_size)
+        self.assertEqual((7, 5), proposal.original_size)
+        np.testing.assert_array_equal(prepared.pixels, proposal.pixels)
+        self.assertFalse(np.shares_memory(prepared.pixels, proposal.pixels))
+        with self.assertRaises(ValueError):
+            proposal.pixels.setflags(write=True)
+        path = self._save(image.crop((2, 1, 5, 4)))
+        match = self.matcher.find_best_match_coarse_to_fine(
+            prepared, proposal, path, threshold=0.9
+        )
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(Bounds(2, 1, 3, 3), match.bounds)
+
     def test_proposal_frame_requires_a_prepared_frame(self) -> None:
         with self.assertRaises(TypeError):
             self.matcher.prepare_proposal_frame(Image.new("RGB", (16, 16)))  # type: ignore[arg-type]
 
     def test_coarse_to_fine_rejects_a_mismatched_proposal_frame(self) -> None:
-        prepared = self.matcher.prepare_frame(_smooth_textured_image((120, 92)))
+        prepared = self.matcher.prepare_frame(_smooth_textured_image((120, 90)))
         assert prepared is not None
-        # 30x22 is not a same-aspect downscale of 120x92 (30x23 is).
+        # The malformed former quarter proposal still fails; the producer
+        # now chooses 60x45 rather than relaxing consumer rejection.
         proposal = PreparedFrame(
             pixels=np.zeros((22, 30, 3), dtype=np.uint8),
-            original_size=(120, 92),
+            original_size=(120, 90),
             reference_size=(30, 22),
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "same-aspect downscale"):
             self.matcher.find_best_match_coarse_to_fine(
                 prepared, proposal, Path(self.temp_dir.name) / "any.png", threshold=0.9
             )
