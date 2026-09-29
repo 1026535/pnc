@@ -30,6 +30,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     primary_screen_type_for_home_city_object,
 )
 from pnc_automation.app.pnc.domain.building_details import BuildingDetail, BuildingDetailPhase
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraScanMode
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -502,7 +503,8 @@ class OpenBuildingComposedInterruptionTests(unittest.TestCase):
         self.assertEqual(6, len(boundary.builds))
         self.assertEqual(4, len(self._narrow_requests(boundary)))
         self.assertEqual(
-            [ObservationRequest.home_city_navigation()] * 4,
+            [ObservationRequest.home_city_navigation(mode=HomeCityCameraScanMode.ENDPOINT_PROBE)] * 3
+            + [ObservationRequest.home_city_navigation()],
             self._narrow_requests(boundary),
         )
         # One operation label owned every capture: no renewed operation clock.
@@ -534,7 +536,8 @@ class OpenBuildingComposedInterruptionTests(unittest.TestCase):
         self.assertGreaterEqual(boundary.now, 45.0)
         self.assertEqual(1, len(recoveries))
         self.assertEqual(
-            [ObservationRequest.home_city_navigation()] * len(self._narrow_requests(boundary)),
+            [ObservationRequest.home_city_navigation(mode=HomeCityCameraScanMode.ENDPOINT_PROBE)]
+            * len(self._narrow_requests(boundary)),
             self._narrow_requests(boundary),
         )
         self.assertEqual(ScreenType.PNC_HOME_CITY, runtime.last_observation.screen_type)

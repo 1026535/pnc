@@ -214,8 +214,8 @@ class HomeCityMeasuredScanTests(unittest.TestCase):
             frames = iter((initial, confirm, lost, lost_again, passive))
             labels = []
 
-            def capture(label):
-                labels.append(label)
+            def capture(request):
+                labels.append(request.label)
                 return next(frames)
 
             steps = (
