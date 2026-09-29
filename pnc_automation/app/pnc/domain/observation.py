@@ -13,7 +13,11 @@ from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCast
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.bag import BagTab
-from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity, CampaignNodeFacts
+from pnc_automation.app.pnc.domain.campaign import (
+    CampaignChapterIdentity,
+    CampaignNodeFacts,
+    CampaignStageDetail,
+)
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraProof,
@@ -585,6 +589,7 @@ class Observation:
     active_chat_channel: ChatChannel | None = None
     active_bag_tab: BagTab | None = None
     campaign_chapter: CampaignChapterIdentity | None = None
+    campaign_stage: CampaignStageDetail | None = None
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
@@ -622,6 +627,7 @@ class Observation:
         active_chat_channel: ChatChannel | None = None,
         active_bag_tab: BagTab | None = None,
         campaign_chapter: CampaignChapterIdentity | None = None,
+        campaign_stage: CampaignStageDetail | None = None,
         profile_player_name: str | None = None,
         mailbox_type: MailboxType | None = None,
         mailbox_empty: bool | None = None,
@@ -682,6 +688,7 @@ class Observation:
             "active_chat_channel": active_chat_channel,
             "active_bag_tab": active_bag_tab,
             "campaign_chapter": campaign_chapter,
+            "campaign_stage": campaign_stage,
             "profile_player_name": profile_player_name,
             "mailbox_type": mailbox_type,
             "mailbox_empty": mailbox_empty,

@@ -6,6 +6,7 @@ import unittest
 from PIL import Image
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, RowRecognitionStatus
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
 from tests.support.pnc.campaign import _builder_with_backend, _capture, _image, _navigation_perception_with_backend
@@ -79,6 +80,24 @@ class CampaignRealOcrTests(unittest.TestCase):
                 (),
                 6,
             ),
+            (
+                "campaign_chapter_6_path_20260922.png",
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                ListEntryKind.CAMPAIGN_STAGE,
+                "campaign_chapter_6",
+                {1, 2, 3, 4},
+                (),
+                6,
+            ),
+            (
+                "campaign_chapter_6_path_holdout_20260922.png",
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                ListEntryKind.CAMPAIGN_STAGE,
+                "campaign_chapter_6",
+                {1, 2, 3, 4},
+                (),
+                6,
+            ),
         )
         for name, screen, kind, layout_id, complete_numbers, locked_numbers, chapter in cases:
             capture = _capture(_image(name))
@@ -135,6 +154,56 @@ class CampaignRealOcrTests(unittest.TestCase):
                         self.assertEqual(
                             capture.frame_ref, observation.campaign_chapter.frame_ref
                         )
+
+    def test_native_chapter_six_stage_details_keep_owned_challenge_and_cost(self) -> None:
+        """Challenge and its cost follow the captured left and central layouts."""
+        backend = _require_rapid_ocr_service(self)
+        for date, stage, publisher in (
+            (date, stage, publisher)
+            for date in ("20260922", "20260927")
+            for stage in (4, 5)
+            for publisher in ("builder", "navigation")
+        ):
+            capture = _capture(_image(f"campaign_stage_6_{stage}_{date}.png"))
+            with self.subTest(date=date, stage=stage, publisher=publisher):
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if publisher == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertEqual(ScreenType.PNC_CAMPAIGN_STAGE, observation.screen_type)
+                self.assertEqual("clear", observation.decision.guard.value)
+                self.assertFalse(observation.blocking_popup)
+                self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                for selector in (
+                    UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,
+                ):
+                    control = observation.get(selector)
+                    self.assertIsNotNone(control)
+                    self.assertEqual(capture.frame_ref, control.frame_ref)
+                    self.assertEqual("campaign_stage_chapter_6", control.source_layout_id)
+                challenge = observation.get(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON)
+                self.assertIsNotNone(challenge)
+                # Stage 4's Blitz occupies the right-hand slot; Challenge must
+                # retain the measured left target rather than the old center.
+                if stage == 4:
+                    self.assertLess(challenge.bounds.x + challenge.bounds.width, 450)
+                else:
+                    self.assertLess(challenge.bounds.x, 450)
+                    self.assertGreater(challenge.bounds.x + challenge.bounds.width, 450)
+                detail = observation.campaign_stage
+                self.assertIsNotNone(detail)
+                self.assertEqual((6, stage), (detail.chapter_number, detail.stage_number))
+                self.assertEqual((126, 120, 12), (
+                    detail.action_points, detail.max_action_points, detail.challenge_cost,
+                ))
+                self.assertEqual(capture.frame_ref, detail.frame_ref)
+                self.assertIsNone(detail.mode)
 
     def test_real_ocr_binds_scaled_return_path_stage_numbers(self) -> None:
         """The reference-size return frame still resolves every visible stage."""

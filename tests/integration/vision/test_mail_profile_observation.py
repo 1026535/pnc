@@ -115,3 +115,55 @@ class MailProfileObservationTests(MailWorkflowFixtures, unittest.TestCase):
             observation.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).action_point,
             expected_mail_button.action_point,
         )
+
+    def test_observation_builder_assembles_split_title_fragments_in_reading_order(self) -> None:
+        """Adjacent same-row title fragments join into the displayed remote name regardless of OCR order."""
+
+        fragments = (
+            _ocr_line("another", x=175, y=17, width=213, height=60),
+            _ocr_line("NPC", x=362, y=19, width=119, height=54),
+        )
+        for order, lines in (
+            ("observed", fragments),
+            ("reversed", fragments[::-1]),
+        ):
+            with self.subTest(order=order):
+                observation = _build_observation(
+                    request=ObservationRequest.player_profile_follow_up(),
+                    accepted_screen=ScreenType.PNC_PLAYER_PROFILE,
+                    layout_id="remote_player_profile_gear",
+                    lines=(*lines, _ocr_line("Mail", x=720, y=1190, width=90, height=26)),
+                )
+
+                self.assertEqual(observation.profile_player_name, "another NPC")
+
+    def test_observation_builder_abstains_on_competing_title_rows(self) -> None:
+        """Separated rows inside the bounded title band cannot form one name."""
+
+        observation = _build_observation(
+            request=ObservationRequest.player_profile_follow_up(),
+            accepted_screen=ScreenType.PNC_PLAYER_PROFILE,
+            layout_id="remote_player_profile_gear",
+            lines=(
+                _ocr_line("another", x=200, y=8, width=120, height=28),
+                _ocr_line("NPC", x=200, y=58, width=120, height=28),
+                _ocr_line("Mail", x=720, y=1190, width=90, height=26),
+            ),
+        )
+
+        self.assertIsNone(observation.profile_player_name)
+
+    def test_observation_builder_abstains_on_empty_profile_title(self) -> None:
+        """A gear layout without title text cannot supply the remote name."""
+
+        observation = _build_observation(
+            request=ObservationRequest.player_profile_follow_up(),
+            accepted_screen=ScreenType.PNC_PLAYER_PROFILE,
+            layout_id="remote_player_profile_gear",
+            lines=(
+                _ocr_line("Gear", x=48, y=108, width=86, height=30),
+                _ocr_line("Mail", x=720, y=1190, width=90, height=26),
+            ),
+        )
+
+        self.assertIsNone(observation.profile_player_name)

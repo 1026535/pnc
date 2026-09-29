@@ -9,12 +9,14 @@ from pnc_automation.app.automation.engine.navigation_core import reviewed_naviga
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
-from tests.support.pnc.campaign import CAMPAIGN_CHALLENGE_BOX, FIXTURES, _builder, _capture, _image, _navigation_perception
+from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
+from tests.support.pnc.campaign import CAMPAIGN_CHALLENGE_BOX, FIXTURES, _CampaignCropOcrService, _builder, _builder_with_backend, _capture, _image, _navigation_perception, _navigation_perception_with_backend
 
 
 class CampaignFrameAndProvenanceTests(unittest.TestCase):
@@ -185,6 +187,42 @@ class CampaignFrameAndProvenanceTests(unittest.TestCase):
                         "source_sha256"
                     ],
                 )
+
+
+    def test_stage_detail_facts_publish_through_both_publishers_with_provenance(self) -> None:
+        """Both observation paths bind the reviewed stage facts to the stage frame."""
+        stage_lines = (
+            OcrLine("[10-3] Grandia Ruins", Bounds(142, 211, 256, 27), 0.99),
+            OcrLine("150/120", Bounds(368, 590, 84, 24), 0.95),
+            OcrLine("12", Bounds(244, 646, 30, 18), 0.95),
+        )
+        capture = _capture(_image("campaign_stage_10_3.png"))
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                backend = _CampaignCropOcrService(stage_lines)
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if path == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
+                detail = observation.campaign_stage
+                self.assertIsNotNone(detail)
+                assert detail is not None
+                self.assertEqual(detail.chapter_number, 10)
+                self.assertEqual(detail.stage_number, 3)
+                self.assertEqual(detail.name, "Grandia Ruins")
+                self.assertEqual(detail.action_points, 150)
+                self.assertEqual(detail.max_action_points, 120)
+                self.assertEqual(detail.challenge_cost, 12)
+                self.assertIsNone(detail.mode)
+                self.assertEqual(detail.source_screen, ScreenType.PNC_CAMPAIGN_STAGE)
+                self.assertEqual(detail.source_layout_id, "campaign_stage_10_3")
+                self.assertEqual(detail.frame_ref, capture.frame_ref)
 
     def test_native_grandia_animation_frames_keep_map_and_owned_home_control(self) -> None:
         """The captured node animation cannot make a clear map lose its return route."""

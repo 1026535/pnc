@@ -105,7 +105,7 @@ class CampaignTests(FlowAndTaskFixtures, unittest.TestCase):
             ),
         )
         actions = task.plan(context, eligible)
-        self.assertEqual(len(actions), 2)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapListEntryAction)
         self.assertEqual(actions[0].entry_kind, ListEntryKind.CAMPAIGN_STAGE)
         self.assertEqual(actions[0].title_text, "3")
@@ -172,7 +172,7 @@ class CampaignTests(FlowAndTaskFixtures, unittest.TestCase):
                     self.assertEqual(result.status, TaskStatus.SKIPPED)
 
     def test_campaign_task_verify_still_acts_on_eligible_stage_evidence(self) -> None:
-        """An eligible stage row keeps success and retry semantics intact."""
+        """An eligible stage row keeps retry semantics; foreign surfaces stay failures."""
 
         task = CampaignTask()
         context = self._make_context(
@@ -183,7 +183,8 @@ class CampaignTests(FlowAndTaskFixtures, unittest.TestCase):
             list_entries=(_stage_entry(3, mode=CampaignMode.STANDARD),),
         )
 
-        success = task.verify(context, before, make_observation(ScreenType.PNC_BATTLE_PREP))
+        stage = task.verify(context, before, make_observation(ScreenType.PNC_CAMPAIGN_STAGE))
+        foreign = task.verify(context, before, make_observation(ScreenType.PNC_BATTLE_PREP))
         unchanged = task.verify(
             context,
             before,
@@ -193,12 +194,68 @@ class CampaignTests(FlowAndTaskFixtures, unittest.TestCase):
             ),
         )
 
-        self.assertEqual(success.status, TaskStatus.SUCCESS)
+        self.assertEqual(stage.status, TaskStatus.REPLAN)
+        self.assertEqual(foreign.status, TaskStatus.FAILED)
+        self.assertTrue(foreign.retryable)
         self.assertEqual(unchanged.status, TaskStatus.FAILED)
         self.assertTrue(unchanged.retryable)
 
-    def test_campaign_task_accepts_battle_prep_as_campaign_entry_outcome(self) -> None:
-        """Keeps Campaign entry proof consistent with the task's owned battle-prep state."""
+    def test_campaign_task_stops_before_the_unverified_challenge_destination(self) -> None:
+        """Stage detail plans no input; it is the proven boundary, not a waypoint."""
+
+        task = CampaignTask()
+        context = self._make_context(params=task.parse_params({"enabled_modes": ["standard"]}), task_id=TaskId.CAMPAIGN)
+        stage = make_observation(ScreenType.PNC_CAMPAIGN_STAGE)
+
+        self.assertEqual([], task.plan(context, stage))
+
+        result = task.verify(context, stage, stage)
+        self.assertEqual(TaskStatus.FAILED, result.status)
+        self.assertFalse(result.retryable)
+
+    def test_campaign_task_stage_selection_cannot_prove_formation_entry(self) -> None:
+        """Planning a stage-row tap cannot prove the separate formation transition."""
+
+        task = CampaignTask()
+        context = self._make_context(params=task.parse_params({"enabled_modes": ["standard"]}), task_id=TaskId.CAMPAIGN)
+        chapter = make_observation(
+            ScreenType.PNC_CAMPAIGN_CHAPTER,
+            list_entries=(_stage_entry(3, mode=CampaignMode.STANDARD),),
+        )
+        stage = make_observation(ScreenType.PNC_CAMPAIGN_STAGE)
+        formation = make_observation(ScreenType.PNC_HERO_FORMATION)
+
+        unproven = task.verify(context, stage, formation)
+        self.assertEqual(TaskStatus.FAILED, unproven.status)
+        self.assertFalse(unproven.retryable)
+
+        actions = task.plan(context, chapter)
+        self.assertEqual(1, len(actions))
+        self.assertIsInstance(actions[0], TapListEntryAction)
+
+        result = task.verify(context, stage, formation)
+        self.assertEqual(TaskStatus.FAILED, result.status)
+        self.assertFalse(result.retryable)
+
+    def test_campaign_task_rejects_a_stale_stage_transition_frame(self) -> None:
+        """A formation frame not newer than the recorded selection never succeeds."""
+
+        task = CampaignTask()
+        context = self._make_context(params=task.parse_params({"enabled_modes": ["standard"]}), task_id=TaskId.CAMPAIGN)
+        stale_formation = make_observation(ScreenType.PNC_HERO_FORMATION)
+        chapter = make_observation(
+            ScreenType.PNC_CAMPAIGN_CHAPTER,
+            list_entries=(_stage_entry(3, mode=CampaignMode.STANDARD),),
+        )
+        stage = make_observation(ScreenType.PNC_CAMPAIGN_STAGE)
+
+        task.plan(context, chapter)
+        result = task.verify(context, stage, stale_formation)
+        self.assertEqual(TaskStatus.FAILED, result.status)
+        self.assertFalse(result.retryable)
+
+    def test_campaign_task_rejects_battle_prep_as_campaign_entry_outcome(self) -> None:
+        """The shared battle-prep surface no longer counts as Campaign progress."""
 
         task = CampaignTask()
         context = self._make_context(params=task.parse_params({"enabled_modes": ["standard"]}), task_id=TaskId.CAMPAIGN)
@@ -209,7 +266,8 @@ class CampaignTests(FlowAndTaskFixtures, unittest.TestCase):
             make_observation(ScreenType.PNC_BATTLE_PREP),
         )
 
-        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertEqual(result.status, TaskStatus.FAILED)
+        self.assertTrue(result.retryable)
 
     def test_campaign_policy_parses_battle_mode_independently_of_difficulty(self) -> None:
         """battle_mode selects one shared match-3 mode without changing enabled_modes."""

@@ -16,8 +16,8 @@ from tests.support.pnc.campaign import CAMPAIGN_CHALLENGE_BOX, _CampaignCropOcrS
 
 
 class CampaignControlsAndOverlaysTests(unittest.TestCase):
-    def test_stage_content_request_preserves_controls_without_unused_body_ocr(self) -> None:
-        """A recognized stage skips popup guard OCR while retaining measured controls."""
+    def test_stage_content_request_preserves_controls_with_only_bounded_detail_ocr(self) -> None:
+        """A recognized stage reads only its reviewed detail regions plus controls."""
         capture = _capture(_image("campaign_stage_10_3.png"))
         for path in ("builder", "navigation"):
             with self.subTest(path=path):
@@ -39,7 +39,25 @@ class CampaignControlsAndOverlaysTests(unittest.TestCase):
                     self.assertTrue(observation.has(selector))
                     self.assertEqual(observation.visible_elements[selector].frame_ref, capture.frame_ref)
                 self.assertFalse(observation.list_entries)
-                self.assertEqual(backend.regions, [])
+                self.assertEqual(len(backend.regions), 4)
+                self.assertTrue(all(region is not None for region in backend.regions))
+
+    def test_stage_detail_abstains_when_reviewed_regions_are_unreadable(self) -> None:
+        """Empty OCR leaves every stage fact unobserved instead of defaulting."""
+        capture = _capture(_image("campaign_stage_10_3.png"))
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                backend = _CampaignCropOcrService(())
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if path == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertIsNone(observation.campaign_stage)
 
     def test_benchmark_wrapper_preserves_owned_detail_close(self) -> None:
         """Timing instrumentation forwards the base-first visual contract."""
@@ -89,6 +107,14 @@ class CampaignControlsAndOverlaysTests(unittest.TestCase):
                 {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
             ),
             "campaign_chapter_6_path_return.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
+            ),
+            "campaign_chapter_6_path_20260922.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
+            ),
+            "campaign_chapter_6_path_holdout_20260922.png": (
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
                 {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
             ),
