@@ -366,8 +366,8 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
         corroborates only. Both publishers must localize at zoom 1.0 near
         atlas (-1298,-645), publish the existing Wall slot-2 body at
         (456,1057) with full provenance, and publish the genuinely present
-        Alliance Hall slot-13 body at (507,810) without inventing any other
-        target.
+        Alliance Hall slot-13 body at (507,810) and the source Market slot-11
+        body at (213,949), without inventing any other target.
         """
         backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
         builder, navigation = _wire(backend)
@@ -406,7 +406,7 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
                 self.assertEqual(1, len(walls))
                 self.assertEqual(2, walls[0].home_city_slot.slot_index)
                 self.assertEqual(
-                    {HomeCityObjectId.WALL, HomeCityObjectId.ALLIANCE_HALL},
+                    {HomeCityObjectId.WALL, HomeCityObjectId.ALLIANCE_HALL, HomeCityObjectId.MARKET},
                     {
                         home_city_object_id_from_metadata(item.metadata)
                         for item in surface.objects
@@ -414,6 +414,12 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
                     },
                     "the corridor view must not invent any other camera target",
                 )
+                market = next(
+                    item for item in surface.objects
+                    if home_city_object_id_from_metadata(item.metadata) is HomeCityObjectId.MARKET
+                    and item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                )
+                self.assertEqual(11, market.home_city_slot.slot_index)
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_manor_capture_publishes_measured_body_through_both_paths(self) -> None:
