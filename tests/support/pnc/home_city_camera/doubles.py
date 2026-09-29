@@ -268,7 +268,12 @@ class _PrepareCountingMatcher(OpenCvTemplateMatcher):
     def __init__(self) -> None:
         super().__init__()
         self.prepare_frame_calls = 0
+        self.prepare_proposal_frame_calls = 0
 
     def prepare_frame(self, image: Image.Image, *, reference_size=None):
         self.prepare_frame_calls += 1
         return super().prepare_frame(image, reference_size=reference_size)
+
+    def prepare_proposal_frame(self, frame: PreparedFrame):
+        self.prepare_proposal_frame_calls += 1
+        return super().prepare_proposal_frame(frame)

@@ -15,21 +15,23 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
 )
 from pnc_automation.app.pnc.domain.observation import Bounds
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.home_city_camera import HomeCityCameraLocalizer
+from pnc_automation.app.pnc.vision.home_city_camera.localization import (
+    HomeCityCameraLocalizer,
+)
 from pnc_automation.app.pnc.vision.observation_provenance import bind_spatial_surface
 from pnc_automation.app.pnc.vision.spatial_surfaces import (
     build_home_city_spatial_surface,
 )
 from pnc_automation.core.errors import SelectorResolutionError
 
-from tests.support.pnc.capture_vision.home_camera_doubles import (
+from tests.support.pnc.home_city_camera.doubles import (
     _AnchorScriptedMatcher,
     _PrepareCountingMatcher,
     _ZoomScriptedMatcher,
     _anchor_hit,
     _view_on_scripted_matcher,
 )
-from tests.support.pnc.capture_vision.home_camera_fixtures import (
+from tests.support.pnc.home_city_camera.fixtures import (
     _CAMERA_FIXTURES,
     _fixture,
     _frame_ref,
@@ -485,6 +487,7 @@ class HomeCityViewAnalysisTests(unittest.TestCase):
         )
 
         self.assertEqual(1, matcher.prepare_frame_calls)
+        self.assertEqual(1, matcher.prepare_proposal_frame_calls)
         self.assertIsNotNone(surface.camera_proof)
         self.assertTrue(surface.camera_proof.localized)
         self.assertIsNotNone(surface.home_city_view)
@@ -521,3 +524,20 @@ class HomeCityViewAnalysisTests(unittest.TestCase):
                 source_screen=ScreenType.PNC_HOME_CITY,
                 source_layout_id="layout-a",
             )
+
+    def test_proposal_cache_reuses_only_the_same_prepared_frame(self) -> None:
+        """Proposal pixels are reused per frame and invalidated on replacement."""
+
+        matcher = _PrepareCountingMatcher()
+        localizer = HomeCityCameraLocalizer(matcher=matcher)
+        image = Image.new("RGB", (900, 1600))
+        first = localizer.prepare_frame(image)
+        second = localizer.prepare_frame(image)
+        assert first is not None
+        assert second is not None
+        self.assertIsNot(first, second)
+
+        first_proposal = localizer._proposal_frame(first)
+        self.assertIs(first_proposal, localizer._proposal_frame(first))
+        self.assertIsNot(first_proposal, localizer._proposal_frame(second))
+        self.assertEqual(2, matcher.prepare_proposal_frame_calls)

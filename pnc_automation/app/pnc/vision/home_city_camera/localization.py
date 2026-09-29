@@ -1,72 +1,18 @@
-"""Measured Home-city camera localization from reviewed scene landmarks.
-
-One prepared frame at the atlas reference size is matched against a small
-package-data landmark catalog.  At least three accepted correspondences from at
-least two independent scene groups must agree on a single transform within
-tolerance before a camera proof is published, and the agreeing reference
-positions must span enough distance to separate camera zoom from translation.
-Institute-correlated crops share one group so they cannot outvote
-contradictory evidence, and HUD, nameplate, focus-pin, or promo material is
-never part of the catalog.  Landmarks whose buildings occupy player-chosen
-multi-type slots are marked movable: they may corroborate an established
-transform but can never establish or contradict one, because their scene
-position legitimately varies between accounts.
-
-The atlas-to-reference offset is the accepted Castle / Infantry Barracks
-calibration basis: measured reference nameplate centers (458, 847) and
-(129, 1122) against catalog coordinates (991, 625) and (660, 899) resolve to
-(-532, +222) within about one pixel.  The offset maps canonical atlas
-coordinates into the authored reference view, so a landmark authored at
-reference position ``p`` appears in the current frame's reference space at
-``zoom * p + image_translation`` and an atlas point ``a`` projects to
-``zoom * a + (zoom * offset + image_translation)``.
-``HomeCityCameraProof.translation`` publishes that combined atlas-to-frame
-value and ``HomeCityCameraProof.zoom`` publishes the measured relative zoom;
-both come only from current-frame landmark geometry, never from guessing.
-
-Localization evaluates a bounded grid of template-scale hypotheses on every
-frame; every hypothesis is scored by the same consensus machinery,
-contradictory qualifying transforms at any scale are rejected as ambiguous,
-and the surviving cluster is refit by least squares so the published zoom is
-the measured value rather than the grid step.  Correspondences are measured
-between landmark and match bounds centers: the top-left of a match moves
-with the evaluated template scale while its center stays on the physical
-feature, so center geometry is the scale-invariant contract.
-
-Body targets bound to player-chosen ordinary slots carry a typed reference
-slot marking the calibrated pivot their crop was authored from.  Every
-eligible slot's predicted body rectangle is derived by translating the
-authored bounds by that candidate's pivot delta and projecting through the
-localized transform; the OpenCV search is bounded to the predicted
-neighborhood inside the frame, partially visible bodies are skipped, and a
-measured hit that would claim the same physical body for two slots is
-rejected as ambiguous rather than resolved by order.  Slot tags on the
-published objects are current-frame observations only -- never static
-occupancy, routes, or tap authorization.
-"""
+"""Home-city camera localization, consensus fitting, and view analysis."""
 
 from __future__ import annotations
 
-import json
 import math
 import statistics
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, replace
-from functools import lru_cache
-from pathlib import Path
+from dataclasses import dataclass
+from threading import RLock
 
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.building_catalog import (
-    HomeCityObjectId,
     build_home_city_object_metadata,
     home_city_object_definition,
-    home_city_object_id_from_metadata,
-)
-from pnc_automation.app.pnc.domain.home_city_slots import (
-    HomeCitySlotEligibility,
-    HomeCitySlotSelector,
-    home_city_slots_for_object,
 )
 from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraEvidence,
@@ -76,6 +22,7 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityZoomAnchor,
     HomeCityZoomStatus,
 )
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedSpatialObject,
@@ -90,258 +37,30 @@ from pnc_automation.core.vision.template.template_matcher import (
     PreparedFrame,
 )
 
-HOME_CITY_CAMERA_REFERENCE_SIZE = (900, 1600)
-HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET = (-532, 222)
-_CAMERA_DATA_DIR = Path(__file__).resolve().parent / "data" / "home_city_camera"
+from .catalog import load_home_city_camera_catalog
+from .models import (
+    HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,
+    HOME_CITY_CAMERA_REFERENCE_SIZE,
+    HomeCityCameraCatalog,
+    HomeCityCameraLandmark,
+    HomeCityCameraTarget,
+    HomeCityCameraTargetMatch,
+    HomeCityViewNormalization,
+    HomeCityZoomAnchorSpec,
+)
+
 _CAMERA_CONSENSUS_TOLERANCE_PX = 3
 _CAMERA_MIN_MATCHES = 3
 _CAMERA_MIN_GROUPS = 2
-# Bounded relative-zoom hypotheses evaluated on every frame.  The endpoints
-# are grid limits, not measured bounds: fitted zooms are constrained to this
-# domain and an unresolved result is the honest answer for a camera outside
-# it.
 _CAMERA_ZOOM_SEARCH = tuple(round(0.70 + 0.05 * index, 2) for index in range(15))
 _CAMERA_ZOOM_MIN = _CAMERA_ZOOM_SEARCH[0]
 _CAMERA_ZOOM_MAX = _CAMERA_ZOOM_SEARCH[-1]
 _CAMERA_ZOOM_FIT_SNAP = 0.02
 _CAMERA_SCALE_SEPARATION_MIN_PX = 100.0
-# Two qualifying hypotheses whose measured transforms differ beyond these
-# tolerances are contradictory evidence rather than grid quantization.
 _CAMERA_RIVAL_ZOOM_DELTA = 0.10
 _CAMERA_RIVAL_TRANSLATION_PX = 10.0
-# Bound on concurrent scale evaluations; each is read-only over the prepared
-# frame and the lock-guarded matcher cache, so results stay deterministic.
 _CAMERA_SWEEP_WORKERS = 8
-_NORMALIZATION_FILE_NAME = "normalization.json"
-# Qualifying anchor hits at different template scales must land on the same
-# physical feature; a wider center gap means the views are non-corresponding
-# placement evidence and publish no anchor.
 _ANCHOR_CORRESPONDENCE_PX = 30.0
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityCameraLandmark:
-    """One authored scene crop and its position in the reference view."""
-
-    id: str
-    group_id: str
-    file_name: str
-    reference_bounds: Bounds
-    min_score: float
-    movable: bool = False
-
-    @property
-    def reference_center(self) -> tuple[float, float]:
-        """Returns the authored bounds midpoint -- the canonical correspondence point.
-
-        Neighboring template scales produce differently sized matches of the
-        same physical feature: the observed top-left shifts with the evaluated
-        scale while the center stays anchored on the feature. Correspondences
-        are therefore measured center-to-center; the authored bounds and the
-        measured match bounds themselves are preserved for evidence and
-        rendering.
-        """
-
-        return (
-            self.reference_bounds.x + self.reference_bounds.width / 2,
-            self.reference_bounds.y + self.reference_bounds.height / 2,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityCameraTarget:
-    """One evidence-backed body crop with measured current-frame action geometry."""
-
-    object_id: HomeCityObjectId
-    landmark_id: str
-    file_name: str
-    reference_bounds: Bounds
-    reference_action_bounds: Bounds
-    reference_action_point: tuple[int, int]
-    min_score: float
-    max_projection_error: int
-    reference_slot: HomeCitySlotSelector | None = None
-
-    def __post_init__(self) -> None:
-        """A slot-bound target must name a calibrated slot that can host its object."""
-
-        if self.reference_slot is None:
-            return
-        if not isinstance(self.reference_slot, HomeCitySlotSelector):
-            raise SelectorResolutionError(
-                "Camera-target reference slots must use HomeCitySlotSelector or None.",
-                landmark_id=self.landmark_id,
-                reference_slot=self.reference_slot,
-            )
-        slot = self._eligible_slots().get(self.reference_slot.slot_index)
-        if slot is None or slot.atlas_coordinate is None:
-            raise SelectorResolutionError(
-                "A camera target's reference slot must be a calibrated slot eligible for its object.",
-                landmark_id=self.landmark_id,
-                reference_slot=self.reference_slot.slot_index,
-            )
-
-    def _eligible_slots(self) -> dict[int, HomeCitySlotEligibility]:
-        """Returns the calibrated ordinary slots eligible for this object."""
-
-        return {
-            slot.slot_index: slot
-            for slot in home_city_slots_for_object(self.object_id)
-        }
-
-    def atlas_action_point(
-        self, *, home_city_slot: HomeCitySlotSelector | None = None
-    ) -> tuple[int, int]:
-        """Returns the authored action point expressed in atlas coordinates.
-
-        Fixed scene targets own exactly one atlas point and reject a slot
-        argument.  A slot-bound target owns geometry authored at its
-        calibrated reference slot: callers must pass the selected slot when
-        the object can occupy more than one candidate, and the point is
-        translated by that slot's pivot delta so a reference binding never
-        masquerades as observed occupancy.  A single-type binding leaves the
-        authored point unchanged.
-        """
-
-        offset_x, offset_y = HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET
-        if self.reference_slot is None:
-            if home_city_slot is not None:
-                raise SelectorResolutionError(
-                    "Fixed camera targets carry no slot identity.",
-                    landmark_id=self.landmark_id,
-                )
-            return (
-                self.reference_action_point[0] - offset_x,
-                self.reference_action_point[1] - offset_y,
-            )
-        slots = self._eligible_slots()
-        if home_city_slot is None:
-            if len(slots) > 1:
-                raise SelectorResolutionError(
-                    "A movable camera target requires an explicit selected slot for atlas action geometry.",
-                    landmark_id=self.landmark_id,
-                )
-            home_city_slot = self.reference_slot
-        if not isinstance(home_city_slot, HomeCitySlotSelector):
-            raise SelectorResolutionError(
-                "Selected slots must use HomeCitySlotSelector.",
-                landmark_id=self.landmark_id,
-                home_city_slot=home_city_slot,
-            )
-        slot = slots.get(home_city_slot.slot_index)
-        if slot is None or slot.atlas_coordinate is None:
-            raise SelectorResolutionError(
-                "The selected slot cannot host this camera target.",
-                landmark_id=self.landmark_id,
-                home_city_slot=home_city_slot.slot_index,
-            )
-        reference_pivot = slots[self.reference_slot.slot_index].atlas_coordinate
-        pivot = slot.atlas_coordinate
-        return (
-            self.reference_action_point[0] - offset_x + pivot.x - reference_pivot.x,
-            self.reference_action_point[1] - offset_y + pivot.y - reference_pivot.y,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityCameraTargetMatch:
-    """One projection-agreed body match with its measured frame-space action geometry."""
-
-    target: HomeCityCameraTarget
-    bounds: Bounds
-    action_bounds: Bounds
-    action_point: tuple[int, int]
-    score: float
-    projection_error: float
-    home_city_slot: HomeCitySlotSelector | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityZoomEndpointCalibration:
-    """Qualified endpoint calibration measured from retained native captures.
-
-    ``zoom_interval`` is the permitted relative-zoom band for the maximally
-    zoomed-out Home view and ``non_endpoint_floor`` the lowest fitted zoom
-    measured on a natively closer retained view.  A fit strictly between the
-    two classes or outside the documented separation stays unresolved rather
-    than choosing a side.
-    """
-
-    id: str
-    reference_size: tuple[int, int]
-    zoom_interval: tuple[float, float]
-    non_endpoint_floor: float
-    min_fixed_groups: int
-    max_mean_residual_px: float
-    native_sources: tuple[str, ...]
-    holdout_sources: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityZoomAnchorSpec:
-    """One qualified native scenery patch containing a reviewed gesture point.
-
-    ``file_name`` is a packaged native crop that contains the dispatch point
-    a reviewed gesture touched; ``point_offset`` is that point inside the
-    crop in template pixels.  A match at ``template_scale`` ``s`` publishes
-    the match's own bounds and the point ``bounds.origin + s * point_offset``
-    -- the pixels the published point sits on participated directly in the
-    correlation, so no projection can drift the point off its qualified
-    feature.  ``scales`` lists only the native template scales with saved
-    positive and negative match evidence.
-    """
-
-    id: str
-    file_name: str
-    point_offset: tuple[int, int]
-    scales: tuple[float, ...]
-    min_score: float
-    native_sources: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityViewNormalization:
-    """The packaged view calibration: endpoint verdict, anchors, HUD exclusion.
-
-    ``native_frame_size`` is the authored capture-size boundary this
-    calibration was measured on -- separate from the endpoint's atlas
-    reference size.  Only native captures at exactly this size carry view
-    calibration evidence; any other capture size publishes UNSUPPORTED and
-    no anchor.
-    """
-
-    hud_exclusion_bounds: tuple[Bounds, ...]
-    native_frame_size: tuple[int, int]
-    endpoint: HomeCityZoomEndpointCalibration | None
-    zoom_anchors: tuple[HomeCityZoomAnchorSpec, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class HomeCityCameraCatalog:
-    """Immutable package-data landmark and target definitions for the Home camera."""
-
-    landmarks: tuple[HomeCityCameraLandmark, ...]
-    targets: tuple[HomeCityCameraTarget, ...]
-    reference_size: tuple[int, int]
-    atlas_to_reference_offset: tuple[int, int]
-    anchor_object_ids: tuple[HomeCityObjectId, ...]
-    reference_source: str
-    data_dir: Path
-    normalization: HomeCityViewNormalization | None = None
-
-    def template_path(self, file_name: str) -> Path:
-        """Returns the resolved package-data path for one authored template."""
-
-        return (self.data_dir / file_name).resolve()
-
-    def target_for(self, object_id: HomeCityObjectId) -> HomeCityCameraTarget | None:
-        """Returns the camera-qualified target spec for one canonical object id."""
-
-        for target in self.targets:
-            if target.object_id == object_id:
-                return target
-        return None
-
 
 @dataclass(frozen=True, slots=True)
 class _CameraVote:
@@ -389,673 +108,6 @@ class _CameraHypothesis:
         )
 
 
-@lru_cache(maxsize=1)
-def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
-    """Loads the reviewed landmark catalog once and validates every packaged crop."""
-
-    institute_body_bounds = Bounds(700, 1240, 80, 75)
-    tower_body_bounds = Bounds(240, 1620, 130, 140)
-    campaign_body_bounds = Bounds(1480, 1306, 150, 70)
-    manor_body_bounds = Bounds(441, 2210, 132, 112)
-    catalog = HomeCityCameraCatalog(
-        landmarks=(
-            HomeCityCameraLandmark(
-                id="p2_institute_facade",
-                group_id="institute_structure",
-                file_name="p2_institute_facade.png",
-                reference_bounds=Bounds(615, 1185, 120, 100),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="p3_institute_base_left",
-                group_id="institute_structure",
-                file_name="p3_institute_base_left.png",
-                reference_bounds=Bounds(585, 1250, 105, 70),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="p4_garden_terrace",
-                group_id="garden_terrace",
-                file_name="p4_garden_terrace.png",
-                reference_bounds=Bounds(583, 1071, 90, 110),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="p5_plaza_low",
-                group_id="plaza_low",
-                file_name="p5_plaza_low.png",
-                reference_bounds=Bounds(610, 1345, 120, 45),
-                min_score=0.80,
-            ),
-            HomeCityCameraLandmark(
-                id="t6_plaza_south",
-                group_id="plaza_low",
-                file_name="t6_plaza_south.png",
-                reference_bounds=Bounds(540, 1340, 130, 50),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="p6_path_right",
-                group_id="institute_structure",
-                file_name="p6_path_right.png",
-                reference_bounds=institute_body_bounds,
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="t5_barracks_roofs",
-                group_id="barracks_roofs",
-                file_name="t5_barracks_roofs.png",
-                reference_bounds=Bounds(121, 990, 140, 110),
-                min_score=0.80,
-            ),
-            HomeCityCameraLandmark(
-                id="tower_of_trial_body",
-                group_id="tower_structure",
-                file_name="tower_of_trial_body.png",
-                reference_bounds=tower_body_bounds,
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="blacksmith_structure",
-                group_id="blacksmith_structure",
-                file_name="blacksmith_structure.png",
-                reference_bounds=Bounds(640, 1845, 120, 130),
-                min_score=0.90,
-                # Blacksmith is a player-chosen occupant of large slots 11-13;
-                # its scene position legitimately varies between accounts.
-                movable=True,
-            ),
-            HomeCityCameraLandmark(
-                id="southern_courtyard",
-                group_id="southern_courtyard",
-                file_name="southern_courtyard.png",
-                reference_bounds=Bounds(640, 1530, 100, 100),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="castle_fountain",
-                group_id="castle_structure",
-                file_name="castle_fountain.png",
-                reference_bounds=Bounds(417, 875, 85, 70),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="castle_tower",
-                group_id="castle_structure",
-                file_name="castle_tower.png",
-                reference_bounds=Bounds(543, 667, 62, 157),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="statue_wings",
-                # The monument and its circular base are correlated parts of
-                # the same plaza, not two independent camera landmarks.
-                group_id="plaza_low",
-                file_name="statue_wings.png",
-                reference_bounds=Bounds(390, 1030, 120, 100),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="garden_west",
-                group_id="courtyard_garden",
-                file_name="garden_west.png",
-                reference_bounds=Bounds(300, 1060, 90, 110),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="plaza_ring",
-                group_id="plaza_low",
-                file_name="plaza_ring.png",
-                reference_bounds=Bounds(340, 1290, 60, 60),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="east_aqueduct",
-                group_id="east_fortification",
-                file_name="east_aqueduct.png",
-                reference_bounds=Bounds(1451, 1505, 120, 140),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="east_parapet",
-                group_id="east_fortification",
-                file_name="east_parapet.png",
-                reference_bounds=Bounds(1651, 1715, 80, 60),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="east_cliff_rock",
-                group_id="east_cliff",
-                file_name="east_cliff_rock.png",
-                reference_bounds=Bounds(1681, 1825, 80, 140),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="east_rock_trees",
-                group_id="east_cliff",
-                file_name="east_rock_trees.png",
-                reference_bounds=Bounds(1521, 1965, 120, 100),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="campaign_portal_body",
-                group_id="campaign_portal",
-                file_name="campaign_portal_body.png",
-                reference_bounds=campaign_body_bounds,
-                # The Campaign portal is a fixed scene structure, not a
-                # player-chosen slot occupant; the independently measured
-                # post-pan pedestal score (.92164) is documented in the
-                # fixture manifest and home-camera-navigation.md.
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="campaign_left_pedestal",
-                group_id="campaign_portal",
-                file_name="campaign_left_pedestal.png",
-                reference_bounds=Bounds(1371, 1222, 85, 135),
-                # A second fixed region of the same Campaign structure: it
-                # shares campaign_portal with the body, so the two crops are
-                # one structure's correspondences and never independent
-                # votes. Localization evidence only -- no target or tap.
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="ridge_wall",
-                group_id="east_fortification",
-                file_name="ridge_wall.png",
-                reference_bounds=Bounds(1117, 1365, 100, 130),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="alliance_hall_structure",
-                group_id="alliance_hall_structure",
-                file_name="alliance_hall_structure.png",
-                reference_bounds=Bounds(1197, 1675, 140, 80),
-                min_score=0.90,
-                # Alliance Hall is a player-chosen occupant of large slots
-                # 11-13; its scene position legitimately varies between
-                # accounts.
-                movable=True,
-            ),
-            HomeCityCameraLandmark(
-                id="west_trial_wall",
-                group_id="tower_structure",
-                file_name="west_trial_wall.png",
-                reference_bounds=Bounds(110, 1875, 120, 140),
-                min_score=0.95,
-            ),
-            HomeCityCameraLandmark(
-                id="west_sanctum_column",
-                group_id="sanctum_structure",
-                file_name="west_sanctum_column.png",
-                reference_bounds=Bounds(50, 2005, 80, 105),
-                min_score=0.95,
-            ),
-            # Two non-overlapping fixed parts of the Illusory Beast Manor share
-            # one group: they are one structure's identity correspondences and
-            # cannot supply an independent consensus vote by themselves.
-            HomeCityCameraLandmark(
-                id="illusory_beast_manor_owl_head",
-                group_id="illusory_beast_manor_structure",
-                file_name="illusory_beast_manor_owl_head.png",
-                reference_bounds=Bounds(441, 2210, 72, 53),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="illusory_beast_manor_right_tower",
-                group_id="illusory_beast_manor_structure",
-                file_name="illusory_beast_manor_right_tower.png",
-                reference_bounds=Bounds(527, 2237, 46, 75),
-                min_score=0.90,
-            ),
-            # Northeast coverage measured on 2026-09-23 157_farm frames: the
-            # Sauroi Lair pier is one fixed structure group, and the two moat
-            # fortification parts join east_fortification rather than voting
-            # independently. All three exclude HUD, nameplates and badges.
-            HomeCityCameraLandmark(
-                id="northeast_sauroi_pier",
-                group_id="sauroi_lair_structure",
-                file_name="northeast_sauroi_pier.png",
-                reference_bounds=Bounds(1361, 957, 90, 125),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="northeast_moat_cap",
-                group_id="east_fortification",
-                file_name="northeast_moat_cap.png",
-                reference_bounds=Bounds(1246, 1112, 95, 115),
-                min_score=0.90,
-            ),
-            HomeCityCameraLandmark(
-                id="northeast_moat_shaft",
-                group_id="east_fortification",
-                file_name="northeast_moat_shaft.png",
-                reference_bounds=Bounds(1291, 1227, 70, 95),
-                min_score=0.90,
-            ),
-        ),
-        targets=(
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.INSTITUTE,
-                landmark_id="p6_path_right",
-                file_name="p6_path_right.png",
-                reference_bounds=institute_body_bounds,
-                reference_action_bounds=Bounds(712, 1244, 30, 18),
-                reference_action_point=(724, 1253),
-                min_score=0.90,
-                max_projection_error=8,
-                # Authored at the static single-type slot 9: the binding tags
-                # the observed slot without changing candidate behavior.
-                reference_slot=HomeCitySlotSelector(9),
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.TOWER_OF_TRIAL,
-                landmark_id="tower_of_trial_body",
-                file_name="tower_of_trial_body.png",
-                reference_bounds=tower_body_bounds,
-                reference_action_bounds=Bounds(272, 1680, 56, 50),
-                reference_action_point=(299, 1714),
-                min_score=0.90,
-                max_projection_error=8,
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.CAMPAIGN,
-                landmark_id="campaign_portal_body",
-                file_name="campaign_portal_body.png",
-                reference_bounds=campaign_body_bounds,
-                reference_action_bounds=Bounds(1540, 1332, 22, 22),
-                reference_action_point=(1551, 1343),
-                # The independent post-pan live body scores .922; retained
-                # non-Home negatives stay below .40. Projection agreement and
-                # independent camera consensus remain mandatory.
-                min_score=0.90,
-                max_projection_error=8,
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.BLACKSMITH,
-                landmark_id="blacksmith_structure",
-                file_name="blacksmith_structure.png",
-                reference_bounds=Bounds(640, 1845, 120, 130),
-                # Candidate action geometry measured inside the front
-                # wall/door on the saved 157_farm f2 view (native 712,829);
-                # it awaits live destination qualification and is not a
-                # previously proved click.
-                reference_action_bounds=Bounds(700, 1915, 20, 20),
-                reference_action_point=(710, 1925),
-                min_score=0.90,
-                # 12 reference px covers the 6 px scene-calibration
-                # uncertainty plus matching noise; failures are retained
-                # rather than loosened without new evidence.
-                max_projection_error=12,
-                # The crop was authored while Blacksmith occupied slot 12 on
-                # the reviewed 157_farm views; live candidates are all
-                # eligible large slots (11-13) and the binding is evidence,
-                # not a universal layout claim.
-                reference_slot=HomeCitySlotSelector(12),
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.ILLUSORY_BEAST_MANOR,
-                landmark_id="illusory_beast_manor_body",
-                file_name="illusory_beast_manor_body.png",
-                reference_bounds=manor_body_bounds,
-                reference_action_bounds=Bounds(490, 2280, 20, 20),
-                reference_action_point=(500, 2290),
-                # The 2026-09-21 verified tap (511,722) relative to the matched
-                # body scores .918-.931 on three independent PW captures;
-                # non-overlapping rivals stay below .65 and the generic Manor
-                # is never selected. The body is one identity correspondence,
-                # not an additional independent landmark vote.
-                min_score=0.90,
-                max_projection_error=8,
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.WALL,
-                landmark_id="wall_gatehouse",
-                file_name="wall_gatehouse.png",
-                reference_bounds=Bounds(1180, 1845, 95, 125),
-                reference_action_bounds=Bounds(1205, 1907, 32, 32),
-                reference_action_point=(1221, 1923),
-                min_score=0.90,
-                max_projection_error=12,
-                reference_slot=HomeCitySlotSelector(2),
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.GODDESS_STATUE,
-                landmark_id="goddess_statue_body",
-                file_name="goddess_statue_body.png",
-                # The body is the static gold statue column/plinth measured on
-                # the 2026-09-23 live005 frame 0066 (native 368,145,60,78 under
-                # camera (-595,-847)); the earlier circular platform trim was
-                # never a proved clickable body. The crop excludes the upper
-                # HUD, the mutable level badge at the statue's right edge, the
-                # floating nameplate, and the platform ring below.
-                reference_bounds=Bounds(431, 1214, 60, 78),
-                # Keep the candidate tap on the interior gold column body.
-                reference_action_bounds=Bounds(451, 1259, 20, 20),
-                reference_action_point=(461, 1269),
-                min_score=0.90,
-                max_projection_error=12,
-                reference_slot=HomeCitySlotSelector(15),
-            ),
-            HomeCityCameraTarget(
-                object_id=HomeCityObjectId.CASTLE,
-                landmark_id="castle_tower",
-                file_name="castle_tower.png",
-                reference_bounds=Bounds(543, 667, 62, 157),
-                # Interior stonework on the two native Castle views from
-                # 2026-09-21; destination qualification remains a live gate.
-                reference_action_bounds=Bounds(560, 742, 28, 24),
-                reference_action_point=(574, 754),
-                min_score=0.90,
-                max_projection_error=8,
-                reference_slot=HomeCitySlotSelector(1),
-            ),
-        ),
-        reference_size=HOME_CITY_CAMERA_REFERENCE_SIZE,
-        atlas_to_reference_offset=HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,
-        anchor_object_ids=(
-            HomeCityObjectId.CASTLE,
-            HomeCityObjectId.INFANTRY_BARRACKS,
-        ),
-        reference_source=(
-            "20260915T160615Z_core_20260915T160413Z_018f500d_0025_06_fresh_fresh_home_for_pan.png"
-        ),
-        data_dir=_CAMERA_DATA_DIR,
-    )
-    for item in (*catalog.landmarks, *catalog.targets):
-        path = catalog.template_path(item.file_name)
-        if not path.is_file():
-            raise SelectorResolutionError(
-                "Home-camera catalog template is missing from package data.",
-                template=str(path),
-            )
-        with Image.open(path) as template:
-            if template.size != (item.reference_bounds.width, item.reference_bounds.height):
-                raise SelectorResolutionError(
-                    "Home-camera catalog template size does not match its reference bounds.",
-                    template=str(path),
-                    expected=(item.reference_bounds.width, item.reference_bounds.height),
-                    actual=template.size,
-                )
-    for target in catalog.targets:
-        if not target.reference_bounds.contains_bounds(target.reference_action_bounds):
-            raise SelectorResolutionError(
-                "Camera target action bounds must stay inside the authored body crop.",
-                landmark_id=target.landmark_id,
-            )
-        if not target.reference_action_bounds.contains_point(target.reference_action_point):
-            raise SelectorResolutionError(
-                "Camera target action bounds must contain the verified action point.",
-                landmark_id=target.landmark_id,
-            )
-    return replace(catalog, normalization=_load_view_normalization(catalog))
-
-
-def _load_view_normalization(
-    catalog: HomeCityCameraCatalog,
-) -> HomeCityViewNormalization:
-    """Loads and validates the packaged endpoint/anchor view calibration."""
-
-    path = catalog.data_dir / _NORMALIZATION_FILE_NAME
-    if not path.is_file():
-        raise SelectorResolutionError(
-            "Home-camera view normalization calibration is missing from package data.",
-            template=str(path),
-        )
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
-        raise SelectorResolutionError(
-            "Home-camera view normalization calibration is not valid JSON.",
-            template=str(path),
-        ) from error
-    if not isinstance(document, dict):
-        raise SelectorResolutionError(
-            "Home-camera view normalization calibration must be a JSON object.",
-            template=str(path),
-        )
-    if document.get("version") != 1:
-        raise SelectorResolutionError(
-            "Home-camera view normalization calibration must declare version 1.",
-            template=str(path),
-            version=document.get("version"),
-        )
-    endpoint = _normalization_endpoint(document.get("endpoint"), catalog)
-    native_frame_size = document.get("native_frame_size")
-    if (
-        not isinstance(native_frame_size, list | tuple)
-        or len(native_frame_size) != 2
-        or any(
-            type(value) is not int or value <= 0 for value in native_frame_size
-        )
-    ):
-        raise SelectorResolutionError(
-            "Home-camera view normalization must declare a positive native frame size.",
-            entry=native_frame_size,
-        )
-    return HomeCityViewNormalization(
-        hud_exclusion_bounds=tuple(
-            _normalization_bounds(item, field="hud_exclusion_bounds")
-            for item in document.get("hud_exclusion_bounds", ())
-        ),
-        native_frame_size=(native_frame_size[0], native_frame_size[1]),
-        endpoint=endpoint,
-        zoom_anchors=tuple(
-            _normalization_anchor(item, catalog)
-            for item in document.get("zoom_anchors", ())
-        ),
-    )
-
-
-def _normalization_bounds(entry: object, *, field: str) -> Bounds:
-    """Coerces one ``[x, y, w, h]`` authored rectangle into typed bounds."""
-
-    if (
-        not isinstance(entry, list | tuple)
-        or len(entry) != 4
-        or any(type(value) is not int for value in entry)
-    ):
-        raise SelectorResolutionError(
-            "Home-camera view normalization bounds must be four integers.",
-            field=field,
-            entry=entry,
-        )
-    bounds = Bounds(*entry)
-    if bounds.width <= 0 or bounds.height <= 0:
-        raise SelectorResolutionError(
-            "Home-camera view normalization bounds must have positive size.",
-            field=field,
-            entry=entry,
-        )
-    return bounds
-
-
-def _normalization_endpoint(
-    entry: object,
-    catalog: HomeCityCameraCatalog,
-) -> HomeCityZoomEndpointCalibration | None:
-    """Parses the authored endpoint calibration against the catalog layout."""
-
-    if entry is None:
-        return None
-    if not isinstance(entry, dict):
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration must be a JSON object.",
-            entry=entry,
-        )
-    endpoint_id = entry.get("id")
-    reference_size = entry.get("reference_size")
-    zoom_interval = entry.get("zoom_interval")
-    non_endpoint_floor = entry.get("non_endpoint_floor")
-    min_fixed_groups = entry.get("min_fixed_groups")
-    max_mean_residual = entry.get("max_mean_residual_px")
-    if not isinstance(endpoint_id, str) or endpoint_id == "":
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration must name a stable calibration id.",
-            entry=entry,
-        )
-    if (
-        not isinstance(reference_size, list | tuple)
-        or len(reference_size) != 2
-        or any(type(value) is not int or value <= 0 for value in reference_size)
-    ):
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration must declare a supported reference size.",
-            entry=entry,
-        )
-    if tuple(reference_size) != tuple(catalog.reference_size):
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration's reference size must match the catalog layout.",
-            entry=entry,
-            reference_size=catalog.reference_size,
-        )
-    if (
-        not isinstance(zoom_interval, list | tuple)
-        or len(zoom_interval) != 2
-        or any(
-            not isinstance(value, int | float) or not math.isfinite(value)
-            for value in zoom_interval
-        )
-        or not 0.0 < zoom_interval[0] < zoom_interval[1]
-    ):
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration must declare an increasing positive zoom interval.",
-            entry=entry,
-        )
-    if (
-        not isinstance(non_endpoint_floor, int | float)
-        or not math.isfinite(non_endpoint_floor)
-        or non_endpoint_floor <= zoom_interval[1]
-    ):
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration's non-endpoint floor must exceed its interval.",
-            entry=entry,
-        )
-    if type(min_fixed_groups) is not int or min_fixed_groups < 1:
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration must require at least one independent group.",
-            entry=entry,
-        )
-    if (
-        not isinstance(max_mean_residual, int | float)
-        or not math.isfinite(max_mean_residual)
-        or max_mean_residual <= 0.0
-    ):
-        raise SelectorResolutionError(
-            "The Home-camera endpoint calibration must declare a positive residual bound.",
-            entry=entry,
-        )
-    return HomeCityZoomEndpointCalibration(
-        id=endpoint_id,
-        reference_size=(reference_size[0], reference_size[1]),
-        zoom_interval=(float(zoom_interval[0]), float(zoom_interval[1])),
-        non_endpoint_floor=float(non_endpoint_floor),
-        min_fixed_groups=min_fixed_groups,
-        max_mean_residual_px=float(max_mean_residual),
-        native_sources=_normalization_sources(entry.get("native_sources")),
-        holdout_sources=_normalization_sources(entry.get("holdout_sources")),
-    )
-
-
-def _normalization_sources(entry: object) -> tuple[str, ...]:
-    """Coerces one authored source-capture list into provenance strings."""
-
-    if not isinstance(entry, list | tuple):
-        return ()
-    if any(not isinstance(item, str) or item == "" for item in entry):
-        raise SelectorResolutionError(
-            "Home-camera view normalization sources must be non-empty names.",
-            entry=entry,
-        )
-    return tuple(entry)
-
-
-def _normalization_anchor(
-    entry: object,
-    catalog: HomeCityCameraCatalog,
-) -> HomeCityZoomAnchorSpec:
-    """Parses one authored native scenery patch plus its contained point."""
-
-    if not isinstance(entry, dict):
-        raise SelectorResolutionError(
-            "A Home-camera zoom-anchor spec must be a JSON object.",
-            entry=entry,
-        )
-    anchor_id = entry.get("id")
-    file_name = entry.get("file_name")
-    point_offset = entry.get("point_offset")
-    scales = entry.get("scales")
-    min_score = entry.get("min_score")
-    if not isinstance(anchor_id, str) or anchor_id == "":
-        raise SelectorResolutionError(
-            "A Home-camera zoom anchor must name a stable qualification id.",
-            entry=entry,
-        )
-    if not isinstance(file_name, str) or not catalog.template_path(file_name).is_file():
-        raise SelectorResolutionError(
-            "A Home-camera zoom anchor must name a packaged template crop.",
-            entry=entry,
-            template=file_name,
-        )
-    if (
-        not isinstance(point_offset, list | tuple)
-        or len(point_offset) != 2
-        or any(type(value) is not int or value < 0 for value in point_offset)
-    ):
-        raise SelectorResolutionError(
-            "A Home-camera zoom anchor's point must be a non-negative integer offset inside its crop.",
-            entry=entry,
-        )
-    with Image.open(catalog.template_path(file_name)) as template:
-        template_size = template.size
-    if not (
-        point_offset[0] < template_size[0]
-        and point_offset[1] < template_size[1]
-    ):
-        raise SelectorResolutionError(
-            "A Home-camera zoom anchor's point must lie inside its packaged crop.",
-            entry=entry,
-            template_size=template_size,
-        )
-    if (
-        not isinstance(scales, list | tuple)
-        or not scales
-        or any(
-            not isinstance(value, int | float)
-            or not math.isfinite(value)
-            or value <= 0.0
-            for value in scales
-        )
-    ):
-        raise SelectorResolutionError(
-            "A Home-camera zoom anchor must declare non-empty positive template scales.",
-            entry=entry,
-        )
-    if (
-        not isinstance(min_score, int | float)
-        or not math.isfinite(min_score)
-        or not 0.0 < min_score <= 1.0
-    ):
-        raise SelectorResolutionError(
-            "A Home-camera zoom anchor must declare a match floor in (0, 1].",
-            entry=entry,
-        )
-    return HomeCityZoomAnchorSpec(
-        id=anchor_id,
-        file_name=file_name,
-        point_offset=(point_offset[0], point_offset[1]),
-        scales=tuple(float(value) for value in scales),
-        min_score=float(min_score),
-        native_sources=_normalization_sources(entry.get("native_sources")),
-    )
-
-
-def home_city_camera_target(object_id: HomeCityObjectId) -> HomeCityCameraTarget | None:
-    """Returns the camera-qualified target spec for one canonical object id."""
-
-    return load_home_city_camera_catalog().target_for(object_id)
-
-
 class HomeCityCameraLocalizer:
     """Matches the shared scene-landmark catalog on one prepared frame per call."""
 
@@ -1069,6 +121,9 @@ class HomeCityCameraLocalizer:
         self._matcher = matcher
         self._catalog = catalog if catalog is not None else load_home_city_camera_catalog()
         self._zoom_search = _CAMERA_ZOOM_SEARCH if zoom_search is None else zoom_search
+        self._proposal_source: PreparedFrame | None = None
+        self._proposal_cache: PreparedFrame | None = None
+        self._proposal_lock = RLock()
         if (
             not self._zoom_search
             or any(
@@ -1091,6 +146,24 @@ class HomeCityCameraLocalizer:
             reference_size=self._catalog.reference_size,
         )
 
+    def _proposal_frame(self, frame: PreparedFrame) -> PreparedFrame:
+        """Returns one immutable proposal frame for the current prepared frame.
+
+        The observation surface asks for localization and view analysis in
+        sequence over the same prepared pixels. Reusing this read-only
+        half-resolution representation avoids a second expensive resize while
+        retaining frame identity and never caching an observation or OCR
+        result.
+        """
+
+        with self._proposal_lock:
+            if self._proposal_source is frame and self._proposal_cache is not None:
+                return self._proposal_cache
+            proposal = self._matcher.prepare_proposal_frame(frame)
+            self._proposal_source = frame
+            self._proposal_cache = proposal
+            return proposal
+
     def localize(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
         """Publishes the current-frame camera verdict from scene correspondences only."""
 
@@ -1104,7 +177,7 @@ class HomeCityCameraLocalizer:
             )
         # One half-resolution proposal frame serves every scale hypothesis of
         # this localization; it is immutable prepared data, not matcher state.
-        proposal_frame = self._matcher.prepare_proposal_frame(frame)
+        proposal_frame = self._proposal_frame(frame)
         hypotheses = self._evaluate_zoom_sweep(frame, proposal_frame)
         qualifying = [
             hypothesis for hypothesis in hypotheses if hypothesis.qualified
@@ -2184,7 +1257,7 @@ class HomeCityCameraLocalizer:
         normalization = self._catalog.normalization
         if normalization is None:
             return None
-        proposal_frame = self._matcher.prepare_proposal_frame(frame)
+        proposal_frame = self._proposal_frame(frame)
         for spec in normalization.zoom_anchors:
             anchor = self._match_anchor_spec(
                 frame,
@@ -2338,58 +1411,3 @@ def _claims_same_body(first: Bounds, second: Bounds) -> bool:
     return first.contains_point(second.center()) or second.contains_point(
         first.center()
     )
-
-
-def merge_camera_target_objects(
-    objects: tuple[DetectedSpatialObject, ...],
-    camera_objects: tuple[DetectedSpatialObject, ...],
-) -> tuple[DetectedSpatialObject, ...]:
-    """Prefer measured bodies and attach only mutually unambiguous label facts.
-
-    All measured instances survive. Once a semantic type has measured body
-    evidence, its OCR-only duplicates cannot remain selectable objects. A
-    label enriches a body only if each has exactly one compatible counterpart;
-    counting both sides before merging prevents order-dependent level claims.
-    """
-
-    if not camera_objects:
-        return objects
-    object_ids = tuple(home_city_object_id_from_metadata(item.metadata) for item in objects)
-    camera_ids = tuple(home_city_object_id_from_metadata(item.metadata) for item in camera_objects)
-    measured_ids = {object_id for object_id in camera_ids if object_id is not None}
-    compatible_bodies: list[list[int]] = [[] for _ in objects]
-    compatible_labels: list[list[int]] = [[] for _ in camera_objects]
-    for label_index, (label, object_id) in enumerate(zip(objects, object_ids)):
-        if object_id not in measured_ids:
-            continue
-        for body_index, (body, camera_id) in enumerate(zip(camera_objects, camera_ids)):
-            if camera_id != object_id:
-                continue
-            if (
-                label.home_city_slot is not None
-                and body.home_city_slot is not None
-                and label.home_city_slot != body.home_city_slot
-            ):
-                continue
-            compatible_bodies[label_index].append(body_index)
-            compatible_labels[body_index].append(label_index)
-
-    merged = [
-        item for item, object_id in zip(objects, object_ids)
-        if object_id not in measured_ids
-    ]
-    for body_index, body in enumerate(camera_objects):
-        labels = compatible_labels[body_index]
-        if len(labels) == 1 and len(compatible_bodies[labels[0]]) == 1:
-            label = objects[labels[0]]
-            body = replace(
-                body,
-                name_text=label.name_text or body.name_text,
-                level=label.level if label.level is not None else body.level,
-                metadata={
-                    **body.metadata,
-                    **{key: value for key, value in label.metadata.items() if key == "home_city_label"},
-                },
-            )
-        merged.append(body)
-    return tuple(merged)

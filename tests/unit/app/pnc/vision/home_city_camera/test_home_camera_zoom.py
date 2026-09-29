@@ -17,19 +17,23 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
 )
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import Bounds
-from pnc_automation.app.pnc.vision.home_city_camera import (
+from pnc_automation.app.pnc.vision.home_city_camera.models import (
     HomeCityCameraLandmark,
+)
+from pnc_automation.app.pnc.vision.home_city_camera.localization import (
     HomeCityCameraLocalizer,
+)
+from pnc_automation.app.pnc.vision.home_city_camera.catalog import (
     load_home_city_camera_catalog,
 )
 from pnc_automation.core.vision.image.models import TemplateMatch
 
-from tests.support.pnc.capture_vision.home_camera_doubles import (
+from tests.support.pnc.home_city_camera.doubles import (
     _ScaleAwareScriptedMatcher,
     _ZoomScriptedMatcher,
     _zoomed_localizer,
 )
-from tests.support.pnc.capture_vision.home_camera_fixtures import (
+from tests.support.pnc.home_city_camera.fixtures import (
     _CAMERA_FIXTURES,
     _fixture,
     _localizer,

@@ -9,7 +9,7 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraStatus,
 )
 
-from tests.support.pnc.capture_vision.home_camera_fixtures import (
+from tests.support.pnc.home_city_camera.fixtures import (
     _CAMERA_FIXTURES,
     _fixture,
     _localizer,

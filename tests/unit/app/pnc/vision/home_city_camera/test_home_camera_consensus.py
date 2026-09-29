@@ -8,7 +8,7 @@ from PIL import Image
 
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraStatus
 
-from tests.support.pnc.capture_vision.home_camera_doubles import _scripted_localizer
+from tests.support.pnc.home_city_camera.doubles import _scripted_localizer
 
 
 class HomeCityCameraConsensusTests(unittest.TestCase):

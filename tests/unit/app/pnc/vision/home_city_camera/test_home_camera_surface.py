@@ -17,14 +17,16 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectSourceKind,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.home_city_camera import merge_camera_target_objects
+from pnc_automation.app.pnc.vision.home_city_camera.targets import (
+    merge_camera_target_objects,
+)
 from pnc_automation.app.pnc.vision.observation_provenance import bind_spatial_surface
 from pnc_automation.app.pnc.vision.spatial_surfaces import (
     build_home_city_spatial_surface,
 )
 from pnc_automation.core.errors import SelectorResolutionError
 
-from tests.support.pnc.capture_vision.home_camera_fixtures import (
+from tests.support.pnc.home_city_camera.fixtures import (
     _CAMERA_FIXTURES,
     _fixture,
     _frame_ref,

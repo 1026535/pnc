@@ -11,9 +11,11 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraStatus,
 )
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
-from pnc_automation.app.pnc.vision.home_city_camera import load_home_city_camera_catalog
+from pnc_automation.app.pnc.vision.home_city_camera.catalog import (
+    load_home_city_camera_catalog,
+)
 
-from tests.support.pnc.capture_vision.home_camera_fixtures import (
+from tests.support.pnc.home_city_camera.fixtures import (
     _CAMERA_FIXTURES,
     _SCREEN_RECOGNITION,
     _fixture,

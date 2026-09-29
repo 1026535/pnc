@@ -9,7 +9,9 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_definition_for_label,
 )
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
-from pnc_automation.app.pnc.vision.home_city_camera import load_home_city_camera_catalog
+from pnc_automation.app.pnc.vision.home_city_camera.catalog import (
+    load_home_city_camera_catalog,
+)
 
 
 class HomeCityCameraCatalogTests(unittest.TestCase):
