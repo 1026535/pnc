@@ -2005,6 +2005,32 @@
       "expected_visual_screens": [
         "PNC_INFANTRY_BARRACKS"
       ]
+    },
+    {
+      "image": "building_routes/infantry_barracks_native_20260929.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526",
+      "sha256": "700890de9180c0dad2a5c21e47b0a3b914461558995afb81ed899ef868bee8c4",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ],
+      "annotation": "Same-session correlated native regression captures0087/0086. The validation frame is not an independent holdout; installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn010-20260929/20260929T174022Z_core_20260929T173559Z_c3c3b526_0087_core_13_home_after_7.png",
+      "source_sha256": "024633ed6d85a6a3bfc93ffb803a13fae8d4c4b256dffd11857ed44a77ff4012"
+    },
+    {
+      "image": "building_routes/infantry_barracks_native_holdout_20260929.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526",
+      "sha256": "b38560dcfe02423db8e136179a27b3db026a99083516e4aee0b25d08c341fee1",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ],
+      "annotation": "Same-session correlated native regression captures0087/0086. The validation frame is not an independent holdout; installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-29/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn010-20260929/20260929T174018Z_core_20260929T173559Z_c3c3b526_0086_core_13_home_after_6.png",
+      "source_sha256": "d408e03850262191e43e29dcf8648b5af02e06723107189b9214b1fb323e257d"
     }
   ]
 }
