@@ -2576,6 +2576,17 @@ selectors:
     mask: embedded_alpha
   notes:
   - 'Measured stage-detail Close control owns dismissal of the Campaign detail surface; Challenge is intentionally not registered.'
+- id: PNC_CAMPAIGN_FORMATION_BACK_BUTTON
+  screens:
+  - PNC_HERO_FORMATION
+  status: planned
+  detection_kind: semantic
+  interaction_kind: navigation
+  materialize_relative_bounds: false
+  notes:
+  - Produced only by the reviewed hero_formation_challenge_preparation visual profile when its measured top-left gold diamond Back anchor is present.
+  - The September29 live path observed this control returning the Campaign stage Challenge formation preparation to its source stage detail; the typed graph edge awaits final candidate live proof.
+  - Withheld on the OCR-driven SaveForm variant and any other Hero Formation appearance; no coordinate-only or fixed-region fallback exists.
 - id: PNC_POPUP_CLOSE_BUTTON
   screens:
   - PNC_POPUP

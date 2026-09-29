@@ -1878,6 +1878,48 @@
         ],
         "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
       }
+    },
+    {
+      "image": "hero_formation_challenge_preparation_20260929.png",
+      "screen": "PNC_HERO_FORMATION",
+      "split": "reference",
+      "group": "2026-09-29/testing/m1_campaign_eastern_left",
+      "sha256": "8eaa8901de9b98bf0f2730754c5153eb2d25d0d2540b5edd8751504a8f5eb7a8",
+      "expected_visual_screens": [
+        "PNC_HERO_FORMATION"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-29/testing/20260929T051057Z_core_20260929T050725Z_37cfd0b9_0084_c3_formation_content.png",
+        "source_file_sha256": "2debd635a39fcf13c93870ea0fdeef418f98dc91fbdc581db64ef9c129a15aab",
+        "candidate": "8e1fa8dd",
+        "native_size": [
+          900,
+          1600
+        ],
+        "qualification": "Observed regression sample; C3 formation capture and reconcile frame are correlated in one invocation, not an independent holdout"
+      },
+      "annotation": "Unmodified native 900x1600 Hero Formation preparation frame opened by the authorized non-spending stage 6-5 Challenge tap at candidate 8e1fa8dd; this exact frame returned UNKNOWN. All three anchor/control assets are cropped from this frame. Installed build not recorded."
+    },
+    {
+      "image": "hero_formation_challenge_preparation_reconcile_20260929.png",
+      "screen": "PNC_HERO_FORMATION",
+      "split": "validation",
+      "group": "2026-09-29/testing/m1_campaign_eastern_left",
+      "sha256": "8eaa8901de9b98bf0f2730754c5153eb2d25d0d2540b5edd8751504a8f5eb7a8",
+      "expected_visual_screens": [
+        "PNC_HERO_FORMATION"
+      ],
+      "provenance": {
+        "source": "C:/Users/lebel/pnc/artifacts/2026-09-29/testing/m1-campaign-eastern-left-20260929-09_reconcile_0_20260929T051815.303410z0000.png",
+        "source_file_sha256": "9f29e444ae0613064b8df69d216322f01b53692d65e04540c1fecf1782801569",
+        "candidate": "8e1fa8dd",
+        "native_size": [
+          900,
+          1600
+        ],
+        "qualification": "Observed regression sample; C3 formation capture and reconcile frame are correlated in one invocation, not an independent holdout"
+      },
+      "annotation": "Reconcile-phase capture of the same preparation surface immediately before the manually observed non-spending Back to the typed 6-5 stage detail; decodes identically to the reference frame. No anchor assets came from this file."
     }
   ]
 }

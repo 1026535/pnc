@@ -112,6 +112,123 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
         self.assertIsNone(next(pending, None))
 
 
+    def test_formation_preparation_routes_back_through_stage_to_home(self):
+        """One owned preparation Back reaches the typed stage, then the reviewed chain to Home."""
+        controls = {
+            ScreenType.PNC_HERO_FORMATION: UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON,
+            ScreenType.PNC_CAMPAIGN_STAGE: UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON,
+            ScreenType.PNC_CAMPAIGN_CHAPTER: UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
+            ScreenType.PNC_CAMPAIGN_MAP: UiElementId.PNC_CAMPAIGN_HOME_PORTAL,
+        }
+        screens = (
+            ScreenType.PNC_HERO_FORMATION, ScreenType.PNC_HERO_FORMATION,
+            ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_CAMPAIGN_STAGE,
+            ScreenType.PNC_CAMPAIGN_STAGE,
+            ScreenType.PNC_CAMPAIGN_CHAPTER, ScreenType.PNC_CAMPAIGN_CHAPTER,
+            ScreenType.PNC_CAMPAIGN_CHAPTER,
+            ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_MAP,
+            ScreenType.PNC_CAMPAIGN_MAP,
+            ScreenType.PNC_HOME_CITY, ScreenType.PNC_HOME_CITY,
+        )
+        now = datetime(2026, 9, 29, tzinfo=UTC)
+        frames = []
+        for index, screen in enumerate(screens):
+            selector = controls.get(screen)
+            visible = {} if selector is None else {
+                selector: VisibleElement(
+                    selector, Bounds(14, 4, 48, 42), 1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            }
+            frames.append(replace(
+                observation(screen), visible_elements=visible,
+                captured_at=now + timedelta(seconds=index),
+            ))
+        pending = iter(frames)
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(pending), reviewed_navigation_edges(), sleep=lambda _: None,
+        )
+
+        returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertIs(frames[-1], returned)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+        self.assertEqual(list(controls.values()), [action.selector_id for action in actuator.actions])
+        self.assertIsNone(next(pending, None))
+
+
+    def test_formation_without_preparation_back_refuses_navigation(self):
+        """SaveForm-like and control-less formations never reach the actuator."""
+        variants = (
+            {
+                UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON: VisibleElement(
+                    UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON, Bounds(350, 1490, 200, 40), 1.0,
+                    source_kind=VisibleElementSourceKind.GEOMETRY,
+                ),
+            },
+            {},
+        )
+        for visible in variants:
+            with self.subTest(visible=list(visible)):
+                pending = iter((
+                    replace(
+                        observation(ScreenType.PNC_HERO_FORMATION),
+                        visible_elements=visible,
+                    ),
+                    replace(
+                        observation(ScreenType.PNC_HERO_FORMATION),
+                        visible_elements=visible,
+                    ),
+                ))
+                actuator = Actuator()
+                core = NavigationCore(
+                    actuator, lambda _: next(pending), reviewed_navigation_edges(),
+                    sleep=lambda _: None,
+                )
+                with self.assertRaises(RuntimeError):
+                    core.navigate(ScreenType.PNC_HOME_CITY)
+                self.assertEqual([], actuator.actions)
+
+
+    def test_formation_preparation_back_rejects_an_unexpected_destination(self):
+        """A post-Back screen outside the reviewed destination stops after one tap."""
+        back = {
+            UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON: VisibleElement(
+                UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON, Bounds(14, 4, 48, 42), 1.0,
+                source_kind=VisibleElementSourceKind.TEMPLATE,
+            ),
+        }
+        now = datetime(2026, 9, 29, tzinfo=UTC)
+        pending = iter((
+            replace(
+                observation(ScreenType.PNC_HERO_FORMATION), visible_elements=back,
+                captured_at=now,
+            ),
+            replace(
+                observation(ScreenType.PNC_HERO_FORMATION), visible_elements=back,
+                captured_at=now + timedelta(seconds=1),
+            ),
+            replace(
+                observation(ScreenType.PNC_MAIL_HUB),
+                captured_at=now + timedelta(seconds=2),
+            ),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(pending), reviewed_navigation_edges(), sleep=lambda _: None,
+        )
+
+        with self.assertRaises(RuntimeError) as failure:
+            core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertIn("unexpected screen", str(failure.exception))
+        self.assertEqual(
+            [UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON],
+            [action.selector_id for action in actuator.actions],
+        )
+
+
     def test_campaign_measured_open_descends_to_corridor_before_horizontal_pan(self):
         """Northern Home first descends to the measured corridor, then pans east."""
         target = measured_building_object(

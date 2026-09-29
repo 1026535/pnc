@@ -565,6 +565,94 @@ class CampaignVisualProfileTests(unittest.TestCase):
             {UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON},
         )
 
+    def test_native_formation_preparation_publishes_only_the_owned_back(self) -> None:
+        """Both publishers type the recorded Challenge preparation via the dedicated profile."""
+
+        for name in (
+            "hero_formation_challenge_preparation_20260929.png",
+            "hero_formation_challenge_preparation_reconcile_20260929.png",
+        ):
+            image = _image(name)
+            recognition = load_visual_screen_recognizer().recognize(image)
+            self.assertEqual(
+                ("hero_formation_challenge_preparation",),
+                recognition.profile_ids,
+            )
+            self.assertEqual(
+                {UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON},
+                {item.selector_id for item in recognition.controls},
+            )
+            self.assertEqual(
+                {UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON},
+                {item.selector_id for item in recognition.dismiss_controls},
+            )
+            capture = _capture(image)
+            for publisher in ("builder", "navigation"):
+                with self.subTest(frame=name, publisher=publisher):
+                    observation = (
+                        _builder().build(capture)
+                        if publisher == "builder"
+                        else _navigation_perception().build(capture)
+                    )
+                    self.assertEqual(observation.screen_type, ScreenType.PNC_HERO_FORMATION)
+                    self.assertEqual(
+                        observation.decision.layout_id, "hero_formation_challenge_preparation"
+                    )
+                    control = observation.get(UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON)
+                    self.assertIsNotNone(control)
+                    self.assertEqual(control.source_kind, VisibleElementSourceKind.TEMPLATE)
+                    self.assertEqual(
+                        control.source_layout_id, "hero_formation_challenge_preparation"
+                    )
+                    self.assertEqual(control.frame_ref, capture.frame_ref)
+                    # Formation Challenge/Save/edit/continuation controls stay
+                    # unpublished, and no Campaign stage/AP facts are projected.
+                    self.assertFalse(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+                    self.assertFalse(observation.has(UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON))
+                    self.assertFalse(observation.has(UiElementId.PNC_HERO_FORMATION_HEADER))
+                    self.assertIsNone(observation.campaign_stage)
+
+    def test_formation_preparation_identity_requires_both_independent_anchors(self) -> None:
+        recognizer = load_visual_screen_recognizer()
+        image = _image("hero_formation_challenge_preparation_20260929.png").resize((540, 960))
+
+        for region in ((108, 10, 312, 38), (124, 58, 270, 82)):
+            with self.subTest(erased=region):
+                negative = image.copy()
+                negative.paste((0, 0, 0), region)
+                result = recognizer.recognize(negative)
+                self.assertNotIn("hero_formation_challenge_preparation", result.profile_ids)
+                self.assertNotIn(
+                    UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON,
+                    {item.selector_id for item in result.controls},
+                )
+
+    def test_formation_preparation_missing_back_keeps_identity_without_control(self) -> None:
+        recognizer = load_visual_screen_recognizer()
+        image = _image("hero_formation_challenge_preparation_20260929.png").resize((540, 960))
+        image.paste((0, 0, 0), (14, 4, 62, 46))
+
+        result = recognizer.recognize(image)
+
+        self.assertEqual(("hero_formation_challenge_preparation",), result.profile_ids)
+        self.assertNotIn(
+            UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON,
+            {item.selector_id for item in result.controls},
+        )
+
+    def test_current_stage_fixture_does_not_match_formation_preparation(self) -> None:
+        """A saved Campaign stage frame must not degrade into the formation variant."""
+
+        recognizer = load_visual_screen_recognizer()
+        for name in ("campaign_stage_6_5_20260927.png", "campaign_stage_10_3.png"):
+            with self.subTest(name=name):
+                result = recognizer.recognize(_image(name))
+                self.assertNotIn("hero_formation_challenge_preparation", result.profile_ids)
+                self.assertNotIn(
+                    UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON,
+                    {item.selector_id for item in result.controls},
+                )
+
     def test_campaign_challenge_uses_measured_geometry_at_both_viewports(self) -> None:
         recognizer = load_visual_screen_recognizer()
         control = next(

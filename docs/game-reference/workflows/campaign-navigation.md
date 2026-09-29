@@ -195,3 +195,34 @@ conflicting credible pairs within a strip still abstain. Cost remains tied to
 the measured Challenge bounds. No Blitz control, formation state or spending
 permission is inferred. Corrected-candidate live C2/C3 validation remains with
 the M1 owner.
+
+## Challenge formation preparation, September 29
+
+**Artifact-observed:** M1 runtime `20260929T050725Z_37cfd0b9` on `testing`,
+candidate `8e1fa8dd`, capture0084
+(`tests/data/screen_recognition/hero_formation_challenge_preparation_20260929.png`).
+An authorized non-spending stage 6-5 Challenge tap opened the Hero Formation
+preparation surface — the packaged `openHeroBattlePosWin` /
+`CommonSelectHeroBattlePosPanel` path documented in the September 13 boundary
+section — but the exact `8e1fa8dd` runtime classified it `UNKNOWN` with no
+layout or controls. A later manual tap on the panel's top-left gold diamond
+Back glyph returned to the typed 6-5 stage detail, and the reviewed chain then
+reached Home at 05:18:41Z with no spending or formation mutation. The reconcile
+capture `hero_formation_challenge_preparation_reconcile_20260929.png` decodes
+identically to the reference frame; both share one invocation and are
+correlated, not an independent holdout. Installed build was not recorded.
+
+The `hero_formation_challenge_preparation` profile now qualifies this variant
+on two independent invariant anchors — the `Hero Formation` title and the
+`Deployable Heroes` section heading — at the unchanged 0.95 floor, and
+publishes only its measured Back control
+(`PNC_CAMPAIGN_FORMATION_BACK_BUTTON`), withheld on the OCR-driven SaveForm and
+any other Hero Formation appearance. The reviewed navigation graph gains the
+non-spending edge PNC_HERO_FORMATION Back -&gt; PNC_CAMPAIGN_STAGE; any other
+observed destination stops after that one owned tap. Formation
+Challenge/GoFight/Save, hero edit, Auto, and continuation controls remain
+unpublished, and no stage/AP facts are projected onto formation.
+
+Typed recognition and the owned typed return remain awaiting final candidate
+live proof; the continuation/battle authority boundary is unchanged and
+unknown. No full-plan acceptance or mode availability is implied.

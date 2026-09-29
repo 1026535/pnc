@@ -2161,6 +2161,11 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_CAMPAIGN_MAP, selector.PNC_CAMPAIGN_HOME_PORTAL, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_CAMPAIGN_CHAPTER, selector.PNC_CAMPAIGN_BACK_BUTTON, frozenset({screen.PNC_CAMPAIGN_MAP})),
         NavigationEdge(screen.PNC_CAMPAIGN_STAGE, selector.PNC_CAMPAIGN_CLOSE_BUTTON, frozenset({screen.PNC_CAMPAIGN_CHAPTER})),
+        # The dedicated preparation Back is published only by the
+        # hero_formation_challenge_preparation layout; the OCR SaveForm and
+        # other formation variants never carry it, so this edge cannot fire
+        # there. Only the observed Campaign stage destination is qualified.
+        NavigationEdge(screen.PNC_HERO_FORMATION, selector.PNC_CAMPAIGN_FORMATION_BACK_BUTTON, frozenset({screen.PNC_CAMPAIGN_STAGE})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_QUEST, quest),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
         NavigationEdge(screen.PNC_BAG_CHEST_PREVIEW, selector.PNC_BAG_CHEST_PREVIEW_CLOSE, frozenset({screen.PNC_BAG})),
