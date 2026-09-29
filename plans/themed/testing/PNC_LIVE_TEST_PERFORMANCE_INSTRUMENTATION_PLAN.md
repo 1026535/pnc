@@ -19,7 +19,7 @@ ChatGPT Pro review baseline: `b0701df653fa774678ab96b3c293ac13eeb25b1e`. Impleme
 
 Repair and use the existing world-map P1 capture benchmark as a calibration harness, then attach one optional, run-scoped performance collector with a no-op default to the canonical live-test lifecycle. Scope this to supported offline/live test entry points, not always-on telemetry for routine automation. Enable collection only through an explicit benchmark/test option. Cover both authored/direct `ScriptRunner` executions and `CoreRuntime`/`CoreWorkflowRunner` executions built through the shared connected-runtime path. During implementation, inventory the live-test entry points and adapt a bypassing canonical seam if one exists; do not stop after measuring only the P1 tool. Start each outer wall timer before that run's application/runtime construction and preparation; finish it after cleanup, including exceptional exits. Do not claim to include Python imports that occur before the entry point.
 
-Give each run a stable measurement ID and correlate it with the existing core trace when present; preserve parent/child identity where a preparation run precedes a workflow run. Keep reports separate from navigation events and emit one per-run summary under `.local-data/reports/performance/`. Add a small local summarizer that groups existing reports by workflow/runner path and ranks total duration, stage contribution, failure, wait, and recovery frequency. Do not write a report event on every trace record or add a hosted metrics backend.
+Give each run a stable measurement ID and correlate it with the existing core trace when present; preserve parent/child identity where a preparation run precedes a workflow run. Keep reports separate from navigation events and emit one per-run summary under `.local-data/performance-metrics/runs/`. Add a small local summarizer that groups existing reports by workflow/runner path and ranks total duration, stage contribution, failure, wait, and recovery frequency. Do not write a report event on every trace record or add a hosted metrics backend.
 
 Record only the first useful timing layers:
 
@@ -39,11 +39,12 @@ Do not add a metrics backend, required profiler dependency, broad event tracing,
 
 ## Local use
 
-- Set `PNC_PERFORMANCE_REPORTS=1` before invoking a supported `build_application_runner` entry point to write one local report per connected workflow lifecycle. Reports default to `.local-data/reports/performance/` and remain disabled otherwise.
-- Run a representative saved-fixture baseline with `py tools/benchmark_screen_recognition.py --warm-replays 5 --measurement-profile post_d --sample home_city_core.png --sample world_map_core.png --sample bag.png --sample chat_alliance.png --sample quest_daily_sep09.png --output .local-data/reports/performance/screen-recognition-baseline.json`. This is host-only and does not use ADB; `--sample` validates all manifest metadata and split-isolation rules while decoding and hash-checking only selected images.
+- Set `PNC_PERFORMANCE_REPORTS=1` before invoking a supported `build_application_runner` entry point to write one local report per connected workflow lifecycle. Reports default to `.local-data/performance-metrics/runs/` and remain disabled otherwise.
+- Run the weekly saved-fixture comparison with `py tools/weekly_performance_report.py`. It benchmarks five warm replays of the same five reviewed fixtures, records per-fixture operation medians and OCR work counts, and compares them with the latest compatible run. It also summarizes instrumented workflow spans collected during the preceding seven days. The runner is host-only and does not use ADB.
+- Raw benchmark results, span reports, and weekly comparisons live in `.local-data/performance-metrics/{benchmarks,runs,weekly}/`. The root is explicitly ignored by Git and must remain untracked. The fixture runner uses `--sample` to validate all manifest metadata and split-isolation rules while decoding and hash-checking only selected images.
 - Add `--performance-report` to capture nested observation, OCR-backend, and Home-camera scale spans with thread CPU time. Reports also record the current Git revision, a content-only dirty-source fingerprint, host identity, and relevant image/OCR dependency versions.
-- For a separately authorized representative live P1 run, use `py tools/benchmark_world_map_p1_capture.py --performance-report`; all runtime-dependent measurements finish before the connected runtime closes.
-- Rank collected runs with `py tools/summarize_performance_reports.py --directory .local-data/reports/performance`.
+- For a separately authorized representative live P1 run, use `py tools/benchmark_world_map_p1_capture.py --performance-report`; its span report goes under `runs/` and its timing JSON under `benchmarks/`, after all runtime-dependent measurements finish and the connected runtime closes.
+- Rank collected span reports with `py tools/summarize_performance_reports.py --directory .local-data/performance-metrics/runs`.
 
 ## Phases and acceptance
 
@@ -57,7 +58,7 @@ Fix the P1 capture benchmark's context scope so all measurements using the conne
 
 Implement the collector and connect the entry-point, connected-runtime, ADB, screenshot, observation/OCR, explicit wait, and recovery measurements above. Enable it for the P1 benchmark and the canonical `ScriptRunner` and `CoreRuntime` run shapes. Disabled collection must preserve existing behavior. Capture failures and cleanup as outcomes, and correlate each report with its core trace or mark that trace as unavailable. Verify every live entry point found in the phase-one inventory either flows through these seams or has a focused adapter.
 
-**Accept when:** focused offline tests cover normal, timeout/exception, failed construction, recovery, cleanup, nested spans, and worker-thread identity; fake runs through both runner shapes produce correctly correlated summaries; and the local summarizer can rank reports across workflow paths. Reports remain low-volume, contain no credentials or config secrets, and write under `.local-data/reports/performance/`. Measure disabled and enabled overhead against the same uninstrumented workload.
+**Accept when:** focused offline tests cover normal, timeout/exception, failed construction, recovery, cleanup, nested spans, and worker-thread identity; fake runs through both runner shapes produce correctly correlated summaries; and the local summarizer can rank reports across workflow paths. Reports remain low-volume, contain no credentials or config secrets, and write under the explicitly ignored `.local-data/performance-metrics/` root. Measure disabled and enabled overhead against the same uninstrumented workload.
 
 ### 3. Establish cross-workflow baselines and prioritize optimizations
 

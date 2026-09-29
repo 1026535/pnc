@@ -7,6 +7,7 @@ import json
 import statistics
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
@@ -79,15 +80,21 @@ def main() -> None:
     parser.add_argument("--label", default="world_map_p1_capture_benchmark")
     parser.add_argument("--skip-prepare", action="store_true")
     parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the benchmark JSON here; defaults to the local performance-metrics folder.",
+    )
+    parser.add_argument(
         "--performance-report",
         action="store_true",
-        help="Write a run-scoped report beneath .local-data/reports/performance.",
+        help="Write a run-scoped report beneath .local-data/performance-metrics/runs/.",
     )
     arguments = parser.parse_args()
     if arguments.iterations <= 0:
         raise ValueError("iterations must be positive.")
 
-    performance_directory = root / ".local-data" / "reports" / "performance"
+    performance_directory = root / ".local-data" / "performance-metrics" / "runs"
     writer = (
         PerformanceReportWriter(performance_directory)
         if arguments.performance_report
@@ -125,6 +132,17 @@ def main() -> None:
     benchmark_report["account"] = arguments.account
     if performance_run is not None and performance_run.report_path is not None:
         benchmark_report["performance_report"] = str(performance_run.report_path)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    output_path = arguments.output or (
+        root
+        / ".local-data"
+        / "performance-metrics"
+        / "benchmarks"
+        / f"world-map-p1-{timestamp}.json"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    benchmark_report["benchmark_result_path"] = str(output_path)
+    output_path.write_text(json.dumps(benchmark_report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(benchmark_report, indent=2, sort_keys=True))
 
 

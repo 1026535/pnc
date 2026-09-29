@@ -2032,7 +2032,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--performance-report",
         action="store_true",
-        help="Write local nested timing spans under .local-data/reports/performance/.",
+        help="Write local nested timing spans under .local-data/performance-metrics/runs/.",
     )
     arguments = parser.parse_args(argv)
     if arguments.coverage_audit:
@@ -2045,7 +2045,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_path = arguments.output or arguments.root / "artifacts" / "non_yolo_recognition" / "coverage_audit.json"
     else:
         writer = (
-            PerformanceReportWriter(ROOT / ".local-data" / "reports" / "performance")
+            PerformanceReportWriter(ROOT / ".local-data" / "performance-metrics" / "runs")
             if arguments.performance_report
             else None
         )
@@ -2073,7 +2073,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "selected_samples",
                     None if arguments.sample is None else ",".join(arguments.sample),
                 )
-        output_path = arguments.output or ROOT / "artifacts" / "screen_recognition" / "benchmark.json"
+        if performance_run is not None and performance_run.report_path is not None:
+            document["performance_report"] = str(performance_run.report_path)
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        output_path = arguments.output or (
+            ROOT
+            / ".local-data"
+            / "performance-metrics"
+            / "benchmarks"
+            / f"screen-recognition-{timestamp}.json"
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(document, indent=2, sort_keys=True) + "\n",

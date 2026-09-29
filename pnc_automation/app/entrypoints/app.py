@@ -437,7 +437,7 @@ def build_application_runner(
     if workspace_root.name == "config":
         workspace_root = workspace_root.parent
     resolved_performance_writer = performance_report_writer or PerformanceReportWriter.from_environment(
-        workspace_root / ".local-data" / "reports" / "performance"
+        workspace_root / ".local-data" / "performance-metrics" / "runs"
     )
     if world_yolo_producer is None and app_config.runtime.world_yolo_model_path is not None:
         world_yolo_producer = load_world_yolo_producer(app_config.runtime.world_yolo_model_path)

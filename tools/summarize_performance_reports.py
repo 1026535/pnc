@@ -119,7 +119,7 @@ def main() -> None:
     parser.add_argument(
         "--directory",
         type=Path,
-        default=root / ".local-data" / "reports" / "performance",
+        default=root / ".local-data" / "performance-metrics" / "runs",
     )
     parser.add_argument("--limit-spans", type=int, default=8)
     arguments = parser.parse_args()
