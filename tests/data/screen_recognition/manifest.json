@@ -1770,26 +1770,7 @@
         "source_decoded_sha256": "f2a0cfef22d9a70dfdf14d06190cdcb239c1f06ec09e218e7091c20a93f036a1",
         "file_sha256": "450a2d6261e4eb27420e04c3746b871bc31a1b52ab89b82d1a246e43e325b9ea",
         "derivative": "Native900x1600 RGBA; only opaque masks on variable player name, Might value and coordinates values; static labels and all other pixels preserved. Reference-only same-frame evidence.",
-        "mask_rectangles_xyxy": [
-          [
-            158,
-            280,
-            630,
-            341
-          ],
-          [
-            318,
-            374,
-            714,
-            431
-          ],
-          [
-            379,
-            434,
-            714,
-            484
-          ]
-        ]
+        "mask_rectangles_xyxy": "[[158, 280, 630, 341], [318, 374, 714, 431], [379, 434, 714, 484]]"
       }
     },
     {
@@ -1982,10 +1963,7 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/testing/20260927T161532Z_core_20260927T161139Z_cb7d3149_0057_c2_64_stage_after_0.png",
         "source_file_sha256": "762a6842017e541dee49c64dcf80c6645cb1bea4b81136ce1513981275b6a3ea",
         "candidate": "d07b2d8f",
-        "native_size": [
-          900,
-          1600
-        ],
+        "native_size": "900x1600",
         "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
       }
     },
@@ -2002,10 +1980,7 @@
         "source": "C:/Users/lebel/pnc/artifacts/2026-09-27/testing/20260927T161557Z_core_20260927T161139Z_cb7d3149_0069_c2_65_stage_after_0.png",
         "source_file_sha256": "bb48af090876a9db53baa926f402b2862fe9a09c6101a84683f70b86f5e3e137",
         "candidate": "d07b2d8f",
-        "native_size": [
-          900,
-          1600
-        ],
+        "native_size": "900x1600",
         "qualification": "Observed regression sample; both stages correlated in one session, not independent holdout"
       }
     }
