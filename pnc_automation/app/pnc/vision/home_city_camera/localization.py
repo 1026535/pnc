@@ -181,6 +181,40 @@ class HomeCityCameraLocalizer:
                 measured.set_attribute("localized", proof.localized)
             return proof
 
+    def localize_endpoint(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
+        """Measure one calibrated endpoint-scale hypothesis on the current frame.
+
+        This scoped probe is not the unrestricted ambiguity search. Navigation
+        certifies its first endpoint candidate with ``localize`` before use.
+        """
+
+        normalization = self._catalog.normalization
+        endpoint = None if normalization is None else normalization.endpoint
+        frame = self._coerce_frame(image)
+        frame_size = (
+            image.original_size if isinstance(image, PreparedFrame) else image.size
+        )
+        if endpoint is None or frame is None:
+            return HomeCityCameraProof(
+                status=HomeCityCameraStatus.UNSUPPORTED,
+                reason=(
+                    "missing_endpoint_calibration"
+                    if endpoint is None else "unsupported_frame_layout"
+                ),
+                frame_size=frame_size,
+            )
+        proposal_frame = self._proposal_frame(frame)
+        midpoint = sum(endpoint.zoom_interval) / 2
+        scale = min(self._zoom_search, key=lambda value: abs(value - midpoint))
+        hypothesis = self._evaluate_zoom(frame, proposal_frame, scale)
+        if not hypothesis.qualified:
+            if self._is_ambiguous(hypothesis):
+                return self._ambiguous("conflicting_landmark_clusters", hypothesis, frame_size)
+            return self._insufficient([hypothesis], frame_size)
+        if self._rival_cluster(hypothesis) is not None:
+            return self._ambiguous("conflicting_landmark_clusters", hypothesis, frame_size)
+        return self._publish(frame, hypothesis, frame_size, proposal_frame)
+
     def _localize(self, image: Image.Image | PreparedFrame) -> HomeCityCameraProof:
         """Compute one camera proof; ``localize`` owns optional timing."""
 

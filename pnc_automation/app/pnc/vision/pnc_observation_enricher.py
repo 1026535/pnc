@@ -2024,6 +2024,7 @@ class PncObservationEnricher:
                     lines=(),
                     selector_registry=self.selector_registry,
                     camera=self.home_city_camera,
+                    camera_mode=request.home_city_camera_mode,
                 ),
             )
         if (

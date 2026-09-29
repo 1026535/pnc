@@ -10,7 +10,9 @@ from PIL import Image
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import WorkflowContext
+from pnc_automation.app.automation.engine.navigation_core import HomeCityObservationRequest
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraScanMode
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -55,6 +57,7 @@ class HomeCityNavigationRequestTests(unittest.TestCase):
         self.assertEqual((), additions.screen_evidence)
         build.assert_called_once_with(
             image=image, lines=(), selector_registry=None, camera=camera,
+            camera_mode=HomeCityCameraScanMode.UNRESTRICTED,
         )
         self.assertEqual([], context.mock_calls)
 
@@ -114,11 +117,16 @@ class HomeCityNavigationRequestTests(unittest.TestCase):
             runtime.navigation.open_building.call_args,
             runtime.navigation.discover_home_city.call_args,
         ):
-            self.assertIs(home, call.kwargs["observe_content"]("proof"))
+            self.assertIs(home, call.kwargs["observe_content"](
+                HomeCityObservationRequest("proof", HomeCityCameraScanMode.ENDPOINT_PROBE)
+            ))
         self.assertEqual(2, runtime.observe.call_count)
         for call in runtime.observe.call_args_list:
             self.assertTrue(call.kwargs["include_content"])
-            self.assertEqual(ObservationRequest.home_city_navigation(), call.kwargs["request"])
+            self.assertEqual(
+                ObservationRequest.home_city_navigation(mode=HomeCityCameraScanMode.ENDPOINT_PROBE),
+                call.kwargs["request"],
+            )
 
     def test_popup_recovery_restores_requested_home_camera_scope(self):
         popup = make_observation(ScreenType.PNC_POPUP)

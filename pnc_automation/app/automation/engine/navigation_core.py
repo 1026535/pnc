@@ -31,7 +31,9 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraScanMode,
     HomeCityCameraProof,
+    HomeCityCameraStatus,
     HomeCityViewEvidence,
     HomeCityZoomStatus,
 )
@@ -179,13 +181,21 @@ class NavigationPolicy:
             raise ValueError("Home zoom and pose observation budgets must be positive integers.")
 
 
+@dataclass(frozen=True, slots=True)
+class HomeCityObservationRequest:
+    """One capture label and its scoped camera measurement contract."""
+
+    label: str
+    camera_mode: HomeCityCameraScanMode
+
+
 @dataclass(slots=True)
 class _HomeCityOperation:
     """One Home request's deadline, input counts and current evidence lifetime."""
 
     core: NavigationCore
     targets: tuple[HomeCityCameraTarget, ...]
-    observe_content: Callable[[str], Observation]
+    observe_content: Callable[[HomeCityObservationRequest], Observation]
     label: str
     started: float
     state: HomeCityScanState = field(default_factory=HomeCityScanState)
@@ -210,13 +220,26 @@ class _HomeCityOperation:
             self.stop(HomeCityScanStopReason.DEADLINE_EXHAUSTED,
                       "Home navigation exhausted its operation deadline; no further input sent.")
 
-    def capture(self, previous: Observation | None, stage: str) -> Observation:
+    def capture(
+        self,
+        previous: Observation | None,
+        stage: str,
+        *,
+        camera_mode: HomeCityCameraScanMode | None = None,
+    ) -> Observation:
         """Capture fresh content without hiding extra captures in another observer."""
         self.check_deadline()
         if previous is not None:
             self.core.wait("home_city_poll", self.core.policy.poll_seconds)
         self.check_deadline()
-        frame = self.observe_content(f"{self.label}_{stage}")
+        mode = camera_mode or (
+            HomeCityCameraScanMode.NORMALIZED_ENDPOINT
+            if self.calibration_id is not None
+            else HomeCityCameraScanMode.ENDPOINT_PROBE
+        )
+        frame = self.observe_content(
+            HomeCityObservationRequest(f"{self.label}_{stage}", mode)
+        )
         self.check_deadline()
         if previous is not None:
             if frame.captured_at <= previous.captured_at:
@@ -301,6 +324,10 @@ class _HomeCityOperation:
         pending_wheel: Observation | None = None
         while True:
             view = self.view(current)
+            proof = current.spatial_surface.camera_proof
+            if proof is not None and proof.status is HomeCityCameraStatus.AMBIGUOUS:
+                self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
+                          "Home fixed landmarks disagree; no dependent wheel or building input sent.")
             if view is not None and view.zoom_status == HomeCityZoomStatus.UNSUPPORTED:
                 self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
                           "This Home view has no supported endpoint calibration; no wheel input sent.")
@@ -309,7 +336,10 @@ class _HomeCityOperation:
                 if passive >= self.core.policy.max_home_pose_observations:
                     self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
                               "Endpoint confirmation exceeded its passive observation allowance.")
-                after = self.capture(current, "endpoint_confirmation")
+                after = self.capture(
+                    current, "endpoint_confirmation",
+                    camera_mode=HomeCityCameraScanMode.UNRESTRICTED,
+                )
                 passive += 1
                 if self.endpoint(after) and self.view(after).calibration_id == view.calibration_id:
                     self.calibration_id = view.calibration_id
@@ -320,8 +350,8 @@ class _HomeCityOperation:
                 HomeCityZoomStatus.UNRESOLVED, HomeCityZoomStatus.UNSUPPORTED,
             ):
                 # A current positively qualified anchor may normalize an unlocalized
-                # start. After input, unresolved scale only permits passive captures.
-                if pending_wheel is not None or view is None or view.zoom_anchor is None:
+                # start. After input, it must shrink before another wheel is allowed.
+                if view is None or view.zoom_anchor is None:
                     if passive >= self.core.policy.max_home_pose_observations:
                         self.stop(HomeCityScanStopReason.ZOOM_UNRESOLVED,
                                   "Current Home zoom could not be qualified within its passive allowance.")
@@ -331,9 +361,20 @@ class _HomeCityOperation:
             if pending_wheel is not None:
                 before_proof = pending_wheel.spatial_surface.camera_proof
                 after_proof = current.spatial_surface.camera_proof
+                before_anchor = self.view(pending_wheel).zoom_anchor
+                after_anchor = view.zoom_anchor
+                anchor_shrank = (
+                    before_anchor is not None and after_anchor is not None
+                    and before_anchor.qualification_id == after_anchor.qualification_id
+                    and after_anchor.bounds.width <= before_anchor.bounds.width
+                    and after_anchor.bounds.height <= before_anchor.bounds.height
+                    and (after_anchor.bounds.width < before_anchor.bounds.width
+                         or after_anchor.bounds.height < before_anchor.bounds.height)
+                )
                 progressed = (before_proof is not None and after_proof is not None
-                              and after_proof.localized
-                              and (not before_proof.localized or after_proof.zoom < before_proof.zoom))
+                               and before_proof.localized and after_proof.localized
+                               and after_proof.zoom < before_proof.zoom)
+                progressed = progressed or anchor_shrank
                 if not progressed:
                     unchanged = (before_proof is not None and after_proof is not None
                                  and before_proof.localized and after_proof.localized
@@ -424,7 +465,7 @@ class NavigationCore:
         self,
         target: HomeCityObjectId,
         *,
-        observe_content: Callable[[str], Observation],
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
         require_measured: bool = False,
         home_city_slot: HomeCitySlotSelector | None = None,
@@ -445,7 +486,7 @@ class NavigationCore:
         self,
         target: HomeCityObjectId,
         *,
-        observe_content: Callable[[str], Observation],
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
         home_city_slot: HomeCitySlotSelector | None = None,
     ) -> Observation:
@@ -480,7 +521,7 @@ class NavigationCore:
         return result
 
     def discover_home_city(
-        self, *, observe_content: Callable[[str], Observation],
+        self, *, observe_content: Callable[[HomeCityObservationRequest], Observation],
     ) -> HomeCityScanResult:
         """Survey qualified candidates within one budget, without tapping occupants."""
         operation = self._home_operation(observe_content, load_home_city_camera_catalog().targets)
@@ -493,7 +534,7 @@ class NavigationCore:
         return result
 
     def _home_operation(
-        self, observe_content: Callable[[str], Observation],
+        self, observe_content: Callable[[HomeCityObservationRequest], Observation],
         targets: tuple[HomeCityCameraTarget, ...],
     ) -> _HomeCityOperation:
         """Allocate one request lifetime; internal reacquisition never starts another."""

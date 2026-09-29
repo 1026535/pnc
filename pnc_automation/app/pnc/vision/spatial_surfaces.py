@@ -14,6 +14,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_definition_for_label,
 )
 from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraScanMode,
     HomeCityCameraProof,
     HomeCityCameraStatus,
     HomeCityViewEvidence,
@@ -162,6 +163,7 @@ def build_home_city_spatial_surface(
     lines: tuple[OcrLine, ...],
     selector_registry: SelectorRegistry | None,
     camera: HomeCityCameraLocalizer | None = None,
+    camera_mode: HomeCityCameraScanMode = HomeCityCameraScanMode.UNRESTRICTED,
 ) -> SpatialSurfaceObservation:
     """Builds the canonical home-city spatial surface using camera-relative building parsing.
 
@@ -199,9 +201,19 @@ def build_home_city_spatial_surface(
                 frame_size=image.size,
             )
         else:
-            camera_proof = camera.localize(prepared)
+            camera_proof = (
+                camera.localize(prepared)
+                if camera_mode is HomeCityCameraScanMode.UNRESTRICTED
+                else camera.localize_endpoint(prepared)
+            )
             home_city_view = camera.analyze_view(prepared, camera_proof=camera_proof)
-            if camera_proof.localized:
+            if camera_proof.localized and (
+                camera_mode is HomeCityCameraScanMode.UNRESTRICTED
+                or (
+                    camera_mode is HomeCityCameraScanMode.NORMALIZED_ENDPOINT
+                    and home_city_view.zoom_status is HomeCityZoomStatus.AT_ENDPOINT
+                )
+            ):
                 objects = merge_camera_target_objects(
                     objects,
                     camera.matched_target_objects(prepared, proof=camera_proof),

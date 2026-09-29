@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraScanMode
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -35,6 +36,7 @@ class ObservationRequest:
     world_map_coordinate_only: bool = False
     include_world_yolo_objects: bool = False
     include_home_city_camera: bool = False
+    home_city_camera_mode: HomeCityCameraScanMode = HomeCityCameraScanMode.UNRESTRICTED
     artifact_selection: ObservationArtifactSelection | None = None
 
     @classmethod
@@ -99,18 +101,23 @@ class ObservationRequest:
         )
 
     @classmethod
-    def home_city_navigation(cls) -> "ObservationRequest":
+    def home_city_navigation(
+        cls, *, mode: HomeCityCameraScanMode = HomeCityCameraScanMode.UNRESTRICTED,
+    ) -> "ObservationRequest":
         """Request measured Home pose, zoom and bodies without unrelated HUD OCR.
 
         Independent screen recognition and interruption checks still own the
         frame. This scope never supplies screen identity or a predicted body.
         """
 
+        if not isinstance(mode, HomeCityCameraScanMode):
+            raise ValueError("Home navigation requires a typed camera scan mode.")
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_HOME_CITY}),
             include_popup_guard=True,
             include_loading_guard=True,
             include_home_city_camera=True,
+            home_city_camera_mode=mode,
         )
 
     @classmethod

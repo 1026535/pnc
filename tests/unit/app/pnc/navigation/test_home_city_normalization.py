@@ -8,14 +8,15 @@ from unittest.mock import patch
 
 from pnc_automation.app.automation.engine.core_runtime import _sanitize_trace_entry
 from pnc_automation.app.automation.engine.navigation_core import (
-    NavigationCore, NavigationPolicy, _HomeCityOperation, reviewed_navigation_edges,
+    HomeCityObservationRequest, NavigationCore, NavigationPolicy, _HomeCityOperation,
+    reviewed_navigation_edges,
 )
 from pnc_automation.app.pnc.domain.action_requests import (
     SwipeAction, SwipePurpose, TapSpatialObjectAction, WheelAction,
 )
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.home_city_camera import (
-    HomeCityCameraProof, HomeCityCameraStatus, HomeCityViewEvidence,
+    HomeCityCameraProof, HomeCityCameraScanMode, HomeCityCameraStatus, HomeCityViewEvidence,
     HomeCityZoomAnchor, HomeCityZoomStatus,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -37,7 +38,8 @@ _BODY = measured_building_object(
 
 
 def home(index, *, status=HomeCityZoomStatus.AT_ENDPOINT, zoom=.75,
-         objects=(), anchor=True, localized=True, translation=(-288, 44)):
+         objects=(), anchor=True, localized=True, translation=(-288, 44),
+         anchor_bounds=Bounds(430, 480, 40, 40)):
     """Publish a deliberately controlled producer verdict on a distinct frame."""
     result = camera_home_frame(
         objects, image_size=(900, 1600), zoom=zoom, translation=translation,
@@ -48,7 +50,7 @@ def home(index, *, status=HomeCityZoomStatus.AT_ENDPOINT, zoom=.75,
     )
     view = HomeCityViewEvidence(
         status, "test", "test_endpoint", HomeCityZoomAnchor(
-            (450, 500), Bounds(430, 480, 40, 40), "test_wheel_only",
+            anchor_bounds.center(), anchor_bounds, "test_wheel_only",
         ) if anchor else None, (900, 1600),
     )
     return replace(result, spatial_surface=replace(
@@ -68,6 +70,66 @@ def operation(frames, *, policy=None, actuator=None, clock=lambda: 0.0):
 
 
 class HomeNormalizationTests(unittest.TestCase):
+    def test_endpoint_probe_is_certified_once_then_pan_uses_fixed_scale(self):
+        frames = iter((home(0), home(1), home(2, translation=(-288, 100))))
+        requests = []
+        op = operation([])
+
+        def observe(request: HomeCityObservationRequest):
+            requests.append(request)
+            return next(frames)
+
+        op.observe_content = observe
+        normalized = op.normalize()
+        op.localized_after(normalized, "after_pan")
+        self.assertEqual(
+            [HomeCityCameraScanMode.ENDPOINT_PROBE,
+             HomeCityCameraScanMode.UNRESTRICTED,
+             HomeCityCameraScanMode.NORMALIZED_ENDPOINT],
+            [request.camera_mode for request in requests],
+        )
+        self.assertEqual([], op.core.actuator.actions)
+
+    def test_shrinking_current_anchor_proves_progress_without_arbitrary_scale_fit(self):
+        op = operation([
+            home(0, status=HomeCityZoomStatus.UNRESOLVED, localized=False),
+            home(1, status=HomeCityZoomStatus.UNRESOLVED, localized=False,
+                 anchor_bounds=Bounds(430, 480, 36, 36)),
+            home(2), home(3),
+        ])
+        self.assertEqual(home(3), op.normalize())
+        self.assertEqual(2, op.state.zoom_inputs)
+
+    def test_moved_but_same_size_anchor_is_not_zoom_progress(self):
+        op = operation([
+            home(0, status=HomeCityZoomStatus.UNRESOLVED, localized=False),
+            *(
+                home(index, status=HomeCityZoomStatus.UNRESOLVED, localized=False,
+                     anchor_bounds=Bounds(450, 490, 40, 40))
+                for index in (1, 2, 3)
+            ),
+        ])
+        with self.assertRaises(HomeCityScanError) as error:
+            op.normalize()
+        self.assertIs(error.exception.result.stop_reason, HomeCityScanStopReason.ZOOM_UNRESOLVED)
+        self.assertEqual(1, op.state.zoom_inputs)
+
+    def test_ambiguous_fixed_landmarks_refuse_even_a_visible_wheel_anchor(self):
+        initial = home(0, status=HomeCityZoomStatus.UNRESOLVED, localized=False)
+        surface = initial.spatial_surface
+        ambiguous = replace(initial, spatial_surface=replace(
+            surface,
+            camera_proof=HomeCityCameraProof(
+                HomeCityCameraStatus.AMBIGUOUS, "conflicting_landmark_clusters",
+                frame_size=(900, 1600),
+            ),
+        ))
+        op = operation([ambiguous])
+        with self.assertRaises(HomeCityScanError) as error:
+            op.normalize()
+        self.assertIs(error.exception.result.stop_reason, HomeCityScanStopReason.ZOOM_UNRESOLVED)
+        self.assertEqual([], op.core.actuator.actions)
+
     def test_endpoint_needs_two_fresh_frames_without_wheel(self):
         op = operation([home(0), home(1)])
         self.assertEqual(home(1), op.normalize())
