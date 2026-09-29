@@ -1,6 +1,6 @@
 # Live failure follow-up — 2026-09-28
 
-Status: implementation authorized on 2026-09-28 after the reviewed audit. The user requested code slices first, Devin implementation and review, correction of review findings, then push. The earlier planning-only status below describes the completed audit phase.
+Status: source implementation, review corrections, and main delivery are complete at `4d9da06e97b00bc31b79f9692d2ad5020c74cc40`. The September 29 completion review below supersedes the earlier branch-delivery status. Live effectiveness remains awaiting ordinary-run evidence; historical incidents are not closed by code delivery. Earlier audit and implementation sections are retained as dated history.
 
 ## Implementation amendment and code slices
 
@@ -152,3 +152,41 @@ Review artifacts: lead `C:/Users/lebel/pnc/.local-data/live-failure-followup-202
 Live checkpoint: `C:/Users/lebel/pnc/.local-data/live-test-batches/live-failure-followup-20260928.md`. Canonical reservation-status reports configured testing reserved by `m-epic-coordinator`, scope `m-epic-01a0ca67`; its task lock is idle but the foreign long reservation still forbids admission. All dependent live cases stay pending. No task lease, ADB access, spending or castle/account switch was attempted. Resume only after that reservation is released and the clean candidate is repinned for one bounded Devin assignment.
 
 Delivery branch: `codex/live-failure-followup-plan-20260928`. Push the reviewed source plus this outcome-only document commit; retain the isolated worktree and ignored evidence. The primary checkout remains untouched. Final push receipt and any later live acceptance belong in the coordinator ledger/batch, without rewriting this source-validation record.
+
+## September 29 main delivery and completion review
+
+The user subsequently authorized main integration and an adjacent fix log, with live effectiveness assessed from ordinary runs the following week. Main delivery completed at `4d9da06e97b00bc31b79f9692d2ad5020c74cc40`; remote `main`, primary local `main`, and the clean task-owned landing checkout were verified at that commit. The September 29 follow-up request authorizes reviewing all found issues, addressing remaining work, pushing, then going idle. The repository's default branch is `main`; no remote `master` branch exists.
+
+The final integration preserves the published Campaign package split and restores the accepted regression contracts. The final affected gate on `4d9da06e`, based on `f89d8760aa8d869edb0442992fff484be37cbdd2`, passed **3,506 tests, with 7 skipped and no failures or errors**, across 402 modules. Run ID: `d6b4c67ea69748cca7f7b8d52f726c8e`; source fingerprint: `ba93a72437fd776aaf72a95751e5d0aa9008174bd06799d9bda70b9b876e32f0`. Machine evidence is retained in the owned checkout's `.test-impact/live-failure-main-accepted-{selection,results}.json`. The runtime and tests are unchanged by this completion amendment, so that passing gate is reused.
+
+The follow-up review inspected the final production diff, its publishers and consumers, the regression contracts, fixture provenance, and machine results. All six recorded findings are resolved:
+
+| Finding | Verified final disposition |
+|---|---|
+| PF1: inconsistent pressed VIP Close ownership | Normal and pressed variants share dismissal semantics and publish one measured control and one overlay candidate; one-tap recovery and absent-control refusal remain covered. |
+| PF2: reference frames labeled as independent validation | Both correlated September 28 VIP frames are reference evidence; the independent VIP holdouts retain their holdout classification. |
+| PF3: missing popup negatives | Missing-X and competing foreground-guard regressions exercise both publishers and refuse action. |
+| PF4: missing core Cash Mall return and unsafe legacy fallback | The captured Voucher Mall entry has a measured Back-to-Home edge; absent Back and unexpected destinations stop. The legacy owner also refuses missing Back. |
+| PF5: missing composed Campaign deadline proof | The public Campaign workflow, real runtime observation, and real navigation owner share one explicit 45-second clock through recovery; deadline crossing permits no late building input or success. |
+| PF6: weakened Campaign tests after package migration | Native RGBA/provenance and the 14-frame negative methods are AST-identical to the accepted `8ca19be5` versions. The geometry contract is present in the canonical unit suite. The corrected fixture manifest passes the final gate. |
+
+No additional actionable runtime defect was found. The remaining documentation gap was that this tracked plan still ended at feature-branch delivery; this amendment records the completed main integration and review without changing historical evidence.
+
+Every stable incident reference in the September 28 report was assigned a disposition in the [completion review](C:/Users/lebel/pnc/.local-data/reports/live-test-fixes/2026-09-29-review.md) and its [machine record](C:/Users/lebel/pnc/.local-data/reports/live-test-fixes/2026-09-29-review.json): 37 in-scope incident records and two related references. These are record counts, not distinct-event counts; the report's aliases and grouped events remain intact.
+
+| Incident family | Final source or operational disposition | Remaining evidence and owner |
+|---|---|---|
+| Savannah duplicate close, stacked update, and post-update render | Published one-shot recovery retained; foreground ownership and the captured standalone variant corrected. | Popup recovery owner: automatic recovery on an eligible ordinary occurrence; no forced offer or update. |
+| VIP Close persistence and associated identity alias | Observed pressed-control publication gap corrected; same appearance does not receive another tap merely because its Close appearance changes. | Popup recovery owner: independent pressed-state/live proof; historical persistence beyond the demonstrated publication gap remains unknown. |
+| Captured Voucher Mall | Canonical Cash Mall identity and measured Back-to-Home return delivered. | PW/popup owner: this captured entry's ordinary-run return. The older UNKNOWN/Cash Mall identity incident does not establish that its entry has the same layout or return contract. |
+| Campaign stage panels and Chat | Current Chapter 6 reflows, typed stage facts, two-tab Chat, and the observed Chat-to-More return integrated. | M/V14 owners: current route/stage acceptance and evidence-backed status for `INC-20260922-001`; the latter remains owner-status-unverified. |
+| Territory/Profile | Independent Territory identity and same-row name assembly integrated; qualified inspection and return contracts retained. | V19 owner: current automated name match and individually observed return to Home. |
+| Campaign host contention and later route reference | Narrow public-callback and 45-second deadline contracts are proven offline; timing/freshness limits retained. | M owner: normal-load route acceptance. Offline proof does not establish a latency fix. |
+| Stale reservation receipt | Correct receipt handoff and subsequent feature retry were already recorded in the audit; registry enforcement was correct. | Existing V44 evidence remains authoritative; no lease redesign or foreign receipt adoption. |
+| Read-only Savannah refusal and recovered identity preflight | Policy enforcement and the separately recorded recovery remain valid. | No global recovery-policy widening; missing preflight frame remains an evidence gap. |
+| K226/K287 mismatch and confirmation delay | Later authorized K287 selection and fresh confirmation were already recorded; no additional switch is needed for this delivery. | M owner must prove target identity for any separately assigned live work. |
+| Wall/Alliance recovery and recovered setup incidents | Exact-event canonical recovery or bounded operational recovery is documented. | No new generic recovery is justified; a later recurrence requires its own boundary evidence. |
+| Zoom/Exchange note and takeover popup | Recorded recovery preserved; unique causal/initial-frame evidence is insufficient for another source correction. | V44/M owners: retained or future relevant evidence; no invented popup family or historical closure. |
+| HD-Player access violation | Host executable failure, with no demonstrated PNC source defect. | Existing host/PW owner handles recurrence; no speculative application workaround. |
+
+The adjacent [fix collection](C:/Users/lebel/pnc/.local-data/reports/live-test-fixes/INDEX.md) and existing Monday report own the October 5 efficacy comparison. An absent popup, zero incidents without an eligible opportunity, or manual recovery does not count as automated success. This review starts no live test, switch, spending, worker, reservation, or recurring monitor. The earlier live checkpoint is historical and must be repinned and reauthorized before execution; no automatic continuation remains assigned. After publication, the lead goes idle.
