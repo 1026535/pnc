@@ -236,5 +236,3 @@ def _build_both(
 
 def _elements(observation: Observation) -> set[UiElementId]:
     return set(observation.visible_elements)
-
-__all__ = [name for name in globals() if not name.startswith("__")]

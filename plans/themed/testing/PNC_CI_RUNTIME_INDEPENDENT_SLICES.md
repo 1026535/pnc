@@ -94,7 +94,7 @@ Use the first feature's migrated real publication case to qualify the helper, th
 
 ## S2 — Pet Workshop
 
-**Owned existing files:** `pnc_automation/app/pnc/vision/pet_workshop.py`; `tests/unit/app/pnc/vision/test_pet_workshop_publication.py`; `tests/integration/vision/test_pet_workshop_publication.py` and `test_pet_workshop_analysis.py`; `tests/support/pnc/pet_workshop.py`. The solver support and domain solver are read-only.
+**Owned existing files:** `pnc_automation/app/pnc/vision/pet_workshop.py`; `tests/unit/app/pnc/vision/test_pet_workshop_publication.py`; `tests/integration/vision/test_pet_workshop_publication.py` and `test_pet_workshop_analysis.py`. The shared synthetic domain fixtures at `tests/support/pnc/pet_workshop.py`, solver support and domain solver are read-only. Keep that canonical fixture owner at its existing path: moving it into publication support would unnecessarily couple domain/solver tests to a publication package.
 
 **Owned new packages:** `vision/pet_workshop/`, matching unit/integration `pet_workshop/` packages, and `tests/support/pnc/pet_workshop_publication/`.
 
@@ -172,7 +172,9 @@ For Devin execution use the [Devin handoff format](../../../.agents/skills/devin
 
 Integrate terminal feature handbacks on one authoritative candidate. Review the combined diff and ledgers, resolve any shared-resource/source-as-data mappings once, and update shared testing documentation once. Shared ownership rules stay additive and fail closed. Keep the current static declaration floor, policy version compatibility checks, four shards, stable gate and 30-minute limits.
 
-Run the finished integrated candidate through `py tools/run_tests.py affected --base <recorded-common-base> --explain` once. Reuse valid focused worker evidence; do not follow a passing full fallback with another local `full`. CI owns the merge-candidate run. Verify disjoint shard modules/case IDs, artifact provenance and complete job durations on the exact revision before acceptance.
+Migrate the existing `tests/integration/vision/test_campaign_chapter_five.py` imports from the removed mixed Campaign test module to S5's canonical support helper. The lead owns this caller update and preserves its assertions; the feature worker returns the final helper path and exported names instead of editing the outside-scope test or retaining a test-module shim.
+
+Inspect the finished migration selection once with `py tools/run_tests.py affected --base <recorded-common-base> --dry-run --explain`; package creation/deletion can correctly select the full inventory. Execute that selection through the exact merge-candidate CI run. Reuse valid focused worker evidence and the complete offline coverage run below instead of duplicating a full local execution. Verify disjoint shard modules/case IDs, artifact provenance and complete job durations on the exact revision before acceptance.
 
 Produce one fresh coverage/context measurement of the accepted integrated tree with the existing `measure --contexts` path, in a separately owned offline measurement scope rather than ordinary CI. Publish ignored line/branch and component evidence plus a policy-compatible seed. Do not have five workers contend over one coverage database. The September 14 percentage is historical, not a current ratchet or a valid before/after comparison.
 

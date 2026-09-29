@@ -47,7 +47,12 @@ from tests.support.automation.session import FakeSession
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
 from tests.support.runtime.observation_service import FakeObservationService
-from tests.support.pnc.pet_workshop_publication.helpers import *  # noqa: F403
+from tests.support.pnc.pet_workshop_publication.helpers import (
+    _BOARD_LAYOUT_ID,
+    _capture,
+    _header_frame,
+    _wire,
+)
 
 class PetWorkshopHeaderOcrTests(unittest.TestCase):
     """Scripted and RapidOCR reads of the measured header counters."""
