@@ -151,7 +151,7 @@ resources, or unavailable base/analysis evidence. The selection JSON records
 each module's reasons and every full fallback. Static imports cannot completely
 describe reflection, plugins, source-as-data, or arbitrary external resources;
 affected success is the merge-candidate gate, with the residual risk that an
-unmodeled dependency could be missed until the post-merge full run.
+unmodeled dependency could be missed until a separately assigned complete audit.
 
 `measure` always runs the full portable inventory and writes branch coverage and
 timing evidence. It does not switch per-test Coverage contexts or manipulate
