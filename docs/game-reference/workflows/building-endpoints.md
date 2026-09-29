@@ -197,3 +197,57 @@ shared observation report the Bank body but authorizes no tap, and
 `open_building`/`open_visible_building` still refuse the unsupported route
 because no `PNC_BANK` destination, entry menu, or return edge is modeled. The
 intermediate Home menu behavior above stays the governing uncertainty.
+
+### Military barracks — ordinary slots 5-8 bodies qualified
+
+The V44-4 military body package measured four fixed single-type slots from the
+same 2026-09-29 f1171ffa attempt1 session used for the Bank crop. All four
+crops are authored from baseline frame 0022 (camera translation (-24,45),
+zoom 0.75) and reproduce on the independent 0092 survey view
+(translation (-152,-21), zoom 0.75):
+
+- `infantry_barracks_body` (slot 5, client 1020): white facade between the red
+  columns, native (415,625,83,78) on 0022 and (287,559,83,78) on 0092; also
+  qualified on the 2026-09-22 zoom-1.0 f0 baseline at (53,995,111,104). The
+  crop excludes the floating coin bubble and pennant above, the gold `Z`
+  marker and level badge at the right, and the nameplate below. Action point
+  (450,666) on 0022 sits on the interior parapet.
+- `cavalry_barracks_body` (slot 6, client 1021): blue awning and tower under
+  the radar dome, (252,690,100,42) on 0022 and (124,624,100,42) on 0092; the
+  `Cavalry Barracks` nameplate corroborates on 0092. The crop excludes the
+  `Z` marker grazing the upper-right and the statue/nameplate below. Action
+  point (308,722) on 0022 sits on the awning.
+- `ranged_barracks_body` (slot 7, client 1022): gong, towers and platform
+  band, (390,800,120,34) on 0022 and (262,734,120,34) on 0092. The crop
+  excludes the `6` badge above, the red `0` badges and `Z` marker at the
+  right, and the nameplate below. On the zoom-1.0 f0 baseline the predicted
+  band lies under the chapter banner and must stay an occlusion no-match.
+  Action point (445,818) on 0022 sits on the platform step.
+- `siege_factory_body` (slot 8, client 1023): factory front wall between the
+  blue-topped towers, (212,806,72,84) on 0022 and (84,740,72,84) on 0092.
+  The crop excludes the `Z` marker at the upper-right and the cavalry
+  nameplate above. On 0092 the projected action point (117,789) lands inside
+  that view's left-HUD exclusion band — a view-specific limitation, not a
+  target defect. Action point (245,855) on 0022 sits on the interior front
+  wall.
+
+Every action point was visually checked on both saved views against floating
+training-completion bubbles, help/status bubbles, gold/`Z` markers, level
+badges, nameplates and nearby area controls; all four sit on clear current
+body pixels. Packaged click routing prioritizes area/button colliders over
+bodies, so a body match or slot pivot alone does not prove the selected
+point opens the panel — destination qualification remains a live gate, and
+no military tap is authorized by this evidence.
+
+### Hall of War — slot 14 pending native capture
+
+Slot 14 (client type 1011, `WARID`) is a fixed single-type slot with a
+calibrated pivot, but no saved frame shows the body unclipped: on 0022 the
+Hall of War remains cut at the left viewport edge (~x0-95), exposing the
+dome, the golden winged statue and a clipped `...of War` nameplate — enough
+to corroborate identity, not enough to author a crop. The catalog therefore
+carries no Hall of War target. The minimal missing capture is one native
+Home view at zoom 0.75-1.0 with the Hall14 body fully inside the frame and
+free of floating bubbles/area controls, its camera translation recorded, plus
+one independent holdout pose; a readable `Hall of War` nameplate or a paired
+endpoint/tap receipt supplies identity.

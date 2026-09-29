@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session plus the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa) that measured the slot-3 Warehouse body and the fixed sys_1/5001 Bank body. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
+  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session plus the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa) that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, and the four single-type military bodies at slots 5 through 8. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
   "samples": [
     {
       "image": "home_city_blacksmith_slot12_f1_20260922.png",
@@ -71,7 +71,7 @@
         1390,
         1484
       ],
-      "annotation": "157_farm baseline view. Camera zoom 1.0, atlas translation (-532,222): all eligible Blacksmith slot predictions lie below the viewport, so no slot-bound body may publish even though the frame localizes.",
+      "annotation": "157_farm baseline view. Camera zoom 1.0, atlas translation (-532,222): all eligible Blacksmith slot predictions lie below the viewport, so no slot-bound body may publish even though the frame localizes. The same frame is the V44-4 zoom-1.0 Infantry Barracks holdout (body at 53,995,111,104, action point 100,1049); the Ranged Barracks body region sits under the chapter banner and must stay an occlusion no-match, and the Cavalry/Siege slot predictions lie outside the viewport.",
       "outside_mask_sha256": "d3d743e448b0f50a4973e5e65ee1172dd19370f627c10114b45639c9c98bf76b"
     },
     {
@@ -215,7 +215,7 @@
         1390,
         1484
       ],
-      "annotation": "f1171ffa attempt1 home baseline frame 0022. Camera zoom 0.75, atlas translation (-24,45): the fixed sys_1/5001 Bank body is measured at (216,1036,120,97) score .9940 with action point (275,1070) below the conservative tap band. The crop excludes the floating '!' badge pointer and nameplate; Bank stays a fixed system node with no ordinary slot.",
+      "annotation": "f1171ffa attempt1 home baseline frame 0022. Camera zoom 0.75, atlas translation (-24,45): the fixed sys_1/5001 Bank body is measured at (216,1036,120,97) score .9940 with action point (275,1070) below the conservative tap band. The crop excludes the floating '!' badge pointer and nameplate; Bank stays a fixed system node with no ordinary slot. This frame is also the V44-4 military template source: Infantry Barracks slot 5 at (415,625,83,78) action (450,666), Cavalry Barracks slot 6 at (252,690,100,42) action (308,722), Ranged Barracks slot 7 at (390,800,120,34) action (445,818), Siege Factory slot 8 at (212,806,72,84) action (245,855); all four points sit on clear body pixels free of floating training/help/status bubbles and area controls. Hall of War (slot 14) remains clipped at the left frame edge (x~0-95) and is not authorable from this view.",
       "outside_mask_sha256": "027cac3d909724c14fdbdcaa63213dcfda179a8acd217e571e75f8aa4087efac"
     },
     {
@@ -239,7 +239,7 @@
         1390,
         1484
       ],
-      "annotation": "f1171ffa attempt1 bank survey frame 0092 -- independent view, same session as 0022 but a distinct camera pose. Camera zoom 0.75, atlas translation (-152,-21): the Bank facade/blue dome measures at (88,971,120,97) score .9718, action point (147,1006) below the tap band.",
+      "annotation": "f1171ffa attempt1 bank survey frame 0092 -- independent view, same session as 0022 but a distinct camera pose. Camera zoom 0.75, atlas translation (-152,-21): the Bank facade/blue dome measures at (88,971,120,97) score .9718, action point (147,1006) below the tap band. The same pose is the V44-4 military independent holdout: Infantry Barracks at (287,559,83,78) action (322,600), Cavalry Barracks at (124,624,100,42) action (180,656), Ranged Barracks at (262,734,120,34) action (317,752), Siege Factory at (84,740,72,84) action (117,789); each carries a readable building nameplate corroborating slot identity. The siege action point lands inside this view's left-HUD exclusion band -- a view-specific limitation, not a target defect.",
       "outside_mask_sha256": "13047d78813363a12c67a50e21215297fcc472314404202facd623156cdf44df"
     }
   ]

@@ -25,7 +25,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             catalog.anchor_object_ids,
         )
         self.assertEqual(30, len(catalog.landmarks))
-        self.assertEqual(10, len(catalog.targets))
+        self.assertEqual(14, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
             {
@@ -136,6 +136,22 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
         # The Bank is a fixed system node: it publishes no slot candidate.
         self.assertIsNone(bank.reference_slot)
         self.assertEqual((399, 1367), bank.atlas_action_point())
+        # The four military bodies are single-type fixed slots: the authored
+        # point is the only legal answer and needs no slot argument.
+        for object_id, slot_index, atlas_point in (
+            (HomeCityObjectId.INFANTRY_BARRACKS, 5, (632, 827)),
+            (HomeCityObjectId.CAVALRY_BARRACKS, 6, (442, 903)),
+            (HomeCityObjectId.RANGED_BARRACKS, 7, (625, 1031)),
+            (HomeCityObjectId.SIEGE_FACTORY, 8, (359, 1080)),
+        ):
+            with self.subTest(object_id=object_id):
+                target = catalog.target_for(object_id)
+                self.assertIsNotNone(target)
+                self.assertEqual(HomeCitySlotSelector(slot_index), target.reference_slot)
+                self.assertEqual(atlas_point, target.atlas_action_point())
+        # The Hall of War publishes no camera target until a clean native body
+        # and identity pose exist.
+        self.assertIsNone(catalog.target_for(HomeCityObjectId.HALL_OF_WAR))
         # An unrelated nearby "Manor" label is not the Illusory Beast Manor and
         # must never resolve to it.
         self.assertIsNone(home_city_object_definition_for_label("Manor"))

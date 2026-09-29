@@ -789,6 +789,98 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 min_score=0.90,
                 max_projection_error=8,
             ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.INFANTRY_BARRACKS,
+                landmark_id="infantry_barracks_body",
+                file_name="infantry_barracks_body.png",
+                # White facade between the red columns under the front
+                # watchtower, measured on the 2026-09-29 attempt1 baseline
+                # frame 0022 (native 415,625,83,78 under camera (-24,45) at
+                # zoom 0.75) with a readable 'Infantry Barracks' nameplate;
+                # the independent 0092 survey view measures the same body at
+                # (287,559,83,78) and the zoom-1.0 f0 baseline at
+                # (53,995,111,104). The crop excludes the floating coin
+                # bubble and pennant above, the gold 'Z' marker and level
+                # badge at the right, and the nameplate below.
+                reference_bounds=Bounds(53, 995, 111, 104),
+                # Interior parapet point clear of all floating controls on
+                # both saved views; destination qualification remains a live
+                # gate since collider routing is not proven by a body match.
+                reference_action_bounds=Bounds(89, 1038, 22, 22),
+                reference_action_point=(100, 1049),
+                min_score=0.90,
+                # 12 reference px covers the scene-calibration uncertainty
+                # plus matching noise, matching the slot-bound convention.
+                max_projection_error=12,
+                # Slot 5 is the single-type infantry slot (client 1020); the
+                # binding tags the authored slot's reviewed eligibility.
+                reference_slot=HomeCitySlotSelector(5),
+            ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.CAVALRY_BARRACKS,
+                landmark_id="cavalry_barracks_body",
+                file_name="cavalry_barracks_body.png",
+                # Blue awning and tower under the radar dome, measured on the
+                # 2026-09-29 attempt1 baseline frame 0022 (native
+                # 252,690,100,42 under camera (-24,45) at zoom 0.75); the
+                # independent 0092 survey view measures the same body at
+                # (124,624,100,42) and carries the readable 'Cavalry
+                # Barracks' nameplate that corroborates the slot-6 body.
+                # The crop excludes the floating 'Z' marker grazing its
+                # upper-right and the statue/nameplate below the awning.
+                reference_bounds=Bounds(-164, 1082, 133, 56),
+                # Interior awning point clear of floating controls on both
+                # saved views; destination qualification remains a live gate.
+                reference_action_bounds=Bounds(-101, 1114, 22, 22),
+                reference_action_point=(-90, 1125),
+                min_score=0.90,
+                max_projection_error=12,
+                # Slot 6 is the single-type cavalry slot (client 1021).
+                reference_slot=HomeCitySlotSelector(6),
+            ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.RANGED_BARRACKS,
+                landmark_id="ranged_barracks_body",
+                file_name="ranged_barracks_body.png",
+                # Gong, towers and platform band, measured on the 2026-09-29
+                # attempt1 baseline frame 0022 (native 390,800,120,34 under
+                # camera (-24,45) at zoom 0.75) with a readable 'Ranged
+                # Barracks' nameplate; the independent 0092 survey view
+                # measures the same body at (262,734,120,34). The crop
+                # excludes the '6' badge above, the red '0' badges and 'Z'
+                # marker at the right, and the nameplate below.
+                reference_bounds=Bounds(20, 1229, 160, 45),
+                # Interior platform point clear of floating controls on both
+                # saved views; destination qualification remains a live gate.
+                reference_action_bounds=Bounds(82, 1242, 22, 22),
+                reference_action_point=(93, 1253),
+                min_score=0.90,
+                max_projection_error=12,
+                # Slot 7 is the single-type ranged slot (client 1022).
+                reference_slot=HomeCitySlotSelector(7),
+            ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.SIEGE_FACTORY,
+                landmark_id="siege_factory_body",
+                file_name="siege_factory_body.png",
+                # Factory front wall between the blue-topped towers, measured
+                # on the 2026-09-29 attempt1 baseline frame 0022 (native
+                # 212,806,72,84 under camera (-24,45) at zoom 0.75) with a
+                # readable 'Siege Factory' nameplate; the independent 0092
+                # survey view measures the same body at (84,740,72,84), where
+                # the action point projects inside the declared left-HUD
+                # exclusion band. The crop excludes the floating 'Z' marker
+                # at its upper-right and the cavalry nameplate above.
+                reference_bounds=Bounds(-217, 1237, 96, 112),
+                # Interior wall point clear of floating controls on the
+                # saved views; destination qualification remains a live gate.
+                reference_action_bounds=Bounds(-184, 1291, 22, 22),
+                reference_action_point=(-173, 1302),
+                min_score=0.90,
+                max_projection_error=12,
+                # Slot 8 is the single-type siege slot (client 1023).
+                reference_slot=HomeCitySlotSelector(8),
+            ),
         ),
         reference_size=HOME_CITY_CAMERA_REFERENCE_SIZE,
         atlas_to_reference_offset=HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,
