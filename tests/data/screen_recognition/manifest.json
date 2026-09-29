@@ -1795,6 +1795,26 @@
       "expected_visual_screens": [
         "PNC_INFANTRY_BARRACKS"
       ]
+    },
+    {
+      "image": "building_routes/infantry_barracks_native_20260929.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526_0087_core_13_home_after_7",
+      "sha256": "700890de9180c0dad2a5c21e47b0a3b914461558995afb81ed899ef868bee8c4",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ]
+    },
+    {
+      "image": "building_routes/infantry_barracks_native_holdout_20260929.png",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526_0086_core_13_home_after_6",
+      "sha256": "b38560dcfe02423db8e136179a27b3db026a99083516e4aee0b25d08c341fee1",
+      "expected_visual_screens": [
+        "PNC_INFANTRY_BARRACKS"
+      ]
     }
   ]
 }

@@ -116,6 +116,18 @@ CASES = (
         "building_infantry_barracks",
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
     ),
+    (
+        "infantry_barracks_native_20260929.png",
+        ScreenType.PNC_INFANTRY_BARRACKS,
+        "building_infantry_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
+        "infantry_barracks_native_holdout_20260929.png",
+        ScreenType.PNC_INFANTRY_BARRACKS,
+        "building_infantry_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
 )
 
 
@@ -134,6 +146,14 @@ BARRACKS_REFERENCES = (
         ScreenType.PNC_INFANTRY_BARRACKS,
         "building_infantry_barracks",
         ("RGB", (900, 1600)),
+        ((175, 13, 675, 80), (466, 233, 900, 309)),
+        (0, 0, 167, 92),
+    ),
+    (
+        "infantry_barracks_native_20260929.png",
+        ScreenType.PNC_INFANTRY_BARRACKS,
+        "building_infantry_barracks",
+        ("RGBA", (900, 1600)),
         ((175, 13, 675, 80), (466, 233, 900, 309)),
         (0, 0, 167, 92),
     ),
@@ -233,8 +253,8 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
 
     def test_barracks_identity_does_not_follow_the_requested_family(self) -> None:
         """The native frame determines identity even when another family is requested."""
-        for index, (fixture_name, screen, layout_id, _, _, _) in enumerate(BARRACKS_REFERENCES):
-            other_screen = BARRACKS_REFERENCES[1 - index][1]
+        for fixture_name, screen, layout_id, _, _, _ in BARRACKS_REFERENCES:
+            other_screen = next(item[1] for item in BARRACKS_REFERENCES if item[1] != screen)
             with Image.open(FIXTURE_ROOT / fixture_name) as source:
                 image = source.copy()
             for observer_name, observation in self._both_observations(image, other_screen, layout_id):

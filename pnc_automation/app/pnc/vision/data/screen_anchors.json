@@ -6203,6 +6203,64 @@
       "occludes": [
         "PNC_HOME_CITY"
       ]
+    },
+    {
+      "id": "building_infantry_barracks_native",
+      "layout_id": "building_infantry_barracks",
+      "screen": "PNC_INFANTRY_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/infantry_barracks_native_20260929.png",
+        "decoded_sha256": "700890de9180c0dad2a5c21e47b0a3b914461558995afb81ed899ef868bee8c4",
+        "capture_group": "2026-09-29/devin-live-test_v44-4-integrated-turn010/c3c3b526_0087_core_13_home_after_7"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Current native RGBA 900x1600 Infantry Barracks capture from live turn010 (session c3c3b526, frame 0087). The 2026-09-17 reference's description panel drifts about 0.07 similarity under current build chrome, so this variant pairs the shared Infantry title anchor with a description patch re-measured in canonical 540x960 LANCZOS reference space. Identity still requires title + Infantry description and only the independently measured Back control is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_infantry_barracks_title.png",
+          "search_region": [
+            105,
+            8,
+            300,
+            40
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_infantry_barracks_native_description.png",
+          "search_region": [
+            280,
+            140,
+            260,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_infantry_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     }
   ]
 }
