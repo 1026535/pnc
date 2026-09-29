@@ -303,3 +303,50 @@ class HomeCityCameraPanTests(unittest.TestCase):
         with self.assertRaises(SelectorResolutionError):
             plan_home_city_camera_pan(observation=_observation(translation=(-886, -796)),
                                       target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
+
+    def test_inspection_moves_until_the_whole_body_region_is_exposed(self):
+        """At this pose the institute slot-9 anchor is inside the band while its
+        projected body region still protrudes past the right edge. Acquisition
+        refuses -- there is no current-frame body match to tap -- but discovery
+        inspection still moves the canonical region into the safe band."""
+        observation = _observation(translation=(-760, -460), zoom=.74)
+        with self.assertRaisesRegex(SelectorResolutionError, "no current-frame match"):
+            plan_home_city_camera_step(
+                observation=observation, target=HomeCityObjectId.INSTITUTE,
+                home_city_slot=HomeCitySlotSelector(9))
+
+        step = plan_home_city_camera_step(
+            observation=observation, target=HomeCityObjectId.INSTITUTE,
+            home_city_slot=HomeCitySlotSelector(9), inspect_body=True)
+
+        self.assertEqual("right", step.action.direction)
+        self.assertEqual("pan_home_city_eastern_return_right", step.action.reason)
+        x1, y1, x2, y2 = _points(step.action)
+        self.assertTrue(step.action.safe_bounds.contains_point((x1, y1)))
+        self.assertTrue(step.action.safe_bounds.contains_point((x2, y2)))
+
+    def test_inspection_refuses_once_the_whole_region_is_exposed(self):
+        """A fully-exposed projected region is a refusal, not another pan."""
+        with self.assertRaisesRegex(SelectorResolutionError, "already fully inside"):
+            plan_home_city_camera_step(
+                observation=_observation(translation=(-720, -460), zoom=.74),
+                target=HomeCityObjectId.INSTITUTE,
+                home_city_slot=HomeCitySlotSelector(9), inspect_body=True)
+
+    def test_inspection_uses_the_projected_region_not_an_observed_body(self):
+        """Inspection exposure is decided by canonical region geometry; a
+        measured body elsewhere inside the band cannot satisfy it (and the
+        observed body keeps acquisition at its own no-pan refusal)."""
+        body = _body()
+        observation = _observation(translation=(-760, -460), zoom=.74, objects=(body,))
+        with self.assertRaisesRegex(SelectorResolutionError, "no pan is needed"):
+            plan_home_city_camera_step(
+                observation=observation, target=HomeCityObjectId.INSTITUTE,
+                home_city_slot=HomeCitySlotSelector(9))
+
+        step = plan_home_city_camera_step(
+            observation=observation, target=HomeCityObjectId.INSTITUTE,
+            home_city_slot=HomeCitySlotSelector(9), inspect_body=True)
+
+        self.assertEqual("right", step.action.direction)
+        self.assertTrue(step.action.safe_bounds.contains_point(_points(step.action)[:2]))

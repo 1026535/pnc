@@ -33,12 +33,14 @@ _DEFAULT_TEMPLATE_CACHE_SIZE = 128
 # Coarse-to-fine search constants.  The proposal floor sits below the final
 # threshold to retain native candidates on the qualified captures; coarse
 # score changes and bounded candidate ranking can still omit candidates on
-# unseen content. Proposals never qualify a match. Distinct neighborhoods are
-# deduplicated at a coarse Chebyshev
-# radius and bounded; overflow falls back to the exact full-resolution search
-# rather than truncating a possible rival.
+# unseen content. Proposals never qualify a match.  Distinct neighborhoods are
+# deduplicated at a Chebyshev radius of ``_PROPOSAL_NEIGHBORHOOD_NATIVE_PX``
+# native reference pixels — proposal-coordinate differences are scaled by the
+# actual frame ratio before comparison, so the neighborhood is resolution-
+# independent — and bounded; overflow falls back to the exact full-resolution
+# search rather than truncating a possible rival.
 _PROPOSAL_THRESHOLD_MARGIN = 0.20
-_PROPOSAL_NEIGHBORHOOD_PX = 3
+_PROPOSAL_NEIGHBORHOOD_NATIVE_PX = 6
 _MAX_REFINEMENT_PROPOSALS = 8
 # A coarse pixel maps through the frame-size ratio into native reference
 # coordinates; this radius covers the resulting position quantization.
@@ -407,7 +409,7 @@ class OpenCvTemplateMatcher:
         )
 
     def prepare_proposal_frame(self, frame: PreparedFrame) -> PreparedFrame:
-        """Returns a half-resolution proposal frame for coarse-to-fine matching.
+        """Returns a quarter-resolution proposal frame for coarse-to-fine matching.
 
         The proposal frame is a fresh immutable downsample of ``frame`` that
         keeps the original screenshot size, so coarse positions still project
@@ -419,8 +421,8 @@ class OpenCvTemplateMatcher:
 
         if not isinstance(frame, PreparedFrame):
             raise TypeError("frame must be a PreparedFrame")
-        width = max(1, frame.reference_size[0] // 2)
-        height = max(1, frame.reference_size[1] // 2)
+        width = max(1, frame.reference_size[0] // 4)
+        height = max(1, frame.reference_size[1] // 4)
         pixels = cv2.resize(
             frame.pixels, (width, height), interpolation=cv2.INTER_AREA
         )
@@ -457,8 +459,10 @@ class OpenCvTemplateMatcher:
           score degrades beyond the measured margin or its coarse correlation
           rank falls outside that bounded set. Qualification therefore applies
           to the validated landmark content and scales, not arbitrary images.
-        - Distinct proposal neighborhoods are deduplicated at Chebyshev
-          radius ``_PROPOSAL_NEIGHBORHOOD_PX`` and bounded to
+        - Distinct proposal neighborhoods are deduplicated at a Chebyshev
+          radius of ``_PROPOSAL_NEIGHBORHOOD_NATIVE_PX`` native reference
+          pixels — each proposal-coordinate difference is multiplied by the
+          actual frame ratio before comparison — and bounded to
           ``_MAX_REFINEMENT_PROPOSALS``.  More distinct neighborhoods fall
           back to the exact full-resolution search for this template and
           scale, so no possible rival is silently truncated and the result
@@ -518,8 +522,8 @@ class OpenCvTemplateMatcher:
         positions: list[tuple[int, int]] = []
         for candidate_x, candidate_y, _correlation, _confidence in ranked:
             if any(
-                abs(candidate_x - kept_x) <= _PROPOSAL_NEIGHBORHOOD_PX
-                and abs(candidate_y - kept_y) <= _PROPOSAL_NEIGHBORHOOD_PX
+                abs(candidate_x - kept_x) * ratio_x <= _PROPOSAL_NEIGHBORHOOD_NATIVE_PX
+                and abs(candidate_y - kept_y) * ratio_y <= _PROPOSAL_NEIGHBORHOOD_NATIVE_PX
                 for kept_x, kept_y in positions
             ):
                 continue

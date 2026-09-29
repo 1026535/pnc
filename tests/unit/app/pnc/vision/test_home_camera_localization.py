@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import threading
 import unittest
+from unittest import mock
 
 from PIL import Image
 
@@ -12,8 +14,11 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraProof,
     HomeCityCameraStatus,
 )
+from pnc_automation.app.pnc.domain.observation import Bounds
+from pnc_automation.app.pnc.vision import home_city_camera as home_camera_module
 from pnc_automation.app.pnc.vision.home_city_camera import (
     HomeCityCameraLocalizer,
+    HomeCityCameraTargetMatch,
     load_home_city_camera_catalog,
 )
 from pnc_automation.core.errors import SelectorResolutionError
@@ -373,6 +378,74 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
         self.assertEqual(HomeCityCameraStatus.UNSUPPORTED, proof.status)
         self.assertIsNone(proof.translation)
         self.assertEqual((640, 960), proof.frame_size)
+
+    def test_target_matches_run_bounded_and_stay_in_catalog_order(self) -> None:
+        """Independent post-proof matches share the bounded sweep capacity."""
+        localizer = _localizer()
+        catalog_targets = localizer.catalog.targets
+        barrier = threading.Barrier(2)
+        overlapped = threading.Event()
+        calls: list[HomeCityObjectId] = []
+
+        def scripted(_frame, target, *, proof):
+            calls.append(target.object_id)
+            try:
+                barrier.wait(timeout=10)
+            except threading.BrokenBarrierError:
+                pass
+            else:
+                overlapped.set()
+            return (
+                HomeCityCameraTargetMatch(
+                    target=target,
+                    bounds=Bounds(10, 10, 40, 40),
+                    action_bounds=Bounds(20, 20, 10, 10),
+                    action_point=(25, 25),
+                    score=0.9,
+                    projection_error=0.0,
+                ),
+            )
+
+        created: list[int] = []
+        original_executor = home_camera_module.ThreadPoolExecutor
+
+        def factory(*args, **kwargs):
+            created.append(kwargs.get("max_workers", args[0] if args else None))
+            return original_executor(*args, **kwargs)
+
+        proof = HomeCityCameraProof(
+            status=HomeCityCameraStatus.LOCALIZED,
+            reason="scripted bounded pool",
+            translation=(-532, 222),
+            zoom=1.0,
+            frame_size=(900, 1600),
+        )
+        frame = localizer.prepare_frame(Image.new("RGB", (900, 1600)))
+        with (
+            mock.patch.object(
+                localizer, "match_target_candidates", side_effect=scripted
+            ),
+            mock.patch.object(
+                home_camera_module, "ThreadPoolExecutor", side_effect=factory
+            ),
+        ):
+            objects = localizer.matched_target_objects(frame, proof=proof)
+
+        # Every catalog target matched concurrently, capped at the shared bound.
+        self.assertEqual(len(catalog_targets), len(calls))
+        self.assertEqual({t.object_id for t in catalog_targets}, set(calls))
+        self.assertTrue(overlapped.is_set())
+        self.assertEqual([8], created)
+        # ``map`` keeps catalog order, so each object is assembled against its
+        # own target's identity even though matches finish out of order.
+        self.assertEqual(
+            [t.object_id.value for t in catalog_targets],
+            [o.metadata["home_city_object_id"] for o in objects],
+        )
+        self.assertEqual(
+            [t.landmark_id for t in catalog_targets],
+            [o.metadata["camera_landmark_id"] for o in objects],
+        )
 
     def test_projection_is_scale_normalized_into_frame_pixels(self) -> None:
         proof = HomeCityCameraProof(

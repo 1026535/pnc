@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 from pnc_automation.core.vision.template import template_matcher as matcher_module
 from pnc_automation.core.vision.template.template_matcher import (
     DecodedTemplateCache,
@@ -504,12 +504,12 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         self.assertEqual(result.bounds, Bounds(x=42, y=22, width=20, height=16))
 
     def test_coarse_to_fine_supports_off_grid_template_scale(self) -> None:
-        donor = _smooth_textured_image((120, 90))
+        donor = _smooth_textured_image((120, 92))
         patch = donor.crop((8, 8, 32, 32))
         scaled_values = cv2.resize(
             np.array(patch), (20, 20), interpolation=cv2.INTER_AREA
         )
-        image = Image.new("RGB", (120, 90), (24, 28, 32))
+        image = Image.new("RGB", (120, 92), (24, 28, 32))
         image.paste(Image.fromarray(scaled_values, mode="RGB"), (61, 44))
         path = self._save(patch)
         prepared = self.matcher.prepare_frame(image)
@@ -560,6 +560,147 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         self.assertEqual(result, expected)
         assert result is not None
         self.assertEqual(result.bounds, Bounds(x=24, y=8, width=12, height=12))
+
+    def test_proposal_frame_quarters_the_reference_resolution(self) -> None:
+        """The proposal frame is a quarter-scale immutable view of the scene."""
+        image = _smooth_textured_image((200, 160))
+        prepared = self.matcher.prepare_frame(image)
+
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+
+        self.assertIsInstance(proposal, PreparedFrame)
+        self.assertEqual(proposal.reference_size, (50, 40))
+        self.assertEqual(proposal.original_size, (200, 160))
+        self.assertEqual(proposal.pixels.shape, (40, 50, 3))
+        self.assertFalse(proposal.pixels.flags.writeable)
+
+        # Reference-normalized frames keep the original capture size, so
+        # coarse hits still project through the standard mapping.
+        resized = Image.new("RGB", (240, 184), (30, 40, 50))
+        normalized = self.matcher.prepare_frame(resized, reference_size=(120, 92))
+        assert normalized is not None
+        small = self.matcher.prepare_proposal_frame(normalized)
+        self.assertEqual(small.reference_size, (30, 23))
+        self.assertEqual(small.original_size, (240, 184))
+        self.assertTrue(np.all(small.pixels == (30, 40, 50)))
+
+    def test_proposal_frame_requires_a_prepared_frame(self) -> None:
+        with self.assertRaises(TypeError):
+            self.matcher.prepare_proposal_frame(Image.new("RGB", (16, 16)))  # type: ignore[arg-type]
+
+    def test_coarse_to_fine_rejects_a_mismatched_proposal_frame(self) -> None:
+        prepared = self.matcher.prepare_frame(_smooth_textured_image((120, 92)))
+        assert prepared is not None
+        # 30x22 is not a same-aspect downscale of 120x92 (30x23 is).
+        proposal = PreparedFrame(
+            pixels=np.zeros((22, 30, 3), dtype=np.uint8),
+            original_size=(120, 92),
+            reference_size=(30, 22),
+        )
+
+        with self.assertRaises(ValueError):
+            self.matcher.find_best_match_coarse_to_fine(
+                prepared, proposal, Path(self.temp_dir.name) / "any.png", threshold=0.9
+            )
+
+    def test_coarse_to_fine_dedup_is_measured_in_native_pixels(self) -> None:
+        """Proposal peaks merge at 6 native px, so 2 quarter px stay distinct."""
+        image = _smooth_textured_image((120, 92))
+        path = self._save(image.crop((8, 8, 24, 24)))
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert prepared is not None and proposal is not None
+        # The quarter-resolution proposal maps one coarse pixel to 4 native.
+
+        for peaks, expected_calls in (
+            (((10, 5), (11, 5)), 1),  # 4 native px apart -> one neighborhood
+            (((10, 5), (12, 5)), 2),  # 8 native px apart -> two neighborhoods
+            (((10, 5), (10, 7)), 2),  # 8 native px on the other axis -> two
+        ):
+            with self.subTest(peaks=peaks):
+                refined: list[Bounds] = []
+
+                def fake_native(_frame, _path, *, threshold, search_region=None, **_kw):
+                    assert search_region is not None
+                    refined.append(search_region)
+                    return None
+
+                with (
+                    mock.patch.object(
+                        matcher_module,
+                        "_qualified_candidates",
+                        return_value=[(x, y, 0.95, 0.95) for x, y in peaks],
+                    ) as coarse,
+                    mock.patch.object(
+                        self.matcher, "find_best_match", side_effect=fake_native
+                    ) as native,
+                ):
+                    result = self.matcher.find_best_match_coarse_to_fine(
+                        prepared, proposal, path, threshold=0.9
+                    )
+
+                self.assertIsNone(result)
+                self.assertEqual(expected_calls, native.call_count)
+                # Coarse candidates are proposed at the lowered floor.
+                self.assertAlmostEqual(0.7, coarse.call_args.kwargs["threshold"])
+                # Quarter coordinate (10, 5) maps to native (40, 20) and the
+                # 16x16 template keeps the 6px refinement margin on each side.
+                self.assertEqual(Bounds(34, 14, 28, 28), refined[0])
+
+    def test_coarse_to_fine_returns_the_best_confidence_refinement(self) -> None:
+        """Distinct neighborhoods each refine natively; confidence picks the winner."""
+        image = _smooth_textured_image((120, 92))
+        path = self._save(image.crop((8, 8, 24, 24)))
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert prepared is not None and proposal is not None
+        strong = TemplateMatch(bounds=Bounds(60, 24, 16, 16), confidence=0.93)
+        weak = TemplateMatch(bounds=Bounds(40, 20, 16, 16), confidence=0.85)
+        hits = iter((weak, strong))
+
+        with (
+            mock.patch.object(
+                matcher_module,
+                "_qualified_candidates",
+                return_value=[(10, 5, 0.96, 0.96), (15, 6, 0.97, 0.97)],
+            ),
+            mock.patch.object(
+                self.matcher,
+                "find_best_match",
+                side_effect=lambda *_a, **_kw: next(hits),
+            ) as native,
+        ):
+            result = self.matcher.find_best_match_coarse_to_fine(
+                prepared, proposal, path, threshold=0.9
+            )
+
+        self.assertEqual(2, native.call_count)
+        self.assertEqual(strong, result)
+
+    def test_coarse_to_fine_undersized_proposal_template_runs_exact_search(self) -> None:
+        """A template too small at quarter scale keeps the exact-native path."""
+        image = _smooth_textured_image((120, 92))
+        patch = image.crop((47, 33, 59, 45))
+        path = self._save(patch)
+        prepared = self.matcher.prepare_frame(image)
+        proposal = self.matcher.prepare_proposal_frame(prepared)
+        assert prepared is not None and proposal is not None
+        expected = self.matcher.find_best_match(prepared, path, threshold=0.9)
+
+        with mock.patch.object(
+            self.matcher,
+            "find_best_match",
+            wraps=self.matcher.find_best_match,
+        ) as native:
+            result = self.matcher.find_best_match_coarse_to_fine(
+                prepared, proposal, path, threshold=0.9
+            )
+
+        # The 12px template is 3px on the proposal frame, below the supported
+        # minimum, so the exact full-resolution search runs once.
+        self.assertEqual(1, native.call_count)
+        self.assertIsNone(native.call_args.kwargs.get("search_region"))
+        self.assertEqual(result, expected)
 
     def test_coarse_to_fine_leaves_generic_matcher_behavior_unchanged(self) -> None:
         image = _smooth_textured_image((80, 60))

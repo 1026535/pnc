@@ -108,6 +108,7 @@ from pnc_automation.app.pnc.navigation.spatial_navigation import (
     HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
     HOME_CITY_HUD_SAFE_MIN_X_RATIO,
     HOME_CITY_HUD_SAFE_MIN_Y_RATIO,
+    HomeCityCameraPanStep,
     home_city_scan_step_budget,
     plan_home_city_camera_step,
 )
@@ -507,7 +508,16 @@ class NavigationCore:
         state = operation.state
         targets = operation.targets
         avoid_direction: str | None = None
-        attempted_routes: set[tuple[object, ...]] = set()
+        # (target, slot, direction, zoom, atlas camera center x/y).  The pose is
+        # kept in atlas camera-center units so a noisy revisit still matches the
+        # localization allowance instead of exact floating-point equality.
+        attempted_routes: list[
+            tuple[HomeCityObjectId, HomeCitySlotSelector | None, str, float, float, float]
+        ] = []
+        # Request-local retained candidate: replanned from every fresh frame and
+        # released once it is inspected or no qualified route remains.  It is a
+        # selection preference, never persisted route authority for a stale action.
+        preferred: tuple[HomeCityCameraTarget, HomeCitySlotSelector | None] | None = None
         stop = operation.stop
         proof = _require_localized_camera(current)
         state.observe(current, targets=targets, usable_region=_usable_home_region(proof))
@@ -526,48 +536,99 @@ class NavigationCore:
                     on_target_acquired=on_target_acquired,
                     home_city_slot=home_city_slot or resolved[0].home_city_slot,
                 )
-            proposals = []
-            unplanned_candidates = False
-            unsafe_candidates = False
-            for spec in targets:
-                if (acquire_target is None and spec.reference_slot is None
-                        and spec.object_id in state.inspected_targets):
-                    continue
-                candidates = ((resolved[0].home_city_slot,) if resolved is not None
-                              else state.candidate_slots(spec, proof, exact=home_city_slot))
-                for slot in candidates:
+            chosen: (
+                tuple[HomeCityCameraTarget, HomeCitySlotSelector | None, HomeCityCameraPanStep]
+                | None
+            ) = None
+            if acquire_target is None and preferred is not None:
+                spec, preferred_slot = preferred
+                if state.candidate_inspected(spec, preferred_slot):
+                    preferred = None
+                else:
                     try:
                         step = plan_home_city_camera_step(
-                            observation=current, target=spec.object_id, home_city_slot=slot,
-                            avoid_direction=avoid_direction,
+                            observation=current, target=spec.object_id,
+                            home_city_slot=preferred_slot, avoid_direction=avoid_direction,
+                            inspect_body=True,
                         )
                     except SelectorResolutionError:
-                        unplanned_candidates = True
-                        continue
-                    if not _qualified_home_pan(step.action, current):
-                        unsafe_candidates = True
-                        continue
-                    proposals.append((step.distance_to_goal(proof), spec.object_id.value, spec, slot, step))
-                    break  # Preserve each family's candidate priority.
-            if not proposals:
-                return stop(
-                    HomeCityScanStopReason.NO_SAFE_GESTURE if unsafe_candidates else (
-                    HomeCityScanStopReason.NO_PROGRESS if avoid_direction is not None else (
-                        HomeCityScanStopReason.NO_QUALIFIED_ROUTE if unplanned_candidates
-                        else HomeCityScanStopReason.CANDIDATES_INSPECTED
-                    )),
-                    "No qualified pan remains after no camera movement or unresolved body evidence; "
-                    "remaining slots are unknown, not absent.",
-                )
-            if state.gestures >= budget:
+                        preferred = None
+                    else:
+                        if not _qualified_home_pan(step.action, current) or _attempted_home_route(
+                            attempted_routes, proof, spec.object_id, preferred_slot,
+                            step.action.direction,
+                        ):
+                            preferred = None
+                        else:
+                            chosen = (spec, preferred_slot, step)
+            if chosen is None:
+                proposals = []
+                unplanned_candidates = False
+                unsafe_candidates = False
+                repeated_route = False
+                for spec in targets:
+                    candidates = ((resolved[0].home_city_slot,) if resolved is not None
+                                  else state.candidate_slots(spec, proof, exact=home_city_slot))
+                    for slot in candidates:
+                        if acquire_target is None and state.candidate_inspected(spec, slot):
+                            continue
+                        try:
+                            step = plan_home_city_camera_step(
+                                observation=current, target=spec.object_id, home_city_slot=slot,
+                                avoid_direction=avoid_direction,
+                                inspect_body=acquire_target is None,
+                            )
+                        except SelectorResolutionError:
+                            unplanned_candidates = True
+                            continue
+                        if not _qualified_home_pan(step.action, current):
+                            unsafe_candidates = True
+                            continue
+                        # Discovery skips a route already attempted at a
+                        # materially same pose and considers other candidates;
+                        # acquisition fails closed after selection instead.
+                        if acquire_target is None and _attempted_home_route(
+                            attempted_routes, proof, spec.object_id, slot, step.action.direction,
+                        ):
+                            repeated_route = True
+                            continue
+                        proposals.append(
+                            (step.distance_to_goal(proof), spec.object_id.value, spec, slot, step)
+                        )
+                        break  # Preserve each family's candidate priority.
+                if not proposals:
+                    return stop(
+                        HomeCityScanStopReason.NO_SAFE_GESTURE if unsafe_candidates else (
+                        HomeCityScanStopReason.NO_PROGRESS
+                        if avoid_direction is not None or repeated_route else (
+                            HomeCityScanStopReason.NO_QUALIFIED_ROUTE if unplanned_candidates
+                            else HomeCityScanStopReason.CANDIDATES_INSPECTED
+                        )),
+                        "No qualified pan remains after no camera movement or unresolved body evidence; "
+                        "remaining slots are unknown, not absent.",
+                    )
+                if state.gestures >= budget:
+                    return stop(HomeCityScanStopReason.BUDGET_EXHAUSTED,
+                                "Measured Home-city scan exhausted its canonical gesture budget.")
+                _, _, spec, slot, step = min(proposals, key=lambda item: (item[0], item[1]))
+                if _attempted_home_route(
+                    attempted_routes, proof, spec.object_id, slot, step.action.direction,
+                ):
+                    return stop(
+                        HomeCityScanStopReason.NO_PROGRESS,
+                        "Home scan revisited the same pose/candidate/direction; no repeated pan sent.",
+                    )
+                if acquire_target is None:
+                    preferred = (spec, slot)
+                chosen = (spec, slot, step)
+            elif state.gestures >= budget:
                 return stop(HomeCityScanStopReason.BUDGET_EXHAUSTED,
                             "Measured Home-city scan exhausted its canonical gesture budget.")
-            _, _, spec, slot, step = min(proposals, key=lambda item: (item[0], item[1]))
-            route = (proof.translation, proof.zoom, spec.object_id, slot, step.action.direction)
-            if route in attempted_routes:
-                stop(HomeCityScanStopReason.NO_PROGRESS,
-                     "Home scan revisited the same pose/candidate/direction; no repeated pan sent.")
-            attempted_routes.add(route)
+            spec, slot, step = chosen
+            center = camera_view_center_atlas(proof)
+            attempted_routes.append(
+                (spec.object_id, slot, step.action.direction, proof.zoom, center[0], center[1])
+            )
             state.gestures += 1
             operation.trace(current, "pan", target=spec.object_id, slot=slot)
             self.record({
@@ -1940,6 +2001,35 @@ def _qualified_home_pan(action: SwipeAction, observation: Observation) -> bool:
             and 0 <= x1 < width and 0 <= x2 < width
             and 0 <= y1 < height and 0 <= y2 < height
             and (x1, y1) != (x2, y2))
+
+
+def _attempted_home_route(
+    routes: list[
+        tuple[HomeCityObjectId, HomeCitySlotSelector | None, str, float, float, float]
+    ],
+    proof: HomeCityCameraProof,
+    object_id: HomeCityObjectId,
+    slot: HomeCitySlotSelector | None,
+    direction: str,
+) -> bool:
+    """Whether this candidate's direction already ran at a materially same pose.
+
+    Poses compare in atlas camera-center units under the same localization
+    allowance the stall detector uses, plus the existing zoom tolerance, so a
+    noisy return to the same corridor/candidate/direction still counts as a
+    repeat while a different target or moved pose stays eligible.
+    """
+
+    center = camera_view_center_atlas(proof)
+    for candidate_id, candidate_slot, candidate_direction, zoom, center_x, center_y in routes:
+        if (candidate_id, candidate_slot, candidate_direction) != (object_id, slot, direction):
+            continue
+        if abs(zoom - proof.zoom) > 0.02:
+            continue
+        if (max(abs(center_x - center[0]), abs(center_y - center[1]))
+                <= _CAMERA_STALL_TOLERANCE_REFERENCE_PX):
+            return True
+    return False
 
 
 def _template_control(observation: Observation, selector_id: UiElementId) -> bool:

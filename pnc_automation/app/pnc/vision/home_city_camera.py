@@ -1255,8 +1255,8 @@ class HomeCityCameraLocalizer:
                 reason="unsupported_frame_layout",
                 frame_size=frame_size,
             )
-        # One half-resolution proposal frame serves every scale hypothesis of
-        # this localization; it is immutable prepared data, not matcher state.
+        # One quarter-resolution proposal frame serves every scale hypothesis
+        # of this localization; it is immutable prepared data, not matcher state.
         proposal_frame = self._matcher.prepare_proposal_frame(frame)
         hypotheses = self._evaluate_zoom_sweep(frame, proposal_frame)
         qualifying = [
@@ -2058,10 +2058,31 @@ class HomeCityCameraLocalizer:
             or proof.frame_size is None
         ):
             return ()
+        targets = self._catalog.targets
+        if len(targets) > 1:
+            # Independent post-proof matches share the bounded sweep capacity;
+            # they only read the immutable frame and lock-guarded template
+            # caches.  ``map`` keeps catalog order so object assembly stays
+            # deterministic.
+            with ThreadPoolExecutor(
+                max_workers=min(_CAMERA_SWEEP_WORKERS, len(targets)),
+                thread_name_prefix="home-camera-target",
+            ) as pool:
+                match_sets = tuple(
+                    pool.map(
+                        lambda target: self.match_target_candidates(frame, target, proof=proof),
+                        targets,
+                    )
+                )
+        else:
+            match_sets = tuple(
+                self.match_target_candidates(frame, target, proof=proof)
+                for target in targets
+            )
         objects: list[DetectedSpatialObject] = []
         viewport_bounds = Bounds(0, 0, *proof.frame_size)
-        for target in self._catalog.targets:
-            for match in self.match_target_candidates(frame, target, proof=proof):
+        for target, matches in zip(targets, match_sets):
+            for match in matches:
                 metadata = build_home_city_object_metadata(target.object_id)
                 metadata.update(
                     {
@@ -2365,17 +2386,37 @@ class HomeCityCameraLocalizer:
         pixels the point sits on.
         """
 
-        hits: list[tuple[float, TemplateMatch]] = []
-        for scale in spec.scales:
-            hit = self._matcher.find_best_match_coarse_to_fine(
-                frame,
-                proposal_frame,
-                self._catalog.template_path(spec.file_name),
-                threshold=spec.min_score,
-                template_scale=scale,
+        if len(spec.scales) > 1:
+            # Independent scale hypotheses share the bounded sweep capacity and
+            # stay in authored spec order, so hit correspondence and spec
+            # priority are unchanged.
+            with ThreadPoolExecutor(
+                max_workers=min(_CAMERA_SWEEP_WORKERS, len(spec.scales)),
+                thread_name_prefix="home-camera-anchor",
+            ) as pool:
+                results = tuple(
+                    pool.map(
+                        lambda scale: self._matcher.find_best_match_coarse_to_fine(
+                            frame,
+                            proposal_frame,
+                            self._catalog.template_path(spec.file_name),
+                            threshold=spec.min_score,
+                            template_scale=scale,
+                        ),
+                        spec.scales,
+                    )
+                )
+        else:
+            results = (
+                self._matcher.find_best_match_coarse_to_fine(
+                    frame,
+                    proposal_frame,
+                    self._catalog.template_path(spec.file_name),
+                    threshold=spec.min_score,
+                    template_scale=spec.scales[0],
+                ),
             )
-            if hit is not None:
-                hits.append((scale, hit))
+        hits = [(scale, hit) for scale, hit in zip(spec.scales, results) if hit is not None]
         if not hits:
             return None
         best_scale, best = max(hits, key=lambda item: item[1].confidence)

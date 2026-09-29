@@ -45,7 +45,10 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof, HomeCityZoomStatus
-from pnc_automation.app.pnc.navigation.home_city_scan import camera_view_center_atlas
+from pnc_automation.app.pnc.navigation.home_city_scan import (
+    camera_view_center_atlas,
+    projected_body_region,
+)
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.world_yolo import world_yolo_roi_bounds
 from pnc_automation.core.vision.image.models import Bounds
@@ -2337,6 +2340,7 @@ def plan_home_city_camera_step(
     target: HomeCityObjectId,
     home_city_slot: HomeCitySlotSelector | None = None,
     avoid_direction: str | None = None,
+    inspect_body: bool = False,
 ) -> HomeCityCameraPanStep:
     """Choose one fixed gesture inside a current mapped region and the safe viewport.
 
@@ -2344,6 +2348,14 @@ def plan_home_city_camera_step(
     lengths are individual measured profiles, not a camera gain or universal drag
     threshold. The caller must remeasure pose after every input. A missing usable
     profile is a refusal, never permission to fall back to an unqualified swipe.
+
+    ``inspect_body`` aligns the proposal with the discovery scan's inspection
+    definition: the candidate's entire canonical ``projected_body_region`` must
+    fit inside the shared HUD-safe band, so an axis needs correction while any
+    part of the body still lies outside it, and a region that cannot fit refuses
+    instead of widening the band.  Existing acquisition callers keep the default
+    anchor/body-point semantics.  Geometry guides inspection only; it never
+    manufactures a detected body, occupancy, or tap point.
     """
     validate_home_city_slot_selector(target, home_city_slot)
     surface = observation.spatial_surface
@@ -2366,23 +2378,43 @@ def plan_home_city_camera_step(
     spec = home_city_camera_target(target)
     if spec is None:
         raise SelectorResolutionError("Building has no camera-qualified target.", target=target.value)
-    body = next((item for item in surface.objects
-                 if home_city_object_id_from_metadata(item.metadata) == target
-                 and item.source_kind == SpatialObjectSourceKind.TEMPLATE
-                 and (home_city_slot is None or item.home_city_slot == home_city_slot)
-                 and item.action_point is not None), None)
-    point = (body.action_point if body is not None else
-             proof.project_atlas_to_reference(spec.atlas_action_point(home_city_slot=home_city_slot)))
     width, height = proof.frame_size
     bands = ((width * HOME_CITY_HUD_SAFE_MIN_X_RATIO, width * HOME_CITY_HUD_SAFE_MAX_X_RATIO),
              (height * HOME_CITY_HUD_SAFE_MIN_Y_RATIO, height * HOME_CITY_HUD_SAFE_MAX_Y_RATIO))
-    needed = tuple(0.0 if low <= value <= high else (low + high) / 2 - value
-                   for value, (low, high) in zip(point, bands))
-    if needed == (0.0, 0.0):
-        raise SelectorResolutionError(
-            "Measured target is already inside the HUD-safe band; no pan is needed."
-            if body is not None else
-            "Projected target anchor is inside the HUD-safe band but has no current-frame match.")
+    if inspect_body:
+        region = projected_body_region(spec, home_city_slot)
+        near = proof.project_atlas_to_reference((region.left, region.top))
+        far = proof.project_atlas_to_reference((region.right, region.bottom))
+        needed = []
+        for extent, (low, high) in zip(((near[0], far[0]), (near[1], far[1])), bands):
+            if extent[1] - extent[0] > high - low:
+                raise SelectorResolutionError(
+                    "Projected body region cannot fit inside the HUD-safe band.",
+                    target=target.value,
+                )
+            needed.append(0.0 if low <= extent[0] and extent[1] <= high
+                          else (low + high) / 2 - (extent[0] + extent[1]) / 2)
+        needed = tuple(needed)
+        if needed == (0.0, 0.0):
+            raise SelectorResolutionError(
+                "Projected body region is already fully inside the HUD-safe band.",
+                target=target.value,
+            )
+    else:
+        body = next((item for item in surface.objects
+                     if home_city_object_id_from_metadata(item.metadata) == target
+                     and item.source_kind == SpatialObjectSourceKind.TEMPLATE
+                     and (home_city_slot is None or item.home_city_slot == home_city_slot)
+                     and item.action_point is not None), None)
+        point = (body.action_point if body is not None else
+                 proof.project_atlas_to_reference(spec.atlas_action_point(home_city_slot=home_city_slot)))
+        needed = tuple(0.0 if low <= value <= high else (low + high) / 2 - value
+                       for value, (low, high) in zip(point, bands))
+        if needed == (0.0, 0.0):
+            raise SelectorResolutionError(
+                "Measured target is already inside the HUD-safe band; no pan is needed."
+                if body is not None else
+                "Projected target anchor is inside the HUD-safe band but has no current-frame match.")
     axes = sorted((0, 1), key=lambda axis: abs(needed[axis]) / (width, height)[axis], reverse=True)
     # Preserve already qualified route choices on both axes before considering
     # the additional terrace. A new horizontal lane must not displace a usable

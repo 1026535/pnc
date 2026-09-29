@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import threading
 import unittest
+from unittest import mock
 
 from PIL import Image
 
@@ -15,6 +17,7 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
 )
 from pnc_automation.app.pnc.domain.observation import Bounds
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.vision import home_city_camera as home_camera_module
 from pnc_automation.app.pnc.vision.home_city_camera import HomeCityCameraLocalizer
 from pnc_automation.app.pnc.vision.observation_provenance import bind_spatial_surface
 from pnc_automation.app.pnc.vision.spatial_surfaces import (
@@ -386,6 +389,64 @@ class HomeCityViewAnalysisTests(unittest.TestCase):
         self.assertEqual((270, 704), anchor.point)
         self.assertEqual(Bounds(190, 650, 170, 200), anchor.bounds)
         self.assertTrue(anchor.bounds.contains_point(anchor.point))
+
+    def test_anchor_scale_sweep_runs_bounded_and_keeps_scale_pairs(self) -> None:
+        """The moat spec's eight scales share the bounded capacity and stay paired."""
+        moat_scales = (0.98, 1.0, 1.02, 1.05, 1.11, 1.17, 1.35, 1.4)
+        matcher = _AnchorScriptedMatcher(
+            {
+                ("northeast_moat_slope_wheel.png", scale): _anchor_hit(
+                    (275, 750), scale=scale, score=0.95 if scale != 1.0 else 0.96
+                )
+                for scale in moat_scales
+            }
+        )
+        barrier = threading.Barrier(2)
+        overlapped = threading.Event()
+        calls: list[tuple[str, float]] = []
+        original = matcher.find_best_match
+
+        def recorded(*args, **kwargs):
+            calls.append((args[1].name, kwargs.get("template_scale", 1.0)))
+            try:
+                barrier.wait(timeout=10)
+            except threading.BrokenBarrierError:
+                pass
+            else:
+                overlapped.set()
+            return original(*args, **kwargs)
+
+        created: list[int] = []
+        original_executor = home_camera_module.ThreadPoolExecutor
+
+        def factory(*args, **kwargs):
+            created.append(kwargs.get("max_workers", args[0] if args else None))
+            return original_executor(*args, **kwargs)
+
+        with (
+            mock.patch.object(matcher, "find_best_match", side_effect=recorded),
+            mock.patch.object(
+                home_camera_module, "ThreadPoolExecutor", side_effect=factory
+            ),
+        ):
+            view = _view_on_scripted_matcher(matcher)
+
+        anchor = view.zoom_anchor
+        self.assertIsNotNone(anchor)
+        assert anchor is not None
+        self.assertEqual("northeast_moat_slope_wheel_20260925", anchor.qualification_id)
+        self.assertEqual((270, 704), anchor.point)
+        self.assertEqual(Bounds(190, 650, 170, 200), anchor.bounds)
+        self.assertTrue(overlapped.is_set())
+        self.assertEqual([8], created)
+        self.assertEqual(
+            set(moat_scales),
+            {
+                scale
+                for name, scale in calls
+                if name == "northeast_moat_slope_wheel.png"
+            },
+        )
 
     def test_anchor_is_none_when_scale_hits_disagree(self) -> None:
         """P6: contradictory hit neighborhoods publish no fallback anchor."""
