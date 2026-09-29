@@ -32,6 +32,9 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
+)
 from pnc_automation.app.pnc.vision.home_city_camera import HomeCityCameraLocalizer
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -74,7 +77,10 @@ _CAMERA_TARGET_IDS = frozenset(
 _EXPECTED = {
     "home_city_pan_07.png": {
         "translation": (-1000, -710),
-        "targets": {HomeCityObjectId.INSTITUTE: (154, 193)},
+        "targets": {
+            HomeCityObjectId.INSTITUTE: (154, 193),
+            HomeCityObjectId.WAREHOUSE: (301, 113),
+        },
     },
     "home_city_tower_pan_28.png": {
         "translation": (-532, -638),
@@ -89,6 +95,7 @@ _EXPECTED = {
         "targets": {
             HomeCityObjectId.INSTITUTE: (260, 463),
             HomeCityObjectId.GODDESS_STATUE: (103, 473),
+            HomeCityObjectId.WAREHOUSE: (407, 382),
         },
     },
     "home_city_campaign_portal_20260915.png": {
@@ -134,10 +141,12 @@ _EXPECTED = {
     },
     # 2026-09-23 157_farm northeast baseline frame: the new fixed Sauroi pier
     # and moat fortification crops localize the previously landmark-free view.
-    # No qualified building target is visible in this view.
+    # The slot-3 Warehouse body is genuinely visible and now qualifies, but its
+    # measured action point sits below the HUD-safe band, so this view remains
+    # perception evidence only and authorizes no tap.
     "home_city_northeast_holdout_20260923.png": {
         "translation": (-1251, 139),
-        "targets": {},
+        "targets": {HomeCityObjectId.WAREHOUSE: (250, 1038)},
         "zoom": 1.0,
     },
     # 2026-09-23 157_farm wall-corridor regression frame (turn003 c3c post-pan
@@ -620,8 +629,10 @@ class HomeCameraPublicationTests(unittest.TestCase):
         landmark correspondences before the Sauroi pier and moat fortification
         crops were authored. Both publishers must localize at zoom ~1.0 near
         atlas translation (-1251, +139) through at least three fixed
-        correspondences in two genuinely independent groups, and must not
-        invent a body or tap while no qualified target is visible.
+        correspondences in two genuinely independent groups. The slot-3
+        Warehouse body is genuinely visible and publishes measured perception
+        evidence, but its action point lands below the HUD-safe tap band, so
+        this view still authorizes no building interaction.
         """
         backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
         builder, navigation = _wire(backend)
@@ -631,6 +642,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
 
         observations = self._build_both(builder, navigation, backend, capture)
         expected = _EXPECTED[name]
+        safe_max_y = int(HOME_CITY_HUD_SAFE_MAX_Y_RATIO * 1600)
         for publisher, observation in (
             ("observation_builder", observations[0]),
             ("navigation_perception", observations[1]),
@@ -652,12 +664,26 @@ class HomeCameraPublicationTests(unittest.TestCase):
                     <= proof.matched_group_ids,
                     "the northeast view must localize on the new fixed groups",
                 )
-                self.assertFalse(
-                    any(
-                        item.source_kind is SpatialObjectSourceKind.TEMPLATE
-                        for item in surface.objects
-                    ),
-                    "a target-free northeast view must not invent a building",
+                template_objects = [
+                    item
+                    for item in surface.objects
+                    if item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                ]
+                self.assertEqual(
+                    {HomeCityObjectId.WAREHOUSE},
+                    {
+                        home_city_object_id_from_metadata(item.metadata)
+                        for item in template_objects
+                    },
+                    "only the genuinely visible Warehouse may publish",
+                )
+                warehouse = template_objects[0]
+                self.assertEqual(3, warehouse.home_city_slot.slot_index)
+                assert warehouse.action_point is not None
+                self.assertGreater(
+                    warehouse.action_point[1],
+                    safe_max_y,
+                    "the Warehouse action lies below the tap band: evidence only",
                 )
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
@@ -784,7 +810,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
         Both publishers consume the single shared surface, so the view
         evidence, frame size, and frame provenance are identical on each path.
         """
-        for sequence, (name, translation, status, reason, anchor_id, anchor_point) in enumerate((
+        for sequence, (name, translation, status, reason, anchor_id, anchor_point, targets) in enumerate((
             (
                 "home_city_zoom_endpoint_20260925.png",
                 (-1084, 50),
@@ -792,6 +818,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 "measured_zoom_at_endpoint",
                 "northeast_moat_slope_wheel_20260925",
                 (270, 704),
+                {},
             ),
             (
                 "home_city_zoom_rung_20260925.png",
@@ -800,6 +827,8 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 "measured_zoom_closer_than_endpoint",
                 "castle_fountain_wheel_20260927",
                 (450, 558),
+                # The slot-3 Warehouse body is genuinely visible in this view.
+                {HomeCityObjectId.WAREHOUSE: (838, 725)},
             ),
             (
                 "home_city_default_start_20260927.png",
@@ -808,6 +837,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 "measured_zoom_closer_than_endpoint",
                 "castle_fountain_wheel_20260927",
                 (450, 895),
+                {},
             ),
             (
                 "home_city_fountain_935_20260927.png",
@@ -816,6 +846,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 "measured_zoom_closer_than_endpoint",
                 "castle_fountain_wheel_20260927",
                 (450, 699),
+                {},
             ),
             (
                 "home_city_fountain_879_20260927.png",
@@ -824,6 +855,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 "measured_zoom_closer_than_endpoint",
                 "castle_fountain_wheel_20260927",
                 (450, 657),
+                {},
             ),
         )):
             backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
@@ -840,7 +872,7 @@ class HomeCameraPublicationTests(unittest.TestCase):
             ):
                 with self.subTest(fixture=name, publisher=publisher):
                     self._assert_camera_publication(
-                        observation, capture, translation, {},
+                        observation, capture, translation, targets,
                     )
                     surface = observation.spatial_surface
                     assert surface is not None

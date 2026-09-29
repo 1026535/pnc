@@ -750,6 +750,45 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 max_projection_error=8,
                 reference_slot=HomeCitySlotSelector(1),
             ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.WAREHOUSE,
+                landmark_id="warehouse_body",
+                file_name="warehouse_body.png",
+                reference_bounds=Bounds(902, 1050, 112, 138),
+                # The L-shaped keep plus courtyard measured on the 2026-09-29
+                # turn006 post-pan frame 0047 (native 282,667,83,102 under
+                # camera (-777,55) at zoom ~0.739); the independent 0084
+                # survey view scores .957. The crop excludes the nameplate,
+                # level badge and the sidebar-occluded edge.
+                reference_action_bounds=Bounds(956, 1108, 22, 22),
+                reference_action_point=(967, 1119),
+                min_score=0.90,
+                # 12 reference px covers scene-calibration uncertainty plus
+                # matching noise; the same skin republishes at slot 3 on
+                # other castles, which is correct slot-3-only evidence.
+                max_projection_error=12,
+                # Warehouse is the single occupant type slot 3 allows; the
+                # binding tags the authored slot without narrowing
+                # candidate behavior beyond its reviewed eligibility.
+                reference_slot=HomeCitySlotSelector(3),
+            ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.BANK,
+                landmark_id="bank_body",
+                file_name="bank_body.png",
+                reference_bounds=Bounds(-212, 1543, 160, 129),
+                # Golden facade and blue dome under the fixed sys_1/5001
+                # marker, measured on the 2026-09-29 attempt1 baseline frame
+                # 0022 (native 216,1036,120,97 under camera (-24,45) at zoom
+                # 0.75); the independent 0092 survey view scores .972. The
+                # crop starts below the floating '!' badge pointer and
+                # excludes the nameplate. The node projects outside the
+                # canonical reference window but matching is frame-space.
+                reference_action_bounds=Bounds(-144, 1578, 22, 22),
+                reference_action_point=(-133, 1589),
+                min_score=0.90,
+                max_projection_error=8,
+            ),
         ),
         reference_size=HOME_CITY_CAMERA_REFERENCE_SIZE,
         atlas_to_reference_offset=HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,

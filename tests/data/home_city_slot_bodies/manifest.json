@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
+  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session plus the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa) that measured the slot-3 Warehouse body and the fixed sys_1/5001 Bank body. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
   "samples": [
     {
       "image": "home_city_blacksmith_slot12_f1_20260922.png",
@@ -145,6 +145,102 @@
       ],
       "annotation": "157_farm live005 frame 0066, the authored source of the Goddess statue-body crop. Observed regression/validation frame, not an independent holdout. Camera zoom 1.0, atlas translation (-595,-847): the slot-15 gold statue column/plinth matches at (368,145,60,78) score 1.0 with candidate action (398,200), which sits above the HUD-safe tap band so production must pan and reobserve before tapping. The earlier platform-trim target was never a proved clickable body.",
       "outside_mask_sha256": "c195b827516bd9cd0fff2f38a0284c48ef8fae74a27e1d4882bce5cef7f7bd88"
+    },
+    {
+      "image": "home_city_warehouse_slot3_0047_20260929.png",
+      "role": "slot_body_positive_warehouse_post_pan",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "0585dc669e53162f3c3783dd44c82b1afe72986eee3b3c407b2a1c047a901f62",
+      "sha256": "20c8791c99c714608563c3aa1fc22a01c525f4af14db8073736d31a7429b7bee",
+      "source_artifact": "20260929T035156Z_core_20260929T034927Z_1721bc67_0047_core_8_home_after_pan_2_0.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "c1b32c5c8b869b6850e844341db017a756a49df43f26dc63d4fbd423fab9f495",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "1721bc67 turn006 Campaign-fallback survey frame 0047. Camera zoom ~0.739, atlas translation (-777,55): the slot-3 Warehouse body is measured at frame (282,667,83,102) score .9948; interior action point (330,718) sits inside the HUD-safe band. Body template crops the L-shaped keep plus courtyard without the 'Warehouse' nameplate or level badge.",
+      "outside_mask_sha256": "61ce1d8fa7127cb004a28c7225424b43196b43db99f2fa706c6f5d332a9b2ec5"
+    },
+    {
+      "image": "home_city_warehouse_slot3_0084_20260929.png",
+      "role": "slot_body_holdout_warehouse_survey",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "7ef0c47ea6e7fa377d5b090cd54b18133ea0b2858467edaf3506dc7f82b12fee",
+      "sha256": "a183cc12b98d8fb9bb3160a7010203ae9fd600c824f8a6f90ab9ec37392ee2b5",
+      "source_artifact": "20260929T031001Z_core_20260929T030531Z_f1171ffa_0084_warehouse_survey_0_12.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "202f8a08e5f6242a318f2fc1182d6f10d5bd7b165ad791fd9ed5b4b0ab86b556",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "f1171ffa attempt1 warehouse survey frame 0084 -- independent session from the template source. Camera zoom 0.75, atlas translation (-389,-427): the same Warehouse skin measures at (684,197,84,104) score .9565 with the upper-right sidebar partially occluding the structure edge; the measured crop uses only unoccluded body pixels. Action point (733,249) is above the conservative tap band.",
+      "outside_mask_sha256": "96b8aa6342ced273d81df3477e427038faaa554e34cd8ff8a5fac7a00b124b0f"
+    },
+    {
+      "image": "home_city_bank_sys1_0022_20260929.png",
+      "role": "fixed_body_positive_bank_baseline",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "de40116d29e12a5329924e2485578c85c2b476b360b421b99ea7de752ae58380",
+      "sha256": "a554c9dd030dae6f9bb3ba2360c7de8277aab72438f526c363353a0a5e3ba167",
+      "source_artifact": "20260929T030605Z_core_20260929T030531Z_f1171ffa_0022_home_baseline_02.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "15713b41188bb438671599cf6a09e8d4f03a1003a6ff4b77e2ff31b71a0680ef",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "f1171ffa attempt1 home baseline frame 0022. Camera zoom 0.75, atlas translation (-24,45): the fixed sys_1/5001 Bank body is measured at (216,1036,120,97) score .9940 with action point (275,1070) below the conservative tap band. The crop excludes the floating '!' badge pointer and nameplate; Bank stays a fixed system node with no ordinary slot.",
+      "outside_mask_sha256": "027cac3d909724c14fdbdcaa63213dcfda179a8acd217e571e75f8aa4087efac"
+    },
+    {
+      "image": "home_city_bank_sys1_0092_20260929.png",
+      "role": "fixed_body_holdout_bank_survey",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "8599401624e0a88f5efa171816a2029fb877987b1c5aac7dc3d88db6e32ae377",
+      "sha256": "8eccf81eb5821a7e30faf846fc2819381b4603da225a68e5e7909bfe6779525b",
+      "source_artifact": "20260929T032524Z_core_20260929T030531Z_f1171ffa_0092_bank_survey_1_20.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "dd47a19b2cdc84ecf74d87aa462c2e7485c33076fae4487598da173b436b44fc",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "f1171ffa attempt1 bank survey frame 0092 -- independent view, same session as 0022 but a distinct camera pose. Camera zoom 0.75, atlas translation (-152,-21): the Bank facade/blue dome measures at (88,971,120,97) score .9718, action point (147,1006) below the tap band.",
+      "outside_mask_sha256": "13047d78813363a12c67a50e21215297fcc472314404202facd623156cdf44df"
     }
   ]
 }

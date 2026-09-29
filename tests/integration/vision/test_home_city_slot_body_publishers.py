@@ -88,6 +88,43 @@ _EXPECTED = {
             HomeCityObjectId.CAMPAIGN: (None, (451, 404)),
         },
     },
+    "home_city_warehouse_slot3_0047_20260929.png": {
+        "translation": (-777, 55),
+        "targets": {
+            HomeCityObjectId.INSTITUTE: (HomeCitySlotSelector(9), (150, 817)),
+            HomeCityObjectId.CAMPAIGN: (None, (760, 883)),
+            HomeCityObjectId.WALL: (HomeCitySlotSelector(2), (517, 1313)),
+            HomeCityObjectId.WAREHOUSE: (HomeCitySlotSelector(3), (330, 718)),
+        },
+    },
+    "home_city_warehouse_slot3_0084_20260929.png": {
+        "translation": (-389, -427),
+        "targets": {
+            HomeCityObjectId.INSTITUTE: (HomeCitySlotSelector(9), (551, 348)),
+            HomeCityObjectId.TOWER_OF_TRIAL: (None, (237, 690)),
+            HomeCityObjectId.BLACKSMITH: (HomeCitySlotSelector(12), (542, 844)),
+            HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (358, 360)),
+            HomeCityObjectId.WAREHOUSE: (HomeCitySlotSelector(3), (733, 249)),
+        },
+    },
+    "home_city_bank_sys1_0022_20260929.png": {
+        "translation": (-24, 45),
+        "targets": {
+            HomeCityObjectId.TOWER_OF_TRIAL: (None, (601, 1158)),
+            HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (722, 829)),
+            HomeCityObjectId.BANK: (None, (275, 1070)),
+        },
+    },
+    "home_city_bank_sys1_0092_20260929.png": {
+        "translation": (-152, -21),
+        "targets": {
+            HomeCityObjectId.INSTITUTE: (HomeCitySlotSelector(9), (788, 752)),
+            HomeCityObjectId.TOWER_OF_TRIAL: (None, (473, 1094)),
+            HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (594, 764)),
+            HomeCityObjectId.CASTLE: (HomeCitySlotSelector(1), (677, 382)),
+            HomeCityObjectId.BANK: (None, (147, 1006)),
+        },
+    },
 }
 
 
@@ -388,6 +425,43 @@ class HomeCitySlotBodyPublisherTests(unittest.TestCase):
                     for item in surface.objects
                 ), "wrong-slot content must never claim the Blacksmith target")
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_20260929_views_publish_warehouse_and_bank_on_both_paths(self) -> None:
+        """The new Warehouse/Bank bodies publish identically through both producers.
+
+        Each fixture is a native masked frame from the 2026-09-29 driver-
+        correction sessions; both publishers must agree on the same measured
+        slot-3 Warehouse and the slot-free fixed Bank node alongside the other
+        genuinely visible bodies.
+        """
+
+        for sequence, name in enumerate(
+            (
+                "home_city_warehouse_slot3_0047_20260929.png",
+                "home_city_warehouse_slot3_0084_20260929.png",
+                "home_city_bank_sys1_0022_20260929.png",
+                "home_city_bank_sys1_0092_20260929.png",
+            )
+        ):
+            backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+            builder, navigation = _wire(backend)
+            capture = _capture(
+                name, session_id="v44-4-warehouse-bank", capture_sequence=sequence,
+            )
+            observations = self._build_both(builder, navigation, backend, capture)
+            expected = _EXPECTED[name]
+            for publisher, observation in (
+                ("observation_builder", observations[0]),
+                ("navigation_perception", observations[1]),
+            ):
+                with self.subTest(fixture=name, publisher=publisher):
+                    self._assert_slot_body_publication(
+                        observation,
+                        capture,
+                        expected["translation"],
+                        expected["targets"],
+                    )
+            self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
 
 if __name__ == "__main__":

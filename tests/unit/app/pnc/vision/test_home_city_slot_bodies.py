@@ -44,6 +44,9 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectSourceKind,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    HOME_CITY_HUD_SAFE_MAX_X_RATIO,
+    HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
+    HOME_CITY_HUD_SAFE_MIN_X_RATIO,
     HOME_CITY_HUD_SAFE_MIN_Y_RATIO,
 )
 from pnc_automation.app.pnc.vision.home_city_camera import (
@@ -479,6 +482,265 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
                     ),
                 )
 
+    def test_warehouse_publishes_slot_3_on_source_and_holdout_views(self) -> None:
+        warehouse = _catalog_target(HomeCityObjectId.WAREHOUSE)
+        for name, translation, bounds, point in (
+            (
+                "home_city_warehouse_slot3_0047_20260929.png",
+                (-777, 55),
+                Bounds(282, 667, 83, 102),
+                (330, 718),
+            ),
+            (
+                "home_city_warehouse_slot3_0084_20260929.png",
+                (-389, -427),
+                Bounds(684, 197, 84, 104),
+                (733, 249),
+            ),
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(translation, proof.translation)
+                matches = self.localizer.match_target_candidates(
+                    frame, warehouse, proof=proof
+                )
+                self.assertEqual(1, len(matches))
+                match = matches[0]
+                self.assertEqual(HomeCitySlotSelector(3), match.home_city_slot)
+                self.assertEqual(bounds, match.bounds)
+                self.assertEqual(point, match.action_point)
+                self.assertGreaterEqual(match.score, 0.9)
+                self.assertLessEqual(match.projection_error, 12)
+                self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+                self.assertTrue(match.action_bounds.contains_point(match.action_point))
+                self.assertEqual(
+                    match,
+                    self.localizer.match_target(frame, warehouse, proof=proof),
+                )
+
+                objects = self.localizer.matched_target_objects(frame, proof=proof)
+                published = next(
+                    object_
+                    for object_ in objects
+                    if home_city_object_id_from_metadata(object_.metadata)
+                    is HomeCityObjectId.WAREHOUSE
+                )
+                self.assertEqual(HomeCitySlotSelector(3), published.home_city_slot)
+                self.assertEqual(match.bounds, published.bounds)
+                self.assertEqual(match.action_point, published.action_point)
+                self.assertEqual("camera_template", published.metadata["detection_source"])
+                self.assertEqual(3, published.metadata["home_city_slot_index"])
+
+    def test_warehouse_0047_action_lies_inside_the_safe_tap_band(self) -> None:
+        """The source view's measured body point stays inside the HUD-safe band."""
+
+        proof, frame = self._proof_and_frame("home_city_warehouse_slot3_0047_20260929.png")
+        match = self.localizer.match_target(
+            frame, _catalog_target(HomeCityObjectId.WAREHOUSE), proof=proof
+        )
+        self.assertIsNotNone(match)
+        x, y = match.action_point
+        self.assertLessEqual(int(HOME_CITY_HUD_SAFE_MIN_X_RATIO * 900), x)
+        self.assertLessEqual(x, int(HOME_CITY_HUD_SAFE_MAX_X_RATIO * 900))
+        self.assertLessEqual(int(HOME_CITY_HUD_SAFE_MIN_Y_RATIO * 1600), y)
+        self.assertLessEqual(y, int(HOME_CITY_HUD_SAFE_MAX_Y_RATIO * 1600))
+
+    def test_warehouse_erased_or_occluded_body_never_publishes(self) -> None:
+        warehouse = _catalog_target(HomeCityObjectId.WAREHOUSE)
+        image = _fixture("home_city_warehouse_slot3_0047_20260929.png")
+        proof = self.localizer.localize(image.copy())
+        self.assertTrue(proof.localized)
+        matches = self.localizer.match_target_candidates(
+            self.localizer.prepare_frame(image), warehouse, proof=proof
+        )
+        self.assertEqual(1, len(matches))
+        body = matches[0].bounds
+        image.paste((0, 0, 0, 255), (body.x, body.y, body.x + body.width, body.y + body.height))
+        self.assertEqual(
+            (),
+            self.localizer.match_target_candidates(
+                self.localizer.prepare_frame(image), warehouse, proof=proof
+            ),
+        )
+
+    def test_warehouse_never_publishes_on_unrelated_views(self) -> None:
+        warehouse = _catalog_target(HomeCityObjectId.WAREHOUSE)
+        for name in (
+            "home_city_blacksmith_slot12_f1_20260922.png",
+            "home_city_blacksmith_slot12_f2_20260922.png",
+            "home_city_baseline_f0_20260922.png",
+            "home_city_pan2_f5_20260922.png",
+            "home_city_wall_slot2_f6_20260922.png",
+            "home_city_goddess_slot15_0066_20260923.png",
+            "home_city_bank_sys1_0022_20260929.png",
+            "home_city_bank_sys1_0092_20260929.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(
+                    (),
+                    self.localizer.match_target_candidates(
+                        frame, warehouse, proof=proof
+                    ),
+                )
+
+    def test_bank_publishes_fixed_body_on_source_and_holdout_views(self) -> None:
+        bank = _catalog_target(HomeCityObjectId.BANK)
+        for name, translation, bounds, point in (
+            (
+                "home_city_bank_sys1_0022_20260929.png",
+                (-24, 45),
+                Bounds(216, 1036, 120, 97),
+                (275, 1070),
+            ),
+            (
+                "home_city_bank_sys1_0092_20260929.png",
+                (-152, -21),
+                Bounds(88, 971, 120, 97),
+                (147, 1006),
+            ),
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(translation, proof.translation)
+                matches = self.localizer.match_target_candidates(
+                    frame, bank, proof=proof
+                )
+                self.assertEqual(1, len(matches))
+                match = matches[0]
+                # The fixed sys_1/5001 node owns no ordinary slot.
+                self.assertIsNone(match.home_city_slot)
+                self.assertEqual(bounds, match.bounds)
+                self.assertEqual(point, match.action_point)
+                self.assertGreaterEqual(match.score, 0.9)
+                self.assertLessEqual(match.projection_error, 8)
+                self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+                self.assertTrue(match.action_bounds.contains_point(match.action_point))
+                self.assertEqual(
+                    match,
+                    self.localizer.match_target(frame, bank, proof=proof),
+                )
+
+                objects = self.localizer.matched_target_objects(frame, proof=proof)
+                published = next(
+                    object_
+                    for object_ in objects
+                    if home_city_object_id_from_metadata(object_.metadata)
+                    is HomeCityObjectId.BANK
+                )
+                self.assertIsNone(published.home_city_slot)
+                self.assertNotIn("home_city_slot_index", published.metadata)
+
+    def test_bank_action_stays_below_the_safe_tap_band(self) -> None:
+        """Both Bank views measure the body under the HUD-safe band.
+
+        The fixed node's projected action point lands below the conservative
+        tap band (max ratio 0.58) on both views, so this package supplies
+        perception/discovery evidence only; Bank still refuses open before
+        input and no tap is authorized by these frames.
+        """
+
+        bank = _catalog_target(HomeCityObjectId.BANK)
+        safe_max_y = int(HOME_CITY_HUD_SAFE_MAX_Y_RATIO * 1600)
+        for name in (
+            "home_city_bank_sys1_0022_20260929.png",
+            "home_city_bank_sys1_0092_20260929.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                match = self.localizer.match_target(frame, bank, proof=proof)
+                self.assertIsNotNone(match)
+                self.assertGreater(match.action_point[1], safe_max_y)
+
+    def test_bank_erased_or_occluded_body_never_publishes(self) -> None:
+        bank = _catalog_target(HomeCityObjectId.BANK)
+        image = _fixture("home_city_bank_sys1_0022_20260929.png")
+        proof = self.localizer.localize(image.copy())
+        self.assertTrue(proof.localized)
+        matches = self.localizer.match_target_candidates(
+            self.localizer.prepare_frame(image), bank, proof=proof
+        )
+        self.assertEqual(1, len(matches))
+        body = matches[0].bounds
+        image.paste((0, 0, 0, 255), (body.x, body.y, body.x + body.width, body.y + body.height))
+        self.assertEqual(
+            (),
+            self.localizer.match_target_candidates(
+                self.localizer.prepare_frame(image), bank, proof=proof
+            ),
+        )
+
+    def test_bank_never_publishes_on_unrelated_views(self) -> None:
+        bank = _catalog_target(HomeCityObjectId.BANK)
+        for name in (
+            "home_city_blacksmith_slot12_f1_20260922.png",
+            "home_city_blacksmith_slot12_f2_20260922.png",
+            "home_city_baseline_f0_20260922.png",
+            "home_city_pan2_f5_20260922.png",
+            "home_city_wall_slot2_f6_20260922.png",
+            "home_city_goddess_slot15_0066_20260923.png",
+            "home_city_warehouse_slot3_0047_20260929.png",
+            "home_city_warehouse_slot3_0084_20260929.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(
+                    (),
+                    self.localizer.match_target_candidates(frame, bank, proof=proof),
+                )
+
+    def test_contradictory_camera_proofs_reject_both_new_bodies(self) -> None:
+        """Wrong translations/zooms move predictions away from the bodies."""
+
+        warehouse = _catalog_target(HomeCityObjectId.WAREHOUSE)
+        bank = _catalog_target(HomeCityObjectId.BANK)
+        image = _fixture("home_city_warehouse_slot3_0047_20260929.png")
+        frame = self.localizer.prepare_frame(image)
+        for proof in (
+            _localized_proof((-1250, 139)),
+            _localized_proof((-777, 55)),  # real translation, wrong 1.0 zoom
+            _localized_proof((-200, 55), zoom=0.7387),
+        ):
+            self.assertEqual(
+                (),
+                self.localizer.match_target_candidates(frame, warehouse, proof=proof),
+            )
+        bank_image = _fixture("home_city_bank_sys1_0022_20260929.png")
+        bank_frame = self.localizer.prepare_frame(bank_image)
+        for proof in (
+            _localized_proof((-532, 222)),
+            _localized_proof((200, -1000), zoom=0.75),
+            _localized_proof((-24, 45)),  # real translation, wrong 1.0 zoom
+        ):
+            self.assertEqual(
+                (),
+                self.localizer.match_target_candidates(
+                    bank_frame, bank, proof=proof
+                ),
+            )
+
+    def test_unlocalized_proofs_publish_neither_new_target(self) -> None:
+        for status in (
+            HomeCityCameraStatus.INSUFFICIENT,
+            HomeCityCameraStatus.AMBIGUOUS,
+            HomeCityCameraStatus.UNSUPPORTED,
+        ):
+            with self.subTest(status=status):
+                proof = HomeCityCameraProof(status=status, reason="synthetic")
+                frame = self.localizer.prepare_frame(
+                    _fixture("home_city_bank_sys1_0022_20260929.png")
+                )
+                for target in (
+                    _catalog_target(HomeCityObjectId.WAREHOUSE),
+                    _catalog_target(HomeCityObjectId.BANK),
+                ):
+                    self.assertEqual(
+                        (),
+                        self.localizer.match_target_candidates(
+                            frame, target, proof=proof
+                        ),
+                    )
+
     def test_smaller_resolution_frame_scales_action_geometry(self) -> None:
         """A 450x800 capture normalizes to reference space; measured geometry maps back."""
 
@@ -673,6 +935,10 @@ class FixtureIntegrityTests(unittest.TestCase):
                 "home_city_pan2_f5_20260922.png",
                 "home_city_wall_slot2_f6_20260922.png",
                 "home_city_goddess_slot15_0066_20260923.png",
+                "home_city_warehouse_slot3_0047_20260929.png",
+                "home_city_warehouse_slot3_0084_20260929.png",
+                "home_city_bank_sys1_0022_20260929.png",
+                "home_city_bank_sys1_0092_20260929.png",
             },
             set(samples),
         )

@@ -103,3 +103,37 @@ qualify a current non-collecting entry state before tapping. A visible harvest
 state leaves that entry case pending unless collection is separately authorized;
 it is neither unavailable nor a passed route. This source rule does not authorize
 collecting, upgrading or spending to create a test precondition.
+
+## Measured body evidence — September 29, 2026
+
+The V44-4 sepia-taleggio package measured two Home-city bodies from the
+2026-09-29 driver-correction sessions (157_farm castle, normalized zoom
+0.739-0.75, 900x1600 frames). Each binding pairs a native source frame with an
+independent holdout; scores and projection errors come from the production
+localizer and matcher.
+
+### Warehouse — ordinary slot 3 body qualified
+
+`warehouse_body` is authored from frame 0047 (camera translation (-777,55),
+zoom ~0.739) and reproduces on independent holdout frame 0084
+(translation (-389,-427), zoom 0.75, sidebar-cleared crop) at score ~0.956,
+projection error ~3.9. The measured body is bound to `HomeCitySlotSelector(3)`;
+slot 3 is Warehouse-only, so the same appearance across castles is a correct
+slot-3 observation, not a false positive. The body also requalified on the
+pan_07, mega_castle, northeast_holdout, and zoom_rung saved views. This feeds
+Warehouse's existing shared route through `PNC_WAREHOUSE`; destination and
+return remain the reviewed contract described above — the body evidence does
+not re-prove live entry.
+
+### Bank — fixed sys_1/5001 body qualified for perception only
+
+`bank_body` is authored from frame 0022 (camera translation (-24,45), zoom 0.75)
+and reproduces on independent survey frame 0092 (translation (-152,-21)) at
+score ~0.972, projection error ~1.3. The crop covers the golden facade and blue
+roof and deliberately excludes the floating `!` badge pointer and the
+nameplate. On both views the measured action point lands below the conservative
+HUD-safe tap band, so this evidence is perception/discovery only: it lets
+shared observation report the Bank body but authorizes no tap, and
+`open_building`/`open_visible_building` still refuse the unsupported route
+because no `PNC_BANK` destination, entry menu, or return edge is modeled. The
+intermediate Home menu behavior above stays the governing uncertainty.
