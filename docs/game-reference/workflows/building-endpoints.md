@@ -149,7 +149,7 @@ The recovered body handlers for types 1020-1022
 delegate to `BuildClickComponent` after package/tutorial guards. They do not
 execute the resource collection branch. The common dispatcher opens `CAMP_PANEL`
 with the selected DTO (`vo/buildtabledata.lua:184-191`); Hall 1011 opens
-`WAR_HALL_WIN` at lines 163-164. This proves the packaged entry chain, not the
+`WAR_HALL_WIN` at lines 165-166. This proves the packaged entry chain, not the
 current native appearance or return.
 
 The September 29 route-contract candidate has distinct Infantry/Ranged primary
