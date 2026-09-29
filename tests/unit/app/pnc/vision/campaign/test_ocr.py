@@ -1,27 +1,14 @@
-"""Unit coverage for the Campaign producer's measured feature arithmetic."""
+"""Unit tests for bounded Campaign OCR and abstention."""
 
 from __future__ import annotations
-
 from datetime import UTC, datetime
 import unittest
-
-import numpy as np
 from PIL import Image
-
-from pnc_automation.app.pnc.domain.observation import (
-    DetectedListEntry,
-    ListEntryKind,
-    RowRecognitionStatus,
-)
-from pnc_automation.app.pnc.vision import campaign
+from pnc_automation.app.pnc.vision.campaign import ocr
+from pnc_automation.app.pnc.vision.campaign_ocr_regions import CAMPAIGN_CHAPTER_TITLE_REGION, CAMPAIGN_REFERENCE_SIZE, scale_campaign_bounds
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import (
-    ObservationOcrContext,
-    OcrLine,
-    OcrResult,
-)
-
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult
 
 def _frame_ref() -> FrameRef:
     """Builds deterministic provenance for one offline OCR context."""
@@ -33,7 +20,6 @@ def _frame_ref() -> FrameRef:
         input_sequence=0,
         captured_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
-
 
 class _QueuedOcrBackend:
     """Returns one configured OCR result per backend read, in call order."""
@@ -50,7 +36,6 @@ class _QueuedOcrBackend:
             return OcrResult(lines=(), words=())
         return self.results.pop(0)
 
-
 def _ocr_context(
     image: Image.Image, results: list[OcrResult]
 ) -> tuple[ObservationOcrContext, _QueuedOcrBackend]:
@@ -62,7 +47,6 @@ def _ocr_context(
         backend,
     )
 
-
 def _numeric_result(text: str, confidence: float) -> OcrResult:
     """One OCR line fixture carrying a numeric read at a given confidence."""
 
@@ -71,79 +55,8 @@ def _numeric_result(text: str, confidence: float) -> OcrResult:
         words=(),
     )
 
-
 def _line_result(*lines: OcrLine) -> OcrResult:
     return OcrResult(lines=tuple(lines), words=())
-
-
-def _row(bounds: Bounds) -> DetectedListEntry:
-    return DetectedListEntry(
-        kind=ListEntryKind.CAMPAIGN_STAGE,
-        bounds=bounds,
-        row_status=RowRecognitionStatus.UNREADABLE,
-    )
-
-
-class CampaignFeatureArithmeticTests(unittest.TestCase):
-    """White and high-red pixels must never classify as navy interiors."""
-
-    def test_node_features_do_not_wrap_bright_pixels_into_navy(self) -> None:
-        disc = Bounds(20, 20, 60, 60)
-        for name, color in (
-            ("white", (255, 255, 255)),
-            ("bright_red", (240, 30, 30)),
-        ):
-            with self.subTest(fill=name):
-                pixels = np.zeros((100, 100, 3), dtype=np.uint8)
-                pixels[:, :] = color
-                features = campaign._node_features(pixels, disc)
-                self.assertEqual(0.0, features["blue"])
-                self.assertEqual(0.0, features["navy_band"])
-
-        pixels = np.zeros((100, 100, 3), dtype=np.uint8)
-        pixels[:, :] = (20, 20, 120)
-        features = campaign._node_features(pixels, disc)
-        self.assertGreater(features["blue"], 0.9)
-
-    def test_nameplate_navy_check_does_not_count_white_or_red_trim(self) -> None:
-        plate = Bounds(0, 0, 60, 20)
-        for name, color, expected in (
-            ("white", (255, 255, 255), False),
-            ("bright_red", (240, 30, 30), False),
-        ):
-            with self.subTest(fill=name):
-                pixels = np.zeros((40, 80, 3), dtype=np.uint8)
-                pixels[:, :] = color
-                self.assertIs(
-                    campaign._nameplate_supported(pixels, plate, gold=False), expected
-                )
-
-        pixels = np.zeros((40, 80, 3), dtype=np.uint8)
-        pixels[:, :] = (15, 15, 25)
-        pixels[:, :20] = (30, 30, 140)
-        self.assertTrue(campaign._nameplate_supported(pixels, plate, gold=False))
-
-
-class CampaignDedupTests(unittest.TestCase):
-    """Duplicate ownership is decided by marker geometry, not row envelopes."""
-
-    def test_distinct_nearby_markers_survive_overlapping_row_envelopes(self) -> None:
-        rows = [
-            (Bounds(10, 10, 30, 30), _row(Bounds(10, 10, 160, 60))),
-            (Bounds(120, 20, 30, 30), _row(Bounds(50, 15, 160, 60))),
-        ]
-        kept = campaign._deduplicate_marked(rows)
-        self.assertEqual(2, len(kept))
-
-    def test_overlapping_markers_collapse_to_the_first_row(self) -> None:
-        rows = [
-            (Bounds(10, 10, 30, 30), _row(Bounds(10, 10, 160, 60))),
-            (Bounds(20, 15, 30, 30), _row(Bounds(30, 12, 160, 60))),
-        ]
-        kept = campaign._deduplicate_marked(rows)
-        self.assertEqual(1, len(kept))
-        self.assertIs(kept[0], rows[0][1])
-
 
 class CampaignDiscNumberTests(unittest.TestCase):
     """Badge numerals require a unique credible positive value."""
@@ -154,7 +67,7 @@ class CampaignDiscNumberTests(unittest.TestCase):
 
     def _read(self, results: list[OcrResult]) -> tuple[int | None, _QueuedOcrBackend]:
         context, backend = _ocr_context(self.image, results)
-        value = campaign._read_disc_number(
+        value = ocr._read_disc_number(
             image=self.image,
             disc_ref=self.disc,
             ocr_context=context,
@@ -205,6 +118,29 @@ class CampaignDiscNumberTests(unittest.TestCase):
         )
         value, _backend = self._read([OcrResult(lines=(), words=()), result])
         self.assertIsNone(value)
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+
+class CampaignOcrPlanTests(unittest.TestCase):
+    """Pure reference-space OCR plan calculations stay below integration."""
+
+    def test_campaign_ocr_regions_scale_reference_geometry(self) -> None:
+            """Scale the reviewed Campaign regions without changing their native reference geometry."""
+
+            self.assertEqual(CAMPAIGN_REFERENCE_SIZE, (540, 960))
+            self.assertEqual(
+                scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, (900, 1600)),
+                Bounds(342, 63, 542, 100),
+            )
+            self.assertEqual(
+                scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, CAMPAIGN_REFERENCE_SIZE),
+                CAMPAIGN_CHAPTER_TITLE_REGION,
+            )
+            with self.assertRaisesRegex(ValueError, "positive image dimensions"):
+                scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, (0, 960))
 
 
 if __name__ == "__main__":
