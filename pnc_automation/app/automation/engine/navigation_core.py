@@ -103,6 +103,7 @@ from pnc_automation.app.pnc.vision.home_city_camera import (
     load_home_city_camera_catalog,
 )
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import performance_wait
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
     HOME_CITY_HUD_SAFE_MAX_X_RATIO,
     HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
@@ -213,7 +214,7 @@ class _HomeCityOperation:
         """Capture fresh content without hiding extra captures in another observer."""
         self.check_deadline()
         if previous is not None:
-            self.core.sleep(self.core.policy.poll_seconds)
+            self.core.wait("home_city_poll", self.core.policy.poll_seconds)
         self.check_deadline()
         frame = self.observe_content(f"{self.label}_{stage}")
         self.check_deadline()
@@ -396,6 +397,11 @@ class NavigationCore:
     record: Callable[[dict[str, object]], None] = lambda _: None
     observe_ready: Callable[[str], Observation] | None = None
     _sequence: int = field(default=0, init=False)
+
+    def wait(self, reason: str, seconds: float) -> None:
+        """Measures one explicit passive navigation wait without patching global sleep."""
+
+        performance_wait(reason, seconds, self.sleep)
 
     def transition(self, edge: NavigationEdge) -> Observation:
         """Reacquire the source, tap once, and require a stable observed destination."""
@@ -1634,7 +1640,7 @@ class NavigationCore:
         for index in range(self.policy.max_observations):
             if self.clock() - started >= self.policy.max_seconds:
                 break
-            self.sleep(self.policy.poll_seconds)
+            self.wait("content_confirmation_poll", self.policy.poll_seconds)
             after = observe_content(f"{label}_after_{index}")
             self.record({"event": "observed", "screen": after.screen_type.name,
                          "artifact": str(after.artifact_path), "blocked": after.blocking_popup})
@@ -1680,7 +1686,7 @@ class NavigationCore:
                 home_operation.check_deadline()
             if self.clock() - started >= self.policy.max_seconds:
                 break
-            self.sleep(self.policy.poll_seconds)
+            self.wait("navigation_transition_poll", self.policy.poll_seconds)
             after = self.observe(f"{label}_after_{index}")
             self.record({"event": "observed", "screen": after.screen_type.name,
                          "artifact": str(after.artifact_path), "blocked": after.blocking_popup})

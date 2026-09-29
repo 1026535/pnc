@@ -13,7 +13,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from tests.integration.vision.test_campaign_visual_profiles import (
+from tests.support.pnc.campaign import (
     _builder,
     _builder_with_backend,
     _capture,

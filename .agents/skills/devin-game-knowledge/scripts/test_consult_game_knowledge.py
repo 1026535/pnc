@@ -151,5 +151,25 @@ class ConsultantConfigTests(unittest.TestCase):
                 )
 
 
+class ConsultationPromptTests(unittest.TestCase):
+    """The prompt must tell the consultant the command grammar and retry rule.
+
+    Observed consultations ended `incomplete` when a headless tool rejection
+    (`git -C <path> show`, `cmd; cmd` compounds, `Get-ChildItem`) stopped the
+    worker before its Handback memo — the prompt named the read-only intent but
+    never the permitted forms or that a rejection is recoverable.
+    """
+
+    def test_prompt_states_the_allowed_command_grammar(self) -> None:
+        prompt = consult.consultation_prompt("q")
+        self.assertIn("second token", prompt)
+        self.assertIn("already the working directory", prompt)
+
+    def test_prompt_states_rejection_is_not_terminal(self) -> None:
+        prompt = consult.consultation_prompt("q")
+        self.assertIn("not terminal", prompt)
+        self.assertIn("Handback", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

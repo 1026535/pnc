@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import tempfile
+import threading
 import unittest
 
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
@@ -19,6 +23,11 @@ from pnc_automation.app.pnc.navigation.world_map_proof import (
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.performance import (
+    PerformanceReportWriter,
+    performance_run_scope,
+    performance_span,
+)
 
 from tests.support.pnc.observations import make_observation
 from tests.support.pnc.spatial import make_spatial_object, make_spatial_surface
@@ -163,6 +172,31 @@ class WorldMapProofAnalysisTests(unittest.TestCase):
 
         self.assertEqual([result.work_item.route_index for result in results], [1, 2])
         self.assertEqual(queue.peak_depth, 2)
+
+    def test_p2_worker_inherits_active_performance_run(self) -> None:
+        """Carries the opt-in report context into lazy P2 worker analysis."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            writer = PerformanceReportWriter(Path(temporary_directory))
+            analyzer = WorldMapViewportAnalyzer(observation_builder=_build_rich_p2_observation)
+            with performance_run_scope(writer, "p2_queue") as run:
+                with performance_span("core.workflow"):
+                    with WorldMapViewportAnalysisQueue(analyzer=analyzer.analyze, max_pending=1) as queue:
+                        queue.submit(_p2_work_item(route_index=0, coordinate=(10, 0)))
+                        queue.drain_next()
+                coordinator_thread_id = threading.get_ident()
+
+            self.assertIsNotNone(run)
+            assert run is not None and run.report_path is not None
+            report = json.loads(run.report_path.read_text(encoding="utf-8"))
+            spans = {span["name"]: span for span in report["spans"]}
+            self.assertIn("world_map.p2.analysis", spans)
+            self.assertIn("world_map.p2.wait", spans)
+            self.assertEqual(
+                spans["core.workflow"]["span_id"],
+                spans["world_map.p2.analysis"]["parent_id"],
+            )
+            self.assertNotEqual(coordinator_thread_id, spans["world_map.p2.analysis"]["thread_id"])
 
     def test_p2_queue_ready_and_next_drains_use_route_order_for_out_of_order_submissions(self) -> None:
         """Keeps every drain method on the same route-order coordinator contract."""

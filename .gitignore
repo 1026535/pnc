@@ -24,6 +24,8 @@ artifacts/
 /navigation_selector_validation_output/
 /archives/
 /.local-data/
+# Keep performance samples and trend reports visibly isolated and local-only.
+/.local-data/performance-metrics/
 home_city_blended_gui_removed.png
 home_city_landscape_atlas.png
 home_city_map_unlabeled.png

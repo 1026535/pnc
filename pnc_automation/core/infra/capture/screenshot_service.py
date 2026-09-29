@@ -10,6 +10,7 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 
 from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord, ArtifactStore
+from pnc_automation.core.infra.diagnostics.performance import performance_span
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.errors import ScreenshotCaptureError
@@ -62,28 +63,32 @@ class ScreenshotService:
     ) -> CapturedScreenshot:
         """Captures a screenshot and optionally persists it under the provided artifact directory."""
 
-        captured = session.capture_screenshot_frame()
-        payload = captured.payload
-        frame_ref = captured.frame_ref
-        image = _decode_image(payload)
-        artifact = (
-            self.artifact_store.persist_bytes(
-                artifact_directory=artifact_directory,
-                label=label,
-                extension=self.screenshot_format,
+        with performance_span("screenshot.capture", attributes={"persist": persist}) as measured:
+            with performance_span("screenshot.transport"):
+                captured = session.capture_screenshot_frame()
+            payload = captured.payload
+            frame_ref = captured.frame_ref
+            if measured is not None:
+                measured.set_attribute("payload_bytes", len(payload))
+            with performance_span("screenshot.decode", attributes={"payload_bytes": len(payload)}):
+                image = _decode_image(payload)
+            artifact = None
+            if persist:
+                with performance_span("screenshot.persist", attributes={"payload_bytes": len(payload)}):
+                    artifact = self.artifact_store.persist_bytes(
+                        artifact_directory=artifact_directory,
+                        label=label,
+                        extension=self.screenshot_format,
+                        payload=payload,
+                    )
+            return CapturedScreenshot(
+                artifact=artifact,
+                image=image,
+                image_format=image.format or self.screenshot_format.upper(),
                 payload=payload,
+                ephemeral_captured_at=None if persist else datetime.now(tz=UTC),
+                frame_ref=frame_ref,
             )
-            if persist
-            else None
-        )
-        return CapturedScreenshot(
-            artifact=artifact,
-            image=image,
-            image_format=image.format or self.screenshot_format.upper(),
-            payload=payload,
-            ephemeral_captured_at=None if persist else datetime.now(tz=UTC),
-            frame_ref=frame_ref,
-        )
 
 
 def _decode_image(payload: bytes) -> Image.Image:

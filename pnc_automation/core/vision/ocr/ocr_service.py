@@ -16,6 +16,7 @@ from PIL import Image
 
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.errors import ScreenClassificationError
+from pnc_automation.core.infra.diagnostics.performance import performance_span
 from pnc_automation.core.vision.image.models import Bounds
 
 try:
@@ -482,6 +483,7 @@ class ObservationOcrContext:
                     prepare=None,
                     pin_fullframe=validated_region is None and orientation is OcrTextOrientation.AUTO,
                     orientation=orientation,
+                    purpose=purpose,
                 )
             except Exception:
                 self._record_diagnostic(
@@ -604,6 +606,7 @@ class ObservationOcrContext:
                     prepare=prepare,
                     pin_fullframe=False,
                     orientation=orientation,
+                    purpose=purpose,
                 )
             except Exception:
                 self._record_diagnostic(
@@ -687,6 +690,7 @@ class ObservationOcrContext:
         prepare: Callable[[Image.Image, Bounds], Image.Image | None] | None,
         pin_fullframe: bool,
         orientation: OcrTextOrientation,
+        purpose: OcrReadPurpose,
     ) -> OcrResult | None:
         """Prepares one owned input, runs the backend once, and caches only success."""
 
@@ -715,12 +719,26 @@ class ObservationOcrContext:
         started = perf_counter()
         try:
             backend_region = None if prepare is not None else region
-            if orientation is OcrTextOrientation.AUTO:
-                raw_result = self._backend.read_result(source, backend_region)
-            else:
-                raw_result = self._backend.read_result(
-                    source, backend_region, orientation=orientation,
-                )
+            with performance_span(
+                "ocr.backend_call",
+                attributes={
+                    "purpose": purpose.value,
+                    "orientation": orientation.value,
+                    "input_width": source.width,
+                    "input_height": source.height,
+                    "region_width": None if region is None else region.width,
+                    "region_height": None if region is None else region.height,
+                    "processed_pixel_area": processed_pixel_area,
+                    "preprocessed": prepare is not None,
+                    "backend": type(self._backend).__name__,
+                },
+            ):
+                if orientation is OcrTextOrientation.AUTO:
+                    raw_result = self._backend.read_result(source, backend_region)
+                else:
+                    raw_result = self._backend.read_result(
+                        source, backend_region, orientation=orientation,
+                    )
         except Exception:
             self._engine_seconds += perf_counter() - started
             raise

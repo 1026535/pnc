@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from threading import Lock
@@ -21,6 +22,10 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.domain.observation_policy import ObservationArtifactSelection
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.diagnostics.performance import (
+    current_performance_run,
+    performance_span,
+)
 
 
 class WorldMapScreenshotObservationBuilder(Protocol):
@@ -383,7 +388,16 @@ class WorldMapViewportAnalysisQueue:
             submitted_at_ms=_monotonic_ms(),
         )
         self._telemetry_entries[submission_order] = entry
-        future = self._executor.submit(self._analyze_with_telemetry, work_item, submission_order)
+        if current_performance_run() is None:
+            future = self._executor.submit(self._analyze_with_telemetry, work_item, submission_order)
+        else:
+            context = copy_context()
+            future = self._executor.submit(
+                context.run,
+                self._analyze_with_telemetry,
+                work_item,
+                submission_order,
+            )
         self._pending.append(
             _WorldMapViewportPendingAnalysis(
                 route_index=work_item.route_index,
@@ -438,7 +452,11 @@ class WorldMapViewportAnalysisQueue:
         pending = self._pending.pop(0)
         started_at = time.perf_counter()
         try:
-            return pending.future.result()
+            with performance_span(
+                "world_map.p2.wait",
+                attributes={"reason": blocking_reason or "result"},
+            ):
+                return pending.future.result()
         finally:
             elapsed_ms = (time.perf_counter() - started_at) * 1000.0
             self._mark_released(pending.submission_order)
@@ -488,7 +506,11 @@ class WorldMapViewportAnalysisQueue:
 
         self._update_telemetry(submission_order, worker_started_at_ms=_monotonic_ms())
         try:
-            return self.analyzer(work_item)
+            with performance_span(
+                "world_map.p2.analysis",
+                attributes={"route_index": work_item.route_index},
+            ):
+                return self.analyzer(work_item)
         except Exception as error:
             self._update_telemetry(
                 submission_order,
