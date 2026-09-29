@@ -56,6 +56,14 @@ class HomeCityCameraTargetTests(unittest.TestCase):
                     proof, translation=(translation[0] + 300, translation[1])
                 )
                 self.assertIsNone(localizer.match_target(frame, target, proof=wrong_pose))
+                # Camera/slot geometry alone cannot authorize a missing body.
+                obscured = image.copy()
+                bounds = match.bounds
+                obscured.paste((0, 0, 0), (
+                    bounds.x, bounds.y,
+                    bounds.x + bounds.width, bounds.y + bounds.height,
+                ))
+                self.assertIsNone(localizer.match_target(obscured, target, proof=proof))
 
     def test_institute_body_matches_pan_view_with_verified_action_geometry(self) -> None:
         localizer = _localizer()

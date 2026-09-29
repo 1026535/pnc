@@ -133,7 +133,7 @@ class HomeCityCameraNativeZoomTests(unittest.TestCase):
 
         p6_path_right — the camera-qualified Institute body landmark — does
         not match at scale 1.072. The independently qualified Goddess body
-        remains visible without weakening the Institute match contract.
+        and Castle bodies remain visible without weakening the Institute match contract.
         Baseline and restored views qualify Institute at their measured poses.
         """
         localizer = _localizer()
@@ -145,9 +145,11 @@ class HomeCityCameraNativeZoomTests(unittest.TestCase):
         self.assertIsNone(localizer.match_target(zoomed, target, proof=zoomed_proof))
         objects = localizer.matched_target_objects(zoomed, proof=zoomed_proof)
         self.assertEqual(
-            [HomeCityObjectId.GODDESS_STATUE.value],
+            [HomeCityObjectId.GODDESS_STATUE.value, HomeCityObjectId.CASTLE.value],
             [item.metadata["home_city_object_id"] for item in objects],
         )
+        self.assertEqual(1, objects[-1].home_city_slot.slot_index)
+        self.assertEqual((583, 649), objects[-1].action_point)
 
         for name, action_point in (
             (self._BASELINE, (724, 1253)),

@@ -60,7 +60,15 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
             ),
             proof.matched_group_ids,
         )
-        self.assertFalse(localizer.matched_target_objects(prepared, proof=proof))
+        objects = localizer.matched_target_objects(prepared, proof=proof)
+        # The offer rail hides Institute, while the Castle body remains visible.
+        self.assertEqual(
+            [HomeCityObjectId.CASTLE.value],
+            [item.metadata["home_city_object_id"] for item in objects],
+        )
+        self.assertIsNone(localizer.match_target(
+            prepared, localizer.catalog.target_for(HomeCityObjectId.INSTITUTE), proof=proof,
+        ))
 
     def test_live_tower_pan_localizes_after_northern_landmarks_leave_view(self) -> None:
         """The qualified Tower body extends camera proof beyond the Institute region."""
@@ -136,7 +144,13 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
             {"castle_structure", "plaza_low", "courtyard_garden"}
             <= proof.matched_group_ids
         )
-        self.assertFalse(localizer.matched_target_objects(prepared, proof=proof))
+        objects = localizer.matched_target_objects(prepared, proof=proof)
+        self.assertEqual(
+            [HomeCityObjectId.CASTLE.value],
+            [item.metadata["home_city_object_id"] for item in objects],
+        )
+        self.assertEqual(1, objects[0].home_city_slot.slot_index)
+        self.assertEqual((337, 408), objects[0].action_point)
 
     def test_live_castle_default_view_localizes_at_the_reference_camera(self) -> None:
         """A different account's castle at the authored camera position localizes."""

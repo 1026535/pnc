@@ -105,11 +105,11 @@ _EXPECTED = {
     },
     "home_city_castle_default_20260921.png": {
         "translation": (-532, 222),
-        "targets": {},
+        "targets": {HomeCityObjectId.CASTLE: (344, 452)},
     },
     "home_city_castle_holdout_20260921.png": {
         "translation": (-545, 149),
-        "targets": {},
+        "targets": {HomeCityObjectId.CASTLE: (337, 408)},
     },
     # 2026-09-22 157_farm native wheel-zoom captures (client 5.0.204/235):
     # sampled scene scales 1.0 and ~1.072 at unchanged 900x1600. The zoomed
@@ -506,14 +506,14 @@ class HomeCameraPublicationTests(unittest.TestCase):
                 )
         self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
-    def test_castle_views_publish_camera_proof_without_authorizing_buildings(self) -> None:
+    def test_castle_views_publish_camera_proof_and_only_the_observed_castle(self) -> None:
         """The 2026-09-21 castle captures localize through independent courtyard groups.
 
         The default-camera view localizes on castle structure plus plaza floor,
         and the panned holdout agrees on castle structure, the Goddess Statue
         monument, and the west garden -- three genuinely independent regions.
-        No camera-qualified building target is visible in either view, so both
-        publishers must localize without inventing a tap point.
+        The qualified Castle tower supplies slot 1 and its measured interior
+        point in both views; no other building body may be invented.
         """
         for name, expected_translation in (
             ("home_city_castle_default_20260921.png", (-532, 222)),
@@ -543,13 +543,15 @@ class HomeCameraPublicationTests(unittest.TestCase):
                         surface.camera_proof.matched_group_ids,
                         "the castle keep group must corroborate the camera",
                     )
-                    self.assertFalse(
-                        any(
-                            item.source_kind is SpatialObjectSourceKind.TEMPLATE
-                            for item in surface.objects
-                        ),
-                        "a castle-only view must not authorize an unobserved building",
+                    bodies = [
+                        item for item in surface.objects
+                        if item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                    ]
+                    self.assertEqual(
+                        [HomeCityObjectId.CASTLE],
+                        [home_city_object_id_from_metadata(item.metadata) for item in bodies],
                     )
+                    self.assertEqual(1, bodies[0].home_city_slot.slot_index)
             self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
     def test_native_zoom_frames_publish_measured_scale_through_both_paths(self) -> None:
