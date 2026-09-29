@@ -365,7 +365,9 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
         supplies the second group while the movable Alliance Hall
         corroborates only. Both publishers must localize at zoom 1.0 near
         atlas (-1298,-645), publish the existing Wall slot-2 body at
-        (456,1057) with full provenance, and invent no other target.
+        (456,1057) with full provenance, and publish the genuinely present
+        Alliance Hall slot-13 body at (507,810) without inventing any other
+        target.
         """
         backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
         builder, navigation = _wire(backend)
@@ -404,7 +406,7 @@ class HomeCameraTargetPublicationTests(HomeCameraPublicationAssertions, unittest
                 self.assertEqual(1, len(walls))
                 self.assertEqual(2, walls[0].home_city_slot.slot_index)
                 self.assertEqual(
-                    {HomeCityObjectId.WALL},
+                    {HomeCityObjectId.WALL, HomeCityObjectId.ALLIANCE_HALL},
                     {
                         home_city_object_id_from_metadata(item.metadata)
                         for item in surface.objects

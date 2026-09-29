@@ -127,7 +127,10 @@ _EXPECTED = {
     },
     "home_city_native_zoom_holdout_20260922.png": {
         "translation": (-603, 78),
-        "targets": {HomeCityObjectId.GODDESS_STATUE: (462, 1201)},
+        "targets": {
+            HomeCityObjectId.GODDESS_STATUE: (462, 1201),
+            HomeCityObjectId.INFANTRY_BARRACKS: (68, 965),
+        },
         "zoom": 1.071989179,
     },
     "home_city_native_zoom_restored_20260922.png": {
@@ -148,10 +151,15 @@ _EXPECTED = {
     # 2026-09-23 157_farm wall-corridor regression frame (turn003 c3c post-pan
     # view, frame 0064): the new campaign_left_pedestal landmark supplies the
     # second independent fixed group and the existing Wall slot-2 body
-    # qualifies. Diagnosis-derived live regression sample, not a holdout.
+    # qualifies; the movable Alliance Hall at slot 13 is genuinely present and
+    # publishes its measured body as well. Diagnosis-derived live regression
+    # sample, not a holdout.
     "home_city_wall_corridor_regression_20260923.png": {
         "translation": (-1298, -645),
-        "targets": {HomeCityObjectId.WALL: (456, 1057)},
+        "targets": {
+            HomeCityObjectId.WALL: (456, 1057),
+            HomeCityObjectId.ALLIANCE_HALL: (507, 810),
+        },
         "zoom": 1.0,
     },
 }
