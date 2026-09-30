@@ -11,7 +11,7 @@ attempt reservation, or resource authority.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 
 from pnc_automation.app.pnc.domain.campaign import CampaignNodeFacts, CampaignStageDetail
 from pnc_automation.app.pnc.domain.match3 import Match3Context, Match3Request, Match3Target
@@ -25,6 +25,8 @@ from pnc_automation.core.infra.emulator.provenance import FrameRef
 
 FORMATION_PREPARATION_LAYOUT_ID = "hero_formation_challenge_preparation"
 """The reviewed Hero Formation variant the owned Campaign Challenge opens."""
+
+_PROOF_CONSTRUCTION_KEY = object()
 
 class FormationPreparationError(TaskVerificationError):
     """Raised when stage-to-formation transition evidence fails a required check."""
@@ -48,8 +50,9 @@ class FormationPreparationProof:
     destination_frame: FrameRef
     destination_decision: ScreenDecision
     formation_back: VisibleElement
+    _construction_key: InitVar[object | None] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, _construction_key: object | None) -> None:
         """Check retained types and frame lineage; the factory checks observations."""
 
         for field_name, value, expected in (
@@ -64,6 +67,8 @@ class FormationPreparationProof:
         ):
             if not isinstance(value, expected):
                 raise TypeError(f"FormationPreparationProof.{field_name} must be a {expected.__name__}.")
+        if _construction_key is not _PROOF_CONSTRUCTION_KEY:
+            raise ValueError("Use require_formation_preparation_proof to construct a proof.")
         if self.request.context is not Match3Context.CAMPAIGN or self.request.target is None:
             raise ValueError("The formation preparation proof requires a Campaign request with a target.")
         if self.challenge.selector_id is not UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON:
@@ -133,6 +138,7 @@ def require_formation_preparation_proof(
         destination_frame=destination.frame_ref,
         destination_decision=destination.decision,
         formation_back=back,
+        _construction_key=_PROOF_CONSTRUCTION_KEY,
     )
 
 

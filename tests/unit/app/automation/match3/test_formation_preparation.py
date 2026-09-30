@@ -762,8 +762,8 @@ class FormationPreparationDestinationTests(unittest.TestCase):
 class FormationPreparationProofTypeTests(unittest.TestCase):
     """The immutable proof cannot be assembled from unqualified evidence."""
 
-    def test_proof_rejects_relabeled_frames(self) -> None:
-        """A proof built by hand must still bind the same session/sequence chain."""
+    def test_proof_requires_evidence_checking_factory(self) -> None:
+        """Matching retained fields cannot bypass the source observation checks."""
 
         request, source, dispatch, destination = _valid_transition(
             stage=4, challenge_bounds=_LEFT_CHALLENGE_BOUNDS, tap_point=(40, 730)
@@ -778,7 +778,7 @@ class FormationPreparationProofTypeTests(unittest.TestCase):
                 challenge=source.get(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON),  # type: ignore[arg-type]
                 dispatch=dispatch,
                 source_frame=source.frame_ref,
-                destination_frame=replace(destination.frame_ref, session_id="other"),
+                destination_frame=destination.frame_ref,
                 destination_decision=destination.decision,
                 formation_back=destination.get(UiElementId.PNC_CAMPAIGN_FORMATION_BACK_BUTTON),  # type: ignore[arg-type]
             )
