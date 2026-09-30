@@ -12,10 +12,65 @@ from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_s
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from tests.support.pnc.capture_vision.modal_overlay import update_modal_lines, with_update_modal
+from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_rapid_ocr_service
 from tests.support.pnc.campaign import CAMPAIGN_CHALLENGE_BOX, _CampaignCropOcrService, _builder, _builder_with_backend, _capture, _image, _navigation_perception, _navigation_perception_with_backend
 
 
 class CampaignControlsAndOverlaysTests(unittest.TestCase):
+    def test_native_live028_stage_detail_is_typed_with_only_owned_close(self) -> None:
+        """The observed Stage 10-1 dialog must not become a generic popup or a spending control."""
+        image = _image("campaign_stage_10_1_live028_20260930.png")
+        capture = _capture(image)
+        backend = _require_rapid_ocr_service(self)
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up(),
+                    )
+                    if path == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True,
+                    )
+                )
+                self.assertEqual(ScreenType.PNC_CAMPAIGN_STAGE, observation.screen_type)
+                self.assertEqual("clear", observation.decision.guard.value)
+                self.assertEqual("campaign_stage_10_1_live028", observation.decision.layout_id)
+                self.assertFalse(observation.blocking_popup)
+                close = observation.get(UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON)
+                self.assertIsNotNone(close)
+                self.assertEqual(Bounds(777, 310, 76, 80), close.bounds)
+                self.assertEqual(VisibleElementSourceKind.TEMPLATE, close.source_kind)
+                self.assertTrue(close.bounds.contains_point(close.action_point))
+                self.assertEqual(capture.frame_ref, close.frame_ref)
+                self.assertEqual(ScreenType.PNC_CAMPAIGN_STAGE, close.source_screen)
+                self.assertEqual("campaign_stage_10_1_live028", close.source_layout_id)
+                self.assertFalse(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+                self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+                detail = observation.campaign_stage
+                self.assertIsNotNone(detail)
+                self.assertEqual((10, 1, "Grandia Ruins"), (
+                    detail.chapter_number, detail.stage_number, detail.name,
+                ))
+                self.assertEqual((120, 120), (detail.action_points, detail.max_action_points))
+                self.assertIsNone(detail.challenge_cost)
+                self.assertEqual(capture.frame_ref, detail.frame_ref)
+
+    def test_native_live028_stage_identity_requires_title_and_lineup(self) -> None:
+        """The new title variant cannot type the chapter, map, or a partial dialog."""
+        recognizer = load_visual_screen_recognizer()
+        name = "campaign_stage_10_1_live028"
+        image = _image("campaign_stage_10_1_live028_20260930.png")
+        self.assertEqual((name,), recognizer.recognize(image).profile_ids)
+        for erased in ((230, 325, 665, 375), (342, 392, 602, 450)):
+            with self.subTest(erased=erased):
+                altered = image.copy()
+                ImageDraw.Draw(altered).rectangle(erased, fill=(16, 28, 49))
+                self.assertNotIn(name, recognizer.recognize(altered).profile_ids)
+        for other in ("campaign_stage_10_3.png", "campaign_chapter_10.png", "update_over_bag.png"):
+            with self.subTest(other=other):
+                self.assertNotIn(name, recognizer.recognize(_image(other)).profile_ids)
+
     def test_stage_content_request_preserves_controls_with_only_bounded_detail_ocr(self) -> None:
         """A recognized stage reads only its reviewed detail regions plus controls."""
         capture = _capture(_image("campaign_stage_10_3.png"))

@@ -3550,6 +3550,47 @@
       "layout_id": "campaign_stage_10_3"
     },
     {
+      "id": "campaign_stage_10_1_live028",
+      "layout_id": "campaign_stage_10_1_live028",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_stage_10_1_live028_20260930.png",
+        "decoded_sha256": "860e885ca3020f4d71635036fd9a68b78b764dda316fdf99aa91efa3dccf2ea5",
+        "capture_group": "2026-09-30/v44-integrated-turn028"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Native Chapter10 stage1 title and independent Enemy lineup qualify the observed stage detail. Only its current-frame Close is published; Challenge is not needed for read-only title observation.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_stage_10_1_title_live028.png",
+          "search_region": [125, 185, 300, 60],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_stage_6_5_lineup.png",
+          "search_region": [198, 235, 163, 65],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_close_button.png",
+            "search_region": [466, 180, 46, 68],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        }
+      ]
+    },
+    {
       "id": "trial_challenge_live",
       "screen": "PNC_TRIAL_CHALLENGE",
       "anchors": [

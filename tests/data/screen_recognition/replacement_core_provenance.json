@@ -1373,5 +1373,25 @@
     "capture_group": "2026-09-22/testing/m1_v14_stage_6_5",
     "review": "Exact invariant Marsh of Tear crop from previously qualified title asset; bracketed stage ordinal excluded. Maintains 0.95 threshold plus independent Enemy lineup. New September27 frames are correlated regression samples, not live acceptance.",
     "source_sha256": "b4c70d30986dc56ca8f4620e8bcd95a04bdbd65c3680e4ee76c2d35a11d9abad"
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_stage_10_1_live028_20260930.png",
+    "source": "artifacts/2026-09-30/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn028-20260930/20260930T141924Z_core_20260930T141732Z_2246613e_0046_campaign_stage_title_after_0_10.png",
+    "source_sha256": "d4920d64a76d73f206284a66db33131d6091f3d8e1f84dcc78389dad9dfc5ae5",
+    "reference_size": [900, 1600],
+    "capture_group": "2026-09-30/v44-integrated-turn028",
+    "preserved_regions": [[29, 312, 870, 1258]],
+    "redacted_regions": [[0, 0, 900, 312], [0, 1258, 900, 1600], [0, 312, 29, 1258], [870, 312, 900, 1258]],
+    "redaction_fill_rgb": [16, 28, 49],
+    "notes": "Native live028 frame0046 stage10-1 dialog after confirmed stage-row receipt. Only the panel remains; frame0047 is same-session correlated and not an independent holdout. Installed game build unknown."
+  },
+  {
+    "asset": "screen_anchors/campaign_stage_10_1_title_live028.png",
+    "source": "tests/data/screen_recognition/campaign_stage_10_1_live028_20260930.png",
+    "source_sha256": "860e885ca3020f4d71635036fd9a68b78b764dda316fdf99aa91efa3dccf2ea5",
+    "reference_size": [540, 960],
+    "crop": [140, 196, 400, 227],
+    "capture_group": "2026-09-30/v44-integrated-turn028",
+    "review": "Exact stage10-1 title crop, paired with the separate existing Enemy lineup anchor. No Challenge action is published for this read-only variant."
   }
 ]

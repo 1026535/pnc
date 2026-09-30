@@ -266,3 +266,28 @@ remains unknown, so no full-plan acceptance or mode availability is implied.
 The bounded stage-title reader reported `of Tear Marsh` while the actual UI
 read `Marsh of Tear`; current stage ordinals, AP, cost and owned controls were
 correct. V owns review of the name field before name-based authority uses it.
+
+## Current Chapter 10 stage detail, September 30 live028
+
+**Live-observed:** V44 integrated turn028 on `157_farm`, candidate
+`e9b99779`, frame0046 in
+`artifacts/2026-09-30/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn028-20260930/`.
+The public Campaign and Chapter 10 transitions succeeded. One confirmed tap
+on the observed stage-1 row opened a dialog visibly titled `[10-1] Grandia
+Ruins`, with Enemy lineup, 120/120 action points, a 12-energy Challenge, and
+the top-right X. The running candidate classified it as blocking `PNC_POPUP`
+and sent no subsequent tap; this was a stage identity failure, not a failed
+row dispatch. Installed game build was not recorded. Frame0047 is a correlated
+same-session final capture, not an independent holdout.
+
+**Offline-proven on the saved native pixels:** The new
+`campaign_stage_10_1_live028` variant requires its exact stage title and a
+separate Enemy lineup anchor at the retained 0.95 threshold. It publishes
+only the currently matched X as `PNC_CAMPAIGN_CLOSE_BUTTON` for the existing
+Stage-to-Chapter return. Bounded OCR on both observation publishers reads
+chapter 10, stage 1, `Grandia Ruins`, and 120/120 from the same frame. The
+Challenge cost stays unknown because this read-only variant does not publish
+the Challenge action. Erasing either required stage anchor removes this
+variant, and the existing real popup fixture does not match it. An independent
+current-build holdout and the actual Close-to-Chapter-to-Map-to-Home live return
+remain pending.

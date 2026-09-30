@@ -676,6 +676,16 @@
       ]
     },
     {
+      "image": "campaign_stage_10_1_live028_20260930.png",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "split": "reference",
+      "group": "2026-09-30/v44-integrated-turn028",
+      "sha256": "860e885ca3020f4d71635036fd9a68b78b764dda316fdf99aa91efa3dccf2ea5",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_STAGE"
+      ]
+    },
+    {
       "image": "trial_challenge.png",
       "screen": "PNC_TRIAL_CHALLENGE",
       "split": "reference",
