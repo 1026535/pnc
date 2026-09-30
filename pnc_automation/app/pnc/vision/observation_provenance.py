@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from typing import TYPE_CHECKING, TypeVar
 
 from pnc_automation.app.pnc.domain.campaign import CampaignChapterIdentity, CampaignStageDetail
-from typing import TypeVar
 
 from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
@@ -17,6 +17,7 @@ from pnc_automation.app.pnc.domain.home_city_camera import (
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
+    Observation,
     SpatialSurfaceObservation,
     VisibleElement,
     VisibleElementSourceKind,
@@ -34,6 +35,99 @@ from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInte
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
+
+if TYPE_CHECKING:
+    from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+
+
+def bind_observation_content(
+    observation: Observation,
+    additions: ObservationAdditions,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> Observation:
+    """Publish common parsed facts with their capture and screen provenance.
+
+    Callers decide screen identity, guards and controls before invoking this binder.
+    Only declared content facts are copied; guard and visible-control authority stay
+    with each publisher.
+    """
+
+    return replace(
+        observation,
+        list_entries=tuple(
+            bind_list_entry(entry, frame_ref=frame_ref, source_screen=source_screen,
+                            source_layout_id=source_layout_id)
+            for entry in additions.list_entries
+        ),
+        spatial_surface=bind_spatial_surface(
+            additions.spatial_surface, frame_ref=frame_ref,
+            source_screen=source_screen, source_layout_id=source_layout_id,
+        ),
+        campaign_chapter=bind_campaign_chapter_identity(
+            additions.campaign_chapter, frame_ref=frame_ref,
+            source_screen=source_screen, source_layout_id=source_layout_id,
+        ),
+        campaign_stage=bind_campaign_stage_detail(
+            additions.campaign_stage, frame_ref=frame_ref,
+            source_screen=source_screen, source_layout_id=source_layout_id,
+        ),
+        current_castle=additions.current_castle,
+        current_castle_evidence=additions.current_castle_evidence,
+        current_pnc_account_id=additions.current_pnc_account_id,
+        available_march_slots=additions.available_march_slots,
+        active_chat_channel=additions.active_chat_channel,
+        active_bag_tab=additions.active_bag_tab,
+        profile_player_name=additions.profile_player_name,
+        mailbox_type=additions.mailbox_type,
+        mailbox_empty=additions.mailbox_empty,
+        empty_mailboxes=additions.empty_mailboxes,
+        text_field_states=additions.text_field_states,
+        chat_draft_empty=additions.chat_draft_empty,
+        chat_draft_text=additions.chat_draft_text,
+        research_detail=(
+            bind_research_detail(additions.research_detail, frame_ref=frame_ref,
+                                 source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.research_detail is not None else None
+        ),
+        research_queue_rows=tuple(
+            bind_research_queue_row(row, frame_ref=frame_ref, source_screen=source_screen,
+                                    source_layout_id=source_layout_id)
+            for row in additions.research_queue_rows
+        ),
+        trial_summary=(
+            bind_trial_summary(additions.trial_summary, frame_ref=frame_ref,
+                               source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.trial_summary is not None else None
+        ),
+        trial_stats_detail=(
+            bind_trial_stats_detail(additions.trial_stats_detail, frame_ref=frame_ref,
+                                    source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.trial_stats_detail is not None else None
+        ),
+        hero_recruit_result=(
+            bind_hero_recruit_result(additions.hero_recruit_result, frame_ref=frame_ref,
+                                     source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.hero_recruit_result is not None else None
+        ),
+        bag_preview=(
+            bind_bag_preview(additions.bag_preview, frame_ref=frame_ref,
+                             source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.bag_preview is not None else None
+        ),
+        building_detail=(
+            bind_building_detail(additions.building_detail, frame_ref=frame_ref,
+                                 source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.building_detail is not None else None
+        ),
+        workshop=(
+            bind_workshop_observation(additions.workshop, frame_ref=frame_ref,
+                                      source_screen=source_screen, source_layout_id=source_layout_id)
+            if additions.workshop is not None else None
+        ),
+    )
 
 
 def select_content_labels(

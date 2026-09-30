@@ -14,6 +14,7 @@ from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedListEntry,
     ListEntryKind,
+    Observation,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -27,6 +28,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+from pnc_automation.app.pnc.vision.observation_provenance import bind_observation_content
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
@@ -56,6 +58,92 @@ class NavigationPerceptionTests(unittest.TestCase):
     def capture(self, name):
         with Image.open(TEST_DATA_ROOT / 'screen_recognition' / name) as image:
             return CapturedScreenshot(None, image.copy(), "PNG", ephemeral_captured_at=datetime.now(UTC))
+
+    def test_login_content_publishes_current_account_id(self):
+        """Navigation publication retains the account fact emitted by its enricher."""
+
+        class LoginGuard(Guard):
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
+                return ObservationAdditions(current_pnc_account_id="user@example.com")
+
+        recognizer = Mock()
+        recognizer.recognize.return_value = VisualRecognition(evidence=(
+            ScreenEvidence(ScreenType.PNC_LOGIN, "login_profile"),
+        ))
+        capture = CapturedScreenshot(
+            None, Image.new("RGB", (540, 960)), "PNG",
+            ephemeral_captured_at=datetime.now(UTC),
+        )
+        result = _perception(recognizer, LoginGuard()).build(capture, include_content=True)
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_LOGIN)
+        self.assertEqual(result.current_pnc_account_id, "user@example.com")
+
+    def test_login_account_content_requires_clear_identified_content_scope(self):
+        """A parsed account cannot escape content, unknown, or interruption gates."""
+
+        class LoginGuard(Guard):
+            def __init__(self, screen=None):
+                super().__init__(screen)
+                self.enrich_calls = 0
+
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
+                self.enrich_calls += 1
+                return ObservationAdditions(current_pnc_account_id="user@example.com")
+
+        capture = CapturedScreenshot(
+            None, Image.new("RGB", (540, 960), "white"), "PNG",
+            ephemeral_captured_at=datetime.now(UTC),
+        )
+        recognizer = Mock()
+        recognizer.recognize.return_value = VisualRecognition(evidence=(
+            ScreenEvidence(ScreenType.PNC_LOGIN, "login_profile"),
+        ))
+        guard = LoginGuard()
+        self.assertIsNone(_perception(recognizer, guard).build(capture).current_pnc_account_id)
+        self.assertEqual(guard.enrich_calls, 0)
+
+        recognizer.recognize.return_value = VisualRecognition()
+        unknown = _perception(recognizer, guard).build(capture, include_content=True)
+        self.assertEqual(unknown.screen_type, ScreenType.UNKNOWN)
+        self.assertIsNone(unknown.current_pnc_account_id)
+        self.assertEqual(guard.enrich_calls, 0)
+
+        guard = LoginGuard(ScreenType.PNC_POPUP)
+        recognizer.recognize.return_value = VisualRecognition(evidence=(
+            ScreenEvidence(ScreenType.PNC_LOGIN, "login_profile"),
+        ))
+        blocked = _perception(recognizer, guard).build(capture, include_content=True)
+        self.assertEqual(blocked.screen_type, ScreenType.PNC_POPUP)
+        self.assertIsNone(blocked.current_pnc_account_id)
+        self.assertEqual(guard.enrich_calls, 0)
+
+    def test_common_content_binds_rows_to_the_publishing_frame(self):
+        """Shared content binding keeps the existing frame, screen and layout checks."""
+
+        frame_ref = _frame_ref("content")
+        decision = ScreenDecision(
+            ScreenType.PNC_DAILY_TO_DO, ScreenType.PNC_DAILY_TO_DO,
+            layout_id="daily-layout", guard=GuardVerdict.CLEAR,
+        )
+        base = Observation(decision=decision, frame_ref=frame_ref)
+        row = DetectedListEntry(
+            ListEntryKind.DAILY_QUEST, Bounds(10, 10, 100, 40), title_text="Measured row",
+        )
+        bound = bind_observation_content(
+            base, ObservationAdditions(list_entries=(row,)),
+            frame_ref=frame_ref, source_screen=ScreenType.PNC_DAILY_TO_DO,
+            source_layout_id="daily-layout",
+        )
+        self.assertEqual(bound.list_entries[0].frame_ref, frame_ref)
+        self.assertEqual(bound.list_entries[0].source_screen, ScreenType.PNC_DAILY_TO_DO)
+        self.assertEqual(bound.list_entries[0].source_layout_id, "daily-layout")
+        with self.assertRaisesRegex(SelectorResolutionError, "different capture frame"):
+            bind_observation_content(
+                base, ObservationAdditions(list_entries=(replace(row, frame_ref=_frame_ref("foreign")),)),
+                frame_ref=frame_ref, source_screen=ScreenType.PNC_DAILY_TO_DO,
+                source_layout_id="daily-layout",
+            )
 
     def test_live_tour_surfaces_publish_only_measured_return_controls(self):
         ocr = Mock(spec=OcrService)

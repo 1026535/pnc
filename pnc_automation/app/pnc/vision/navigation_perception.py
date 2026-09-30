@@ -22,19 +22,8 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDebugArtifactCollector
 from pnc_automation.app.pnc.vision.building_details import filter_building_detail_controls
 from pnc_automation.app.pnc.vision.observation_provenance import (
-    bind_building_detail,
-    bind_campaign_chapter_identity,
-    bind_campaign_stage_detail,
-    bind_list_entry,
-    bind_spatial_surface,
-    bind_hero_recruit_result,
-    bind_bag_preview,
-    bind_research_detail,
-    bind_research_queue_row,
-    bind_trial_stats_detail,
-    bind_trial_summary,
+    bind_observation_content,
     bind_visible_elements,
-    bind_workshop_observation,
     select_navigation_elements,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
@@ -344,120 +333,12 @@ class NavigationPerception:
                 {**navigation_elements, **observation.visible_elements, **content_labels},
                 content.building_detail,
             ),
-            list_entries=tuple(
-                bind_list_entry(entry, frame_ref=screenshot.frame_ref, source_screen=screen,
-                                     source_layout_id=decision.layout_id)
-                for entry in content.list_entries
-            ),
-            spatial_surface=bind_spatial_surface(
-                content.spatial_surface,
-                frame_ref=screenshot.frame_ref,
-                source_screen=screen,
-                source_layout_id=decision.layout_id,
-            ),
-            campaign_chapter=bind_campaign_chapter_identity(
-                content.campaign_chapter,
-                frame_ref=screenshot.frame_ref,
-                source_screen=screen,
-                source_layout_id=decision.layout_id,
-            ),
-            campaign_stage=bind_campaign_stage_detail(
-                content.campaign_stage,
-                frame_ref=screenshot.frame_ref,
-                source_screen=screen,
-                source_layout_id=decision.layout_id,
-            ),
-            current_castle=content.current_castle,
-            current_castle_evidence=content.current_castle_evidence,
-            mailbox_type=content.mailbox_type,
-            mailbox_empty=content.mailbox_empty,
-            empty_mailboxes=content.empty_mailboxes,
-            profile_player_name=content.profile_player_name,
-            text_field_states=content.text_field_states,
-            available_march_slots=content.available_march_slots,
-            active_chat_channel=content.active_chat_channel,
-            active_bag_tab=content.active_bag_tab,
-            chat_draft_empty=content.chat_draft_empty,
-            chat_draft_text=content.chat_draft_text,
-            research_detail=(
-                bind_research_detail(
-                    content.research_detail,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.research_detail is not None
-                else None
-            ),
-            research_queue_rows=tuple(
-                bind_research_queue_row(
-                    row,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                for row in content.research_queue_rows
-            ),
-            trial_summary=(
-                bind_trial_summary(
-                    content.trial_summary,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.trial_summary is not None
-                else None
-            ),
-            trial_stats_detail=(
-                bind_trial_stats_detail(
-                    content.trial_stats_detail,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.trial_stats_detail is not None
-                else None
-            ),
-            hero_recruit_result=(
-                bind_hero_recruit_result(
-                    content.hero_recruit_result,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.hero_recruit_result is not None
-                else None
-            ),
-            bag_preview=(
-                bind_bag_preview(
-                    content.bag_preview,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.bag_preview is not None
-                else None
-            ),
-            building_detail=(
-                bind_building_detail(
-                    content.building_detail,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.building_detail is not None
-                else None
-            ),
-            workshop=(
-                bind_workshop_observation(
-                    content.workshop,
-                    frame_ref=screenshot.frame_ref,
-                    source_screen=screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if content.workshop is not None
-                else None
-            ),
+        )
+        observation = bind_observation_content(
+            observation, content,
+            frame_ref=screenshot.frame_ref,
+            source_screen=screen,
+            source_layout_id=decision.layout_id,
         )
         return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
 

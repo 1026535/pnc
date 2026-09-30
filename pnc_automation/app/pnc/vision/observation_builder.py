@@ -71,19 +71,8 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
     ObservationDebugArtifactCollector as ObservationDebugArtifactCollector,
 )
 from pnc_automation.app.pnc.vision.observation_provenance import (
-    bind_building_detail,
-    bind_campaign_chapter_identity,
-    bind_campaign_stage_detail,
-    bind_list_entry,
-    bind_spatial_surface,
-    bind_hero_recruit_result,
-    bind_bag_preview,
-    bind_research_detail,
-    bind_research_queue_row,
-    bind_trial_stats_detail,
-    bind_trial_summary,
+    bind_observation_content,
     bind_visible_elements,
-    bind_workshop_observation,
     select_content_labels,
     select_navigation_elements,
 )
@@ -869,25 +858,9 @@ class ObservationBuilder:
             source_layout_id=decision.layout_id,
         )
         visible_elements = bound_visible_elements
-        bound_list_entries = tuple(
-            bind_list_entry(
-                entry,
-                frame_ref=getattr(screenshot, "frame_ref", None),
-                source_screen=decision.effective_screen,
-                source_layout_id=decision.layout_id,
-            )
-            for entry in additions.list_entries
-        )
         observation = Observation(
             decision=decision,
             visible_elements=visible_elements,
-            list_entries=bound_list_entries,
-            spatial_surface=bind_spatial_surface(
-                additions.spatial_surface,
-                frame_ref=getattr(screenshot, "frame_ref", None),
-                source_screen=decision.effective_screen,
-                source_layout_id=decision.layout_id,
-            ),
             artifact_path=_screenshot_artifact_path(screenshot),
             image_size=screenshot.image.size,
             frame_fingerprint=hashlib.sha256(
@@ -897,111 +870,13 @@ class ObservationBuilder:
             ).hexdigest(),
             captured_at=_screenshot_captured_at(screenshot),
             popup_overlay=additions.popup_overlay,
-            current_castle=additions.current_castle,
-            current_castle_evidence=additions.current_castle_evidence,
-            current_pnc_account_id=additions.current_pnc_account_id,
-            available_march_slots=additions.available_march_slots,
-            active_chat_channel=additions.active_chat_channel,
-            active_bag_tab=additions.active_bag_tab,
-            campaign_chapter=bind_campaign_chapter_identity(
-                additions.campaign_chapter,
-                frame_ref=getattr(screenshot, "frame_ref", None),
-                source_screen=decision.effective_screen,
-                source_layout_id=decision.layout_id,
-            ),
-            campaign_stage=bind_campaign_stage_detail(
-                additions.campaign_stage,
-                frame_ref=getattr(screenshot, "frame_ref", None),
-                source_screen=decision.effective_screen,
-                source_layout_id=decision.layout_id,
-            ),
-            profile_player_name=additions.profile_player_name,
-            mailbox_type=additions.mailbox_type,
-            mailbox_empty=additions.mailbox_empty,
-            empty_mailboxes=additions.empty_mailboxes,
-            text_field_states=additions.text_field_states,
-            chat_draft_empty=additions.chat_draft_empty,
-            chat_draft_text=additions.chat_draft_text,
-            research_detail=(
-                bind_research_detail(
-                    additions.research_detail,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.research_detail is not None
-                else None
-            ),
-            research_queue_rows=tuple(
-                bind_research_queue_row(
-                    row,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                for row in additions.research_queue_rows
-            ),
-            trial_summary=(
-                bind_trial_summary(
-                    additions.trial_summary,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.trial_summary is not None
-                else None
-            ),
-            trial_stats_detail=(
-                bind_trial_stats_detail(
-                    additions.trial_stats_detail,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.trial_stats_detail is not None
-                else None
-            ),
-            hero_recruit_result=(
-                bind_hero_recruit_result(
-                    additions.hero_recruit_result,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.hero_recruit_result is not None
-                else None
-            ),
-            bag_preview=(
-                bind_bag_preview(
-                    additions.bag_preview,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.bag_preview is not None
-                else None
-            ),
-            building_detail=(
-                bind_building_detail(
-                    additions.building_detail,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.building_detail is not None
-                else None
-            ),
-            workshop=(
-                bind_workshop_observation(
-                    additions.workshop,
-                    frame_ref=getattr(screenshot, "frame_ref", None),
-                    source_screen=decision.effective_screen,
-                    source_layout_id=decision.layout_id,
-                )
-                if additions.workshop is not None
-                else None
-            ),
             frame_ref=getattr(screenshot, "frame_ref", None),
+        )
+        observation = bind_observation_content(
+            observation, additions,
+            frame_ref=observation.frame_ref,
+            source_screen=decision.effective_screen,
+            source_layout_id=decision.layout_id,
         )
         if self.debug_artifact_collector is not None and ocr_context is not None:
             self.debug_artifact_collector.persist_recognition_gap(
