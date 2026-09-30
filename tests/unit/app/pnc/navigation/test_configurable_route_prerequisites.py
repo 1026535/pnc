@@ -53,7 +53,100 @@ def _controlled_hall_core():
     return core, actions
 
 
+def _hall_live_pose(objects=(), *, second: int):
+    """Model the saved 0054/0055 endpoint pose with independently supplied bodies."""
+    return camera_home_frame(
+        objects, translation=(-628, -401), zoom=0.74, image_size=(900, 1600),
+        captured_at=_NOW + timedelta(seconds=second),
+    )
+
+
+def _hall_slot13_body():
+    return replace(
+        measured_building_object(
+            HomeCityObjectId.ALLIANCE_HALL,
+            bounds=Bounds(658, 582, 120, 133), action_point=(707, 675),
+            action_bounds=Bounds(699, 668, 15, 15),
+        ),
+        home_city_slot=HomeCitySlotSelector(13),
+    )
+
+
 class ConfigurableRoutePrerequisiteTests(unittest.TestCase):
+    def test_hall_exact_slot_reacquires_current_body_after_endpoint_overlay(self) -> None:
+        core, actions = _controlled_hall_core()
+        observed = Mock(side_effect=(
+            _hall_live_pose((_hall_slot13_body(),), second=0),
+            _hall_live_pose(second=1),
+            _hall_live_pose((_hall_slot13_body(),), second=2),
+        ))
+        core.open_building(
+            HomeCityObjectId.ALLIANCE_HALL, observe_content=observed,
+            home_city_slot=HomeCitySlotSelector(13),
+        )
+        self.assertEqual(3, observed.call_count)
+        self.assertEqual(1, len(actions))
+        self.assertEqual((707, 675), actions[0].target_point)
+        self.assertEqual(HomeCitySlotSelector(13), actions[0].expected_object.home_city_slot)
+
+    def test_hall_exact_slot_still_refuses_when_body_remains_absent(self) -> None:
+        core, actions = _controlled_hall_core()
+        observed = Mock(side_effect=(
+            _hall_live_pose((_hall_slot13_body(),), second=0),
+            _hall_live_pose(second=1),
+            _hall_live_pose(second=2),
+        ))
+        with self.assertRaisesRegex(HomeCityScanError, "No qualified pan remains"):
+            core.open_building(
+                HomeCityObjectId.ALLIANCE_HALL, observe_content=observed,
+                home_city_slot=HomeCitySlotSelector(13),
+            )
+        self.assertEqual(3, observed.call_count)
+        self.assertEqual([], actions)
+
+    def test_hall_exact_slot_does_not_reacquire_over_other_measured_occupant(self) -> None:
+        core, actions = _controlled_hall_core()
+        other = replace(_hall_slot13_body(), metadata={
+            "home_city_object_id": HomeCityObjectId.MARKET.value,
+        })
+        observed = Mock(side_effect=(
+            _hall_live_pose((_hall_slot13_body(),), second=0),
+            _hall_live_pose((other,), second=1),
+        ))
+        with self.assertRaisesRegex(HomeCityScanError, "No qualified pan remains"):
+            core.open_building(
+                HomeCityObjectId.ALLIANCE_HALL, observe_content=observed,
+                home_city_slot=HomeCitySlotSelector(13),
+            )
+        self.assertEqual(2, observed.call_count)
+        self.assertEqual([], actions)
+
+    def test_hall_reacquisition_refuses_changed_endpoint(self) -> None:
+        core, actions = _controlled_hall_core()
+        reacquired = _hall_live_pose((_hall_slot13_body(),), second=2)
+        changed = replace(
+            reacquired,
+            spatial_surface=replace(
+                reacquired.spatial_surface,
+                home_city_view=replace(
+                    reacquired.spatial_surface.home_city_view,
+                    calibration_id="other_endpoint",
+                ),
+            ),
+        )
+        observed = Mock(side_effect=(
+            _hall_live_pose((_hall_slot13_body(),), second=0),
+            _hall_live_pose(second=1),
+            changed,
+        ))
+        with self.assertRaisesRegex(HomeCityScanError, "normalized endpoint"):
+            core.open_building(
+                HomeCityObjectId.ALLIANCE_HALL, observe_content=observed,
+                home_city_slot=HomeCitySlotSelector(13),
+            )
+        self.assertEqual(3, observed.call_count)
+        self.assertEqual([], actions)
+
     def test_reviewed_routes_admit_public_entries_that_fail_closed_on_body(self) -> None:
         """The reviewed edges qualify both types; missing fresh body evidence still refuses.
 

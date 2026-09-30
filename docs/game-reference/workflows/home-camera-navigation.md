@@ -728,3 +728,22 @@ final batched live validation through production `open_building`. The
 observed slot placements are this account's current layout, never global
 mappings. See ignored `turn-025/evidence.json` and `handoff.md` under
 `.local-data/devin-live-test/runs/v44-publication-20260928/`.
+
+**Turn027 Hall acquisition, 2026-09-30, installed build unrecorded:** at
+native `(900,1600)`, endpoint pose near zoom `.74`, translation `(-628,-401)`,
+the exact Hall slot 13 body matched on precheck frame 0053 (score `.96438`)
+and the public operation's fresh entry frame 0054 (score `.96679`). An animated
+First Top-up effect crossed its roof on endpoint-confirmation frame 0055;
+the same production matcher returned no Hall body there. The projected
+slot-13 action anchor remained inside the HUD-safe band, so the scanner
+correctly sent no pan or body tap and stopped with `no_qualified_route`.
+For this target-only exact-slot no-pan case, the scanner now permits one
+same-operation passive frame to reacquire a *current* measured body. That
+frame must retain clear Home, session, calibration, and endpoint proof; if
+the body stays absent or another occupant owns the slot, the operation still
+refuses without input. The prior matching frames are diagnostic evidence,
+never authority for a later tap. Native sources are the turn027 saved
+frames 0053–0055; selected diagnostics and receipt facts are in ignored
+`turn-027/diagnostics.json` and `endpoint_batch.json` under the same run root.
+The passive correction has offline coverage; its ability to recover during a
+later live animation remains pending public-route validation.

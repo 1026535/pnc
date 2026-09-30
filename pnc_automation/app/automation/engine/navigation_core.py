@@ -603,6 +603,7 @@ class NavigationCore:
         # released once it is inspected or no qualified route remains.  It is a
         # selection preference, never persisted route authority for a stale action.
         preferred: tuple[HomeCityCameraTarget, HomeCitySlotSelector | None] | None = None
+        body_reacquired = False
         stop = operation.stop
         proof = _require_localized_camera(current)
         state.observe(current, targets=targets, usable_region=_usable_home_region(proof))
@@ -678,6 +679,39 @@ class NavigationCore:
                         )
                         break  # Preserve each family's candidate priority.
                 if not proposals:
+                    # A transient overlay can hide an exact-slot body while its
+                    # projected action anchor is already in the safe band and
+                    # no qualified pan remains. Give the same operation one
+                    # fresh passive frame; only a new measured body can be used.
+                    if (acquire_target is not None and home_city_slot is not None
+                            and resolved is None and avoid_direction is None
+                            and not body_reacquired
+                            and not any(
+                                item.home_city_slot == home_city_slot
+                                and item.source_kind == SpatialObjectSourceKind.TEMPLATE
+                                for item in current.spatial_surface.objects
+                            )):
+                        spec = targets[0]
+                        point = proof.project_atlas_to_reference(
+                            spec.atlas_action_point(home_city_slot=home_city_slot)
+                        )
+                        if _is_hud_safe_building_point(point, image_size=current.image_size):
+                            body_reacquired = True
+                            after = operation.capture(current, "target_body_reacquisition")
+                            view = operation.view(after)
+                            if (not operation.endpoint(after)
+                                    or view.calibration_id != operation.calibration_id):
+                                operation.stop(
+                                    HomeCityScanStopReason.ZOOM_CHANGED,
+                                    "Home scale departed from its normalized endpoint; no input sent.",
+                                )
+                            after_proof = _require_localized_camera(after)
+                            state.observe(
+                                after, targets=targets,
+                                usable_region=_usable_home_region(after_proof),
+                            )
+                            current, proof = after, after_proof
+                            continue
                     return stop(
                         HomeCityScanStopReason.NO_SAFE_GESTURE if unsafe_candidates else (
                         HomeCityScanStopReason.NO_PROGRESS
@@ -2045,11 +2079,11 @@ def _require_building_image_size(observation: Observation) -> tuple[int, int]:
 
 
 def _is_hud_safe_building_point(
-    point: tuple[int, int],
+    point: tuple[float, float],
     *,
     image_size: tuple[int, int] | None,
 ) -> bool:
-    """Returns whether one observed point stays inside the shared HUD-safe tap band."""
+    """Returns whether a point lies inside the shared HUD-safe band."""
 
     width, height = image_size if image_size is not None else (0, 0)
     if width <= 0 or height <= 0:
