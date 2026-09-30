@@ -13,7 +13,8 @@ full:
   - tests/support/paths.py
   - tests/support/python_sources.py
   - tests/*/__init__.py
-  - tests/data/*
+  - tests/data/screen_recognition/manifest.json
+  - tests/data/screen_recognition/replacement_core_provenance.json
   - tests/local_fixture_artifacts.py
   - pnc_automation/*/__init__.py
   - pnc_automation/__init__.py
@@ -26,6 +27,8 @@ full:
 documentation:
   - '*.md'
 resources:
+  - pattern: tests/data/home_city_slot_bodies/*
+    groups: [unit.app.pnc.vision.home_city_camera, integration.vision.home_city_camera]
   - pattern: pnc_automation/app/pnc/vision/data/*
     groups: [vision, integration]
   - pattern: pnc_automation/templates/*

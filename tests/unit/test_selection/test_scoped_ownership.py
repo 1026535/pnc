@@ -15,7 +15,9 @@ class ScopedOwnershipTests(unittest.TestCase):
         self.tests = inventory([
             "tests/unit/app/pnc/domain/test_sample.py",
             "tests/unit/app/pnc/vision/test_sample.py",
+            "tests/unit/app/pnc/vision/home_city_camera/test_bodies.py",
             "tests/integration/sample/test_capture.py",
+            "tests/integration/vision/home_city_camera/test_publishers.py",
             "tests/contract/sample/test_api.py",
             "tests/architecture/test_imports.py",
         ])
@@ -45,6 +47,41 @@ class ScopedOwnershipTests(unittest.TestCase):
         self.assertFalse(plan.fallbacks)
         self.assertNotIn("tests.unit.app.pnc.vision.test_sample", plan.reasons)
         self.assertIn("tests.unit.app.pnc.domain.test_sample", plan.reasons)
+
+    def test_home_slot_body_fixture_selects_its_two_camera_groups(self) -> None:
+        owned = "tests/data/home_city_slot_bodies/home_city_watchtower_slot4_0050_20260930.png"
+        for path in (owned, "tests/data/home_city_slot_bodies/manifest.json"):
+            with self.subTest(path=path):
+                plan = affected_plan(self.tests, self.rules, [path], self.sources, self.sources, "base", "head")
+                self.assertFalse(plan.fallbacks)
+                self.assertEqual(set(plan.reasons), {
+                    "tests.unit.app.pnc.vision.home_city_camera.test_bodies",
+                    "tests.integration.vision.home_city_camera.test_publishers",
+                    "tests.architecture.test_imports",
+                })
+
+    def test_unowned_fixture_path_keeps_unknown_resource_fallback(self) -> None:
+        for path in ("tests/data/screen_recognition/home_city_new.png",
+                     "tests/data/pet_workshop/analysis_labels.json"):
+            with self.subTest(path=path):
+                plan = affected_plan(self.tests, self.rules, [path], self.sources, self.sources, "base", "head")
+                self.assertTrue(any("unknown non-Python dependency" in reason for reason in plan.fallbacks))
+                self.assertEqual(set(plan.reasons), {test.module for test in self.tests})
+
+    def test_shared_screen_manifests_stay_conservative(self) -> None:
+        for path in ("tests/data/screen_recognition/manifest.json",
+                     "tests/data/screen_recognition/replacement_core_provenance.json"):
+            with self.subTest(path=path):
+                plan = affected_plan(self.tests, self.rules, [path], self.sources, self.sources, "base", "head")
+                self.assertTrue(any("shared contract/infrastructure" in reason for reason in plan.fallbacks))
+                self.assertEqual(set(plan.reasons), {test.module for test in self.tests})
+
+    def test_mixed_owned_and_unknown_fixture_falls_back(self) -> None:
+        changed = ["tests/data/home_city_slot_bodies/home_city_new_slot_0099_20260930.png",
+                   "tests/data/world_map/anchor.png"]
+        plan = affected_plan(self.tests, self.rules, changed, self.sources, self.sources, "base", "head")
+        self.assertTrue(any("unknown non-Python dependency" in reason for reason in plan.fallbacks))
+        self.assertEqual(set(plan.reasons), {test.module for test in self.tests})
 
     def test_public_domain_signature_change_selects_its_contract_and_owner(self) -> None:
         updated = {**self.sources, self.domain: "def value(arg):\n    return arg\n"}

@@ -22,6 +22,8 @@ TEST_PATHS = {
     "architecture": "tests/architecture/test_boundaries.py",
     "vision": "tests/unit/core/vision/test_matcher.py",
     "workflow": "tests/integration/workflows/test_daily.py",
+    "camera_unit": "tests/unit/app/pnc/vision/home_city_camera/test_slot_bodies.py",
+    "camera_integration": "tests/integration/vision/home_city_camera/test_publishers.py",
 }
 TESTS = inventory(list(TEST_PATHS.values()))
 MODULES = {label: path.removesuffix(".py").replace("/", ".") for label, path in TEST_PATHS.items()}
@@ -31,9 +33,13 @@ ALL = frozenset(TEST_PATHS)
 RULES = OwnershipRules(
     ("pyproject.toml", "requirements*", "tests/support/*", "tests/selection_rules.yaml",
      "tests/__init__.py", "tools/test_selection/*", "pnc_automation/*/__init__.py",
-     "pnc_automation/__init__.py", "pnc_automation/app/pnc/domain/*"),
+     "pnc_automation/__init__.py", "pnc_automation/app/pnc/domain/*",
+     "tests/data/screen_recognition/manifest.json",
+     "tests/data/screen_recognition/replacement_core_provenance.json"),
     ("*.md", ".agents/*"),
-    (ResourceRule("pnc_automation/templates/*", ("vision",)),
+    (ResourceRule("tests/data/home_city_slot_bodies/*",
+                  ("unit.app.pnc.vision.home_city_camera", "integration.vision.home_city_camera")),
+     ResourceRule("pnc_automation/templates/*", ("vision",)),
      ResourceRule("scripts/*.yaml", ("integration", "contract")),
      ResourceRule("config/*.json", ("vision", "integration"))),
 )
@@ -82,14 +88,24 @@ CASES = (
     ChangeCase("public constant change", (WORKER,), ENGINE, old_updates={WORKER: "MODE = 'safe'\n"}, new_updates={WORKER: "MODE = 'unsafe'\n"}),
     ChangeCase("syntax error in changed production", (WORKER,), ALL, "cannot parse changed source", new_updates={WORKER: "def run(:"}),
     ChangeCase("syntax error in changed test", (TEST_PATHS["engine"],), ALL, "unmodeled changed source", new_updates={TEST_PATHS["engine"]: "def test_bad(:"}),
+    ChangeCase("owned home slot body PNG", ("tests/data/home_city_slot_bodies/home_city_bank_sys1_0022_20260929.png",), MANDATORY | {"camera_unit", "camera_integration"}),
+    ChangeCase("new owned home slot body PNG", ("tests/data/home_city_slot_bodies/home_city_new_slot_0099_20260930.png",), MANDATORY | {"camera_unit", "camera_integration"}),
+    ChangeCase("owned home slot body manifest", ("tests/data/home_city_slot_bodies/manifest.json",), MANDATORY | {"camera_unit", "camera_integration"}),
+    ChangeCase("unknown fixture PNG resource", ("tests/data/screen_recognition/home_city_new.png",), ALL, "unknown non-Python dependency"),
+    ChangeCase("unknown fixture JSON resource", ("tests/data/pet_workshop/analysis_labels.json",), ALL, "unknown non-Python dependency"),
+    ChangeCase("shared screen manifest stays conservative", ("tests/data/screen_recognition/manifest.json",), ALL, "shared contract/infrastructure"),
+    ChangeCase("shared provenance manifest stays conservative", ("tests/data/screen_recognition/replacement_core_provenance.json",), ALL, "shared contract/infrastructure"),
+    ChangeCase("mixed owned and unknown fixture falls back", ("tests/data/home_city_slot_bodies/home_city_x.png", "tests/data/world_map/anchor.png"), ALL, "unknown non-Python dependency"),
+    ChangeCase("changed owned reader test selects itself", (TEST_PATHS["camera_unit"],), MANDATORY | {"camera_unit"}),
+    ChangeCase("owned fixture plus public signature change", (WORKER, "tests/data/home_city_slot_bodies/home_city_x.png"), ENGINE | {"camera_unit", "camera_integration"}, new_updates={WORKER: "def run(other=1):\n    return other + 1\n"}),
     ChangeCase("unknown YAML resource", ("assets/new.yaml",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown JSON resource", ("assets/catalog.json",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown PNG resource", ("assets/anchor.png",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown SQL resource", ("schema/migration.sql",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown extensionless resource", ("runtime/CATALOG",), ALL, "unknown non-Python dependency"),
-    ChangeCase("owned nested PNG resource", ("pnc_automation/templates/home/button.png",), MANDATORY | {"vision"}),
-    ChangeCase("owned authored YAML", ("scripts/claim.yaml",), MANDATORY | {"runner", "workflow", "api"}),
-    ChangeCase("owned config JSON", ("config/anchors.json",), MANDATORY | {"vision", "runner", "workflow"}),
+    ChangeCase("owned nested PNG resource", ("pnc_automation/templates/home/button.png",), MANDATORY | {"vision", "camera_unit", "camera_integration"}),
+    ChangeCase("owned authored YAML", ("scripts/claim.yaml",), MANDATORY | {"runner", "workflow", "api", "camera_integration"}),
+    ChangeCase("owned config JSON", ("config/anchors.json",), MANDATORY | {"vision", "runner", "workflow", "camera_unit", "camera_integration"}),
     ChangeCase("unknown Python root", ("plugins/new.py",), ALL, "unknown Python owner", new_updates={"plugins/new.py": "pass\n"}),
     ChangeCase("unmapped tool", ("tools/orphan.py",), ALL, "no test dependency established", old_updates={"tools/orphan.py": BODY}, new_updates={"tools/orphan.py": PRIVATE_EDIT}),
     ChangeCase("shared pyproject", ("pyproject.toml",), ALL, "shared contract/infrastructure"),
@@ -279,6 +295,24 @@ class AffectedPlanMatrixTests(unittest.TestCase):
         )
         self.assertNotIn(MODULES["api"], plan.reasons)
         self.assertNotIn(MODULES["runner"], plan.reasons)
+        self.assertEqual(plan.fallbacks, [])
+
+    def test_owned_fixture_selection_is_not_deferred_by_coverage_tiers(self) -> None:
+        path = "tests/data/home_city_slot_bodies/home_city_x.png"
+        plan = affected_plan(
+            TESTS,
+            RULES,
+            [path],
+            sources(),
+            sources(),
+            "base",
+            "head",
+            coverage_selected_tiers=COVERAGE_SELECTED_TIERS,
+        )
+        self.assertEqual(
+            set(plan.reasons),
+            {MODULES[label] for label in MANDATORY | {"camera_unit", "camera_integration"}},
+        )
         self.assertEqual(plan.fallbacks, [])
 
     def test_coverage_policy_always_runs_a_changed_high_level_test_module(self) -> None:

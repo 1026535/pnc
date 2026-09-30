@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from tools.test_selection.models import inventory, module_name
-from tools.test_selection.ownership import OwnershipRules, ResourceRule
+from tools.test_selection.ownership import OwnershipRules, ResourceRule, load_rules
 from tools.test_selection.planner import affected_plan
 from tools.test_selection.python_graph import build_graph
 
@@ -116,6 +116,43 @@ class FaultRecallTests(unittest.TestCase):
         self.assertEqual(set(plan.reasons), {module_name(vision_path)})
         self.assertEqual(len(self.execute(checks, set(plan.reasons)).failures), 1)
         self.assertFalse(plan.fallbacks)
+
+    def test_owned_home_fixture_fault_is_caught_by_its_configured_owner(self) -> None:
+        """The shipped rule routes a corrupt Home body fixture to its real readers."""
+        owned = "tests/data/home_city_slot_bodies/home_city_fault.png"
+        camera_unit = "tests/unit/app/pnc/vision/home_city_camera/test_slot_bodies.py"
+        camera_integration = "tests/integration/vision/home_city_camera/test_publishers.py"
+        contract = "tests/contract/sample/test_api.py"
+        unrelated = "tests/unit/engine/test_worker.py"
+        tests = inventory([camera_unit, camera_integration, contract, unrelated])
+        rules = load_rules(
+            Path(__file__).resolve().parents[3] / "tests/selection_rules.yaml", tests)
+        resource = self.root / "home_city_fault.png"
+        snapshot = {
+            test.path: "pass\n" for test in tests
+        }
+        snapshot["pnc_automation/app/pnc/domain/sample.py"] = "def value():\n    return 1\n"
+        snapshot[contract] = "from pnc_automation.app.pnc.domain.sample import value\n"
+        resource.write_bytes(b"\x89PNG\r\n\x1a\n" + b"pixels")
+
+        def integrity() -> None:
+            data = resource.read_bytes()
+            self.assertTrue(data.startswith(b"\x89PNG\r\n\x1a\n"))
+            self.assertIn(b"pixels", data)
+
+        checks = {
+            module_name(camera_unit): integrity,
+            module_name(camera_integration): lambda: None,
+            module_name(contract): lambda: None,
+            module_name(unrelated): lambda: None,
+        }
+        self.assertTrue(self.execute(checks, set(checks)).wasSuccessful())
+        resource.write_bytes(b"corrupt fixture bytes")
+        plan = affected_plan(tests, rules, [owned], snapshot, snapshot, "base", "head")
+        self.assertFalse(plan.fallbacks)
+        self.assertEqual(set(plan.reasons),
+                         {module_name(camera_unit), module_name(camera_integration)})
+        self.assertEqual(len(self.execute(checks, set(plan.reasons)).failures), 1)
 
     def test_unknown_static_resource_falls_back_and_catches_seeded_failure(self) -> None:
         path = "new-assets/button.png"

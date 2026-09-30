@@ -123,6 +123,18 @@ imports so removed dependencies remain covered. Quoted annotations and supported
 type aliases retain dependencies on named lazy exports; literal metadata does not
 request an export. Global fixture paths, source-scanning helpers, bootstrap files,
 unknown consumers, and other repository-wide infrastructure retain full fallbacks.
+
+`tests/data/home_city_slot_bodies/*` is the one explicitly owned fixture
+subtree: its verified readers live in `unit.app.pnc.vision.home_city_camera`
+and `integration.vision.home_city_camera`, which select both groups for any
+PNG or manifest change there, including the integrity test that enumerates the
+whole subtree. Every other path under `tests/data/` remains unowned; the
+unknown non-Python dependency fallback keeps full selection for those files,
+and the shared `screen_recognition/manifest.json` and
+`replacement_core_provenance.json` stay listed under `full`. New fixture
+directories stay conservative until their readers are mapped and added to this
+rule with real group names; a narrow pattern cannot exempt a path another rule
+owns, and shared or unknown fixtures must not be narrowed into a named group.
 Camera tests are split by catalog, localization, consensus, zoom, targets,
 surface and view behavior. Navigation tests separate transitions, buildings,
 Campaign, Manor, chat, mail, research, trial and Workshop routes. Shared
