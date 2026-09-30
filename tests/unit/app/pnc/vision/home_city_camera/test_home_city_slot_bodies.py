@@ -681,12 +681,158 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
             "home_city_goddess_slot15_0066_20260923.png",
             "home_city_warehouse_slot3_0047_20260929.png",
             "home_city_warehouse_slot3_0084_20260929.png",
+            "home_city_moon_well_slot17_0029_20260930.png",
+            "home_city_moon_well_slot17_0030_20260930.png",
         ):
             with self.subTest(fixture=name):
                 proof, frame = self._proof_and_frame(name)
                 self.assertEqual(
                     (),
                     self.localizer.match_target_candidates(frame, bank, proof=proof),
+                )
+
+    def test_moon_well_publishes_slot_17_on_the_0029_source_view(self) -> None:
+        moon_well = _catalog_target(HomeCityObjectId.MOON_WELL)
+        proof, frame = self._proof_and_frame(
+            "home_city_moon_well_slot17_0029_20260930.png"
+        )
+        self.assertEqual((-637, -421), proof.translation)
+        self.assertAlmostEqual(0.75, proof.zoom, delta=0.005)
+        matches = self.localizer.match_target_candidates(frame, moon_well, proof=proof)
+        self.assertEqual(1, len(matches))
+        match = matches[0]
+        self.assertEqual(HomeCitySlotSelector(17), match.home_city_slot)
+        self.assertEqual(Bounds(625, 1110, 122, 60), match.bounds)
+        self.assertEqual((690, 1140), match.action_point)
+        self.assertGreaterEqual(match.score, 0.9)
+        self.assertLessEqual(match.projection_error, 12)
+        self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+        self.assertTrue(match.action_bounds.contains_point(match.action_point))
+        self.assertEqual(
+            match,
+            self.localizer.match_target(frame, moon_well, proof=proof),
+        )
+
+        objects = self.localizer.matched_target_objects(frame, proof=proof)
+        published = next(
+            object_
+            for object_ in objects
+            if home_city_object_id_from_metadata(object_.metadata)
+            is HomeCityObjectId.MOON_WELL
+        )
+        self.assertEqual(HomeCitySlotSelector(17), published.home_city_slot)
+        self.assertEqual(match.bounds, published.bounds)
+        self.assertEqual(match.action_point, published.action_point)
+        self.assertEqual("camera_template", published.metadata["detection_source"])
+        self.assertEqual(17, published.metadata["home_city_slot_index"])
+
+    def test_moon_well_0030_holdout_publishes_all_four_same_tier_bodies(self) -> None:
+        """The translated view publishes each clean well at its own slot."""
+        moon_well = _catalog_target(HomeCityObjectId.MOON_WELL)
+        proof, frame = self._proof_and_frame(
+            "home_city_moon_well_slot17_0030_20260930.png"
+        )
+        self.assertEqual((-882, -413), proof.translation)
+        self.assertAlmostEqual(0.7417, proof.zoom, delta=0.005)
+        matches = self.localizer.match_target_candidates(frame, moon_well, proof=proof)
+        expected = {
+            17: (Bounds(372, 1110, 120, 59), (436, 1140)),
+            18: (Bounds(531, 1016, 120, 59), (595, 1046)),
+            19: (Bounds(525, 1195, 120, 59), (589, 1225)),
+            20: (Bounds(679, 1109, 120, 59), (743, 1139)),
+        }
+        self.assertEqual(
+            set(expected),
+            {match.home_city_slot.slot_index for match in matches},
+        )
+        for match in matches:
+            bounds, point = expected[match.home_city_slot.slot_index]
+            self.assertEqual(bounds, match.bounds)
+            self.assertEqual(point, match.action_point)
+            self.assertGreaterEqual(match.score, 0.9)
+            self.assertLessEqual(match.projection_error, 12)
+            self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+            self.assertTrue(match.action_bounds.contains_point(match.action_point))
+        # Four distinct bodies share one art tier: no singular claim is legal.
+        self.assertIsNone(
+            self.localizer.match_target(frame, moon_well, proof=proof)
+        )
+
+        objects = self.localizer.matched_target_objects(frame, proof=proof)
+        published = [
+            object_
+            for object_ in objects
+            if home_city_object_id_from_metadata(object_.metadata)
+            is HomeCityObjectId.MOON_WELL
+        ]
+        self.assertEqual(
+            {17, 18, 19, 20},
+            {object_.home_city_slot.slot_index for object_ in published},
+        )
+
+    def test_moon_well_action_points_stay_below_the_safe_tap_band(self) -> None:
+        """Every observed Moon Well point is detection evidence only.
+
+        All four projected action points land below the conservative tap
+        band (max ratio 0.58), so this package supplies perception and
+        discovery evidence only -- destination qualification remains a live
+        gate and no Moon Well tap is authorized by these frames.
+        """
+
+        moon_well = _catalog_target(HomeCityObjectId.MOON_WELL)
+        safe_max_y = int(HOME_CITY_HUD_SAFE_MAX_Y_RATIO * 1600)
+        for name in (
+            "home_city_moon_well_slot17_0029_20260930.png",
+            "home_city_moon_well_slot17_0030_20260930.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                matches = self.localizer.match_target_candidates(
+                    frame, moon_well, proof=proof
+                )
+                self.assertNotEqual((), matches)
+                for match in matches:
+                    self.assertGreater(match.action_point[1], safe_max_y)
+
+    def test_moon_well_erased_body_never_publishes(self) -> None:
+        moon_well = _catalog_target(HomeCityObjectId.MOON_WELL)
+        image = _fixture("home_city_moon_well_slot17_0029_20260930.png")
+        proof = self.localizer.localize(image.copy())
+        self.assertTrue(proof.localized)
+        matches = self.localizer.match_target_candidates(
+            self.localizer.prepare_frame(image), moon_well, proof=proof
+        )
+        self.assertEqual(1, len(matches))
+        body = matches[0].bounds
+        image.paste((0, 0, 0, 255), (body.x, body.y, body.x + body.width, body.y + body.height))
+        self.assertEqual(
+            (),
+            self.localizer.match_target_candidates(
+                self.localizer.prepare_frame(image), moon_well, proof=proof
+            ),
+        )
+
+    def test_moon_well_never_publishes_on_unrelated_views(self) -> None:
+        moon_well = _catalog_target(HomeCityObjectId.MOON_WELL)
+        for name in (
+            "home_city_blacksmith_slot12_f1_20260922.png",
+            "home_city_blacksmith_slot12_f2_20260922.png",
+            "home_city_baseline_f0_20260922.png",
+            "home_city_pan2_f5_20260922.png",
+            "home_city_wall_slot2_f6_20260922.png",
+            "home_city_goddess_slot15_0066_20260923.png",
+            "home_city_warehouse_slot3_0047_20260929.png",
+            "home_city_warehouse_slot3_0084_20260929.png",
+            "home_city_bank_sys1_0022_20260929.png",
+            "home_city_bank_sys1_0092_20260929.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(
+                    (),
+                    self.localizer.match_target_candidates(
+                        frame, moon_well, proof=proof
+                    ),
                 )
 
     def test_contradictory_camera_proofs_reject_both_new_bodies(self) -> None:
@@ -939,6 +1085,8 @@ class FixtureIntegrityTests(unittest.TestCase):
                 "home_city_warehouse_slot3_0084_20260929.png",
                 "home_city_bank_sys1_0022_20260929.png",
                 "home_city_bank_sys1_0092_20260929.png",
+                "home_city_moon_well_slot17_0029_20260930.png",
+                "home_city_moon_well_slot17_0030_20260930.png",
             },
             set(samples),
         )

@@ -27,7 +27,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             catalog.anchor_object_ids,
         )
         self.assertEqual(30, len(catalog.landmarks))
-        self.assertEqual(16, len(catalog.targets))
+        self.assertEqual(17, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
             {
@@ -151,9 +151,23 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
                 self.assertIsNotNone(target)
                 self.assertEqual(HomeCitySlotSelector(slot_index), target.reference_slot)
                 self.assertEqual(atlas_point, target.atlas_action_point())
+        # The Moon Well is an ordinary multi-slot target: the authored point
+        # is bound to the reviewed slot-17 measurement and requires an
+        # explicit slot for atlas geometry.
+        moon_well = catalog.target_for(HomeCityObjectId.MOON_WELL)
+        self.assertIsNotNone(moon_well)
+        self.assertEqual(HomeCitySlotSelector(17), moon_well.reference_slot)
+        self.assertEqual(
+            (1769, 2081),
+            moon_well.atlas_action_point(home_city_slot=HomeCitySlotSelector(17)),
+        )
         # The Hall of War publishes no camera target until a clean native body
         # and identity pose exist.
         self.assertIsNone(catalog.target_for(HomeCityObjectId.HALL_OF_WAR))
+        # Farm stays unregistered: turn020's only clean translated view puts
+        # the body ~14 frame px off the slot prediction, beyond the reviewed
+        # 12 px gate, so no same-tier translated holdout exists yet.
+        self.assertIsNone(catalog.target_for(HomeCityObjectId.FARM))
         # An unrelated nearby "Manor" label is not the Illusory Beast Manor and
         # must never resolve to it.
         self.assertIsNone(home_city_object_definition_for_label("Manor"))

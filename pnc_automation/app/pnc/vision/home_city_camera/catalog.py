@@ -563,6 +563,34 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 # Slot 8 is the single-type siege slot (client 1023).
                 reference_slot=HomeCitySlotSelector(8),
             ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.MOON_WELL,
+                landmark_id="moon_well_body",
+                file_name="moon_well_body.png",
+                # Rocky mound, green crystals and blue-roofed hut measured
+                # on the 2026-09-30 ef03789c turn020 frame 0029 (native
+                # 625,1110,122,60 under camera (-637,-421) at zoom 0.75)
+                # with a readable 'Moon Well' nameplate; the translated
+                # holdout frame 0030 measures the same body window under
+                # camera (-882,-413) at zoom ~0.742. The crop excludes the
+                # floating gem-collect bubble above, the level badge and
+                # yellow flag at the right, and the nameplate below.
+                reference_bounds=Bounds(1151, 2263, 162, 80),
+                # Interior mound point clear of floating controls on both
+                # saved views; destination qualification remains a live
+                # gate and this detection point sits below the
+                # conservative tap band on the measured views.
+                reference_action_bounds=Bounds(1227, 2293, 20, 20),
+                reference_action_point=(1237, 2303),
+                min_score=0.90,
+                # 12 reference px covers the scene-calibration uncertainty
+                # plus matching noise, matching the slot-bound convention.
+                max_projection_error=12,
+                # Slot 17 is one of the multi-type ordinary slots (17-51)
+                # eligible for moon-well bodies (client 1027); the binding
+                # tags the authored slot's reviewed eligibility.
+                reference_slot=HomeCitySlotSelector(17),
+            ),
         ),
         reference_size=HOME_CITY_CAMERA_REFERENCE_SIZE,
         atlas_to_reference_offset=HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,

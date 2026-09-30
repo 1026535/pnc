@@ -252,3 +252,43 @@ Home view at zoom 0.75-1.0 with the Hall14 body fully inside the frame and
 free of floating bubbles/area controls, its camera translation recorded, plus
 one independent holdout pose; a readable `Hall of War` nameplate or a paired
 endpoint/tap receipt supplies identity.
+
+### Moon Well — multi-slot ordinary body qualified for perception only
+
+`moon_well_body` (client 1027) is authored from the authorized 2026-09-30
+ef03789c turn020 frame 0029 (camera translation (-637,-421), zoom 0.75) and
+reproduces on the same-session translated holdout frame 0030 (translation
+(-882,-413), zoom ~0.742). The crop covers the rocky mound, green crystals
+and blue-roofed hut, excluding the floating gem-collect bubble, the yellow
+flag and level badge at the right edge, and the `Moon Well` nameplate below.
+
+Under the production localizer, the slot-17 body publishes on 0029 at
+(625,1110,122,60) score ~0.994, projection error 0.35, action point (690,1140).
+On 0030 the same-tier art publishes at four eligible ordinary slots — 17 at
+(372,1110,120,59) score .9383 perr 10.8, 18 at (531,1016,120,59) score .9455
+perr 10.7, 19 at (525,1195,120,59) score .9425 perr 9.6, and 20 at
+(679,1109,120,59) score .9241 perr 9.8 — each corroborated by a readable
+`Moon Well` nameplate. The multi-body view stays a candidates claim: the
+singular matcher refuses an ambiguous slot. All five observed action points
+(y 1046-1225) sit below the conservative HUD-safe tap band (y <= 928), so
+this evidence is perception/discovery only — it lets shared observation
+report Moon Well bodies at specific slots but authorizes no tap, and the
+resource collection/non-collecting preconditions above remain the governing
+uncertainty.
+
+### Farm — body pending a clean translated holdout (retained gap)
+
+Farm (client 1016) has one clean native source measurement — turn020 frame
+0053 (translation (-351,-410), zoom ~0.739) publishes the slot-22 body at
+(539,1309,67,38) score ~0.987, projection error ~0.8, action (566,1327) —
+but every translated view fails the projection gate: frame 0038
+(translation (-364,-422), zoom 0.75) raw-matches the same-tier body at
+(538,1309,68,38) score ~0.983, yet the hit lands ~14 frame px above the
+slot-22 prediction versus the reviewed 12 px bound, while sibling slots
+score under 0.5. The other authorized views occlude the farm district under
+the quest strip or the private-chat band, and frames 0047/0052 share 0038's
+pose (a static duplicate, not a translated holdout). The catalog therefore
+carries no Farm target. The minimal missing capture is one native Home view
+at a pose distinct from (-351,-410) with the farm body inside the frame,
+clear of the quest strip, collect bubbles, and chat band, where the measured
+body agrees with its slot projection within the reviewed bound.

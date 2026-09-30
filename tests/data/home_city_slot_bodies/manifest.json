@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session plus the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa) that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, and the four single-type military bodies at slots 5 through 8. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
+  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session, the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa), and the authorized 2026-09-30 ef03789c turn020 survey frames that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, the four single-type military bodies at slots 5 through 8, and the multi-slot Moon Well body. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
   "samples": [
     {
       "image": "home_city_blacksmith_slot12_f1_20260922.png",
@@ -241,6 +241,54 @@
       ],
       "annotation": "f1171ffa attempt1 bank survey frame 0092 -- independent view, same session as 0022 but a distinct camera pose. Camera zoom 0.75, atlas translation (-152,-21): the Bank facade/blue dome measures at (88,971,120,97) score .9718, action point (147,1006) below the tap band. The same pose is the V44-4 military independent holdout: Infantry Barracks at (287,559,83,78) action (322,600), Cavalry Barracks at (124,624,100,42) action (180,656), Ranged Barracks at (262,734,120,34) action (317,752), Siege Factory at (84,740,72,84) action (117,789); each carries a readable building nameplate corroborating slot identity. The siege action point lands inside this view's left-HUD exclusion band -- a view-specific limitation, not a target defect.",
       "outside_mask_sha256": "13047d78813363a12c67a50e21215297fcc472314404202facd623156cdf44df"
+    },
+    {
+      "image": "home_city_moon_well_slot17_0029_20260930.png",
+      "role": "slot_body_positive_moon_well_pan2",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "a9e4ff76c091fc3e7c5ae672fb816866268cd34ddb3d254978a0653a52d014d4",
+      "sha256": "291084f55ad2ec4ff70687b7e669793859d098186993b020cf0ad95c58a65820",
+      "source_artifact": "20260930T004416Z_core_20260930T004310Z_ef03789c_0029_core_7_home_after_pan_2_0.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "f54896b3f0b8c816510f09292053bea95f034f7aa633e2d0caeab1a05abbf21a",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "ef03789c turn020 frame 0029, the authored Moon Well source view. Camera zoom 0.75, atlas translation (-637,-421): the slot-17 Moon Well body (rocky mound, green crystals, blue-roofed hut) is measured at frame (625,1110,122,60) score .9936, projection error 0.35, candidate action point (690,1140); a readable 'Moon Well' nameplate and level-6 badge corroborate identity. Slot-18/19/20 predictions lie off-viewport and the right-edge second Moon Well stays clipped. The crop excludes the floating gem bubble above, the flag and level badge at the right, and the nameplate below.",
+      "outside_mask_sha256": "5d3cf4b002b25de34e1907ff525a15bf5fd58182bd6dac2bdc72490bce725890"
+    },
+    {
+      "image": "home_city_moon_well_slot17_0030_20260930.png",
+      "role": "slot_body_holdout_moon_well_pan3",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "0a12163c15dfaf2bcf90fbcf1cec2a285e5a25dda44f342f58af89c1e52d180a",
+      "sha256": "9d576d997bcae33a3fd51b5f167e01ea5ad0b0711f9f7c7aba41eec6df3ac361",
+      "source_artifact": "20260930T004421Z_core_20260930T004310Z_ef03789c_0030_core_7_home_after_pan_3_0.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "522c4dbbd8e3d37fefed8b02f325467c6266d59f8cff3d80112c6fb4206368a9",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "ef03789c turn020 frame 0030, the same-session translated holdout at a distinct camera pose (zoom ~0.742, atlas translation (-882,-413)). The same-tier Moon Well art publishes at four eligible slots: 17 at (372,1110,120,59) score .9383 perr 10.8, 18 at (531,1016,120,59) score .9455 perr 10.7, 19 at (525,1195,120,59) score .9425 perr 9.6, 20 at (679,1109,120,59) score .9241 perr 9.8; action points (436,1140), (595,1046), (589,1225), (743,1139) all sit below the conservative tap band. The four 'Moon Well' nameplates corroborate each slot's identity. The multi-body view stays a candidates claim; the singular match must refuse ambiguity.",
+      "outside_mask_sha256": "082c13a30757981c5fb8e6827052d3f586fc8bc12016f70ae4fa8b63dfe1caff"
     }
   ]
 }
