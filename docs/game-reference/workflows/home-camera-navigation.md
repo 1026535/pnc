@@ -686,7 +686,7 @@ action geometry before any tap; that caller's session boundary remains the
 physical authority. The target-specific Cavalry/Siege acquisition and all
 four endpoint/Back returns still require a new bounded live batch.
 
-**Turn021 follow-up, 2026-09-30, build 5.0.203:** The clear Home frames
+**Turn021 follow-up, 2026-09-30, installed build unrecorded:** The clear Home frames
 0022–0037 in `turn-021/diagnostics.json` stayed at the same rounded camera
 pose without a wheel input, yet endpoint classification alternated between
 `AT_ENDPOINT` and `UNRESOLVED`. The independent saved-frame profile in
