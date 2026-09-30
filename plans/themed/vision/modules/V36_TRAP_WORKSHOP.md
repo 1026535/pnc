@@ -20,10 +20,10 @@ Trap-specific definitions/producer, existing building and typed operation models
 
 ## Acceptance and bounded proof
 
-Add captured workshop/effect-table tests through both publishers. Use a current tier/row negative and any already-available active queue; do not generate production for fixtures. Require independent visual identity, typed observed facts, measured unoccluded controls and correct post-close state. Unknown values never inherit a prior screen's facts.
+Add captured workshop/effect-table tests through both publishers. Use a current tier/row negative and reuse an available active queue when sufficient; create a needed queue state only as part of the assigned proof under the standing non-Main allowance. Require independent visual identity, typed observed facts, measured unoccluded controls and correct post-close state. Unknown values never inherit a prior screen's facts.
 
 Start `py tools/run_tests.py group unit.app.pnc.vision`, then use the index's affected/integration rule for actual source changes.
 
 One configured-testing, active-castle core-runtime route: **Home → Trap Workshop → Effect Table or a proved information detail → Workshop → Home.** Follow the common lease, fresh-frame and stop protocol; record screenshots, observations and action/return trace under ignored `.local-data/`. Saved evidence comes first; no broad live tour is required.
 
-Do not build/collect traps, change quantities, accelerate or upgrade. Missing queue variants remain explicit. If a material route remains unproved, report the exact pending edge rather than calling the feature complete.
+Incidental completed-trap collection is authorized on non-Main instances. Production, quantity changes, acceleration or upgrades may be used when needed for this feature's setup/proof under the standing resource allowance and supported runtime boundaries. Missing queue variants remain explicit until observed; the allowance does not require generating every variant. If a material route remains unproved, report the exact pending edge rather than calling the feature complete.

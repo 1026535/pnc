@@ -44,7 +44,7 @@ Use [test-bluestacks-live](../test-bluestacks-live/SKILL.md) only when offline e
 1. Define one observable precondition and success condition.
 2. Run focused offline tests.
 3. Complete the coherent implementation batch while its live assumptions remain supported. Add its cases to the coordinator's [live-test batch](../test-bluestacks-live/references/live-test-batch.md); checkpoint at the end of the batch, before dependent work relies on an unproven boundary, or when new evidence invalidates a material assumption.
-4. Run or, when authorized, delegate the smallest distinct non-spending live checks together through the canonical runtime and preserve the relevant artifacts. If a check fails, inspect its evidence, fix the relevant boundary, and rerun only affected proof. Stop repeated attempts with unchanged evidence.
+4. Run or, when authorized, delegate the smallest distinct live checks together through the canonical runtime and preserve the relevant artifacts. Apply the live skill's standing spending-enabled non-Main allowance and Main protection; use read-only checks when their purpose requires unchanged state. If a check fails, inspect its evidence, fix the relevant boundary, and rerun only affected proof. Stop repeated attempts with unchanged evidence.
 5. Convert a reproducible live defect into an offline regression when practical.
 
 A live check is not required for documentation, internal refactors, or behavior fully proven below the emulator boundary. Use [write-code-live](../write-code-live/SKILL.md) when proof may spend resources.

@@ -15,7 +15,10 @@ Offline evidence: <focused commands and results; saved artifact provenance if re
 Reporting: <absolute report_repository_root for the primary checkout; unique run ID;
   coordinating task that reconciles publication and owns unknown follow-ups>
 Target and authority: <configured account/active castle/instance, live role, allowed switching,
-  mutations and exact spending budget if applicable; no secrets>
+  feature actions and standing non-Main full available in-game resource allowance, or explicit
+  Main authority; incidental collection permitted; no secrets>
+Read-only exception: <none by default; otherwise the current user restriction or concrete
+  state-preservation test requiring it>
 Lease and cleanup: <declared bundle, one execution owner, initial instance state,
   long-reservation scope/terminal owner if declared, stable ending screen,
   preservation decision; never include a reservation receipt>

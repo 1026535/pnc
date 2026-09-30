@@ -29,9 +29,11 @@ current dispatch and candidates; this reference does not release a new live run.
    and generic paths publish actual dispatch.
 6. A current body match authorizes the final tap; a projected slot never does.
    A fresh destination observation proves arrival. Feature owners prove return.
-   This requires the [reviewed entry semantics](V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-non-collecting-preconditions):
+   This requires the [reviewed entry semantics](V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-collection-effects):
    current action-point qualification, family-specific destination evidence and
-   resource non-collecting preconditions are not supplied by a body match alone.
+   actual collection/menu transitions are not supplied by a body match alone.
+   Non-Main live collection is authorized by the standing user policy; preserve
+   true READ_ONLY contracts only where that mode is explicitly required.
 7. Required live proof runs through the actual production candidate after lead
    review, under a separate bounded Devin assignment. Offline success is not live acceptance.
 

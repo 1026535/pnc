@@ -8,7 +8,7 @@ Use this reference only when a current BlueStacks fact could materially change a
 - Resolve the target from config. A specific castle named in the request or plan authorizes switching to that castle within the selected, role-authorized account and instance. If no castle is named, observe the active castle on the configured `testing` instance; do not switch. A named castle does not authorize switching accounts or instances.
 - Follow [test-bluestacks-live](../../test-bluestacks-live/SKILL.md) and use the canonical runtime.
 - Set a small action/time budget appropriate to the question. A budget is a ceiling, not a quota.
-- Keep the observation non-spending. Stop before any state-changing action that lacks exact authorization.
+- Apply the canonical live skill's standing non-Main resource allowance and Main protection. The observation remains bounded by the planning question; no-spend/read-only is an explicit exception when the question requires preserved state.
 
 ## Observation
 
@@ -22,7 +22,7 @@ Do not launch BlueStacks merely to reconfirm stable repository facts, gather ext
 
 ## Stop
 
-Stop and preserve the latest useful artifact when identity cannot be verified, ADB cannot become responsive within its configured bound, the screen or selector is ambiguous, the next step crosses a mutation boundary, the budget is exhausted, or the same result repeats without new evidence.
+Stop and preserve the latest useful artifact when identity cannot be verified, ADB cannot become responsive within its configured bound, the screen or selector is ambiguous, the next step exceeds the assigned scope or applicable authority, the budget is exhausted, or the same result repeats without new evidence.
 
 ## Plan Evidence
 

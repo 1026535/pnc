@@ -98,11 +98,11 @@ Moon Well (1027) has the same collection branch with an additional capacity chec
 at `builditem_1027.lua:136-156`.
 
 Choosing a body point away from the bubble does not by itself make these taps
-non-claiming. Under a no-claim live assignment, capture the body passively and
-qualify a current non-collecting entry state before tapping. A visible harvest
-state leaves that entry case pending unless collection is separately authorized;
-it is neither unavailable nor a passed route. This source rule does not authorize
-collecting, upgrading or spending to create a test precondition.
+non-claiming. The September 30 [standing live resource policy](../../../.agents/skills/test-bluestacks-live/SKILL.md#standing-game-resource-authority)
+authorizes collection and feature-needed spending on non-Main instances. A harvest
+state is not an authority blocker: observe collection, then continue the intended
+entry from fresh evidence. Collection alone is not a passed route. Only an explicit
+no-claim/read-only case or protected Main requires a positive non-collecting state.
 
 ### Resource collection scope and non-collecting entry — September 29 recheck
 
@@ -133,13 +133,13 @@ inspected Home body handlers and dispatcher. The current shared `open_building`
 contract taps one positively measured body; it has no typed resource-entry state
 or reviewed `RES_BUILD_WIN` endpoint/return for these types. The Farm upgrade and
 construction detail fixtures qualify different phases, not this primary window.
-Keep resource acquisition pending. The smallest next evidence is a passive,
-unoccluded native Home view of one existing resource building and its complete
-popup area, followed by qualification of a current non-collecting state. Only
-after that precondition is established may an authorized capture obtain its
-primary window, independently measured Back and fresh Home return. If only
-harvestable states are present, collection authority or evidence of a distinct
-safe control is required; repeated taps and off-bubble points are not a bypass.
+The remaining route evidence is an unoccluded native Home body, observed entry
+effects, its primary window, independently measured Back and fresh Home return.
+On non-Main instances, the standing authority permits collection, including the
+same-type scope above. If the first tap collects instead of opening, reobserve and
+use the next justified entry action; do not blindly replay or count collection as
+arrival. A non-collecting precondition is needed only for an explicitly restricted
+case or protected Main. Missing endpoint support remains implementation/evidence work.
 
 ### Military body and endpoint prerequisites — September 29 recheck
 
@@ -273,8 +273,8 @@ singular matcher refuses an ambiguous slot. All five observed action points
 (y 1046-1225) sit below the conservative HUD-safe tap band (y <= 928), so
 this evidence is perception/discovery only — it lets shared observation
 report Moon Well bodies at specific slots but authorizes no tap, and the
-resource collection/non-collecting preconditions above remain the governing
-uncertainty.
+remaining body/endpoint/return evidence above still governs route acceptance.
+Non-Main collection authority is supplied by the standing September 30 policy.
 
 ### Farm — body pending a clean translated holdout (retained gap)
 

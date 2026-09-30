@@ -13,7 +13,7 @@ Use Devin as a read-only game-knowledge consultant when the lead needs a precise
 - Devin owns only the bounded consultation. It may inspect the assigned repository, documented workflows, fixtures, saved artifacts, logs, and deterministic tests, and may run read-only commands that help answer the question.
 - The consultation must not edit source, tests, configuration, fixtures, plans, or documentation; create commits or pull requests; change Git state; or install project dependencies. Preserve any pre-existing dirty worktree exactly.
 - Do not expose or transmit credentials, tokens, ignored local configuration, account data, or unrelated files. Prompt with the minimum repository context needed for the question.
-- A consultation does not authorize emulator, ADB, account, or live-game access. If live observation is necessary, require an explicit user request or approved plan naming the exact observation and target. Default to non-spending proof; never use premium currency, speedups, items, or other resources.
+- A consultation does not authorize emulator, ADB, account, or live-game access. If a live observation is necessary, hand its exact question and target to the authorized live owner. That live assignment follows the canonical spending-enabled non-Main allowance and Main protection; incidental collection is not a new approval blocker. This consultation's read-only source/transport boundary remains unchanged.
 
 ## Frame the question
 
@@ -53,7 +53,7 @@ Ask Devin to return a compact memo with these sections:
 - `Answer`: the best-supported answer in plain language.
 - `Findings`: each claim labeled `user-confirmed`, `repository-proven`, `artifact-observed`, `live-observed`, `inferred`, or `unknown`, with high/medium/low confidence.
 - `Automation implications`: selectors, navigation/postcondition implications, reconciliation needs, mutation risk, and what must remain lead-owned.
-- `Next smallest observation`: only if the evidence is insufficient; specify the exact read-only observation and why it resolves the uncertainty.
+- `Next smallest observation`: only if the evidence is insufficient; specify the exact bounded observation and why it resolves the uncertainty. State any actual collection/spending effects so the live owner can apply the standing policy; do not impose read-only game state by default.
 - `Handback`: `READY_FOR_REVIEW`, `NEEDS_LEAD`, `BLOCKED`, or `FAILED`, followed by limitations and any untouched worktree warning.
 
 Treat the memo as a research input, not acceptance. The lead independently verifies findings and reconciles conflicts using the repository's evidence hierarchy. Do not convert an inferred game rule into an automation contract until the required observation or deterministic regression evidence exists.

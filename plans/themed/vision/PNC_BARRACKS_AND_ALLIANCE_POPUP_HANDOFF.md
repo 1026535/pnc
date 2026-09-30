@@ -13,7 +13,7 @@ Two separate perception failures interrupted Devin's vision work:
 
 Neither was evidence of an emulator deadlock or an ACP transport error. The separate ACP diagnosis commits `a21c6c4` and `5f58d4e` improve worker error reporting; they do not fix game recognition.
 
-The lead owns architecture, review, acceptance and integration. All live execution is delegated through `devin-live-test` on configured `3xx_spies`, role `live_testing`, active castle last verified as `K303 / K3033849ba8778 / level 5`. No further `mega_old_acc` access is authorized. Existing saved Mega evidence may be read. These checks require no spending, training, collection, quantity changes, joining/applying to an alliance, or account/castle switches.
+The lead owns architecture, review, acceptance and integration. All live execution is delegated through `devin-live-test` on configured `3xx_spies`, role `live_testing`, active castle last verified as `K303 / K3033849ba8778 / level 5`. No further `mega_old_acc` access is authorized. Existing saved Mega evidence may be read. September 30 authority amendment: apply the standing non-Main resource allowance; incidental troop collection is authorized, and feature-needed setup may use available in-game resources through supported runtime paths. Joining/applying to an alliance and account/castle switches remain outside this handoff's scope.
 
 ## Where the previous popup fix is documented
 

@@ -23,7 +23,7 @@ Determine whether the plan is sound enough to implement and whether any claimed 
 - A screenshot proves visible state, not an unobserved transition. A green test proves a claim only when the test exercises it.
 - Do not demand every target be tested. Require multiple targets only when the contract names them, configuration differs materially, or evidence shows target-dependent behavior.
 - Do not repeat live work to accumulate confidence after the decision is adequately supported.
-- Stop before any state-changing action unless the exact action, target, and budget are authorized.
+- Apply the canonical live skill's standing non-Main resource allowance and Main protection. Check the actual action scope and runtime capability; do not treat ordinary non-Main collection/spending or a missing numeric cap as an authorization blocker. Read-only is an explicit state-preservation or user-requested exception.
 
 ## Verdicts
 

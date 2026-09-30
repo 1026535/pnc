@@ -51,14 +51,16 @@ native qualification and current operation observations retain that boundary.
    bounded observation, not by increasing or restarting its operation budget.
 3. Resource body dispatch can collect multiple same-type buildings:
    `builditem_1015.lua:132-141`, `citybuildinfotopitem.lua:145-163`, and
-   `commands/gain/gaincommand.lua:91-104`. Current non-collecting proof is required
-   before entry. `uis/resbuild/resbuildwin.lua:98-108` confirms that the resource
+   `commands/gain/gaincommand.lua:91-104`. Under the September 30 standing user
+   policy, non-Main collection is authorized; observe the resulting state and
+   actual arrival. Non-collecting proof applies only to an explicit read-only
+   case or protected Main. `uis/resbuild/resbuildwin.lua:98-108` confirms that the resource
    title comes from the selected DTO, not a generic family-independent screen.
 4. Preserve uncertainty at fringe views. Do not add landmarks from variable
    event objects, area masks or unknown occupants without native qualification.
    Campaign's capture-derived landmarks do not create an extra ordinary slot.
 
-These changes clarify existing owners in [V44-4](V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-non-collecting-preconditions).
+These changes clarify existing owners in [V44-4](V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-collection-effects).
 They do not add another engine, registry, detector family or implementation slice.
 
 ## Consultant claims corrected or not promoted
@@ -89,9 +91,9 @@ They do not add another engine, registry, detector family or implementation slic
 | Boundary | Next owner/action | Acceptance limit |
 |---|---|---|
 | Scanner cycling and performance | Existing perception worker completes correction; coordinator reviews and integrates | Bank discovery and accepted route regressions use the final candidate; existing body absence is not positive unavailability. |
-| Infantry5/Ranged7/Hall14 | Body worker qualifies native bodies; existing route candidate supplies endpoints/Back; Devin runs bundled public entry/return after integrated offline proof | Exact slot/body, intended family and canonical Home return; no completion/training/upgrade actions. |
+| Infantry5/Ranged7/Hall14 | Body worker qualifies native bodies; existing route candidate supplies endpoints/Back; Devin runs bundled public entry/return after integrated offline proof | Exact slot/body, intended family and canonical Home return; incidental completed-troop collection allowed on non-Main. Deeper actions only when needed by the assigned case. |
 | Cavalry6/Siege8 | After body review, coordinator releases a bounded native endpoint/Back capture to live Devin, then reviews route qualification | Capture alone is not public-route acceptance; no bypass of the current public refusal counted as success. |
-| Resource types | Live Devin harvests unobstructed body+complete popup-area views opportunistically from needed Home frames | Passive capture does not itself prove non-collecting state. No body tap until positive precondition/safe control or explicit collection authority exists. |
+| Resource types | Live Devin captures body and popup-area views during the coherent route batch | Non-Main collection is authorized. Observe its effect, then prove actual selected-family destination and return; a collected resource is not route-arrival proof. |
 | Fringe landmark sufficiency | Observe pose during the already-required discovery/route batch | Missing pose remains unresolved; no inferred bounds or unsolicited calibration tour. |
 
 Live execution remains in the existing bounded batch on an exact reviewed clean

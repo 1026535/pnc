@@ -16,9 +16,13 @@ configured-testing-instance default; allowed live role; declared instance bundle
 authorized switching; permitted mutations; and stable ending screen. When the plan
 or series declares a persistent long reservation, name its scope, the renewal
 checkpoints, and whether this assignment owns its terminal release; transport the
-receipt to the worker without printing its contents. If spending may occur, give
-the exact action, target, resource type, maximum amount or attempts, precondition,
-success signal, and budget stop condition from the request or approved plan. The
+receipt to the worker without printing its contents. Default to spending-enabled
+testing on non-Main instances under the canonical live skill's standing allowance:
+any/all available in-game resources needed for assigned feature work; incidental
+resource/troop/trap collection is permitted and is not spending. Record the concrete
+actions, target, resource types, inherited allowance, preconditions and success
+signals. Main needs explicit action/budget authority. If this is a read-only run,
+name the current user restriction or state-preservation test requiring it. The
 configured live role and canonical lease remain authoritative. The owner of an active
 long reservation may start a stopped configured target inside that reservation to
 restore the assigned work when its configured role permits instance launch. The worker
@@ -162,8 +166,8 @@ Write one `evidence.json` that lets the lead evaluate assignment completeness wi
   ],
   "actual_mutations": [],
   "spending": {
-    "authorized": "none",
-    "actual": "none"
+    "authorized": "standing non-Main full available in-game balance for assigned feature work, or explicit Main/read-only restriction",
+    "actual": "observed amounts, none, or unknown with the evidence limitation stated"
   },
   "final_screen": "observed stable ending screen",
   "cleanup": "cleanup action and preserved pre-existing state",

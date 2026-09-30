@@ -32,7 +32,7 @@ Detailed coverage should grow with scoped work. A complete behavioral reference 
 
 1. Check the workflow note and build provenance. Find the relevant Lua path/symbol through the source map when no note exists.
 2. Follow the UI action, request wrapper, response handler, and state updates. For a decision made locally, inspect its actual predicate; a method name or command ID is only a lead.
-3. Compare that behavior with the existing automation owner and its observations/tests. Keep product requirements and spending authorization separate from what the game client permits.
+3. Compare that behavior with the existing automation owner and its observations/tests. Keep product requirements and spending authorization separate from what the game client permits. Current live assignments follow the [standing game-resource authority](../../.agents/skills/test-bluestacks-live/SKILL.md#standing-game-resource-authority): spending-enabled non-Main testing, permitted incidental collection and protected Main. Historical no-spend receipts describe those runs; they do not impose a new default on later tests.
 4. Record reusable findings with source path, symbol, build, and confidence. Include an automation implication and any material uncertainty.
 
 Use these evidence labels in new notes:

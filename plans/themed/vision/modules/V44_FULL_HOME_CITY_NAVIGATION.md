@@ -320,7 +320,7 @@ action point clear of visible floating completion/collection/help bubbles and
 area/unlock controls using native evidence; ambiguous overlap leaves the case
 pending. Do not infer collider rectangles from a slot pivot. Resource body
 handlers can themselves collect even at an off-bubble point. Apply the
-[V44-4 entry contract](v44/V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-non-collecting-preconditions)
+[V44-4 entry contract](v44/V44_4_BUILDING_ROUTE_MIGRATION.md#entry-semantics-and-collection-effects)
 before dispatch; confirmation cannot undo an unintended action.
 
 ## 5. Implementation stages and integration ownership

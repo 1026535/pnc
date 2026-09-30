@@ -126,15 +126,17 @@ Each feature parser may be extracted from `pnc_observation_enricher.py` when tha
 
 ## Common verification and live protocol
 
+September 30 standing user amendment: [spending-enabled non-Main testing](../../../.agents/skills/test-bluestacks-live/SKILL.md#standing-game-resource-authority) governs this index and its packets. Any/all available in-game resources may be used as needed for assigned feature setup and proof; incidental resource/troop/trap collection is authorized. Earlier packet defaults prohibiting spending/collection are superseded, while explicit current user restrictions, actual state-preservation tests, Main protection, feature ownership and runtime capability contracts remain. Historical no-spend receipts keep their original meaning.
+
 Each packet lists its specific checks and route. Use the current repository runner and test guidance at execution time. At this baseline, start with the relevant component group, then use `py tools/run_tests.py affected --base origin/main --explain` for ordinary source changes. A final combined integration or a shared-schema change warrants the required broader checks; do not run a full suite independently for every data-only menu packet.
 
 Perception acceptance uses real source captures through both production observation paths, including the real bounded OCR planner. Hand-fed OCR tests may isolate semantic conversion but cannot prove that production can obtain the text. Keep reference and validation captures distinct; a resize/crop of the source reference is not independent validation. If a holdout is unavailable, report that limit rather than certify it. Preserve deterministic semantic tests where they still prove a contract.
 
-For a changed live boundary, use the live skill and a **single configured testing instance, active castle**, resolved at execution time. Hold one canonical reservation across dependent steps, use configured ADB discovery and preserve pre-existing instances. Saved artifacts come first. Build any temporary read-only probe under ignored `.local-data/` through `build_core_runtime`, `CoreWorkflowRunner` and reviewed navigation; do not copy a direct screenshot-coordinate tap harness.
+For a changed live boundary, use the live skill and a **single configured testing instance, active castle**, resolved at execution time. Hold one canonical reservation across dependent steps, use configured ADB discovery and preserve pre-existing instances. Saved artifacts come first. Build any temporary scoped probe with an honest effect declaration under ignored `.local-data/` through `build_core_runtime`, `CoreWorkflowRunner` and reviewed navigation; do not copy a direct screenshot-coordinate tap harness.
 
 Common live stop: at most one listed route attempt after offline checks, stop on an unknown/ambiguous surface, unexpected action boundary or unavailable prerequisite. Retry only after a relevant code or state change. A failed guard is evidence to diagnose, not permission for manual-coordinate automation. Every result records pre/post screenshots, typed observations, frame/action trace and the actual return screen under `.local-data/`. Do not declare success from process exit alone.
 
-Read-only menu opening is the intended proof. Research start, donations, Use/Open items, construction, recruitment and battles are outside these packets' proof budgets. If a needed state can only be created by such an action, use saved evidence or report the exact missing authorization; do not replay a historical transaction.
+Menu recognition and correct entry/return remain these packets' intended outcomes. On non-Main instances, feature-needed setup may use the standing resource allowance, including collection, item use or resource-using actions through supported runtime boundaries. Choose only setup needed for the assigned proof; do not expand into another feature's implementation. An unsupported action path is an implementation dependency, not missing user spending permission. Do not replay a historical transaction or count collection as arrival.
 
 ## Coverage boundaries and overlap with current work
 
@@ -154,7 +156,7 @@ This set assigns the current Home catalog's building menus, the user-confirmed L
 
 Use this prompt with one selected packet:
 
-> Implement Vxx from plans/themed/vision/PNC_VISION_MODULAR_PLAN.md and its linked packet on the agreed current base. Use Luna with xhigh reasoning. Read current instructions, confirm dependency commits and task ownership, preserve newer landed feature work, and complete this feature through the canonical observation and navigation path. Use saved evidence first, follow the packet's bounded non-spending validation, and report unsupported states explicitly. Do not expand into another packet or inherit historical spending permissions.
+> Implement Vxx from plans/themed/vision/PNC_VISION_MODULAR_PLAN.md and its linked packet on the agreed current base. Use Luna with xhigh reasoning. Read current instructions, confirm dependency commits and task ownership, preserve newer landed feature work, and complete this feature through the canonical observation and navigation path. Use saved evidence first, follow bounded validation under the standing spending-enabled non-Main allowance and Main protection, and report unsupported states explicitly. Do not expand into another packet; use the current authority rather than historical resource caps.
 
 Each worker returns: exact commit/base, owned symbols/profile IDs, changed behavior, focused checks, route outcome, evidence path, supported variants, and concrete gaps. Commit/push/integration follow the user's delivery authorization for that implementation task.
 

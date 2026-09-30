@@ -27,7 +27,7 @@ Before work, record:
 - The question/workflows to refresh and the previous accepted evidence root.
 - The task-owned checkout and exact repository base SHA. Use the source-control skill before tracked edits; preserve unrelated work.
 - The supplied APK/evidence paths and a new ignored output directory. Resolve these explicitly when source and evidence live in different worktrees.
-- Whether the assignment is offline-only. If acquisition is authorized, record the configured target, exact read-only acquisition, live owner, and any declared long reservation. The historical `157_farm` selection is not a default authorization for a new run.
+- Whether the assignment is offline-only. If acquisition is authorized, record the configured target, exact acquisition, live owner and any declared long reservation. Package-file copying is read-only by purpose; an accompanying game observation follows the canonical live skill's non-Main resource allowance and Main protection. The historical `157_farm` selection is not a default target for a new run.
 - Allowed tracked paths and whether commit/push/integration are authorized. Writing a procedure does not authorize executing a refresh.
 
 ## 3. Acquire only when necessary and authorized

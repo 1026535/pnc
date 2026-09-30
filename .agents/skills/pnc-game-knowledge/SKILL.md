@@ -30,7 +30,7 @@ For stale evidence, a new build, or a request to maintain the knowledge base, re
 ## Boundaries
 
 - Read-only: no file edits, Git state changes, commits, PRs, dependency installs, or project configuration.
-- No emulator, ADB, account, or live-game access and no resource spending — unless the consultation itself explicitly authorizes one exact non-spending observation and target. Anything beyond that narrow case returns `NEEDS_LEAD` naming the exact observation and target for the lead to escalate.
+- This research skill does not authorize emulator, ADB, account or live-game access. Return the exact missing observation and target for the authorized live owner; that assignment uses the canonical [live policy](../test-bluestacks-live/SKILL.md), including standing non-Main spending/collection authority and Main protection. Read-only research permissions are separate from the live owner's game-resource allowance.
 - Do not read or transmit credentials, tokens, ignored `config/*.yaml` values, or account data.
 - Preserve any pre-existing dirty worktree exactly.
 
@@ -41,5 +41,5 @@ Return a compact memo with exactly these sections:
 - `Answer`: the best-supported answer in plain language.
 - `Findings`: each claim labeled with its evidence tier and confidence.
 - `Automation implications`: selectors, navigation/postcondition implications, reconciliation needs, mutation risk, and what must remain lead-owned.
-- `Next smallest observation`: `None`, or the exact read-only observation that resolves remaining uncertainty and why.
+- `Next smallest observation`: `None`, or the exact bounded observation that resolves remaining uncertainty and why, including known collection/spending effects for the live owner.
 - `Handback`: `READY_FOR_REVIEW`, `NEEDS_LEAD`, `BLOCKED`, or `FAILED`, followed by limitations and any untouched-worktree warning.

@@ -267,7 +267,7 @@ Every building-upgrade-requirement answer must state:
 
 ## Boundaries
 
-- Read-only research. Do not mutate game state, spend resources, run live upgrades, or touch ADB/emulator/accounts. Live validation requires separate explicit authorization and a non-spending scope (or exact action/target/budget via `write-code-live`).
+- This is read-only research: no game actions or ADB/emulator/account access under the research assignment. Required live validation belongs to an authorized live assignment using the standing non-Main resource allowance and Main protection in `test-bluestacks-live`, with `write-code-live` for resource-using proof. Research-only scope does not impose a no-spend default on that separate live assignment.
 - Never write decoded assets to disk, modify package/evidence files, or copy generated output into Git.
 - Do not claim universal or current-live behavior: all data is the 5.0.203/233 snapshot.
 - Never guess missing mappings, item names, or requirement values — report `unknown` plus the minimal artifact needed.

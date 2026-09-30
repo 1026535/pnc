@@ -66,7 +66,9 @@ one worker per building or run duplicate acceptance for equivalent instances.
    unresolved and externally owned boundaries explicitly rather than expanding
    into another feature's implementation or unrelated popup/host repairs.
 
-## Entry semantics and non-collecting preconditions
+## Entry semantics and collection effects
+
+September 30 user amendment: apply the [standing live resource authority](../../../../../.agents/skills/test-bluestacks-live/SKILL.md#standing-game-resource-authority). All non-Main test instances permit incidental resource, troop and trap collection and any/all available in-game resources needed for assigned feature work. Collection is not spending and no longer blocks V44 entry on those targets. Main and explicitly read-only/state-preservation tests remain protected. Preserve true runtime effect contracts; adapt a route that was incorrectly restricted to READ_ONLY rather than requesting the same user permission again.
 
 September 29 source review: use the existing canonical building catalog,
 feature screen identities and reviewed return edges. Extend those owners only
@@ -92,10 +94,12 @@ when a route has evidence; do not create a parallel destination registry.
   handlers can divert to collection. The normal collection handler enumerates
   all harvestable same-type IDs, so exact slot selection does not bound mutation
   to that slot. An off-bubble body point or failure to detect a bubble is not a
-  bypass. Keep public entry refused until a current positive non-collecting
-  precondition or a separately evidenced safe control is qualified, including
-  actual primary identity and return. Collection needs explicit action/target/
-  family-scope budget authority; none is granted by this plan amendment.
+  bypass. On non-Main test instances, same-type collection is permitted. Observe
+  its outcome, reacquire the current intended body if entry still needs another
+  action, and prove actual primary identity and return. Do not count collection
+  as successful arrival or blindly replay a tap. A positive non-collecting state
+  is required only for an explicitly read-only/no-collection case or protected Main.
+  Military and Trap completion collection follow the same authority distinction.
 - **Coverage:** record the five resource types' shared entry-state gap once and
   link their rows. Slots17-51 also allow Recruiting/Infirmary types; their entry
   cases are not blocked merely because they share resource eligibility. Geometry,
@@ -156,7 +160,7 @@ own rows; their outstanding work is not silently reassigned here.
    has migrated and unrelated callers are accounted for. Preserve accepted route
    behavior; do not leave a fallback reachable after the shared navigator refuses.
 6. Run route/body/selection tests and finished-candidate affected selection. Lead
-   reviews the actual changes before a coherent non-spending live route batch.
+   reviews the actual changes before a coherent live route batch under the standing non-Main allowance or an explicit Main/read-only exception.
 7. Map every group row to passing evidence, positive unavailability or a concrete
    pending dependency. Return the full manifest, not only the passing subset.
 
