@@ -244,7 +244,9 @@ class _HomeCityOperation:
         if previous is not None:
             if frame.captured_at <= previous.captured_at:
                 raise RuntimeError("Home navigation received a stale capture; no further input sent.")
-            if previous.frame_ref is not None and frame.frame_ref is not None:
+            if previous.frame_ref is not None:
+                if frame.frame_ref is None:
+                    raise RuntimeError("Home navigation lost frame provenance; no further input sent.")
                 if (previous.frame_ref.session_id != frame.frame_ref.session_id
                         or previous.frame_ref.session_epoch != frame.frame_ref.session_epoch):
                     raise RuntimeError("Home navigation lost instance/session continuity; no further input sent.")
@@ -317,9 +319,13 @@ class _HomeCityOperation:
                       "Home input was not confirmed; no automatic replay or dependent input sent.")
         self.check_deadline()
 
-    def normalize(self) -> Observation:
-        """Reach two consecutive current endpoint fits using single outward wheel inputs."""
-        current = self.capture(None, "entry")
+    def normalize(self, source: Observation | None = None) -> Observation:
+        """Reach two current endpoint fits; a prior source only fences continuity."""
+        if source is not None:
+            if source.frame_ref is None:
+                raise RuntimeError("Home source has no session provenance; no input sent.")
+            self.view(source)
+        current = self.capture(source, "entry")
         passive = 1
         pending_wheel: Observation | None = None
         while True:
@@ -506,14 +512,18 @@ class NavigationCore:
         *,
         observe_content: Callable[[HomeCityObservationRequest], Observation],
         home_city_slot: HomeCitySlotSelector | None = None,
+        source: Observation | None = None,
     ) -> Observation:
         """Locate one current measured Home body without tapping its occupant.
 
         A visible body is evidence for this observation only. Callers must
         recheck frame provenance and their own action authority before input.
+        A supplied source fences session continuity; it never authorizes a
+        gesture or substitutes for this operation's fresh entry capture.
         """
         current, _ = self._locate_building(
             target=target, observe_content=observe_content, home_city_slot=home_city_slot,
+            source=source,
         )
         return current
 
@@ -523,12 +533,13 @@ class NavigationCore:
         target: HomeCityObjectId,
         observe_content: Callable[[HomeCityObservationRequest], Observation],
         home_city_slot: HomeCitySlotSelector | None,
+        source: Observation | None = None,
     ) -> tuple[Observation, _HomeCityOperation]:
         """Share one normalization and target scan between lookup and opening."""
         validate_home_city_slot_selector(target, home_city_slot)
         spec = home_city_camera_target(target)
         operation = self._home_operation(observe_content, () if spec is None else (spec,))
-        current = operation.normalize()
+        current = operation.normalize(source)
         if spec is None:
             # Preserve independently verified direct-visible routes. A missing
             # target qualification cannot authorize the historical blind tour.

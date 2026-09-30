@@ -685,3 +685,21 @@ must recheck the returned body's exact identity, slot, endpoint, frame and
 action geometry before any tap; that caller's session boundary remains the
 physical authority. The target-specific Cavalry/Siege acquisition and all
 four endpoint/Back returns still require a new bounded live batch.
+
+**Turn021 follow-up, 2026-09-30, build 5.0.203:** The clear Home frames
+0022–0037 in `turn-021/diagnostics.json` stayed at the same rounded camera
+pose without a wheel input, yet endpoint classification alternated between
+`AT_ENDPOINT` and `UNRESOLVED`. Some unresolved frames added the southern
+courtyard fixed-landmark group to the institute/plaza groups. These saved
+diagnostics do not retain the unsnapped fitted zoom or classification reason,
+so they do not justify changing calibration thresholds or assuming that .75
+is a saturation proof. Native endpoint profiling remains required to identify
+the competing landmark votes and measured scale.
+
+For developmental target-only acquisition, a prior Home observation may now
+be passed to `locate_building` as a capture/session continuity fence. The
+canonical operation still takes a fresh entry frame, certifies the endpoint
+with its unrestricted confirmation, and retains the same operation deadline
+and camera-input budget through target-directed scanning. This removes the
+helper's separate normalization before a second locate operation; a source
+with an unresolved verdict never authorizes a body or wheel input by itself.

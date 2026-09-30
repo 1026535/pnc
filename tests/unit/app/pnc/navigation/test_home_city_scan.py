@@ -21,6 +21,7 @@ from pnc_automation.app.pnc.navigation.home_city_scan import (
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import plan_home_city_camera_step
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from tests.unit.app.pnc.navigation.test_home_city_slot_selection import _body, _core, _NOW
 from tests.support.pnc.navigation.core_home import (
@@ -33,6 +34,99 @@ _INSTITUTE = home_city_camera_target(HomeCityObjectId.INSTITUTE)
 
 
 class HomeCityTargetLocationTests(unittest.TestCase):
+    @staticmethod
+    def _provenanced(frame, sequence, *, session="source-session"):
+        ref = FrameRef(session, 1, sequence, 0, frame.captured_at)
+        surface = frame.spatial_surface
+        return replace(frame, frame_ref=ref, spatial_surface=replace(
+            surface,
+            camera_proof=replace(surface.camera_proof, frame_ref=ref),
+            home_city_view=replace(surface.home_city_view, frame_ref=ref),
+        ))
+
+    def test_prior_home_source_is_not_reused_as_target_or_endpoint_proof(self):
+        core, actions = _core()
+        target = HomeCityObjectId.CAVALRY_BARRACKS
+        body = replace(
+            measured_building_object(
+                target, bounds=Bounds(300, 500, 100, 50),
+                action_point=(350, 525), action_bounds=Bounds(340, 515, 20, 20),
+            ),
+            home_city_slot=HomeCitySlotSelector(6),
+        )
+        source = self._provenanced(camera_home_frame((body,), captured_at=_NOW), 1)
+        frames = iter((
+            self._provenanced(camera_home_frame(
+                captured_at=_NOW + timedelta(seconds=1)), 2),
+            self._provenanced(camera_home_frame(
+                captured_at=_NOW + timedelta(seconds=2)), 3),
+            self._provenanced(camera_home_frame(
+                (body,), translation=(-240, 222),
+                captured_at=_NOW + timedelta(seconds=3)), 4),
+        ))
+        requests = []
+
+        def observe(request):
+            requests.append(request)
+            return next(frames)
+
+        step = qualified_pan_step('right', axis='x', goal_atlas=(1100, 700))
+        with patch('pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step',
+                   return_value=step):
+            located = core.locate_building(
+                target, observe_content=observe, source=source,
+                home_city_slot=HomeCitySlotSelector(6),
+            )
+        self.assertIs(body, located.spatial_surface.objects[0])
+        self.assertIsNot(source, located)
+        self.assertEqual(3, len(requests))
+        self.assertEqual(['right'], [action.direction for action in actions])
+        self.assertEqual(1, len({request.label.split('_home_')[0] for request in requests}))
+
+    def test_prior_home_source_requires_a_newer_capture(self):
+        core, actions = _core()
+        source = self._provenanced(camera_home_frame(captured_at=_NOW), 1)
+        with self.assertRaisesRegex(RuntimeError, 'stale capture'):
+            core.locate_building(
+                HomeCityObjectId.CAVALRY_BARRACKS,
+                observe_content=lambda _: self._provenanced(
+                    camera_home_frame(captured_at=_NOW), 2),
+                source=source,
+            )
+        self.assertEqual([], actions)
+
+    def test_prior_home_source_rejects_foreign_session_before_input(self):
+        core, actions = _core()
+        source = self._provenanced(camera_home_frame(captured_at=_NOW), 1)
+        foreign = self._provenanced(camera_home_frame(
+            captured_at=_NOW + timedelta(seconds=1)), 2, session="other-session")
+        with self.assertRaisesRegex(RuntimeError, 'instance/session continuity'):
+            core.locate_building(
+                HomeCityObjectId.CAVALRY_BARRACKS,
+                observe_content=lambda _: foreign,
+                source=source,
+            )
+        self.assertEqual([], actions)
+
+    def test_prior_home_source_requires_both_frame_refs(self):
+        core, actions = _core()
+        source = camera_home_frame(captured_at=_NOW)
+        with self.assertRaisesRegex(RuntimeError, 'no session provenance'):
+            core.locate_building(
+                HomeCityObjectId.CAVALRY_BARRACKS,
+                observe_content=lambda _: self.fail('missing source reached capture'),
+                source=source,
+            )
+        source = self._provenanced(source, 1)
+        with self.assertRaisesRegex(RuntimeError, 'lost frame provenance'):
+            core.locate_building(
+                HomeCityObjectId.CAVALRY_BARRACKS,
+                observe_content=lambda _: camera_home_frame(
+                    captured_at=_NOW + timedelta(seconds=1)),
+                source=source,
+            )
+        self.assertEqual([], actions)
+
     def test_unreviewed_target_can_be_located_without_opening(self):
         core, actions = _core()
         target = HomeCityObjectId.CAVALRY_BARRACKS

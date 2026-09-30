@@ -136,6 +136,20 @@ class HomeNormalizationTests(unittest.TestCase):
         self.assertEqual([], op.core.actuator.actions)
         self.assertEqual(0, op.state.zoom_inputs)
 
+    def test_endpoint_then_unresolved_same_pose_does_not_authorize_input(self):
+        op = operation([
+            home(0, translation=(-364, -422)),
+            home(1, status=HomeCityZoomStatus.UNRESOLVED, anchor=False,
+                 translation=(-364, -424)),
+            home(2, status=HomeCityZoomStatus.UNRESOLVED, anchor=False,
+                 translation=(-364, -424)),
+        ])
+        with self.assertRaises(HomeCityScanError) as stopped:
+            op.normalize()
+        self.assertIs(HomeCityScanStopReason.ZOOM_UNRESOLVED,
+                      stopped.exception.result.stop_reason)
+        self.assertEqual([], op.core.actuator.actions)
+
     def test_closer_view_uses_one_outward_detent_and_fresh_anchor_per_step(self):
         op = operation([
             home(0, status=HomeCityZoomStatus.NOT_AT_ENDPOINT, zoom=1),
