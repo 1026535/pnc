@@ -631,7 +631,7 @@ class HomeCityCameraLocalizer:
 
         Translation is origin-relative, so a small zoom difference between
         two fits of the same correspondences scales into a large origin gap
-        (``Î”t â‰ˆ -Î”z Â· centroid``): comparing raw translations would flag
+        (``Δt ≈ -Δz · centroid``): comparing raw translations would flag
         re-measurements of the same scene as rivals. Comparing where each
         transform puts the evidence itself is the scale-invariant check.
         """
