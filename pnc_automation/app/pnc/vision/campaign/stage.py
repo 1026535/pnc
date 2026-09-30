@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
+    OcrLine,
     OcrReadPurpose,
     OcrResult,
 )
@@ -49,11 +50,7 @@ def _stage_detail(
         detail="campaign_stage_title",
         required_fact="campaign_stage_detail",
     )
-    title = " ".join(
-        line.text.strip()
-        for line in sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x))
-        if line.text.strip() and line.confidence >= _NUMERIC_CONFIDENCE_MIN
-    )
+    title = _stage_title_text(result)
     chapter_number, stage_number, name = _parse_stage_title(title or None)
     action_points, max_action_points = _stage_gauge_values(
         image=image,
@@ -78,6 +75,34 @@ def _stage_detail(
         action_points=action_points,
         max_action_points=max_action_points,
         challenge_cost=challenge_cost,
+    )
+
+
+def _stage_title_text(result: OcrResult) -> str:
+    """Read each visual title row left to right despite OCR top-edge jitter."""
+
+    lines = [
+        line for line in result.lines
+        if line.text.strip() and line.confidence >= _NUMERIC_CONFIDENCE_MIN
+    ]
+    rows: list[list[OcrLine]] = []
+    for line in sorted(lines, key=lambda item: (item.bounds.y, item.bounds.x)):
+        for row in rows:
+            if any(
+                2 * (min(line.bounds.y + line.bounds.height,
+                         other.bounds.y + other.bounds.height)
+                     - max(line.bounds.y, other.bounds.y))
+                >= min(line.bounds.height, other.bounds.height)
+                for other in row
+            ):
+                row.append(line)
+                break
+        else:
+            rows.append([line])
+    return " ".join(
+        line.text.strip()
+        for row in rows
+        for line in sorted(row, key=lambda item: item.bounds.x)
     )
 
 

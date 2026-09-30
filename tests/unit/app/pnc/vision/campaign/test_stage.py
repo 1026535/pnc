@@ -116,6 +116,29 @@ class CampaignStageDetailProducerTests(unittest.TestCase):
         self.assertEqual(3, len(backend.regions))
         self.assertTrue(all(region is not None for region in backend.regions))
 
+    def test_single_row_title_fragments_follow_horizontal_order(self) -> None:
+        # Native 6-4/6-5 shows one visual title row. A few pixels of OCR
+        # top-edge jitter must not move its rightmost words before "Marsh".
+        for stage in (4, 5):
+            with self.subTest(stage=stage):
+                title = _line_result(
+                    OcrLine(f"[6-{stage}]", Bounds(151, 196, 59, 24), 0.98),
+                    OcrLine("of Tear", Bounds(303, 198, 87, 22), 0.95),
+                    OcrLine("Marsh", Bounds(222, 201, 76, 20), 0.95),
+                )
+                additions, _backend = self._additions(
+                    [title] + self._reads(title=None)[1:]
+                )
+                detail = additions.campaign_stage
+                assert detail is not None
+                self.assertEqual((6, stage, "Marsh of Tear"), (
+                    detail.chapter_number, detail.stage_number, detail.name,
+                ))
+                self.assertEqual((150, 120, 12), (
+                    detail.action_points, detail.max_action_points,
+                    detail.challenge_cost,
+                ))
+
     def test_unreadable_title_keeps_ordinals_and_name_unknown(self) -> None:
         additions, _backend = self._additions(self._reads(title="Grandia Ruins"))
 
