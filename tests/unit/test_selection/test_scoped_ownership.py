@@ -16,6 +16,7 @@ class ScopedOwnershipTests(unittest.TestCase):
             "tests/unit/app/pnc/domain/test_sample.py",
             "tests/unit/app/pnc/vision/test_sample.py",
             "tests/unit/app/pnc/vision/home_city_camera/test_bodies.py",
+            "tests/unit/app/pnc/navigation/test_sample.py",
             "tests/integration/sample/test_capture.py",
             "tests/integration/vision/home_city_camera/test_publishers.py",
             "tests/contract/sample/test_api.py",
@@ -59,6 +60,32 @@ class ScopedOwnershipTests(unittest.TestCase):
                     "tests.integration.vision.home_city_camera.test_publishers",
                     "tests.architecture.test_imports",
                 })
+
+    def test_packaged_camera_crop_also_selects_its_navigation_readers(self) -> None:
+        path = "pnc_automation/app/pnc/vision/data/home_city_camera/watchtower_body.png"
+        plan = affected_plan(self.tests, self.rules, [path], self.sources, self.sources, "base", "head")
+        self.assertFalse(plan.fallbacks)
+        self.assertEqual(set(plan.reasons), {
+            "tests.unit.app.pnc.vision.test_sample",
+            "tests.unit.app.pnc.vision.home_city_camera.test_bodies",
+            "tests.unit.app.pnc.navigation.test_sample",
+            "tests.integration.sample.test_capture",
+            "tests.integration.vision.home_city_camera.test_publishers",
+            "tests.architecture.test_imports",
+        })
+
+    def test_sibling_vision_data_path_keeps_broad_groups_without_navigation(self) -> None:
+        path = "pnc_automation/app/pnc/vision/data/screen_anchors/campaign_back_button.png"
+        plan = affected_plan(self.tests, self.rules, [path], self.sources, self.sources, "base", "head")
+        self.assertFalse(plan.fallbacks)
+        self.assertNotIn("tests.unit.app.pnc.navigation.test_sample", plan.reasons)
+        self.assertEqual(set(plan.reasons), {
+            "tests.unit.app.pnc.vision.test_sample",
+            "tests.unit.app.pnc.vision.home_city_camera.test_bodies",
+            "tests.integration.sample.test_capture",
+            "tests.integration.vision.home_city_camera.test_publishers",
+            "tests.architecture.test_imports",
+        })
 
     def test_unowned_fixture_path_keeps_unknown_resource_fallback(self) -> None:
         for path in ("tests/data/screen_recognition/home_city_new.png",

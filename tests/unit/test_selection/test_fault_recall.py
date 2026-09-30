@@ -122,9 +122,10 @@ class FaultRecallTests(unittest.TestCase):
         owned = "tests/data/home_city_slot_bodies/home_city_fault.png"
         camera_unit = "tests/unit/app/pnc/vision/home_city_camera/test_slot_bodies.py"
         camera_integration = "tests/integration/vision/home_city_camera/test_publishers.py"
+        navigation = "tests/unit/app/pnc/navigation/test_home_city_scan.py"
         contract = "tests/contract/sample/test_api.py"
         unrelated = "tests/unit/engine/test_worker.py"
-        tests = inventory([camera_unit, camera_integration, contract, unrelated])
+        tests = inventory([camera_unit, camera_integration, navigation, contract, unrelated])
         rules = load_rules(
             Path(__file__).resolve().parents[3] / "tests/selection_rules.yaml", tests)
         resource = self.root / "home_city_fault.png"
@@ -143,6 +144,7 @@ class FaultRecallTests(unittest.TestCase):
         checks = {
             module_name(camera_unit): integrity,
             module_name(camera_integration): lambda: None,
+            module_name(navigation): lambda: None,
             module_name(contract): lambda: None,
             module_name(unrelated): lambda: None,
         }

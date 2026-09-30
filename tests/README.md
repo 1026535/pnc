@@ -135,6 +135,14 @@ and the shared `screen_recognition/manifest.json` and
 directories stay conservative until their readers are mapped and added to this
 rule with real group names; a narrow pattern cannot exempt a path another rule
 owns, and shared or unknown fixtures must not be narrowed into a named group.
+
+Packaged camera crops under `pnc_automation/app/pnc/vision/data/home_city_camera/*`
+add `unit.app.pnc.navigation` to their owners: `home_city_camera_target` and
+`load_home_city_camera_catalog` open every packaged crop, and the navigation
+unit tests invoke them (one module at collection time). Rules are additive, so
+the broad `pnc_automation/app/pnc/vision/data/*` -> `[vision, integration]`
+ownership still applies to the same paths; every other packaged asset keeps
+only those broad groups.
 Camera tests are split by catalog, localization, consensus, zoom, targets,
 surface and view behavior. Navigation tests separate transitions, buildings,
 Campaign, Manor, chat, mail, research, trial and Workshop routes. Shared

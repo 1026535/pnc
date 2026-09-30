@@ -24,6 +24,7 @@ TEST_PATHS = {
     "workflow": "tests/integration/workflows/test_daily.py",
     "camera_unit": "tests/unit/app/pnc/vision/home_city_camera/test_slot_bodies.py",
     "camera_integration": "tests/integration/vision/home_city_camera/test_publishers.py",
+    "navigation": "tests/unit/app/pnc/navigation/test_home_city_scan.py",
 }
 TESTS = inventory(list(TEST_PATHS.values()))
 MODULES = {label: path.removesuffix(".py").replace("/", ".") for label, path in TEST_PATHS.items()}
@@ -39,6 +40,9 @@ RULES = OwnershipRules(
     ("*.md", ".agents/*"),
     (ResourceRule("tests/data/home_city_slot_bodies/*",
                   ("unit.app.pnc.vision.home_city_camera", "integration.vision.home_city_camera")),
+     ResourceRule("pnc_automation/app/pnc/vision/data/home_city_camera/*",
+                  ("unit.app.pnc.navigation",)),
+     ResourceRule("pnc_automation/app/pnc/vision/data/*", ("vision", "integration")),
      ResourceRule("pnc_automation/templates/*", ("vision",)),
      ResourceRule("scripts/*.yaml", ("integration", "contract")),
      ResourceRule("config/*.json", ("vision", "integration"))),
@@ -98,6 +102,12 @@ CASES = (
     ChangeCase("mixed owned and unknown fixture falls back", ("tests/data/home_city_slot_bodies/home_city_x.png", "tests/data/world_map/anchor.png"), ALL, "unknown non-Python dependency"),
     ChangeCase("changed owned reader test selects itself", (TEST_PATHS["camera_unit"],), MANDATORY | {"camera_unit"}),
     ChangeCase("owned fixture plus public signature change", (WORKER, "tests/data/home_city_slot_bodies/home_city_x.png"), ENGINE | {"camera_unit", "camera_integration"}, new_updates={WORKER: "def run(other=1):\n    return other + 1\n"}),
+    ChangeCase("packaged camera crop adds its navigation readers",
+               ("pnc_automation/app/pnc/vision/data/home_city_camera/crop.png",),
+               MANDATORY | {"vision", "camera_unit", "camera_integration", "runner", "workflow", "navigation"}),
+    ChangeCase("sibling vision data keeps broad groups without navigation",
+               ("pnc_automation/app/pnc/vision/data/screen_anchors/button.png",),
+               MANDATORY | {"vision", "camera_unit", "camera_integration", "runner", "workflow"}),
     ChangeCase("unknown YAML resource", ("assets/new.yaml",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown JSON resource", ("assets/catalog.json",), ALL, "unknown non-Python dependency"),
     ChangeCase("unknown PNG resource", ("assets/anchor.png",), ALL, "unknown non-Python dependency"),

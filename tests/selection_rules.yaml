@@ -29,6 +29,8 @@ documentation:
 resources:
   - pattern: tests/data/home_city_slot_bodies/*
     groups: [unit.app.pnc.vision.home_city_camera, integration.vision.home_city_camera]
+  - pattern: pnc_automation/app/pnc/vision/data/home_city_camera/*
+    groups: [unit.app.pnc.navigation]
   - pattern: pnc_automation/app/pnc/vision/data/*
     groups: [vision, integration]
   - pattern: pnc_automation/templates/*
