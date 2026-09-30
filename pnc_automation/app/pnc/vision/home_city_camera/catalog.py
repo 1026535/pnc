@@ -15,7 +15,7 @@ from pnc_automation.app.pnc.domain.observation import Bounds
 from pnc_automation.app.pnc.vision.selector_catalog import default_selector_asset_root
 from pnc_automation.core.errors import SelectorResolutionError
 
-from .models import (
+from pnc_automation.app.pnc.domain.home_city_camera_catalog import (
     HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,
     HOME_CITY_CAMERA_REFERENCE_SIZE,
     HomeCityCameraCatalog,

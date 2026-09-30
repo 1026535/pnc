@@ -22,9 +22,7 @@ from pnc_automation.app.pnc.domain.home_city_slots import (
     validate_home_city_slot_selector,
 )
 from pnc_automation.app.pnc.domain.observation import DetectedSpatialObject, Observation, SpatialObjectSourceKind
-from pnc_automation.app.pnc.vision.home_city_camera import (
-    HomeCityCameraTarget,
-)
+from pnc_automation.app.pnc.domain.home_city_camera_catalog import HomeCityCameraTarget
 
 
 class HomeCityScanStopReason(StrEnum):

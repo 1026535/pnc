@@ -45,7 +45,7 @@ from pnc_automation.core.vision.template.template_matcher import (
 )
 
 from .catalog import load_home_city_camera_catalog
-from .models import (
+from pnc_automation.app.pnc.domain.home_city_camera_catalog import (
     HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,
     HOME_CITY_CAMERA_REFERENCE_SIZE,
     HomeCityCameraCatalog,
@@ -631,7 +631,7 @@ class HomeCityCameraLocalizer:
 
         Translation is origin-relative, so a small zoom difference between
         two fits of the same correspondences scales into a large origin gap
-        (``Δt ≈ -Δz · centroid``): comparing raw translations would flag
+        (``Î”t â‰ˆ -Î”z Â· centroid``): comparing raw translations would flag
         re-measurements of the same scene as rivals. Comparing where each
         transform puts the evidence itself is the scale-invariant check.
         """

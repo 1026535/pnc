@@ -47,6 +47,41 @@ class ImportIsolationTests(unittest.TestCase):
             assert not any(name.startswith(forbidden) for name in sys.modules)
         """)
 
+    def test_home_city_camera_values_import_without_vision_implementation(self) -> None:
+        """A camera value consumer does not construct the camera service graph."""
+
+        self.run_import_check("""
+            import sys
+            from pnc_automation.app.pnc.domain.home_city_camera_catalog import HomeCityCameraTarget
+            import pnc_automation.app.pnc.navigation.home_city_scan
+            assert HomeCityCameraTarget.__name__ == 'HomeCityCameraTarget'
+            assert not any(
+                name.startswith('pnc_automation.app.pnc.vision.home_city_camera')
+                for name in sys.modules
+            )
+            assert 'pnc_automation.core.vision.template.template_matcher' not in sys.modules
+        """)
+
+    def test_camera_value_facades_share_the_neutral_types(self) -> None:
+        """Existing package and models imports retain the canonical class objects."""
+
+        self.run_import_check("""
+            from pnc_automation.app.pnc.domain import home_city_camera_catalog as values
+            from pnc_automation.app.pnc.vision.home_city_camera import models, HomeCityCameraTarget
+            import pnc_automation.app.pnc.vision.home_city_camera as camera
+            for name in (
+                'HomeCityCameraLandmark', 'HomeCityCameraTarget',
+                'HomeCityCameraTargetMatch', 'HomeCityZoomEndpointCalibration',
+                'HomeCityZoomAnchorSpec', 'HomeCityViewNormalization',
+                'HomeCityCameraCatalog',
+            ):
+                assert getattr(models, name) is getattr(values, name)
+                assert getattr(camera, name) is getattr(values, name)
+            assert HomeCityCameraTarget is values.HomeCityCameraTarget
+            assert camera.HOME_CITY_CAMERA_REFERENCE_SIZE is values.HOME_CITY_CAMERA_REFERENCE_SIZE
+            assert camera.HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET is values.HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET
+        """)
+
     def test_app_public_exports_are_lazy_cached_and_compatible(self) -> None:
         self.run_import_check("""
             import sys

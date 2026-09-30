@@ -99,8 +99,8 @@ from pnc_automation.app.pnc.navigation.home_city_scan import (
     HomeCityScanStopReason,
     camera_view_center_atlas,
 )
+from pnc_automation.app.pnc.domain.home_city_camera_catalog import HomeCityCameraTarget
 from pnc_automation.app.pnc.vision.home_city_camera import (
-    HomeCityCameraTarget,
     home_city_camera_target,
     load_home_city_camera_catalog,
 )
