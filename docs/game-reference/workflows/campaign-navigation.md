@@ -224,6 +224,16 @@ observed destination stops after that one owned tap. Formation
 Challenge/GoFight/Save, hero edit, Auto, and continuation controls remain
 unpublished, and no stage/AP facts are projected onto formation.
 
-Typed recognition and the owned typed return remain awaiting final candidate
-live proof; the continuation/battle authority boundary is unchanged and
-unknown. No full-plan acceptance or mode availability is implied.
+**Live-observed, September 30:** Final integrated candidate `4d26d721`
+passed the zero-spend testing-instance run documented at
+`.local-data/devin-live-test/runs/m1-v14-resume-preentry-20260927/turn-012/lead_review.md`.
+The public Campaign operation normalized from a freshly measured zoom 1.0
+Home view and reached the typed Campaign map in 38.86 seconds under an
+explicit 45-second Home policy. Current Stage 6-4 and 6-5 detail, guarded
+Hero Formation preparation and its dedicated Back to the same Stage 6-5,
+then canonical Home, were observed on the same candidate. No final battle
+action, hero edit, Auto toggle or resource spend occurred. Continuation
+remains unknown, so no full-plan acceptance or mode availability is implied.
+The bounded stage-title reader reported `of Tear Marsh` while the actual UI
+read `Marsh of Tear`; current stage ordinals, AP, cost and owned controls were
+correct. V owns review of the name field before name-based authority uses it.
