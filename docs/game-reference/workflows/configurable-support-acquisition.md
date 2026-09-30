@@ -103,7 +103,9 @@ same-type/same-slot template body and an unobstructed native action point.
 edge for both `PNC_MARKET` and `PNC_ALLIANCE_HALL`, so `open_building` and
 `open_visible_building` admit both targets through the shared measured
 operation: route review before observation, exact optional slot, fresh typed
-body at a safe point, one observed-point tap, then the confirmed Back return.
+body at a safe point, and one observed-point tap to the primary endpoint.
+The caller can then invoke `navigate(PNC_HOME_CITY)` for the measured Back
+return; opening the building does not automatically leave its endpoint.
 Public-route candidate status is pending final batched live validation through
 production `open_building`; the turn025 receipts came from the developmental
 helper, not the public caller. The remaining fake tests isolate acquisition
@@ -112,16 +114,16 @@ route. Existing V37/V27 menus, parsers and mutations remain feature-owned.
 
 ## Next smallest observations
 
-CFG-E1 and CFG-E2 receipts were delivered by turn025 on 2026-09-30 (same-process
-developmental helper, per above). The remaining public-route qualification is a
-coordinator-owned live batch through production `open_building`; CFG-P1 stays
-open only for a second native Market body sighting. Reuse the batch-assigned
+CFG-P1 body evidence and CFG-E1/CFG-E2 endpoint receipts were delivered by
+turn024/025 on 2026-09-30 (developmental helper, per above). The remaining
+public-route qualification is a coordinator-owned live batch through production
+`open_building` and the separate Home return. Reuse the batch-assigned
 `157_farm` instance's active castle and established identity/lease authority. Do not move
 buildings or switch castles to manufacture a permutation.
 
 | Case | Precondition and allowed action | Required evidence |
 | --- | --- | --- |
-| CFG-P1 Market body | After the saved native matching checks pass, include Market in one bounded shared discovery. Use the existing core; no Market tap. Source and separate holdout are already available above. | Current passive match with readable Market identity, fixed-landmark pose, observed slot and clear interior point; bind the result to the exact final candidate. If unresolved, keep availability unknown. |
+| CFG-P1 Market body (delivered turn024/025) | Reuse independently reviewed current-frame body evidence; no additional body-only tour is required. | Market slot 11, score 0.9695, projection error 6.71, current endpoint pose and confirmed exact body point `(492,756)` on turn025 candidate `d92bde69`. |
 | CFG-E1 Alliance Hall endpoint/return (delivered turn025, developmental helper) | Final public-caller validation through production `open_building` remains coordinator-owned. | turn025 receipts: Hall body slot 13 point `(708,654)` -> typed `PNC_ALLIANCE_HALL` -> measured top-left Back `(81,52)` -> fresh Home. |
 | CFG-E2 Market endpoint/return (delivered turn025, developmental helper) | Final public-caller validation through production `open_building` remains coordinator-owned. | turn025 receipts: Market body slot 11 point `(492,756)` -> typed `PNC_MARKET` -> measured top-left Back `(81,44)` -> fresh Home, including a current-Market takeover return. |
 

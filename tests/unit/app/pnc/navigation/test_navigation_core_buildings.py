@@ -187,8 +187,8 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
         """Reviewed routes compose public body acquisition with the measured return.
 
         A fresh qualified Home capture -> a measured typed body at the exact
-        requested slot -> one observed-point tap -> the reviewed typed Back
-        edge restores Home inside the same operation. Support slots 11/12/13
+        requested slot -> one observed-point tap. A separate navigation call
+        follows the reviewed typed Back edge to Home. Support slots 11/12/13
         interchange Blacksmith, Market and Alliance Hall; the current
         observed occupant binds identity per request, never a global mapping.
         """
