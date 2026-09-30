@@ -20,6 +20,7 @@ from pnc_automation.app.pnc.domain.home_city_slots import (
     HomeCitySlotSelector,
     home_city_slots_for_object,
 )
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.home_city_camera import (
     HomeCityCameraLocalizer,
     load_home_city_camera_catalog,
@@ -27,6 +28,7 @@ from pnc_automation.app.pnc.vision.home_city_camera import (
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.support.paths import TEST_DATA_ROOT
+from tests.support.pnc.navigation.core_frames import observation
 
 
 _FIXTURES = TEST_DATA_ROOT / "home_city_camera"
@@ -85,19 +87,20 @@ class MarketBodyDataTests(unittest.TestCase):
         with self.assertRaisesRegex(SelectorResolutionError, "cannot host"):
             target.atlas_action_point(home_city_slot=HomeCitySlotSelector(9))
 
-    def test_body_data_does_not_enable_unreviewed_market_entry(self) -> None:
-        actuator, capture = Mock(), Mock()
-        core = NavigationCore(actuator, capture, reviewed_navigation_edges())
-        for method in (core.open_building, core.open_visible_building):
-            with self.subTest(method=method.__name__):
-                with self.assertRaisesRegex(ValueError, "no reviewed return route"):
-                    method(
+    def test_reviewed_market_entry_requires_a_fresh_home_surface(self) -> None:
+        for method in ("open_building", "open_visible_building"):
+            with self.subTest(method=method):
+                actuator = Mock()
+                capture = Mock(return_value=observation(ScreenType.UNKNOWN))
+                core = NavigationCore(actuator, capture, reviewed_navigation_edges())
+                with self.assertRaisesRegex(RuntimeError, "unblocked city surface"):
+                    getattr(core, method)(
                         HomeCityObjectId.MARKET,
                         observe_content=capture,
                         home_city_slot=HomeCitySlotSelector(11),
                     )
-        capture.assert_not_called()
-        actuator.execute_action.assert_not_called()
+                capture.assert_called_once()
+                actuator.execute_action.assert_not_called()
 
 
 class MarketBodyMatchTests(unittest.TestCase):
