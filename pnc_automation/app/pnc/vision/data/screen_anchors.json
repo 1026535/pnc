@@ -6659,6 +6659,64 @@
       ]
     },
     {
+      "id": "building_market",
+      "layout_id": "building_market",
+      "screen": "PNC_MARKET",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/market_native_20260930.png",
+        "decoded_sha256": "f7aee0409bcf7507af327e15cd593352b9bae8c10bbabbd3c1fa5d76003ea76f",
+        "capture_group": "2026-09-30/devin-live-test_v44-4-integrated-turn024/9511b106"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Native RGBA 900x1600 Market endpoint frame0036 from live turn024; first visual profile for this family. Identity rests on the stable market building illustration and the static facility description, not the title, mutable level text, or dynamic Transport Fee/Total Resources values. Correlated frame0037 is same-session validation, not an independent layout proof. The illustration reflects the observed level-14 building; higher-tier art is unproven. Passive endpoint perception only: the profile publishes the measured Back control and no Glory Level, Upgrade, or Resource Transport admission; the pre-existing OCR text path independently owns those controls when content OCR is authorized. Templates are canonical 540x960 LANCZOS reference crops.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_market_art.png",
+          "search_region": [
+            60,
+            100,
+            160,
+            120
+          ],
+          "threshold": 0.94
+        },
+        {
+          "image": "screen_anchors/building_market_description.png",
+          "search_region": [
+            275,
+            140,
+            265,
+            50
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_market_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "building_infantry_barracks",
       "layout_id": "building_infantry_barracks",
       "screen": "PNC_INFANTRY_BARRACKS",

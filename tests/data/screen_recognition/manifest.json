@@ -2098,6 +2098,32 @@
       "source_sha256": "7d893b93c4f6d592f61575579c77ff9f951113c80eb140a792ac722425e54317"
     },
     {
+      "image": "building_routes/market_native_20260930.png",
+      "screen": "PNC_MARKET",
+      "split": "reference",
+      "group": "2026-09-30/devin-live-test_v44-4-integrated-turn024/9511b106",
+      "sha256": "f7aee0409bcf7507af327e15cd593352b9bae8c10bbabbd3c1fa5d76003ea76f",
+      "expected_visual_screens": [
+        "PNC_MARKET"
+      ],
+      "annotation": "Native 900x1600 RGBA turn024 endpoint frame0036, visibly the Market interior (title Market, facility description, Transport Fee and Total Resources rows, Resource Transport control) after the slot-11 body tap at score 0.9695, but classified UNKNOWN because the family had no visual profile. Profile source; recognition is passive endpoint/Back evidence only and grants no transport, upgrade or glory action authority. Installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-30/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn024-20260930/20260930T062556Z_core_20260930T062432Z_9511b106_0036_market_endpoint_endpoint_05.png",
+      "source_sha256": "08361668312ef479b0fcb6115f5f5ed3c16a0289052314329ace43924efd01d0"
+    },
+    {
+      "image": "building_routes/market_native_correlated_20260930.png",
+      "screen": "PNC_MARKET",
+      "split": "validation",
+      "group": "2026-09-30/devin-live-test_v44-4-integrated-turn024/9511b106",
+      "sha256": "25533362e4ca8fa56eec1e52788051888ab4ac9ab61416250514d1a991b3744e",
+      "expected_visual_screens": [
+        "PNC_MARKET"
+      ],
+      "annotation": "Native 900x1600 RGBA turn024 final frame0037. Same-session correlated validation of the Market endpoint appearance, not an independent holdout. Visually identical to frame0036.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-30/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn024-20260930/20260930T062558Z_core_20260930T062432Z_9511b106_0037_final_screen_06.png",
+      "source_sha256": "c57527d596730bc5e88bc356ef3e04ddea61b0d43a19864d6840a3f06048157a"
+    },
+    {
       "image": "hero_formation_challenge_preparation_20260929.png",
       "screen": "PNC_HERO_FORMATION",
       "split": "reference",

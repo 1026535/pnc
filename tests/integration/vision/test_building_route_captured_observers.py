@@ -158,11 +158,23 @@ CASES = (
         "building_cavalry_barracks",
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
     ),
+    (
+        "market_native_20260930.png",
+        ScreenType.PNC_MARKET,
+        "building_market",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
+        "market_native_correlated_20260930.png",
+        ScreenType.PNC_MARKET,
+        "building_market",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
 )
 
 
 # Erasure boxes remain in each preserved native frame's coordinate space.
-BARRACKS_REFERENCES = (
+BUILDING_REFERENCES = (
     (
         "ranged_barracks_reference_20260922.png",
         ScreenType.PNC_RANGED_BARRACKS,
@@ -211,10 +223,18 @@ BARRACKS_REFERENCES = (
         ((55, 145, 280, 285), (466, 233, 900, 309)),
         (0, 0, 167, 92),
     ),
+    (
+        "market_native_20260930.png",
+        ScreenType.PNC_MARKET,
+        "building_market",
+        ("RGBA", (900, 1600)),
+        ((90, 150, 400, 385), (450, 225, 900, 325)),
+        (0, 0, 167, 92),
+    ),
 )
 
 
-BARRACKS_MUTATION_SELECTORS = frozenset(
+BUILDING_MUTATION_SELECTORS = frozenset(
     {
         UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
         UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
@@ -227,6 +247,9 @@ BARRACKS_MUTATION_SELECTORS = frozenset(
         UiElementId.PNC_BARRACKS_SPEEDUP_BUTTON,
         UiElementId.PNC_BARRACKS_COLLECT_BUTTON,
         UiElementId.PNC_BARRACKS_EFFECT_TABLE_ROW,
+        UiElementId.PNC_MARKET_GLORY_LEVEL_BUTTON,
+        UiElementId.PNC_MARKET_UPGRADE_BUTTON,
+        UiElementId.PNC_MARKET_RESOURCE_TRANSPORT_BUTTON,
     }
 )
 
@@ -242,7 +265,7 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
                 fixture = FIXTURE_ROOT / fixture_name
                 with Image.open(fixture) as source:
                     image = source.copy()
-                for native_fixture, _, _, native_format, _, _ in BARRACKS_REFERENCES:
+                for native_fixture, _, _, native_format, _, _ in BUILDING_REFERENCES:
                     if fixture_name == native_fixture:
                         self.assertEqual(native_format, (image.mode, image.size))
                 observations = self._both_observations(image, screen, layout_id)
@@ -292,9 +315,9 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
             ("navigation_perception", navigation.build(capture, include_content=True)),
         )
 
-    def test_barracks_publish_no_mutation_controls(self) -> None:
-        """Qualified family identity and Back do not enable training controls."""
-        for fixture_name, screen, layout_id, _, _, _ in BARRACKS_REFERENCES:
+    def test_building_references_publish_no_mutation_controls(self) -> None:
+        """Qualified family identity and Back do not enable action controls."""
+        for fixture_name, screen, layout_id, _, _, _ in BUILDING_REFERENCES:
             with Image.open(FIXTURE_ROOT / fixture_name) as source:
                 image = source.copy()
             for observer_name, observation in self._both_observations(image, screen, layout_id):
@@ -302,13 +325,13 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
                     self.assertEqual(screen, observation.screen_type)
                     self.assertIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
                     self.assertTrue(
-                        BARRACKS_MUTATION_SELECTORS.isdisjoint(observation.visible_elements)
+                        BUILDING_MUTATION_SELECTORS.isdisjoint(observation.visible_elements)
                     )
 
-    def test_barracks_identity_does_not_follow_the_requested_family(self) -> None:
+    def test_building_identity_does_not_follow_the_requested_family(self) -> None:
         """The native frame determines identity even when another family is requested."""
-        for fixture_name, screen, layout_id, _, _, _ in BARRACKS_REFERENCES:
-            other_screen = next(item[1] for item in BARRACKS_REFERENCES if item[1] != screen)
+        for fixture_name, screen, layout_id, _, _, _ in BUILDING_REFERENCES:
+            other_screen = next(item[1] for item in BUILDING_REFERENCES if item[1] != screen)
             with Image.open(FIXTURE_ROOT / fixture_name) as source:
                 image = source.copy()
             for observer_name, observation in self._both_observations(image, other_screen, layout_id):
@@ -317,9 +340,9 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
                     self.assertNotEqual(other_screen, observation.screen_type)
                     self.assertEqual(layout_id, observation.decision.layout_id)
 
-    def test_erased_identity_anchor_blocks_barracks_identity(self) -> None:
-        """Neither family title nor description alone may qualify the shared panel."""
-        for fixture_name, screen, layout_id, _, identity_boxes, _ in BARRACKS_REFERENCES:
+    def test_erased_identity_anchor_blocks_building_identity(self) -> None:
+        """Neither family identity anchor alone may qualify the shared panel."""
+        for fixture_name, screen, layout_id, _, identity_boxes, _ in BUILDING_REFERENCES:
             with Image.open(FIXTURE_ROOT / fixture_name) as source:
                 image = source.copy()
             for label, box in zip(("title", "description"), identity_boxes, strict=True):
@@ -332,7 +355,7 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
 
     def test_erased_back_anchor_preserves_identity_but_withholds_control(self) -> None:
         """A missing measured Back cannot be recovered from geometry or content."""
-        for fixture_name, screen, layout_id, _, _, back_box in BARRACKS_REFERENCES:
+        for fixture_name, screen, layout_id, _, _, back_box in BUILDING_REFERENCES:
             with Image.open(FIXTURE_ROOT / fixture_name) as source:
                 erased = source.copy()
             ImageDraw.Draw(erased).rectangle(back_box, fill=(10, 20, 40))
