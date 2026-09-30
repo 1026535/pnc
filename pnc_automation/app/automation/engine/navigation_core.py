@@ -492,6 +492,39 @@ class NavigationCore:
     ) -> Observation:
         """Acquire a fresh body through the catalog's measured scan contract."""
         _require_reviewed_building_route(target=target, edges=self.edges)
+        current, operation = self._locate_building(
+            target=target, observe_content=observe_content, home_city_slot=home_city_slot,
+        )
+        return self._open_reacquired_building(
+            target=target, source=current, operation=operation,
+            on_target_acquired=on_target_acquired, home_city_slot=home_city_slot,
+        )
+
+    def locate_building(
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
+        home_city_slot: HomeCitySlotSelector | None = None,
+    ) -> Observation:
+        """Locate one current measured Home body without tapping its occupant.
+
+        A visible body is evidence for this observation only. Callers must
+        recheck frame provenance and their own action authority before input.
+        """
+        current, _ = self._locate_building(
+            target=target, observe_content=observe_content, home_city_slot=home_city_slot,
+        )
+        return current
+
+    def _locate_building(
+        self,
+        *,
+        target: HomeCityObjectId,
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
+        home_city_slot: HomeCitySlotSelector | None,
+    ) -> tuple[Observation, _HomeCityOperation]:
+        """Share one normalization and target scan between lookup and opening."""
         validate_home_city_slot_selector(target, home_city_slot)
         spec = home_city_camera_target(target)
         operation = self._home_operation(observe_content, () if spec is None else (spec,))
@@ -505,20 +538,15 @@ class NavigationCore:
             if resolved is not None and _is_hud_safe_building_point(
                 resolved[1], image_size=current.image_size,
             ):
-                return self._open_reacquired_building(
-                    target=target, source=current, operation=operation,
-                    on_target_acquired=on_target_acquired,
-                    home_city_slot=home_city_slot or resolved[0].home_city_slot,
-                )
+                return current, operation
             operation.stop(HomeCityScanStopReason.NO_QUALIFIED_ROUTE,
                            "Building has no qualified offscreen acquisition route; no pan or tap sent.")
         result = self._scan_home_city(
             current=current, operation=operation,
             acquire_target=target, home_city_slot=home_city_slot,
-            on_target_acquired=on_target_acquired,
         )
         assert isinstance(result, Observation)
-        return result
+        return result, operation
 
     def discover_home_city(
         self, *, observe_content: Callable[[HomeCityObservationRequest], Observation],
@@ -549,7 +577,6 @@ class NavigationCore:
         operation: _HomeCityOperation,
         acquire_target: HomeCityObjectId | None = None,
         home_city_slot: HomeCitySlotSelector | None = None,
-        on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
     ) -> Observation | HomeCityScanResult:
         """One request-local measured scanner shared by acquisition and discovery."""
         state = operation.state
@@ -578,11 +605,7 @@ class NavigationCore:
             if avoid_direction is None and resolved is not None and _is_hud_safe_building_point(
                 resolved[1], image_size=current.image_size,
             ):
-                return self._open_reacquired_building(
-                    target=acquire_target, source=current, operation=operation,
-                    on_target_acquired=on_target_acquired,
-                    home_city_slot=home_city_slot or resolved[0].home_city_slot,
-                )
+                return current
             chosen: (
                 tuple[HomeCityCameraTarget, HomeCitySlotSelector | None, HomeCityCameraPanStep]
                 | None

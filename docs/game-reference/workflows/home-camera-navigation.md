@@ -660,3 +660,28 @@ before further input or any body tap. The single measured movement does not
 establish a universal camera gain, a western clamp, rightward use, or final
 Campaign/Warehouse entry. Those routes remain pending on the corrected
 candidate's live workflow.
+
+## Target-only Home acquisition, 2026-09-30
+
+**Live-observed on `157_farm`, with route outcomes pending:** turn020
+`v44-4-integrated-turn020-20260930` used two generic no-tap city surveys for
+the Cavalry/Siege endpoint batch. Its first scan recorded fresh widest Home
+frames after measured pans with Alliance Hall slot 13 and Market slot 11
+bodies, but the developmental helper inspected only the scan's final frame.
+Neither Cavalry nor Siege acquired a typed body in the recorded frames. Market
+was still visible on later endpoint prechecks; its separate source capture and
+passive normalization fluctuated to UNRESOLVED without another wheel input.
+Those frames do not qualify an endpoint/Back route or justify accepting an
+unresolved zoom. See ignored turn020 `evidence.json` and `diagnostics.json`
+under `.local-data/devin-live-test/runs/v44-publication-20260928/turn-020/`.
+
+`NavigationCore.locate_building` now uses the same one-target, one-operation
+normalization and measured scanner as `open_building`, returning only the
+current qualified Home observation when the requested measured body is
+visible at a HUD-safe point. It sends camera inputs but no building tap.
+`open_building` still checks its reviewed public route before observation,
+then opens from that operation's fresh located frame. A developmental caller
+must recheck the returned body's exact identity, slot, endpoint, frame and
+action geometry before any tap; that caller's session boundary remains the
+physical authority. The target-specific Cavalry/Siege acquisition and all
+four endpoint/Back returns still require a new bounded live batch.

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof, HomeCityCameraStatus
+from pnc_automation.app.pnc.domain.observation import Bounds
 from pnc_automation.app.pnc.domain.home_city_slots import (
     HomeCitySlotOccupancy, HomeCitySlotOccupancyState, HomeCitySlotSelector, home_city_slot,
 )
@@ -23,12 +24,96 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from tests.unit.app.pnc.navigation.test_home_city_slot_selection import _body, _core, _NOW
 from tests.support.pnc.navigation.core_home import (
-    camera_home_frame, home_building_frame, qualified_pan_step,
+    camera_home_frame, home_building_frame, measured_building_object, qualified_pan_step,
 )
 
 
 _BLACKSMITH = home_city_camera_target(HomeCityObjectId.BLACKSMITH)
 _INSTITUTE = home_city_camera_target(HomeCityObjectId.INSTITUTE)
+
+
+class HomeCityTargetLocationTests(unittest.TestCase):
+    def test_unreviewed_target_can_be_located_without_opening(self):
+        core, actions = _core()
+        target = HomeCityObjectId.CAVALRY_BARRACKS
+        body = replace(
+            measured_building_object(
+                target, bounds=Bounds(300, 500, 100, 50),
+                action_point=(350, 525), action_bounds=Bounds(340, 515, 20, 20),
+            ),
+            home_city_slot=HomeCitySlotSelector(6),
+        )
+        frames = iter(camera_home_frame((body,), captured_at=_NOW + timedelta(seconds=i))
+                      for i in range(2))
+        located = core.locate_building(
+            target, observe_content=lambda _: next(frames),
+            home_city_slot=HomeCitySlotSelector(6),
+        )
+        self.assertIs(body, located.spatial_surface.objects[0])
+        self.assertEqual([], actions)
+        with self.assertRaisesRegex(ValueError, "reviewed"):
+            core.open_building(target, observe_content=lambda _: self.fail("public route observed"))
+        self.assertEqual([], actions)
+
+    def test_target_only_scan_returns_current_post_pan_body_without_tap(self):
+        core, actions = _core()
+        target = HomeCityObjectId.CAVALRY_BARRACKS
+        body = replace(
+            measured_building_object(
+                target, bounds=Bounds(300, 500, 100, 50),
+                action_point=(350, 525), action_bounds=Bounds(340, 515, 20, 20),
+            ),
+            home_city_slot=HomeCitySlotSelector(6),
+        )
+        frames = iter((
+            camera_home_frame(captured_at=_NOW),
+            camera_home_frame(captured_at=_NOW + timedelta(seconds=1)),
+            camera_home_frame((body,), translation=(-240, 222),
+                              captured_at=_NOW + timedelta(seconds=2)),
+        ))
+        requests = []
+
+        def observe(request):
+            requests.append(request)
+            return next(frames)
+
+        step = qualified_pan_step('right', axis='x', goal_atlas=(1100, 700))
+        with patch('pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step',
+                   return_value=step) as planner:
+            located = core.locate_building(
+                target, observe_content=observe, home_city_slot=HomeCitySlotSelector(6),
+            )
+        self.assertIs(body, located.spatial_surface.objects[0])
+        self.assertEqual((-240, 222), located.spatial_surface.camera_proof.translation)
+        self.assertEqual([target], [call.kwargs['target'] for call in planner.call_args_list])
+        self.assertEqual([HomeCitySlotSelector(6)],
+                         [call.kwargs['home_city_slot'] for call in planner.call_args_list])
+        self.assertEqual(1, len(actions))
+        self.assertEqual('right', actions[0].direction)
+        self.assertEqual(1, len({request.label.split('_home_')[0] for request in requests}))
+
+    def test_target_only_scan_does_not_return_a_rival_body(self):
+        core, actions = _core()
+        frames = iter((
+            camera_home_frame(captured_at=_NOW),
+            camera_home_frame(captured_at=_NOW + timedelta(seconds=1)),
+            camera_home_frame((_body(12),), translation=(-240, 222),
+                              captured_at=_NOW + timedelta(seconds=2)),
+        ))
+        step = qualified_pan_step('right', axis='x', goal_atlas=(1100, 700))
+        with patch('pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step',
+                   return_value=step), \
+             patch('pnc_automation.app.automation.engine.navigation_core.home_city_scan_step_budget',
+                   return_value=1):
+            with self.assertRaises(HomeCityScanError) as stopped:
+                core.locate_building(
+                    HomeCityObjectId.CAVALRY_BARRACKS,
+                    observe_content=lambda _: next(frames),
+                    home_city_slot=HomeCitySlotSelector(6),
+                )
+        self.assertIs(HomeCityScanStopReason.BUDGET_EXHAUSTED,
+                      stopped.exception.result.stop_reason)
+        self.assertEqual(['right'], [action.direction for action in actions])
 
 
 class HomeCityScanStateTests(unittest.TestCase):
