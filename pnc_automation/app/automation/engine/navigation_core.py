@@ -695,7 +695,7 @@ class NavigationCore:
                         point = proof.project_atlas_to_reference(
                             spec.atlas_action_point(home_city_slot=home_city_slot)
                         )
-                        if _is_hud_safe_building_point(point, image_size=current.image_size):
+                        if _is_hud_safe_building_point(point, image_size=proof.reference_size):
                             body_reacquired = True
                             after = operation.capture(current, "target_body_reacquisition")
                             view = operation.view(after)

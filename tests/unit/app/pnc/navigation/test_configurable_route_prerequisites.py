@@ -53,10 +53,10 @@ def _controlled_hall_core():
     return core, actions
 
 
-def _hall_live_pose(objects=(), *, second: int):
+def _hall_live_pose(objects=(), *, second: int, image_size=(900, 1600)):
     """Model the saved 0054/0055 endpoint pose with independently supplied bodies."""
     return camera_home_frame(
-        objects, translation=(-628, -401), zoom=0.74, image_size=(900, 1600),
+        objects, translation=(-628, -401), zoom=0.74, image_size=image_size,
         captured_at=_NOW + timedelta(seconds=second),
     )
 
@@ -73,6 +73,25 @@ def _hall_slot13_body():
 
 
 class ConfigurableRoutePrerequisiteTests(unittest.TestCase):
+    def test_hall_reacquisition_uses_reference_band_for_scaled_frame(self) -> None:
+        core, actions = _controlled_hall_core()
+        body = replace(
+            _hall_slot13_body(), bounds=Bounds(395, 349, 72, 80),
+            action_point=(424, 405), action_bounds=Bounds(419, 400, 9, 9),
+        )
+        observed = Mock(side_effect=(
+            _hall_live_pose((body,), second=0, image_size=(540, 960)),
+            _hall_live_pose(second=1, image_size=(540, 960)),
+            _hall_live_pose((body,), second=2, image_size=(540, 960)),
+        ))
+        core.open_building(
+            HomeCityObjectId.ALLIANCE_HALL, observe_content=observed,
+            home_city_slot=HomeCitySlotSelector(13),
+        )
+        self.assertEqual(3, observed.call_count)
+        self.assertEqual(1, len(actions))
+        self.assertEqual((424, 405), actions[0].target_point)
+
     def test_hall_exact_slot_reacquires_current_body_after_endpoint_overlay(self) -> None:
         core, actions = _controlled_hall_core()
         observed = Mock(side_effect=(
