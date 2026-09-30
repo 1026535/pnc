@@ -1310,6 +1310,19 @@
       ]
     },
     {
+      "image": "campaign_chapter_10_locked_20260930.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "validation",
+      "group": "2026-09-30/157_farm/v44-4-integrated-turn025",
+      "sha256": "b7df1b41b2903e29b6ca635a63b86dbbf465e987025004b130680a42e6c24111",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ],
+      "source_artifact": "20260930T080219Z_core_20260930T080053Z_9c7ffec7_0040_core_7_campaign_chapter_after_0_14.png",
+      "source_sha256": "157089d59109d6eea1d2aaa79dad32a3acc44d0bfe787ff024147ae97649d560",
+      "annotation": "Unmodified 900x1600 RGBA first post-dispatch Chapter 10 capture from turn025. The chapter-row tap has a confirmed physical receipt; visual classification returned UNKNOWN because the old profile crop contained now-locked stage nodes. Frame0048 is a same-session temporal confirmation only and is not an independent holdout. The stable replacement terrain anchor comes from the older reference fixture, not this frame. Current client build unknown."
+    },
+    {
       "image": "campaign_chapter_5_path_20260916.png",
       "screen": "PNC_CAMPAIGN_CHAPTER",
       "split": "reference",

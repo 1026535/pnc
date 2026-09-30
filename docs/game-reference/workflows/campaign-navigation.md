@@ -1,6 +1,6 @@
 # Campaign navigation surfaces
 
-**Build:** [PNC 5.0.203 / 233](../PROVENANCE.md). **Evidence:** client source verified for Campaign chapter and stage state ownership; offline saved transitions and fixture geometry checked. No Campaign action was performed for this note.
+**Build:** [PNC 5.0.203 / 233](../PROVENANCE.md) for recovered client source; later live builds are noted separately. **Evidence:** client source verified for Campaign chapter and stage state ownership; offline saved transitions and fixture geometry checked. Later live actions are dated below.
 
 This note covers the bounded Chapter 10 navigation evidence represented by the portable fixtures. It does not establish a general Campaign catalog, mode eligibility, battle-prep reachability, or server acceptance.
 
@@ -89,6 +89,35 @@ during animation (node score0.9249 below0.93 while scene score0.9982 passed).
 Cropping the existing reference patch to the Grandia Ruins label yields
 0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
 scene anchor and measured Home portal are unchanged. The two native map fixtures share one correlated validation group. The shared Home-to-Campaign entry and Home return passed the independently reviewed V44 turn012 route. Campaign chapter/stage parsing and formation remain separately owned.
+
+## Chapter 10 locked path, September 30
+
+**Live-observed:** V44 turn025 on `157_farm` opened Campaign and tapped the
+uniquely observed Chapter 10 map row with a confirmed physical receipt. Native
+capture 0040 visibly shows `Ch.10 Grandia Ruins`, one available gold stage-1
+node, eight locked nodes, and the curved chapter Back. Captures 0040–0048 are
+one session; 0048 is temporal confirmation, not an independent holdout. The
+runtime classified the destination UNKNOWN and stopped before a stage tap.
+The current game build is unknown. The unmodified 900×1600 capture 0040 is
+tracked as `campaign_chapter_10_locked_20260930.png`, with artifact name and
+hash in the screen-recognition manifest.
+
+**Offline-proven:** the old Chapter 10 identity crop contained progress-dependent
+numbered nodes and scored 0.50351 on 0040. The unchanged exact title anchor
+scored 0.99246 and the measured Back scored 0.99744. A static mountain-terrain
+crop from the older Chapter 10 reference scores 0.9984 on 0040 and 0.1147 on
+the preceding Campaign map 0038; the older unlocked reference remains positive.
+Title, terrain, and Back thresholds are unchanged. The gold stage-1 glow makes
+the Hough circle cover a 65-pixel outer halo whose white-numeral fraction fails
+the existing badge-core check. Testing its concentric inner disc against the
+same gold and numeral thresholds yields stage 1; both production publishers
+now expose only that measured stage as actionable and the other eight as locked.
+Map and wrong-chapter negatives remain rejected.
+
+**Automation implication:** fresh Chapter 10 recognition may confirm the prior
+row dispatch and admit the current, measured stage-1 row. A read-only stage
+detail/title observation and canonical return still require live proof; no
+Challenge, formation, battle, or spending action is established here.
 
 ## Chapter 6 qualification, September 22
 

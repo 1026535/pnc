@@ -17,6 +17,49 @@ from tests.support.pnc.campaign import FIXTURES, _CampaignCropOcrService, _build
 
 
 class CampaignIdentityTests(unittest.TestCase):
+    def test_native_locked_chapter10_keeps_identity_back_and_available_stage(self) -> None:
+        """A gold stage-1 halo must not hide its numbered, actionable inner disc."""
+
+        backend = _require_rapid_ocr_service(self)
+        capture = _capture(_image("campaign_chapter_10_locked_20260930.png"))
+        for publisher in ("builder", "navigation"):
+            with self.subTest(publisher=publisher):
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up(),
+                    )
+                    if publisher == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True,
+                    )
+                )
+                self.assertEqual(ScreenType.PNC_CAMPAIGN_CHAPTER, observation.screen_type)
+                self.assertEqual("campaign_chapter_10", observation.decision.layout_id)
+                self.assertFalse(observation.blocking_popup)
+                self.assertEqual(10, observation.campaign_chapter.chapter_number)
+                self.assertEqual(capture.frame_ref, observation.campaign_chapter.frame_ref)
+                back = observation.get(UiElementId.PNC_CAMPAIGN_BACK_BUTTON)
+                self.assertIsNotNone(back)
+                self.assertEqual(VisibleElementSourceKind.TEMPLATE, back.source_kind)
+                self.assertEqual(capture.frame_ref, back.frame_ref)
+                rows = observation.entries(ListEntryKind.CAMPAIGN_STAGE)
+                available = [row for row in rows if row.row_status is RowRecognitionStatus.COMPLETE]
+                self.assertEqual([1], [row.campaign_node.stage_number for row in available])
+                self.assertIs(available[0].campaign_node.locked, False)
+                self.assertTrue(available[0].action_bounds.contains_point(available[0].action_point))
+                self.assertEqual(capture.frame_ref, available[0].frame_ref)
+                self.assertEqual("campaign_chapter_10", available[0].source_layout_id)
+                locked = [row for row in rows if row.row_status is RowRecognitionStatus.NO_ACTION]
+                self.assertEqual(8, len(locked))
+                self.assertTrue(all(row.action_point is None for row in locked))
+
+        recognizer = load_visual_screen_recognizer()
+        for other in ("campaign_map.png", "campaign_chapter_6_path.png"):
+            with self.subTest(other=other):
+                self.assertNotIn(
+                    "campaign_chapter_10", recognizer.recognize(_image(other)).profile_ids,
+                )
+
     def test_persisted_southern_map_view_has_owned_home_return_on_both_paths(self) -> None:
         """The live reopened map needs its measured portal and only honest rows."""
         image = _image("campaign_map_southern_view_20260916.png")

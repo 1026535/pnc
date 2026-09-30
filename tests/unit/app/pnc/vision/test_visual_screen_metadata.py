@@ -110,7 +110,9 @@ class VisualScreenMetadataTests(unittest.TestCase):
                     4
                     if profile["id"] in {"bag", "world_map"}
                     else 3
-                    if profile["id"] in {"vip_daily_reset", "campaign_stage_chapter_6"}
+                    if profile["id"] in {
+                        "vip_daily_reset", "campaign_stage_chapter_6", "campaign_chapter_10",
+                    }
                     else 2
                     if profile["id"] in {
                         "institute",
@@ -119,7 +121,6 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         "savannah_hero_offer",
                         "campaign_map",
                         "campaign_chapter_6",
-                        "campaign_chapter_10",
                         "campaign_map_southern_view",
                         "campaign_stage_10_3",
                         "trial_challenge_live",

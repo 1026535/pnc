@@ -12,7 +12,7 @@ from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 from pnc_automation.core.vision.template.template_matcher import PreparedFrame
 
-from .constants import _PATH_HOUGH, _CircleCandidate
+from .constants import _BADGE_GOLD_BAND_MIN, _PATH_HOUGH, _CircleCandidate
 from .geometry import _circle_candidates, _clip_bounds, _deduplicate_marked, _disc_bounds, _edge_clipped, _is_badge_core, _is_lock_core, _node_features
 from .ocr import _chapter_identity, _read_disc_number
 from .rows import _node_entry
@@ -74,7 +74,17 @@ def _path_node_row(
             row_status=RowRecognitionStatus.NO_ACTION,
         )
     if not _is_badge_core(features):
-        return None
+        # A gold stage glow can make Hough fit the outer halo.
+        # The badge remains concentric; require its ordinary core test on an
+        # inner disc before asking OCR for an actionable stage number.
+        if features["gold_band"] < _BADGE_GOLD_BAND_MIN:
+            return None
+        inner_disc = _disc_bounds(_CircleCandidate(
+            candidate.cx, candidate.cy, candidate.radius * 0.75,
+        ))
+        if not _is_badge_core(_node_features(pixels, inner_disc)):
+            return None
+        disc = inner_disc
     number = _read_disc_number(
         image=image, disc_ref=disc, ocr_context=ocr_context,
         required_fact="campaign_stage_number",
