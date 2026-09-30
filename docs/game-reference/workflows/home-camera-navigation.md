@@ -615,7 +615,7 @@ body pixels, action bounds and slot identity at the endpoint scale on each
 new frame; no old point is reused. Session, frame, Home identity, calibration,
 input budget and interruption gates remain in the core operation.
 
-The endpoint interval `[0.738,0.744]`, nearest non-endpoint rung at `0.74692`,
+The endpoint interval `[0.7365,0.744]`, nearest non-endpoint rung at `0.74692`,
 and qualified fountain/moat wheel patches come from
 `pnc_automation/app/pnc/vision/data/home_city_camera/normalization.json` and
 the native 2026-09-25/27 captures described above. The first endpoint
@@ -689,12 +689,21 @@ four endpoint/Back returns still require a new bounded live batch.
 **Turn021 follow-up, 2026-09-30, build 5.0.203:** The clear Home frames
 0022–0037 in `turn-021/diagnostics.json` stayed at the same rounded camera
 pose without a wheel input, yet endpoint classification alternated between
-`AT_ENDPOINT` and `UNRESOLVED`. Some unresolved frames added the southern
-courtyard fixed-landmark group to the institute/plaza groups. These saved
-diagnostics do not retain the unsnapped fitted zoom or classification reason,
-so they do not justify changing calibration thresholds or assuming that .75
-is a saturation proof. Native endpoint profiling remains required to identify
-the competing landmark votes and measured scale.
+`AT_ENDPOINT` and `UNRESOLVED`. The independent saved-frame profile in
+`.local-data/zoom-blocker-turn021/` replayed the real localizer and found
+raw fixed-landmark fits of .738236/.738426 on accepted frames 0022/0031
+versus .737180 on unresolved frames 0023/0032. The latter frames added a
+southern-courtyard vote while some institute/plaza votes fell out of the
+winning cluster. All four were localized at nearly the same pose, with no
+cross-scale rival; the .75 published zoom was grid-snapped and did not
+classify the endpoint. The catalog's lower endpoint bound moved from .738
+to .7365 to cover that measured same-pose spread with a small allowance;
+the .744 upper bound, .7469 closer-view floor, independent fixed-group and
+residual requirements, and unrestricted confirmation remain in force.
+Physical saturation on these exact turn021 frames is inferred from the
+unchanged Home scene and the preceding run's normalized Home view. No turn021 wheel
+dispatch independently proved that physical endpoint, and this calibration
+does not qualify another layout, account, or unidentified smaller scale.
 
 For developmental target-only acquisition, a prior Home observation may now
 be passed to `locate_building` as a capture/session continuity fence. The

@@ -10,14 +10,15 @@
   "endpoint": {
     "id": "home_zoom_endpoint_20260925",
     "reference_size": [900, 1600],
-    "zoom_interval": [0.738, 0.744],
+    "zoom_interval": [0.7365, 0.744],
     "non_endpoint_floor": 0.7469,
     "min_fixed_groups": 2,
     "max_mean_residual_px": 3.0,
     "native_sources": [
       "2026-09-25/157_farm run 173752Z-866a21f1 (endpoint fits 0.7406-0.7406)",
       "2026-09-25/157_farm run 182013Z-bbc50e93 (endpoint fits 0.7398-0.7422)",
-      "2026-09-25/157_farm run 183834Z-409d1503 (endpoint fits 0.7388-0.7431)"
+      "2026-09-25/157_farm run 183834Z-409d1503 (endpoint fits 0.7388-0.7431)",
+      "2026-09-30/157_farm V44 turn021 native same-pose frames 0022/0023/0031/0032: raw fixed fits 0.738236/0.737180/0.738426/0.737180, no intervening wheel input or rival hypothesis; observed 0.00125 fit spread motivates a 0.7365 lower bound with approximately 0.00068 margin below the minimum fit (saved-frame hashes fafb0096b0b3/9a94a404cf8b/1c4f1f4b18a2/13a283bf83b3). Physical saturation on those exact frames is inferred from current Home continuity and prior normalization, not an independently dispatched endpoint wheel in turn021."
     ],
     "holdout_sources": [
       "home_city_zoom_endpoint_20260925.png (tracked endpoint fixture, refit 0.74275)",

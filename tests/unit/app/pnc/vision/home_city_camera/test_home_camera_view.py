@@ -45,6 +45,52 @@ from tests.support.pnc.home_city_camera.fixtures import (
 class HomeCityViewAnalysisTests(unittest.TestCase):
     """analyze_view publishes the measured zoom class plus a qualified anchor."""
 
+    def test_turn021_same_pose_fixed_votes_share_endpoint_class(self) -> None:
+        """Native 0022/0023 vote subsets straddle the old lower band edge."""
+        localizer = _localizer()
+        # Exact reference and observed rectangles from the saved turn021 raw
+        # profile; no screenshot matching is needed to exercise classification.
+        vote_sets = (
+            (
+                ("p2_institute_facade", "institute_structure",
+                 (496, 302, 90, 75), (615, 1185, 120, 100)),
+                ("p3_institute_base_left", "institute_structure",
+                 (473, 350, 79, 52), (585, 1250, 105, 70)),
+                ("p5_plaza_low", "plaza_low",
+                 (492, 420, 90, 34), (610, 1345, 120, 45)),
+                ("t6_plaza_south", "plaza_low",
+                 (440, 416, 98, 38), (540, 1340, 130, 50)),
+                ("p6_path_right", "institute_structure",
+                 (559, 343, 60, 56), (700, 1240, 80, 75)),
+            ),
+            (
+                ("p3_institute_base_left", "institute_structure",
+                 (473, 350, 79, 52), (585, 1250, 105, 70)),
+                ("t6_plaza_south", "plaza_low",
+                 (440, 416, 98, 38), (540, 1340, 130, 50)),
+                ("southern_courtyard", "southern_courtyard",
+                 (514, 556, 75, 75), (640, 1530, 100, 100)),
+            ),
+        )
+        for votes in vote_sets:
+            with self.subTest(groups={vote[1] for vote in votes}):
+                evidence = tuple(
+                    HomeCityCameraEvidence(
+                        landmark_id=name, group_id=group, bounds=Bounds(*observed),
+                        reference_bounds=Bounds(*reference), score=.95,
+                        translation=(-364, -424), residual=0.0, zoom=.75,
+                    )
+                    for name, group, observed, reference in votes
+                )
+                proof = HomeCityCameraProof(
+                    status=HomeCityCameraStatus.LOCALIZED, reason="saved_turn021_votes",
+                    translation=(-364, -424), zoom=.75, frame_size=(900, 1600),
+                    evidence=evidence,
+                    matched_group_ids=frozenset(item.group_id for item in evidence),
+                )
+                status, reason, _ = localizer._classify_zoom(proof)
+                self.assertIs(HomeCityZoomStatus.AT_ENDPOINT, status, reason)
+
     def test_native_endpoint_view_reports_endpoint_with_qualified_anchor(self) -> None:
         """P1: a calibrated endpoint view publishes the endpoint and its anchor."""
         localizer = _localizer()
