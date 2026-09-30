@@ -2072,6 +2072,32 @@
       "source_sha256": "d408e03850262191e43e29dcf8648b5af02e06723107189b9214b1fb323e257d"
     },
     {
+      "image": "building_routes/cavalry_barracks_native_20260930.png",
+      "screen": "PNC_CAVALRY_BARRACKS",
+      "split": "reference",
+      "group": "2026-09-30/devin-live-test_v44-4-integrated-turn021/d8c919d3",
+      "sha256": "c147482d253df3a6af27737ce84be8834e74a5911395e8f970d0061b28cf45b5",
+      "expected_visual_screens": [
+        "PNC_CAVALRY_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA turn021 endpoint frame0040, visibly Cavalry Barracks after the slot-6 body tap but classified UNKNOWN because the family had no visual profile. Profile source; the frame carries a Horseman training-completed poptip, so recognition is passive endpoint/Back evidence only and not authorization to enter a ready barracks. Installed build not recorded.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-30/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn021-20260930/20260930T024932Z_core_20260930T024749Z_d8c919d3_0040_cavalry_slot6_endpoint_endpoint_07.png",
+      "source_sha256": "6b5dcfc829069fbaaf3429f01de125221fb2dbed88d2f480b05d14afd25d4d83"
+    },
+    {
+      "image": "building_routes/cavalry_barracks_native_correlated_20260930.png",
+      "screen": "PNC_CAVALRY_BARRACKS",
+      "split": "validation",
+      "group": "2026-09-30/devin-live-test_v44-4-integrated-turn021/d8c919d3",
+      "sha256": "7416e39f3e1720774b047a666795f662061628d1a77a3b937af055f84e819334",
+      "expected_visual_screens": [
+        "PNC_CAVALRY_BARRACKS"
+      ],
+      "annotation": "Native 900x1600 RGBA turn021 final frame0041. Same-session correlated validation of the endpoint appearance, not an independent holdout. Transient training-completion particles cross the title band here (title template scores 0.736), which is why the profile anchors the building illustration and description instead of the title.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-30/C__Users_lebel_pnc_artifacts_devin-live-test_v44-4-integrated-turn021-20260930/20260930T024934Z_core_20260930T024749Z_d8c919d3_0041_final_screen_08.png",
+      "source_sha256": "7d893b93c4f6d592f61575579c77ff9f951113c80eb140a792ac722425e54317"
+    },
+    {
       "image": "hero_formation_challenge_preparation_20260929.png",
       "screen": "PNC_HERO_FORMATION",
       "split": "reference",

@@ -146,6 +146,18 @@ CASES = (
         "building_infantry_barracks",
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
     ),
+    (
+        "cavalry_barracks_native_20260930.png",
+        ScreenType.PNC_CAVALRY_BARRACKS,
+        "building_cavalry_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
+        "cavalry_barracks_native_correlated_20260930.png",
+        ScreenType.PNC_CAVALRY_BARRACKS,
+        "building_cavalry_barracks",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
 )
 
 
@@ -189,6 +201,14 @@ BARRACKS_REFERENCES = (
         "building_infantry_barracks",
         ("RGBA", (900, 1600)),
         ((175, 13, 675, 80), (466, 233, 900, 309)),
+        (0, 0, 167, 92),
+    ),
+    (
+        "cavalry_barracks_native_20260930.png",
+        ScreenType.PNC_CAVALRY_BARRACKS,
+        "building_cavalry_barracks",
+        ("RGBA", (900, 1600)),
+        ((55, 145, 280, 285), (466, 233, 900, 309)),
         (0, 0, 167, 92),
     ),
 )

@@ -6601,6 +6601,64 @@
       ]
     },
     {
+      "id": "building_cavalry_barracks",
+      "layout_id": "building_cavalry_barracks",
+      "screen": "PNC_CAVALRY_BARRACKS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/cavalry_barracks_native_20260930.png",
+        "decoded_sha256": "c147482d253df3a6af27737ce84be8834e74a5911395e8f970d0061b28cf45b5",
+        "capture_group": "2026-09-30/devin-live-test_v44-4-integrated-turn021/d8c919d3"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Native RGBA 900x1600 Cavalry Barracks endpoint frame0040 from live turn021; first visual profile for this family. Identity rests on the stable cavalry building illustration and the training description, not the title: the same-session correlated frame0041 shows transient training-completion particles over the title band (title template scores 0.736 there), so a title anchor would corrupt ordinary post-completion visits. Correlated validation is same-session, not an independent layout proof. Passive endpoint perception only: the profile classifies the surface and publishes the measured Back control; it does not authorize entry or any queue action, and a training-completion poptip may mean the panel auto-collects on entry. Templates are canonical 540x960 LANCZOS reference crops.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_cavalry_barracks_art.png",
+          "search_region": [
+            40,
+            95,
+            120,
+            70
+          ],
+          "threshold": 0.94
+        },
+        {
+          "image": "screen_anchors/building_cavalry_barracks_description.png",
+          "search_region": [
+            280,
+            140,
+            260,
+            45
+          ],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_cavalry_barracks_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              55
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "building_infantry_barracks",
       "layout_id": "building_infantry_barracks",
       "screen": "PNC_INFANTRY_BARRACKS",
