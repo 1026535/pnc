@@ -8,6 +8,17 @@ the lead owns ownership reconciliation, integration and whole-V44 acceptance.
 Use the [binding interface agreement](V44_INTERFACE_CONTRACT.md), especially
 the existing public APIs, body/slot lifetime, ownership and handback rules.
 
+## September 30 quality priority
+
+The user now prioritizes improving the code and development workflow over fast
+V44 completion. The coordinator's [independent review and revised sequence](V44_QUALITY_REVIEW_AND_SEQUENCE.md)
+governs the next packages. Start with the demonstrated shared-publication gap and
+audited test-resource ownership; establish neutral contracts and the minimal
+tracked discovery/result boundary before further affected route expansion.
+Preserve private reviewed work and accepted route proof. The old prepared ignored
+helper is migration evidence, not the next automatic live release. This bounded
+hold does not pause unrelated M work or resume the user-paused PW task.
+
 ## Outcome and preparation
 
 Move the remaining V44-owned Home acquisition callers and target data onto the

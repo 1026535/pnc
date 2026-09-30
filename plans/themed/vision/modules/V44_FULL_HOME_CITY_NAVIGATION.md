@@ -7,6 +7,14 @@ Date: 2026-09-18; design and qualification reviewed 2026-09-25. **V44 remains un
 
 ## 1. Outcome, scope and sequencing
 
+**September 30 priority amendment:** the user prioritizes maintainable code,
+canonical ownership, testability and the development/validation workflow over
+fast V44 closure. Follow the reviewed [quality sequence](v44/V44_QUALITY_REVIEW_AND_SEQUENCE.md)
+before further route fan-out or copied live-helper expansion. Its bounded
+publication, test-ownership and live-tooling packages supersede the old immediate
+route-first dispatch order. Preserve accepted work and the broader V44-first queue;
+coordinate actual shared boundaries rather than holding all M/PW work.
+
 From a partial recognized Home view, execute:
 **recognize Home → normalize to minimum magnification (fully zoomed out) →
 verify zoom and locate the camera from landmarks → resolve candidate slots →
@@ -31,9 +39,10 @@ their existing interfaces. Feature packets retain their menu content and returns
 
 On resumption, prioritize V44 before new navigation-dependent work. Unrelated
 implementation and offline feature parsing may continue. Accepted V02 routes
-remain usable. New shared-interface consumers wait for integrated V44 contracts;
-remaining Home-entry validation waits for V44 acceptance and its target-specific
-route qualification. Existing incomplete work is preserved, not discarded.
+remain usable. New shared-interface consumers wait for their integrated contract;
+remaining Home-entry validation waits for its target-specific route qualification.
+Whole-V44 completion and permission to resume the broader V queue remain separate
+from acceptance of a useful shared unit. Existing incomplete work is preserved.
 
 Direct dependencies include remaining Home-entry work in V17, V20–22, V27–31 and
 V34–43, plus unqualified Home routes of other packets. V23–26 inherit Blacksmith
@@ -53,9 +62,12 @@ appearance or menu support from this acceptance.
 The Alliance invitation bug remains outside the epic. The September 25 request
 authorizes the bounded Devin Stage 0 live/game-knowledge assignment on `157_farm`
 and this plan revision. Existing permission to launch that instance and keep it
-warm persists. No account/castle switches, construction, upgrades, demolition or
-resource spending are authorized. Further implementation follows the reviewed
-qualification findings; the broader queue is not resumed by this revision alone.
+warm persists. That historical Stage 0 scope did not authorize account/castle
+switches or feature mutations. Current non-Main feature testing follows the
+September 30 standing resource authority in the canonical live skill; incidental
+collection and assigned feature spending need no repeated permission. Main and
+explicit target/switch restrictions remain protected. Further implementation
+follows the reviewed quality sequence; the broader queue is not resumed here.
 
 ## 2. Map and occupancy model
 
