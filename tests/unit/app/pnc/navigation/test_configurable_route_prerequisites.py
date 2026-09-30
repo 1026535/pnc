@@ -1,4 +1,4 @@
-"""Typed configurable occupants; controlled routes do not qualify native edges."""
+"""Typed configurable occupants; reviewed edges still require fresh body evidence."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from pnc_automation.app.automation.engine.navigation_core import (
     NavigationCore,
@@ -19,6 +19,8 @@ from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import Bounds
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.home_city_scan import HomeCityScanError
+from pnc_automation.core.errors import SelectorResolutionError
 from tests.support.pnc.navigation.core_frames import observation
 from tests.support.pnc.navigation.core_home import camera_home_frame, measured_building_object
 
@@ -52,17 +54,39 @@ def _controlled_hall_core():
 
 
 class ConfigurableRoutePrerequisiteTests(unittest.TestCase):
-    def test_public_routes_remain_refused_before_capture(self) -> None:
-        actuator = Mock()
-        capture = Mock()
-        core = NavigationCore(actuator, capture, reviewed_navigation_edges())
+    def test_reviewed_routes_admit_public_entries_that_fail_closed_on_body(self) -> None:
+        """The reviewed edges qualify both types; missing fresh body evidence still refuses.
+
+        Route review now passes for Market and Alliance Hall, so the measured
+        scan alone decides: a frame carrying neither occupant stops typed
+        without any input on either public entry.
+        """
         for target in (HomeCityObjectId.ALLIANCE_HALL, HomeCityObjectId.MARKET):
-            for method in (core.open_building, core.open_visible_building):
-                with self.subTest(target=target, method=method.__name__):
-                    with self.assertRaisesRegex(ValueError, "no reviewed return route"):
-                        method(target, observe_content=capture, home_city_slot=HomeCitySlotSelector(11))
-        capture.assert_not_called()
-        actuator.execute_action.assert_not_called()
+            for method in ("open_building", "open_visible_building"):
+                with self.subTest(target=target, method=method):
+                    actuator = Mock()
+                    content = Mock(side_effect=(
+                        camera_home_frame(captured_at=_NOW + timedelta(seconds=index))
+                        for index in range(6)
+                    ))
+                    observer = Mock()
+                    core = NavigationCore(
+                        actuator, observer, reviewed_navigation_edges(),
+                        NavigationPolicy(max_observations=4), sleep=lambda _: None,
+                    )
+                    message = ("No qualified pan remains" if method == "open_building"
+                               else "absent or ambiguous")
+                    with patch(
+                        "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+                        side_effect=SelectorResolutionError("no qualified lane remains"),
+                    ):
+                        with self.assertRaisesRegex(HomeCityScanError, message):
+                            getattr(core, method)(
+                                target, observe_content=content,
+                                home_city_slot=HomeCitySlotSelector(11),
+                            )
+                    actuator.execute_action.assert_not_called()
+                    observer.assert_not_called()
 
     def test_slot11_hall_uses_fresh_identity_and_point_among_other_occupants(self) -> None:
         core, actions = _controlled_hall_core()

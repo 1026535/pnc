@@ -683,8 +683,8 @@ visible at a HUD-safe point. It sends camera inputs but no building tap.
 then opens from that operation's fresh located frame. A developmental caller
 must recheck the returned body's exact identity, slot, endpoint, frame and
 action geometry before any tap; that caller's session boundary remains the
-physical authority. The target-specific Cavalry/Siege acquisition and all
-four endpoint/Back returns still require a new bounded live batch.
+physical authority. The target-specific Cavalry/Siege acquisition and their
+two endpoint/Back returns still require a new bounded live batch.
 
 **Turn021 follow-up, 2026-09-30, installed build unrecorded:** The clear Home frames
 0022–0037 in `turn-021/diagnostics.json` stayed at the same rounded camera
@@ -712,3 +712,19 @@ with its unrestricted confirmation, and retains the same operation deadline
 and camera-input budget through target-directed scanning. This removes the
 helper's separate normalization before a second locate operation; a source
 with an unresolved verdict never authorizes a body or wheel input by itself.
+
+**Turn024/025 follow-up, 2026-09-30, installed build unrecorded:** on
+`157_farm` the publication helper reacquired the current measured Market body
+at slot 11 (point `(492,756)`) and the Alliance Hall body at slot 13 (point
+`(708,654)`); each entered to its typed endpoint (`PNC_MARKET` via the new
+`building_market` profile, `PNC_ALLIANCE_HALL` via `alliance_remaining_hall`)
+and returned to fresh Home through measured top-left Back at `(81,44)` and
+`(81,52)`, including one current-Market takeover return. These same-process
+receipts qualify the destinations' measured Back behavior for the reviewed
+edges; `reviewed_navigation_edges` now carries `PNC_MARKET` and
+`PNC_ALLIANCE_HALL` -> Home, so both public entries accept the two targets
+through the shared measured operation as public-route candidates pending
+final batched live validation through production `open_building`. The
+observed slot placements are this account's current layout, never global
+mappings. See ignored `turn-025/evidence.json` and `handoff.md` under
+`.local-data/devin-live-test/runs/v44-publication-20260928/`.

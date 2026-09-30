@@ -1,10 +1,11 @@
 # Configurable support-building acquisition
 
-**Recheck:** 2026-09-29. **Client baseline:** PNC 5.0.203 / 233 from the accepted
-APK evidence map. Saved Home captures are from 2026-09-22, 23 and 29; their installed
-build is not recorded. This note covers acquisition prerequisites for Alliance Hall and
+**Recheck:** 2026-09-30. **Client baseline:** PNC 5.0.203 / 233 from the accepted
+APK evidence map. Saved Home captures are from 2026-09-22, 23 and 29; the live025
+endpoint/return receipts are from 2026-09-30; the installed builds are not
+recorded. This note covers acquisition prerequisites for Alliance Hall and
 Market, with Blacksmith as the existing third eligible occupant. It does not
-qualify their feature actions or new public routes.
+qualify their feature actions.
 
 ## Findings
 
@@ -71,9 +72,16 @@ qualify their feature actions or new public routes.
   `home_city_pan_07.png` shows an empty slot 11 between Blacksmith and Hall and
   supplies a real negative. These observations do not prove other placements,
   other skins, collider behavior, or an operational public route.
-- **Unknown:** Market's current native endpoint identity and actual return.
-  Source/holdout matching and both negative checks pass; both-publisher checks
-  and final-candidate live body qualification remain pending.
+- **Live-observed, 2026-09-30, installed build unrecorded:** turn025 on
+  `157_farm` reacquired the measured Market body at slot 11 (point `(492,756)`)
+  and the Alliance Hall body at slot 13 (point `(708,654)`); each entered to
+  its typed endpoint (`PNC_MARKET` through the new `building_market` profile,
+  `PNC_ALLIANCE_HALL` through the guarded `alliance_remaining_hall` profile)
+  and returned to fresh Home through measured top-left Back at `(81,44)` and
+  `(81,52)`, including one current-Market takeover return. Same-process
+  developmental receipts, not public-caller acceptance; evidence under ignored
+  `.local-data/devin-live-test/runs/v44-publication-20260928/turn-025/` and
+  parent review `v44-live025-independent-review-20260930.json`.
   The old artifact
   `20260825T150419Z_phase1_upgrade_focus_market_post_action_3.png` shows foggy
   Home, not a Market body or endpoint; its filename is not identity evidence.
@@ -91,24 +99,31 @@ translate body geometry only; current matches bind occupants to slots 11/12/13.
 Final entry requires a fresh
 same-type/same-slot template body and an unobstructed native action point.
 
-The public core still refuses Alliance Hall and Market before capture because
-neither has a reviewed return edge. The new fake tests isolate acquisition with
-a test-only endpoint edge; they do not qualify an automatic production route.
-Existing V37/V27 menus, parsers and mutations remain feature-owned.
+`reviewed_navigation_edges` now carries the measured top-left Back -> Home
+edge for both `PNC_MARKET` and `PNC_ALLIANCE_HALL`, so `open_building` and
+`open_visible_building` admit both targets through the shared measured
+operation: route review before observation, exact optional slot, fresh typed
+body at a safe point, one observed-point tap, then the confirmed Back return.
+Public-route candidate status is pending final batched live validation through
+production `open_building`; the turn025 receipts came from the developmental
+helper, not the public caller. The remaining fake tests isolate acquisition
+with a test-only endpoint edge and do not qualify an automatic production
+route. Existing V37/V27 menus, parsers and mutations remain feature-owned.
 
 ## Next smallest observations
 
-These are pending coordinator-owned cases for the existing live worker. Add them
-to a released batch with explicit limits before execution; they are not added to
-the current integrated helper's scope by this note. Reuse the batch-assigned
+CFG-E1 and CFG-E2 receipts were delivered by turn025 on 2026-09-30 (same-process
+developmental helper, per above). The remaining public-route qualification is a
+coordinator-owned live batch through production `open_building`; CFG-P1 stays
+open only for a second native Market body sighting. Reuse the batch-assigned
 `157_farm` instance's active castle and established identity/lease authority. Do not move
 buildings or switch castles to manufacture a permutation.
 
 | Case | Precondition and allowed action | Required evidence |
 | --- | --- | --- |
 | CFG-P1 Market body | After the saved native matching checks pass, include Market in one bounded shared discovery. Use the existing core; no Market tap. Source and separate holdout are already available above. | Current passive match with readable Market identity, fixed-landmark pose, observed slot and clear interior point; bind the result to the exact final candidate. If unresolved, keep availability unknown. |
-| CFG-E1 Alliance Hall endpoint/return | After body-data acceptance, current measured Hall body at its observed slot, with a clear point. Coordinator may release one non-spending body entry and one measured **top-left Back** return through the existing capture workflow. | Exact body/slot/source and actual tap receipt, fresh native Alliance Hall title plus static description, independently measured top-left Back, its receipt and fresh Home completion. Do not tap Upgrade, Send Back, Reinforce or Join Alliance. A public-route refusal is not successful capture or permission to bypass its policy. |
-| CFG-E2 Market endpoint/return | Only after CFG-P1 supplies reviewed body/action evidence. Coordinator may release one non-spending body entry and one measured top-left Back return. | Exact body/slot/source and actual tap receipt, full native Market identity with static supporting content, measured Back and fresh Home completion. Capture any observed intermediate state and stop for review; do not guess a new control. Do not tap Upgrade, Resource Transport, Join Alliance or any claim/purchase. |
+| CFG-E1 Alliance Hall endpoint/return (delivered turn025, developmental helper) | Final public-caller validation through production `open_building` remains coordinator-owned. | turn025 receipts: Hall body slot 13 point `(708,654)` -> typed `PNC_ALLIANCE_HALL` -> measured top-left Back `(81,52)` -> fresh Home. |
+| CFG-E2 Market endpoint/return (delivered turn025, developmental helper) | Final public-caller validation through production `open_building` remains coordinator-owned. | turn025 receipts: Market body slot 11 point `(492,756)` -> typed `PNC_MARKET` -> measured top-left Back `(81,44)` -> fresh Home, including a current-Market takeover return. |
 
 One observed placement per available type is sufficient for these missing native
 boundaries. Slot eligibility and selected-slot persistence have deterministic

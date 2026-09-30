@@ -183,68 +183,83 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
         )
 
 
-    def test_military_public_entry_preserves_exact_slot_and_returns_home(self) -> None:
-        """The reviewed military routes compose with public body acquisition."""
-        for target, slot, screen in (
-            (HomeCityObjectId.INFANTRY_BARRACKS, 5, ScreenType.PNC_INFANTRY_BARRACKS),
-            (HomeCityObjectId.RANGED_BARRACKS, 7, ScreenType.PNC_RANGED_BARRACKS),
-            (HomeCityObjectId.HALL_OF_WAR, 14, ScreenType.PNC_HALL_OF_WAR),
-        ):
-            with self.subTest(target=target):
-                selector = HomeCitySlotSelector(slot)
-                body = replace(
-                    measured_building_object(
-                        target,
-                        bounds=Bounds(220, 470, 100, 100),
-                        action_point=(270, 520),
-                        action_bounds=Bounds(264, 514, 12, 12),
-                    ),
-                    home_city_slot=selector,
-                )
-                now = datetime(2026, 9, 29, tzinfo=UTC)
-                content_frames = iter(
-                    camera_home_frame((body,), captured_at=now + timedelta(seconds=index))
-                    for index in (1, 2)
-                )
-                back = VisibleElement(
-                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                    Bounds(22, 8, 58, 38),
-                    0.99,
-                    source_kind=VisibleElementSourceKind.TEMPLATE,
-                )
-                endpoint = replace(
-                    observation(screen),
-                    visible_elements={UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back},
-                    image_size=(540, 960),
-                )
-                frames = iter(
-                    [replace(endpoint, captured_at=now + timedelta(seconds=index))
-                     for index in (3, 4, 5, 6)]
-                    + [replace(observation(ScreenType.PNC_HOME_CITY),
-                               captured_at=now + timedelta(seconds=index))
-                       for index in (7, 8)]
-                )
-                actuator = Actuator()
-                core = NavigationCore(
-                    actuator, lambda _: next(frames), reviewed_navigation_edges(),
-                    NavigationPolicy(max_observations=4), sleep=lambda _: None,
-                )
+    def test_reviewed_public_entry_preserves_exact_slot_and_returns_home(self) -> None:
+        """Reviewed routes compose public body acquisition with the measured return.
 
-                opened = core.open_building(
-                    target, home_city_slot=selector,
-                    observe_content=lambda _: next(content_frames),
-                )
-                returned = core.navigate(ScreenType.PNC_HOME_CITY)
+        A fresh qualified Home capture -> a measured typed body at the exact
+        requested slot -> one observed-point tap -> the reviewed typed Back
+        edge restores Home inside the same operation. Support slots 11/12/13
+        interchange Blacksmith, Market and Alliance Hall; the current
+        observed occupant binds identity per request, never a global mapping.
+        """
+        for method in ("open_building", "open_visible_building"):
+            for target, slot, screen in (
+                (HomeCityObjectId.INFANTRY_BARRACKS, 5, ScreenType.PNC_INFANTRY_BARRACKS),
+                (HomeCityObjectId.RANGED_BARRACKS, 7, ScreenType.PNC_RANGED_BARRACKS),
+                (HomeCityObjectId.HALL_OF_WAR, 14, ScreenType.PNC_HALL_OF_WAR),
+                (HomeCityObjectId.BLACKSMITH, 12, ScreenType.PNC_BLACKSMITH),
+                (HomeCityObjectId.MARKET, 11, ScreenType.PNC_MARKET),
+                (HomeCityObjectId.MARKET, 12, ScreenType.PNC_MARKET),
+                (HomeCityObjectId.MARKET, 13, ScreenType.PNC_MARKET),
+                (HomeCityObjectId.ALLIANCE_HALL, 11, ScreenType.PNC_ALLIANCE_HALL),
+                (HomeCityObjectId.ALLIANCE_HALL, 12, ScreenType.PNC_ALLIANCE_HALL),
+                (HomeCityObjectId.ALLIANCE_HALL, 13, ScreenType.PNC_ALLIANCE_HALL),
+            ):
+                with self.subTest(method=method, target=target):
+                    selector = HomeCitySlotSelector(slot)
+                    body = replace(
+                        measured_building_object(
+                            target,
+                            bounds=Bounds(220, 470, 100, 100),
+                            action_point=(270, 520),
+                            action_bounds=Bounds(264, 514, 12, 12),
+                        ),
+                        home_city_slot=selector,
+                    )
+                    now = datetime(2026, 9, 29, tzinfo=UTC)
+                    content_frames = iter(
+                        camera_home_frame((body,), captured_at=now + timedelta(seconds=index))
+                        for index in (1, 2)
+                    )
+                    back = VisibleElement(
+                        UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        Bounds(22, 8, 58, 38),
+                        0.99,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                    )
+                    endpoint = replace(
+                        observation(screen),
+                        visible_elements={UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back},
+                        image_size=(540, 960),
+                    )
+                    frames = iter(
+                        [replace(endpoint, captured_at=now + timedelta(seconds=index))
+                         for index in (3, 4, 5, 6)]
+                        + [replace(observation(ScreenType.PNC_HOME_CITY),
+                                   captured_at=now + timedelta(seconds=index))
+                           for index in (7, 8)]
+                    )
+                    actuator = Actuator()
+                    core = NavigationCore(
+                        actuator, lambda _: next(frames), reviewed_navigation_edges(),
+                        NavigationPolicy(max_observations=4), sleep=lambda _: None,
+                    )
 
-                self.assertEqual(screen, opened.screen_type)
-                self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
-                self.assertEqual(2, len(actuator.actions))
-                self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
-                self.assertEqual(body, actuator.actions[0].expected_object)
-                self.assertEqual(selector, actuator.actions[0].expected_object.home_city_slot)
-                self.assertEqual(body.action_point, actuator.actions[0].target_point)
-                self.assertEqual(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                                 actuator.actions[1].selector_id)
+                    opened = getattr(core, method)(
+                        target, home_city_slot=selector,
+                        observe_content=lambda _: next(content_frames),
+                    )
+                    returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+                    self.assertEqual(screen, opened.screen_type)
+                    self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+                    self.assertEqual(2, len(actuator.actions))
+                    self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+                    self.assertEqual(body, actuator.actions[0].expected_object)
+                    self.assertEqual(selector, actuator.actions[0].expected_object.home_city_slot)
+                    self.assertEqual(body.action_point, actuator.actions[0].target_point)
+                    self.assertEqual(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                                     actuator.actions[1].selector_id)
 
 
     def test_open_building_visible_target_uses_no_scan_gesture(self):
@@ -450,6 +465,59 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
 
                     observed.assert_not_called()
                     self.assertEqual([], actuator.actions)
+
+
+    def test_reviewed_support_routes_refuse_wrong_occupant_or_slot_without_input(self) -> None:
+        """A foreign occupant or a wrong exact slot never authorizes a body tap.
+
+        Slots 11/12/13 interchange Blacksmith, Market and Alliance Hall; only
+        the requested type's measured body on the selected slot qualifies.
+        """
+        for method in ("open_building", "open_visible_building"):
+            for target, occupant, occupant_slot, selector in (
+                (HomeCityObjectId.MARKET, HomeCityObjectId.BLACKSMITH, 11, None),
+                (HomeCityObjectId.ALLIANCE_HALL, HomeCityObjectId.BLACKSMITH, 11, None),
+                (HomeCityObjectId.MARKET, HomeCityObjectId.MARKET, 11,
+                 HomeCitySlotSelector(12)),
+                (HomeCityObjectId.MARKET, HomeCityObjectId.BLACKSMITH, 11,
+                 HomeCitySlotSelector(11)),
+            ):
+                with self.subTest(method=method, target=target, occupant=occupant,
+                                  selector=selector):
+                    body = replace(
+                        measured_building_object(
+                            occupant,
+                            bounds=Bounds(220, 470, 100, 100),
+                            action_point=(270, 520),
+                            action_bounds=Bounds(264, 514, 12, 12),
+                        ),
+                        home_city_slot=HomeCitySlotSelector(occupant_slot),
+                    )
+                    now = datetime(2026, 9, 30, tzinfo=UTC)
+                    content_frames = iter(
+                        camera_home_frame((body,), captured_at=now + timedelta(seconds=index))
+                        for index in range(6)
+                    )
+                    observer = Mock()
+                    actuator = Actuator()
+                    core = NavigationCore(
+                        actuator, observer, reviewed_navigation_edges(),
+                        NavigationPolicy(max_observations=4), sleep=lambda _: None,
+                    )
+                    message = ("No qualified pan remains" if method == "open_building"
+                               else "absent or ambiguous")
+                    with patch(
+                        "pnc_automation.app.automation.engine.navigation_core.plan_home_city_camera_step",
+                        side_effect=SelectorResolutionError("no qualified lane remains"),
+                    ):
+                        with self.assertRaisesRegex(RuntimeError, message):
+                            getattr(core, method)(
+                                target,
+                                observe_content=lambda _: next(content_frames),
+                                home_city_slot=selector,
+                            )
+                    self.assertEqual([], actuator.actions)
+                    observer.assert_not_called()
 
 
     def test_institute_measured_open_taps_body_verified_target_without_queue_detour(self):

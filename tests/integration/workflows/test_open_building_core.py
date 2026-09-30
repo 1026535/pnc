@@ -106,28 +106,34 @@ class OpenBuildingCoreTests(unittest.TestCase):
     def test_workflow_forwards_exact_slot_selector_to_context(self) -> None:
         """Carries an authored exact slot through the workflow into the shared navigator."""
 
-        workflow = build_open_building_workflow(
-            {"building": HomeCityObjectId.BLACKSMITH.value, "home_city_slot": 12}
-        )
-        observation = Observation(
-            screen_type=ScreenType.PNC_BLACKSMITH,
-            visible_elements={},
-            captured_at=datetime(2026, 9, 11, 12, 0, tzinfo=UTC),
-        )
-        context = Mock()
-        context.open_building.return_value = observation
+        for building, slot, screen in (
+            (HomeCityObjectId.BLACKSMITH, 12, ScreenType.PNC_BLACKSMITH),
+            (HomeCityObjectId.MARKET, 11, ScreenType.PNC_MARKET),
+            (HomeCityObjectId.ALLIANCE_HALL, 13, ScreenType.PNC_ALLIANCE_HALL),
+        ):
+            with self.subTest(building=building):
+                workflow = build_open_building_workflow(
+                    {"building": building.value, "home_city_slot": slot}
+                )
+                observation = Observation(
+                    screen_type=screen,
+                    visible_elements={},
+                    captured_at=datetime(2026, 9, 11, 12, 0, tzinfo=UTC),
+                )
+                context = Mock()
+                context.open_building.return_value = observation
 
-        result = workflow.execute(context)
+                result = workflow.execute(context)
 
-        self.assertEqual(
-            HomeCitySlotSelector(slot_index=12), workflow.policy.home_city_slot
-        )
-        context.open_building.assert_called_once_with(
-            HomeCityObjectId.BLACKSMITH,
-            home_city_slot=HomeCitySlotSelector(slot_index=12),
-        )
-        self.assertEqual(ScreenType.PNC_BLACKSMITH, result.screen_type)
-        self.assertEqual(HomeCityObjectId.BLACKSMITH, result.building)
+                self.assertEqual(
+                    HomeCitySlotSelector(slot_index=slot), workflow.policy.home_city_slot
+                )
+                context.open_building.assert_called_once_with(
+                    building,
+                    home_city_slot=HomeCitySlotSelector(slot_index=slot),
+                )
+                self.assertEqual(screen, result.screen_type)
+                self.assertEqual(building, result.building)
 
     def test_context_forwards_exact_selector_to_navigation_core(self) -> None:
         """The constrained context forwards one selector unchanged to NavigationCore."""
@@ -157,19 +163,25 @@ class OpenBuildingCoreTests(unittest.TestCase):
             home_city_slot=HomeCitySlotSelector(slot_index=12),
         )
 
-    def test_campaign_uses_canonical_primary_screen_and_workflow_endpoint(self) -> None:
-        workflow = build_open_building_workflow({"building": HomeCityObjectId.CAMPAIGN.value})
+    def test_reviewed_targets_use_canonical_primary_screen_and_workflow_endpoint(self) -> None:
+        for building, endpoint in (
+            (HomeCityObjectId.CAMPAIGN, ScreenType.PNC_CAMPAIGN_MAP),
+            (HomeCityObjectId.MARKET, ScreenType.PNC_MARKET),
+            (HomeCityObjectId.ALLIANCE_HALL, ScreenType.PNC_ALLIANCE_HALL),
+        ):
+            with self.subTest(building=building):
+                workflow = build_open_building_workflow({"building": building.value})
 
-        self.assertEqual(
-            ScreenType.PNC_CAMPAIGN_MAP,
-            primary_screen_type_for_home_city_object(HomeCityObjectId.CAMPAIGN),
-        )
-        self.assertEqual(
-            HomeCityObjectId.CAMPAIGN,
-            home_city_object_id_for_screen(ScreenType.PNC_CAMPAIGN_MAP),
-        )
-        self.assertEqual(HomeCityObjectId.CAMPAIGN, workflow.policy.building)
-        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, workflow.spec.exit_screen)
+                self.assertEqual(
+                    endpoint,
+                    primary_screen_type_for_home_city_object(building),
+                )
+                self.assertEqual(
+                    building,
+                    home_city_object_id_for_screen(endpoint),
+                )
+                self.assertEqual(building, workflow.policy.building)
+                self.assertEqual(endpoint, workflow.spec.exit_screen)
 
     def test_context_delegates_once_and_does_not_replay_failure(self) -> None:
         runtime = Mock()

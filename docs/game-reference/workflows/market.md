@@ -28,12 +28,27 @@ native frames while the best rival frames score at most 0.47 (description) and
 0.24 (art). Frame0037 is a same-session correlated validation, not an
 independent holdout.
 
-**Authority boundary:** this profile is passive endpoint/Back perception only.
-It grants no public Market entry, no transport, glory-level, upgrade, or
-spending action, and no navigation return edge. The `PNC_MARKET_*` controls
-admitted by the pre-existing OCR text path on content-authorized observations
-are unchanged; the visual path publishes Back alone.
+**Live-observed, 2026-09-30, installed build unrecorded:** the turn025
+publication helper reacquired the current measured Market body at slot 11
+(point `(492,756)`), entered to typed `PNC_MARKET`, and returned to fresh
+Home through measured top-left Back at `(81,44)`, including one
+current-Market takeover return. Evidence: ignored
+`.local-data/devin-live-test/runs/v44-publication-20260928/turn-025/`
+`evidence.json`/`handoff.md`; parent review
+`.local-data/devin-vision-pipeline/v44-live025-independent-review-20260930.json`.
+That observed slot placement is this account's current layout, not a global
+mapping.
 
-**Not yet proven:** a live typed Back return after recognition on the final
-candidate, an independent-session appearance holdout, and higher-level Market
-art remain unqualified.
+**Authority boundary:** `reviewed_navigation_edges` now carries the measured
+top-left Back -> Home edge for `PNC_MARKET`, so `open_building` and
+`open_visible_building` admit Market through the shared measured operation as
+a public-route candidate. The developmental helper receipts above qualify the
+endpoint's Back behavior; final public-caller validation through production
+`open_building` is still pending. This grants no transport, glory-level,
+upgrade, or spending action. The `PNC_MARKET_*` controls admitted by the
+pre-existing OCR text path on content-authorized observations are unchanged;
+the visual path publishes Back alone.
+
+**Not yet proven:** final public-caller validation of the reviewed
+entry/return (production `open_building`), an independent-session appearance
+holdout, and higher-level Market art remain unqualified.

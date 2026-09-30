@@ -2393,7 +2393,8 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE, screen.PNC_HALL_OF_WAR,
         screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER, screen.PNC_TRIAL_CHALLENGE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
-        screen.PNC_BLACKSMITH, screen.PNC_WALL,
+        screen.PNC_BLACKSMITH, screen.PNC_MARKET, screen.PNC_ALLIANCE_HALL,
+        screen.PNC_WALL,
         screen.PNC_RANGED_BARRACKS, screen.PNC_INFANTRY_BARRACKS,
         # Only the captured voucher_mall producer qualifies this entry's
         # measured Back; other store contexts remain unreviewed.
