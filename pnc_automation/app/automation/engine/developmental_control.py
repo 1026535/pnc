@@ -38,7 +38,10 @@ class BodyEntryWitness:
 
 @dataclass(frozen=True, slots=True)
 class ConsumedCaseAttempt:
-    """Runner-owned pre-dispatch attempt journal reference for one named control."""
+    """Runner-owned logical attempt, including refusals before physical input.
+
+    ``number`` is cumulative within the case; it is not a dispatch count.
+    """
 
     case_id: str
     control_name: str
@@ -73,7 +76,7 @@ class DevelopmentalControlScope:
     attempt: ConsumedCaseAttempt
     body_entry: BodyEntryWitness
     input_chain: tuple[InputDispatchRecord, ...]
-    first_follow_up: Observation
+    latest_input_follow_up: Observation
 
 
 @dataclass(frozen=True, slots=True)

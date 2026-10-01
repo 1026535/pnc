@@ -196,7 +196,7 @@ class ActionExecutor:
     def _validate_developmental_input_chain(
         scope: DevelopmentalControlScope, observation: Observation,
     ) -> None:
-        """Require one exact body receipt and no intervening physical input."""
+        """Require one exact body receipt and a continuous physical input chain."""
 
         def refuse(reason: str) -> None:
             raise SelectorResolutionError(reason, case_id=scope.case_id)
@@ -231,8 +231,8 @@ class ActionExecutor:
             refuse("Developmental control lacks an exact semantic body-entry receipt.")
         source.require_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE).require_visible_object(body)
         chain = scope.input_chain
-        if not chain or chain[0] != receipt or scope.attempt.number != len(chain):
-            refuse("Developmental control input chain differs from the consumed case attempt.")
+        if not chain or chain[0] != receipt:
+            refuse("Developmental control input chain lacks its exact body-entry receipt.")
         previous = receipt
         for current in chain[1:]:
             if (not isinstance(current.dispatch, TapDispatch)
@@ -242,7 +242,7 @@ class ActionExecutor:
                     or current.dispatch.input_sequence != current.source_frame.input_sequence + 1):
                 refuse("Developmental control input chain has an unrecorded or foreign input.")
             previous = current
-        first = scope.first_follow_up
+        first = scope.latest_input_follow_up
         first_ref = first.frame_ref
         current_ref = observation.frame_ref
         if (first_ref is None or current_ref is None or first.artifact_path is None

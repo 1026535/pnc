@@ -91,7 +91,7 @@ class DevelopmentalControlTests(unittest.TestCase):
             read_only=False, resource_allowance_ref=None,
             attempt=ConsumedCaseAttempt("bank_menu", "task_owned_menu_button", 1, 1, "journal:1"),
             body_entry=BodyEntryWitness("bank_menu", "bank_menu_discovery", source, body_action, body_receipt),
-            input_chain=(body_receipt,), first_follow_up=self.current,
+            input_chain=(body_receipt,), latest_input_follow_up=self.current,
         )
         self.proof = MeasuredControlProof(
             frame_ref=self.current.frame_ref, artifact_path=self.current.artifact_path,
@@ -174,7 +174,7 @@ class DevelopmentalControlTests(unittest.TestCase):
             self.scope, control_name="task_owned_back", released_action_id="bank_back",
             attempt=ConsumedCaseAttempt("bank_menu", "task_owned_back", 2, 2, "journal:2"),
             input_chain=(self.scope.body_entry.receipt, first_control_receipt),
-            first_follow_up=later,
+            latest_input_follow_up=later,
         )
         proof = replace(
             self.proof, frame_ref=later.frame_ref, artifact_path=later.artifact_path,
@@ -187,6 +187,22 @@ class DevelopmentalControlTests(unittest.TestCase):
         receipt = self.executor.execute_developmental_control(scope, proof, later)
         self.assertEqual(3, receipt.dispatch.input_sequence)
         self.assertEqual([(325, 415)], self.session.taps)
+
+    def test_refused_logical_attempt_does_not_require_a_physical_receipt(self) -> None:
+        with self.assertRaises(SelectorResolutionError):
+            self.executor.execute_developmental_control(
+                self.scope, replace(self.proof, artifact_path=Path("older.png")), self.current,
+            )
+        self.assertEqual([], self.events)
+        scope = replace(
+            self.scope,
+            attempt=ConsumedCaseAttempt(
+                "bank_menu", "task_owned_menu_button", 2, 2, "journal:2",
+            ),
+        )
+        receipt = self.executor.execute_developmental_control(scope, self.proof, self.current)
+        self.assertEqual(2, receipt.dispatch.input_sequence)
+        self.assertEqual([receipt], self.events)
 
     def test_unreleased_resource_effect_and_global_budget_refuse(self) -> None:
         resource_scope = replace(self.scope, effect=WorkflowEffect.RESOURCE_CHANGING)
