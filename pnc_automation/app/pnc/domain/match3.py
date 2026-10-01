@@ -33,6 +33,18 @@ class Match3Mode(StrEnum):
     GAME_AUTO = "game_auto"
 
 
+class Match3MutationKind(StrEnum):
+    """The feature-level match-3 scope and its one journaled Campaign action.
+
+    Mirrors ``BuildingMutationKind``: the same enum names the feature scope a
+    ``CoreMutationBoundary`` is authorized for and the durable action kind its
+    journaled intents carry. Arena and Lost Land have no journaled mutation
+    contract.
+    """
+
+    CAMPAIGN_BATTLE_START = "match3.campaign_battle_start"
+
+
 class Match3AvailabilityStatus(StrEnum):
     """Reports whether one context/mode pair can execute in this build."""
 

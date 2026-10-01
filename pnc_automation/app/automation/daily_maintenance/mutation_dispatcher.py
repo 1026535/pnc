@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from pnc_automation.app.pnc.domain.daily_maintenance import (
+    ActionPointReservation,
     DailyQuestId,
     DailyTaskCheckpoint,
     MutationIntent,
@@ -15,6 +16,7 @@ from pnc_automation.app.pnc.domain.feature_actions import (
     JournaledActionKind,
     normalize_journaled_action_kind,
 )
+from pnc_automation.app.pnc.domain.match3 import Match3MutationKind
 from pnc_automation.app.pnc.domain.pet_workshop import WorkshopIntentKind
 from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
@@ -33,6 +35,7 @@ class MutationOperation:
     action_kind: JournaledActionKind | None = None
     target: dict[str, object] | None = None
     invocation_id: str | None = None
+    action_point_reservation: ActionPointReservation | None = None
 
     def __post_init__(self) -> None:
         """Validate optional feature action identity fields without changing Daily callers."""
@@ -42,13 +45,28 @@ class MutationOperation:
         if self.quest_id is not None and not isinstance(self.quest_id, DailyQuestId):
             raise TypeError("MutationOperation.quest_id must be a DailyQuestId or None.")
         if self.action_kind is not None and not isinstance(
-            self.action_kind, (BuildingMutationKind, WorkshopIntentKind)
+            self.action_kind, (BuildingMutationKind, WorkshopIntentKind, Match3MutationKind)
         ):
             raise TypeError("MutationOperation.action_kind must be a typed journaled action kind or None.")
         if self.action_kind is not None and self.target is None:
             raise ValueError("Feature MutationOperation requires an exact target.")
         if self.invocation_id is not None and not self.invocation_id.strip():
             raise ValueError("MutationOperation.invocation_id cannot be blank.")
+        if self.action_point_reservation is not None and not isinstance(
+            self.action_point_reservation, ActionPointReservation
+        ):
+            raise TypeError(
+                "MutationOperation.action_point_reservation must be an ActionPointReservation or None."
+            )
+        if self.action_kind is Match3MutationKind.CAMPAIGN_BATTLE_START:
+            if self.invocation_id is None:
+                raise ValueError("Campaign battle-start operations require their invocation id.")
+            if self.action_point_reservation is None:
+                raise ValueError("Campaign battle-start operations require their AP reservation.")
+            if self.diamond_budget != 0:
+                raise ValueError("Campaign battle-start operations cannot carry a diamond budget.")
+        elif self.action_point_reservation is not None:
+            raise ValueError("Only a Campaign battle-start operation may carry an AP reservation.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +78,7 @@ class MutationReconciliation:
     diamonds_spent: int = 0
     artifact_paths: tuple[str, ...] = ()
     metadata: dict[str, object] = field(default_factory=dict)
+    authoritative_no_spend: bool = False
 
     def __post_init__(self) -> None:
         """Rejects ambiguous contradictory proof and negative spend."""
@@ -68,6 +87,10 @@ class MutationReconciliation:
             raise ValueError("Mutation reconciliation cannot prove both precondition and postcondition.")
         if self.diamonds_spent < 0:
             raise ValueError("Mutation reconciliation diamonds_spent cannot be negative.")
+        if not isinstance(self.authoritative_no_spend, bool):
+            raise TypeError("Mutation reconciliation authoritative_no_spend must be a boolean.")
+        if self.authoritative_no_spend and self.postcondition_proven:
+            raise ValueError("Mutation reconciliation cannot prove the postcondition and no spend.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +157,7 @@ class JournaledMutationDispatcher:
             action_kind=None if operation.action_kind is None else operation.action_kind.value,
             target=None if operation.target is None else dict(operation.target),
             invocation_id=operation.invocation_id,
+            action_point_reservation=operation.action_point_reservation,
         )
         checkpoint = self.journal_store.prepare_intent(checkpoint, intent)
         checkpoint = self.journal_store.transition_intent(
@@ -223,6 +247,10 @@ class JournaledMutationDispatcher:
                     pending_clarification=False,
                     artifact_paths=result.artifact_paths,
                 )
+            if result.authoritative_no_spend:
+                checkpoint = self.journal_store.release_intent_action_point_reservation(
+                    checkpoint, operation_id
+                )
             return JournaledMutationResult(
                 checkpoint=checkpoint,
                 committed=False,
@@ -293,6 +321,10 @@ class JournaledMutationDispatcher:
                 pending_clarification=False,
                 artifact_paths=result.artifact_paths,
             )
+        if result.authoritative_no_spend:
+            checkpoint = self.journal_store.release_intent_action_point_reservation(
+                checkpoint, operation.operation_id
+            )
         return JournaledMutationResult(
             checkpoint=checkpoint,
             committed=False,
@@ -321,7 +353,15 @@ def _intent_matches_operation(intent: MutationIntent, operation: MutationOperati
         and intent.action_kind == (None if operation.action_kind is None else operation.action_kind.value)
         and intent.target == operation.target
         and intent.invocation_id == operation.invocation_id
+        and _reservation_points(intent.action_point_reservation)
+        == _reservation_points(operation.action_point_reservation)
     )
+
+
+def _reservation_points(reservation: ActionPointReservation | None) -> int | None:
+    """Reduce one reservation to the points it holds for identity comparison."""
+
+    return None if reservation is None else reservation.reserved_action_points
 
 
 def mutation_operation_from_intent(intent: MutationIntent) -> MutationOperation:
@@ -339,6 +379,7 @@ def mutation_operation_from_intent(intent: MutationIntent) -> MutationOperation:
         ),
         target=None if intent.target is None else dict(intent.target),
         invocation_id=intent.invocation_id,
+        action_point_reservation=intent.action_point_reservation,
     )
 
 

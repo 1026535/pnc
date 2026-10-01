@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
@@ -76,8 +76,10 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
 from pnc_automation.app.pnc.domain.feature_actions import (
     FeatureActionKind,
     WORKSHOP_MUTATION_INTENT_KINDS,
+    is_campaign_battle_start_action,
     is_workshop_journaled_action,
 )
+from pnc_automation.app.pnc.domain.match3 import Match3MutationKind
 from pnc_automation.app.pnc.domain.pet_workshop import WorkshopIntentKind, WorkshopMutationKind
 from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject,
@@ -93,6 +95,11 @@ from pnc_automation.app.pnc.persistence.daily_run_journal_store import (
     DailyRunJournalStore,
     PendingWorkshopOperation,
 )
+
+if TYPE_CHECKING:
+    from pnc_automation.app.automation.match3.battle_start_authority import (
+        CampaignBattleStartAuthority,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +131,7 @@ class CoreMutationBoundary:
         """Reject invalid optional feature mutation budgets at composition time."""
 
         if self.feature_action_kind is not None and not isinstance(
-            self.feature_action_kind, (BuildingMutationKind, WorkshopMutationKind)
+            self.feature_action_kind, (BuildingMutationKind, WorkshopMutationKind, Match3MutationKind)
         ):
             raise TypeError("CoreMutationBoundary.feature_action_kind must be a typed feature kind or None.")
         if not isinstance(self.feature_budget_kind, MutationBudgetKind):
@@ -146,6 +153,11 @@ class CoreMutationBoundary:
             and self.feature_max_diamond_spend != 0
         ):
             raise ValueError("The Workshop mutation scope cannot spend diamonds.")
+        if self.feature_action_kind is Match3MutationKind.CAMPAIGN_BATTLE_START:
+            if self.feature_max_mutations != 1:
+                raise ValueError("The Campaign battle-start scope authorizes exactly one attempt.")
+            if self.feature_max_diamond_spend != 0:
+                raise ValueError("The Campaign battle-start scope cannot spend diamonds.")
 
     def require_caller(
         self, *, account_id: str, journal_root: Path | None = None,
@@ -231,7 +243,10 @@ class CoreMutationBoundary:
 
         if action_kind is not None:
             return self.feature_action_kind == action_kind
-        if self.feature_action_kind is WorkshopMutationKind.RUN:
+        if self.feature_action_kind in (
+            WorkshopMutationKind.RUN,
+            Match3MutationKind.CAMPAIGN_BATTLE_START,
+        ):
             return False
         try:
             return capability is not None and capability == self.policy.quest_id
@@ -836,6 +851,169 @@ class CoreMutationBoundary:
                 "before another Workshop action."
             )
 
+    def dispatch_campaign_battle_start(
+        self,
+        *,
+        checkpoint: DailyTaskCheckpoint,
+        authority: CampaignBattleStartAuthority,
+        dispatch: Callable[[], None],
+        reconcile: Callable[[], MutationReconciliation],
+    ) -> JournaledMutationResult:
+        """Journal the one consumed Campaign battle-start attempt, then dispatch once.
+
+        The operation is derived inside this boundary from the factory-minted
+        authority sealed to this exact scope — callers can never propose their
+        own Campaign operation or acknowledgement. The durable attempt record
+        is persisted before the injected dispatch callback runs. Any ambiguous
+        outcome — callback exception, missing receipt, timeout, restart, or
+        rejected postcondition — leaves the attempt consumed: no caller can
+        journal or dispatch another Campaign start for the same invocation,
+        and the journaled attempt never grants another dispatch permission.
+        The reconciliation callback may reobserve only; this scope deliberately
+        has no precondition-resume path that could send input again.
+        """
+
+        operation = self._require_campaign_authority(authority)
+        self.authorize(action_kind=Match3MutationKind.CAMPAIGN_BATTLE_START)
+        if self.journal_store.find_campaign_battle_start_attempts(
+            account_id=self.target.account_id,
+            castle=self.target.castle,
+            invocation_id=operation.invocation_id,
+        ):
+            raise PermissionError(
+                "The Campaign battle-start attempt for this invocation is already consumed."
+            )
+        self._require_campaign_checkpoint(checkpoint, operation)
+        return _campaign_facing_result(
+            JournaledMutationDispatcher(self.journal_store).execute(
+                checkpoint=checkpoint,
+                operation=operation,
+                dispatch=dispatch,
+                reconcile=reconcile,
+            )
+        )
+
+    def reconcile_campaign_battle_start(
+        self,
+        *,
+        checkpoint: DailyTaskCheckpoint,
+        operation_id: str,
+        reconcile: Callable[[], MutationReconciliation],
+    ) -> JournaledMutationResult:
+        """Reconcile one consumed Campaign attempt by observation only.
+
+        The callback may reobserve outcome evidence; it cannot send input,
+        the consumed attempt is never dispatched again, and the
+        Campaign-facing result never reports a new dispatch permission.
+        """
+
+        if self.feature_action_kind is not Match3MutationKind.CAMPAIGN_BATTLE_START:
+            raise PermissionError("This mutation scope does not authorize a Campaign battle start.")
+        self.authorize(action_kind=Match3MutationKind.CAMPAIGN_BATTLE_START)
+        self._require_checkpoint_identity(checkpoint)
+        self._require_persisted_checkpoint(checkpoint)
+        intent = next(
+            (item for item in checkpoint.mutation_intents if item.operation_id == operation_id),
+            None,
+        )
+        if intent is None or not is_campaign_battle_start_action(intent.action_kind):
+            raise PermissionError("The requested operation is not a Campaign battle-start attempt.")
+        return _campaign_facing_result(
+            JournaledMutationDispatcher(self.journal_store).reconcile_existing(
+                checkpoint=checkpoint,
+                operation_id=operation_id,
+                reconcile=reconcile,
+            )
+        )
+
+    def _require_campaign_authority(
+        self, authority: CampaignBattleStartAuthority
+    ) -> MutationOperation:
+        """Bind dispatch to the factory-minted authority sealed to this exact scope."""
+
+        from pnc_automation.app.automation.match3.battle_start_authority import (
+            CampaignBattleStartAuthority,
+        )
+
+        if not isinstance(authority, CampaignBattleStartAuthority):
+            raise TypeError(
+                "Campaign battle starts require the factory-minted battle-start authority."
+            )
+        if authority.mutation_boundary is not self:
+            raise PermissionError(
+                "The Campaign battle-start authority belongs to a different mutation scope."
+            )
+        operation = authority.operation()
+        self._require_campaign_operation_identity(operation)
+        return operation
+
+    def _require_campaign_operation_identity(self, operation: MutationOperation) -> None:
+        """Restricts this scope to the exact journaled Campaign battle start."""
+
+        if self.feature_action_kind is not Match3MutationKind.CAMPAIGN_BATTLE_START:
+            raise PermissionError("This mutation scope does not authorize a Campaign battle start.")
+        if operation.quest_id is not None:
+            raise PermissionError(
+                "A Campaign battle-start operation cannot carry a Daily quest identity."
+            )
+        if operation.action_kind is not Match3MutationKind.CAMPAIGN_BATTLE_START:
+            raise PermissionError(
+                "The Campaign battle-start scope does not authorize this action kind."
+            )
+        if operation.diamond_budget != 0:
+            raise PermissionError("Campaign battle-start operations cannot spend diamonds.")
+        if operation.invocation_id is None:
+            raise ValueError("Campaign battle-start operations require their persisted invocation id.")
+        if operation.action_point_reservation is None:
+            raise ValueError("Campaign battle-start operations require their AP reservation.")
+        if not isinstance(operation.target, dict) or not operation.target:
+            raise ValueError("Campaign battle-start operations require their exact typed target.")
+
+    def _require_campaign_checkpoint(
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        operation: MutationOperation,
+    ) -> None:
+        """Validates identity and unresolved state for the one Campaign battle start."""
+
+        self._require_checkpoint_identity(checkpoint)
+        self._require_persisted_checkpoint(checkpoint)
+        unresolved = tuple(
+            intent for intent in checkpoint.mutation_intents
+            if intent.operation_id != operation.operation_id
+            and intent.state is not MutationIntentState.COMMITTED
+        )
+        if unresolved:
+            raise RuntimeError(
+                "An unresolved mutation must be reconciled before a Campaign battle start."
+            )
+        foreign_pending = tuple(
+            entry
+            for entry in self.journal_store.find_pending_workshop_operations(
+                account_id=self.target.account_id,
+                castle=self.target.castle,
+            )
+            if entry.game_reset_id != checkpoint.game_reset_id
+        )
+        if foreign_pending:
+            raise RuntimeError(
+                "An unresolved Workshop operation from an earlier reset must be reconciled "
+                "before a Campaign battle start."
+            )
+        unresolved_campaign = tuple(
+            attempt
+            for attempt in self.journal_store.find_campaign_battle_start_attempts(
+                account_id=self.target.account_id,
+                castle=self.target.castle,
+            )
+            if attempt.intent.state is not MutationIntentState.COMMITTED
+            and attempt.invocation_id != operation.invocation_id
+        )
+        if unresolved_campaign:
+            raise RuntimeError(
+                "An unresolved Campaign battle start must be reconciled before a new attempt."
+            )
+
     def find_pending_workshop_operations(self) -> tuple[PendingWorkshopOperation, ...]:
         """Return this scope's unresolved Workshop operations across reset partitions."""
 
@@ -1146,6 +1324,21 @@ class CoreMutationBoundary:
             ),
             artifact_paths=result.artifact_paths,
         )
+
+
+def _campaign_facing_result(result: JournaledMutationResult) -> JournaledMutationResult:
+    """Never surface a new battle-dispatch permission once the attempt is journaled.
+
+    The generic dispatcher may flag ``retry_permitted`` when the original
+    precondition is reobserved; a journaled Campaign battle start is consumed
+    regardless, so the Campaign-facing result clamps the generic flag off and
+    keeps the unresolved attempt pending clarification. Daily, Building, and
+    Workshop results keep their generic semantics.
+    """
+
+    if not result.retry_permitted:
+        return result
+    return replace(result, retry_permitted=False, pending_clarification=True)
 
 
 def _require_upgrade_policy_state(

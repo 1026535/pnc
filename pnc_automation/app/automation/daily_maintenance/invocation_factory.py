@@ -53,3 +53,23 @@ def generate_workshop_invocation_id(
         f"pet-workshop-run-{game_reset_id}-{account_id}-"
         f"{castle.kingdom}_{castle.castle_name}-{uuid4().hex[:12]}"
     )
+
+
+def generate_match3_invocation_id(
+    *,
+    account_id: str,
+    castle: CastleIdentity,
+    game_reset_id: str,
+) -> str:
+    """Generate one unique durable identity for an authorized match-3 invocation.
+
+    Mirrors the Workshop generator: a fresh id per healthy invocation keeps
+    attempt identity independent of frame fingerprints and maintenance dates,
+    while the consumed-attempt query still covers every reset partition, so a
+    later reset or fresh operation id cannot evade a consumed Campaign start.
+    """
+
+    return sanitize_artifact_segment(
+        f"match3-campaign-{game_reset_id}-{account_id}-"
+        f"{castle.kingdom}_{castle.castle_name}-{uuid4().hex[:12]}"
+    )

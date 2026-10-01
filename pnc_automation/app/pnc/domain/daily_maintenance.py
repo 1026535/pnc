@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.match3 import Match3MutationKind
 from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.domain.pet_workshop import WorkshopMutationKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -251,6 +252,7 @@ class MutationAcknowledgement:
     max_diamond_spend: int | None
     action_kind: str | None = None
     budget_kind: MutationBudgetKind = MutationBudgetKind.COUNTED
+    max_action_points: int | None = None
 
     def __post_init__(self) -> None:
         """Rejects broad or unbounded live acknowledgements."""
@@ -279,6 +281,20 @@ class MutationAcknowledgement:
             raise ValueError("The observed Workshop bar budget requires the pet_workshop.run scope.")
         if workshop and self.max_diamond_spend != 0:
             raise ValueError("Workshop acknowledgements cannot spend diamonds.")
+        campaign_start = self.action_kind == Match3MutationKind.CAMPAIGN_BATTLE_START.value
+        if campaign_start and self.budget_kind is not MutationBudgetKind.COUNTED:
+            raise ValueError("A Campaign battle-start acknowledgement requires a counted budget.")
+        if campaign_start and self.max_mutations != 1:
+            raise ValueError("A Campaign battle-start acknowledgement must authorize exactly one attempt.")
+        if campaign_start and self.max_diamond_spend != 0:
+            raise ValueError("Campaign battle-start acknowledgements cannot spend diamonds.")
+        if campaign_start:
+            if type(self.max_action_points) is not int or self.max_action_points <= 0:
+                raise ValueError(
+                    "Campaign battle-start acknowledgements require a positive AP ceiling."
+                )
+        elif self.max_action_points is not None:
+            raise ValueError("Only Campaign battle-start acknowledgements may carry an AP ceiling.")
         if self.quest_id is not None:
             validate_daily_diamond_limit(self.max_diamond_spend, quest_id=self.quest_id)
         elif self.max_diamond_spend is None or self.max_diamond_spend < 0:
@@ -364,6 +380,35 @@ class MutationIntentState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ActionPointReservation:
+    """Durable action-point reservation bound to one journaled Campaign battle start.
+
+    ``reserved_action_points`` is the exact observed Challenge cost the
+    attempt holds; it is never aliased to diamonds, Workshop energy, or a
+    Daily quest budget. ``released`` is set only by an authoritative
+    no-spend reconciliation, which frees the reservation while the consumed
+    attempt remains journaled and replay stays refused.
+    """
+
+    reserved_action_points: int
+    released: bool = False
+
+    def __post_init__(self) -> None:
+        """Require a positive typed reservation and an explicit release flag."""
+
+        if (
+            isinstance(self.reserved_action_points, bool)
+            or not isinstance(self.reserved_action_points, int)
+            or self.reserved_action_points <= 0
+        ):
+            raise ValueError(
+                "ActionPointReservation.reserved_action_points must be a positive integer."
+            )
+        if not isinstance(self.released, bool):
+            raise TypeError("ActionPointReservation.released must be a boolean.")
+
+
+@dataclass(frozen=True, slots=True)
 class MutationIntent:
     """Represents one individually journaled mutating sub-operation."""
 
@@ -378,6 +423,7 @@ class MutationIntent:
     action_kind: str | None = None
     target: dict[str, Any] | None = None
     invocation_id: str | None = None
+    action_point_reservation: ActionPointReservation | None = None
 
     def __post_init__(self) -> None:
         """Rejects malformed identifiers and overspent premium budgets."""
@@ -398,6 +444,25 @@ class MutationIntent:
             raise TypeError("MutationIntent.target must be a mapping or None.")
         if self.invocation_id is not None and not self.invocation_id.strip():
             raise ValueError("MutationIntent.invocation_id cannot be blank.")
+        if self.action_point_reservation is not None and not isinstance(
+            self.action_point_reservation, ActionPointReservation
+        ):
+            raise TypeError(
+                "MutationIntent.action_point_reservation must be an ActionPointReservation or None."
+            )
+        if self.action_kind == Match3MutationKind.CAMPAIGN_BATTLE_START.value:
+            if self.quest_id is not None:
+                raise ValueError("A Campaign battle-start intent cannot carry a Daily quest identity.")
+            if self.invocation_id is None:
+                raise ValueError("A Campaign battle-start intent requires its invocation id.")
+            if not isinstance(self.target, dict) or not self.target:
+                raise ValueError("A Campaign battle-start intent requires its exact target.")
+            if self.action_point_reservation is None:
+                raise ValueError("A Campaign battle-start intent requires its AP reservation.")
+            if self.diamond_budget != 0 or self.diamonds_spent != 0:
+                raise ValueError("A Campaign battle-start intent cannot carry diamond values.")
+        elif self.action_point_reservation is not None:
+            raise ValueError("Only a Campaign battle-start intent may carry an AP reservation.")
 
 
 @dataclass(frozen=True, slots=True)

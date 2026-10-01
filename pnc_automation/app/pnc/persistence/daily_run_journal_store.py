@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import Lock
@@ -12,6 +13,7 @@ from typing import Any
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
 from pnc_automation.app.pnc.domain.daily_maintenance import (
+    ActionPointReservation,
     DailyQuestId,
     DailyTaskCheckpoint,
     MutationBudgetKind,
@@ -20,6 +22,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     WorkshopInvocationRecord,
 )
 from pnc_automation.app.pnc.domain.feature_actions import (
+    is_campaign_battle_start_action,
     is_workshop_journaled_action,
     normalize_journaled_action_kind,
 )
@@ -65,6 +68,30 @@ class PendingWorkshopOperation:
     @property
     def invocation_id(self) -> str | None:
         """The invocation that journaled this operation, when recorded."""
+
+        return self.intent.invocation_id
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignBattleStartAttempt:
+    """One journaled Campaign battle-start attempt and its original references."""
+
+    journal_path: Path
+    game_reset_id: str
+    account_id: str
+    castle: CastleIdentity
+    checkpoint: DailyTaskCheckpoint
+    intent: MutationIntent
+
+    @property
+    def operation_id(self) -> str:
+        """The durable operation id assigned by its original invocation."""
+
+        return self.intent.operation_id
+
+    @property
+    def invocation_id(self) -> str | None:
+        """The durable invocation identity that journaled this attempt."""
 
         return self.intent.invocation_id
 
@@ -197,6 +224,39 @@ class DailyRunJournalStore:
             return updated
         raise KeyError(f"Mutation operation '{operation_id}' does not exist.")
 
+    def release_intent_action_point_reservation(
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        operation_id: str,
+    ) -> DailyTaskCheckpoint:
+        """Releases one journaled AP reservation on authoritative no-spend proof.
+
+        The consumed attempt record is retained: only the reservation flag
+        changes, so replay remains refused while the held action points are
+        freed. Idempotent for an already-released reservation.
+        """
+
+        intents = list(checkpoint.mutation_intents)
+        for index, intent in enumerate(intents):
+            if intent.operation_id != operation_id:
+                continue
+            if intent.action_point_reservation is None:
+                raise ValueError(
+                    f"Mutation operation '{operation_id}' carries no action-point reservation."
+                )
+            if intent.action_point_reservation.released:
+                return checkpoint
+            intents[index] = replace(
+                intent,
+                action_point_reservation=replace(
+                    intent.action_point_reservation, released=True
+                ),
+            )
+            updated = replace(checkpoint, mutation_intents=tuple(intents))
+            self.save(updated)
+            return updated
+        raise KeyError(f"Mutation operation '{operation_id}' does not exist.")
+
     def mark_completed(self, checkpoint: DailyTaskCheckpoint, quest_id: DailyQuestId) -> DailyTaskCheckpoint:
         """Persists one completed capability idempotently."""
 
@@ -224,19 +284,22 @@ class DailyRunJournalStore:
         self.save(updated)
         return updated
 
-    def find_pending_workshop_operations(
+    def _iter_scoped_checkpoints(
         self,
         *,
         account_id: str,
         castle: CastleIdentity,
-    ) -> tuple[PendingWorkshopOperation, ...]:
-        """Finds unresolved Workshop intents for one castle across every reset partition."""
+    ) -> Iterator[tuple[Path, DailyTaskCheckpoint]]:
+        """Yields each durable checkpoint for one account/castle across reset partitions.
+
+        Malformed journals and identity/path mismatches fail closed so a
+        tampered or unreadable record can never be silently skipped.
+        """
 
         if not self.root.is_dir():
-            return ()
+            return
         account_segment = sanitize_artifact_segment(account_id)
         castle_segment = sanitize_artifact_segment(f"{castle.kingdom}_{castle.castle_name}")
-        pending: list[PendingWorkshopOperation] = []
         for reset_dir in sorted(self.root.iterdir()):
             if not reset_dir.is_dir():
                 continue
@@ -256,6 +319,20 @@ class DailyRunJournalStore:
                     "Daily-maintenance journal identity does not match its path.",
                     path=str(path),
                 )
+            yield path, checkpoint
+
+    def find_pending_workshop_operations(
+        self,
+        *,
+        account_id: str,
+        castle: CastleIdentity,
+    ) -> tuple[PendingWorkshopOperation, ...]:
+        """Finds unresolved Workshop intents for one castle across every reset partition."""
+
+        pending: list[PendingWorkshopOperation] = []
+        for path, checkpoint in self._iter_scoped_checkpoints(
+            account_id=account_id, castle=castle
+        ):
             pending.extend(
                 PendingWorkshopOperation(
                     journal_path=path,
@@ -270,6 +347,46 @@ class DailyRunJournalStore:
                 and intent.state is not MutationIntentState.COMMITTED
             )
         return tuple(pending)
+
+    def find_campaign_battle_start_attempts(
+        self,
+        *,
+        account_id: str,
+        castle: CastleIdentity,
+        invocation_id: str | None = None,
+    ) -> tuple[CampaignBattleStartAttempt, ...]:
+        """Finds journaled Campaign battle-start attempts for one invocation.
+
+        The search covers every reset partition for the exact account/castle,
+        so a fresh operation id or a later reset cannot evade a consumed
+        attempt. ``invocation_id=None`` returns every Campaign attempt for the
+        scope. Campaign intents require their invocation id and AP reservation
+        at decode time, so a malformed matching record fails closed while its
+        journal loads.
+        """
+
+        if invocation_id is not None and (
+            not isinstance(invocation_id, str) or not invocation_id.strip()
+        ):
+            raise ValueError("Campaign battle-start lookups require a nonblank invocation id.")
+        attempts: list[CampaignBattleStartAttempt] = []
+        for path, checkpoint in self._iter_scoped_checkpoints(
+            account_id=account_id, castle=castle
+        ):
+            attempts.extend(
+                CampaignBattleStartAttempt(
+                    journal_path=path,
+                    game_reset_id=checkpoint.game_reset_id,
+                    account_id=account_id,
+                    castle=checkpoint.castle,
+                    checkpoint=checkpoint,
+                    intent=intent,
+                )
+                for intent in checkpoint.mutation_intents
+                if is_campaign_battle_start_action(intent.action_kind)
+                and (invocation_id is None or intent.invocation_id == invocation_id)
+            )
+        return tuple(attempts)
 
     def register_workshop_invocation(
         self,
@@ -355,6 +472,18 @@ def _serialize_checkpoint(checkpoint: DailyTaskCheckpoint) -> dict[str, Any]:
                 "action_kind": intent.action_kind,
                 "target": intent.target,
                 "invocation_id": intent.invocation_id,
+                **(
+                    {
+                        "action_point_reservation": {
+                            "reserved_action_points": (
+                                intent.action_point_reservation.reserved_action_points
+                            ),
+                            "released": intent.action_point_reservation.released,
+                        }
+                    }
+                    if intent.action_point_reservation is not None
+                    else {}
+                ),
             }
             for intent in checkpoint.mutation_intents
         ],
@@ -418,6 +547,9 @@ def _deserialize_checkpoint(payload: Any) -> DailyTaskCheckpoint:
                 ),
                 target=(None if item.get("target") is None else dict(item["target"])),
                 invocation_id=(None if schema_version == 1 else item.get("invocation_id")),
+                action_point_reservation=_deserialize_action_point_reservation(
+                    item.get("action_point_reservation")
+                ),
             )
             for item in intents_raw
         ),
@@ -428,6 +560,19 @@ def _deserialize_checkpoint(payload: Any) -> DailyTaskCheckpoint:
         workshop_invocations=(
             () if schema_version == 1 else _deserialize_workshop_invocations(payload)
         ),
+    )
+
+
+def _deserialize_action_point_reservation(payload: Any) -> ActionPointReservation | None:
+    """Builds the durable AP reservation with fail-closed validation."""
+
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        raise TypeError("Journal action_point_reservation must be a mapping.")
+    return ActionPointReservation(
+        reserved_action_points=payload["reserved_action_points"],
+        released=payload.get("released", False),
     )
 
 

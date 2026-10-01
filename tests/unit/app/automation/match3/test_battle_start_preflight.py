@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 from pnc_automation.app.automation.match3 import (
     FORMATION_PREPARATION_LAYOUT_ID,
@@ -505,6 +506,46 @@ class StartBudgetTests(unittest.TestCase):
             Match3StartBudget(max_action_points="12", max_attempts=1)  # type: ignore[arg-type]
         with self.assertRaises(TypeError):
             Match3StartBudget(max_action_points=12, max_attempts=True)
+
+
+class ObservedActionPointsTests(unittest.TestCase):
+    """The source-frame observed AP must cover the observed Challenge cost."""
+
+    def setUp(self) -> None:
+        self.proof, self.destination = _valid_transition()
+        assert self.destination.frame_ref is not None
+        self.continuation = _continuation(self.destination.frame_ref)
+        self.budget = Match3StartBudget(max_action_points=12, max_attempts=1)
+
+    def _preflight(self) -> Match3StartPreflight:
+        return require_match3_start_preflight(
+            transition=self.proof,
+            formation=self.destination,
+            continuation=self.continuation,
+            budget=self.budget,
+            account_id=_ACCOUNT_ID,
+            castle=_CASTLE,
+        )
+
+    def test_insufficient_observed_action_points_fail_closed(self) -> None:
+        """Observed AP below the Challenge cost cannot qualify a start proposal."""
+
+        forged = replace(self.proof.stage_detail, action_points=5)
+        with patch.object(FormationPreparationProof, "stage_detail", forged):
+            with self.assertRaises(Match3StartPreflightError) as error:
+                self._preflight()
+        self.assertEqual(error.exception.details["check"], "insufficient_ap")
+        self.assertEqual(error.exception.details["action_points"], 5)
+        self.assertEqual(error.exception.details["challenge_cost"], 12)
+
+    def test_missing_observed_action_points_fail_closed(self) -> None:
+        """A source frame without an observed AP fact cannot qualify a proposal."""
+
+        forged = replace(self.proof.stage_detail, action_points=None)
+        with patch.object(FormationPreparationProof, "stage_detail", forged):
+            with self.assertRaises(Match3StartPreflightError) as error:
+                self._preflight()
+        self.assertEqual(error.exception.details["check"], "action_points")
 
 
 class PreflightInputTests(unittest.TestCase):

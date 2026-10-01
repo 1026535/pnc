@@ -155,6 +155,11 @@ class Match3StartPreflight:
             raise ValueError("The retained stage detail must observe the Challenge cost.")
         if self.budget.max_action_points < cost:
             raise ValueError("The retained budget must cover at least one observed Challenge cost.")
+        action_points = self.transition.stage_detail.action_points
+        if action_points is None or action_points < cost:
+            raise ValueError(
+                "The retained stage detail must observe enough action points for the Challenge cost."
+            )
 
     @property
     def request(self) -> Match3Request:
@@ -221,6 +226,7 @@ def require_match3_start_preflight(
     _require_formation_identity(formation, transition, account_id, castle)
     _require_continuation_off(continuation, formation)
     _require_budget(budget, transition.stage_detail)
+    _require_action_points(transition.stage_detail)
     assert formation.frame_ref is not None
     return Match3StartPreflight(
         transition=transition,
@@ -317,5 +323,23 @@ def _require_budget(budget: Match3StartBudget, detail: CampaignStageDetail) -> N
             "The proposed ceiling must cover the observed Challenge cost.",
             check="budget_ap",
             max_action_points=budget.max_action_points,
+            challenge_cost=detail.challenge_cost,
+        )
+
+
+def _require_action_points(detail: CampaignStageDetail) -> None:
+    """Require the source frame to have observed enough action points for one Challenge."""
+
+    assert detail.challenge_cost is not None
+    if detail.action_points is None:
+        raise Match3StartPreflightError(
+            "The stage detail must observe current action points.",
+            check="action_points",
+        )
+    if detail.action_points < detail.challenge_cost:
+        raise Match3StartPreflightError(
+            "Observed action points must cover the observed Challenge cost.",
+            check="insufficient_ap",
+            action_points=detail.action_points,
             challenge_cost=detail.challenge_cost,
         )

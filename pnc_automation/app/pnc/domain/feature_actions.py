@@ -1,22 +1,24 @@
 """Canonical typed action-kind sets shared by authority, specs, and journals.
 
 One feature scope (``FeatureActionKind``) authorizes a bounded workflow such as
-one building action or one ``pet_workshop.run`` invocation. A journaled
-operation carries one typed sub-action (``JournaledActionKind``) — a building
-mutation kind or a Workshop intent kind — never the feature scope itself and
-never an arbitrary string.
+one building action, one ``pet_workshop.run`` invocation, or one Campaign
+battle start. A journaled operation carries one typed sub-action
+(``JournaledActionKind``) — a building mutation kind, a Workshop intent kind,
+or the Campaign battle start — never the feature scope itself and never an
+arbitrary string.
 """
 
 from __future__ import annotations
 
 from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
+from pnc_automation.app.pnc.domain.match3 import Match3MutationKind
 from pnc_automation.app.pnc.domain.pet_workshop import (
     WorkshopIntentKind,
     WorkshopMutationKind,
 )
 
-FeatureActionKind = BuildingMutationKind | WorkshopMutationKind
-JournaledActionKind = BuildingMutationKind | WorkshopIntentKind
+FeatureActionKind = BuildingMutationKind | WorkshopMutationKind | Match3MutationKind
+JournaledActionKind = BuildingMutationKind | WorkshopIntentKind | Match3MutationKind
 
 WORKSHOP_MUTATION_INTENT_KINDS = frozenset(
     {
@@ -34,8 +36,8 @@ WORKSHOP_MUTATION_INTENT_KINDS = frozenset(
 must not be journaled as mutation intents; the scope covers only this set.
 """
 
-_FEATURE_ACTION_KIND_TYPES = (BuildingMutationKind, WorkshopMutationKind)
-_JOURNALED_ACTION_KIND_TYPES = (BuildingMutationKind, WorkshopIntentKind)
+_FEATURE_ACTION_KIND_TYPES = (BuildingMutationKind, WorkshopMutationKind, Match3MutationKind)
+_JOURNALED_ACTION_KIND_TYPES = (BuildingMutationKind, WorkshopIntentKind, Match3MutationKind)
 
 
 def normalize_feature_action_kind(value: str) -> FeatureActionKind:
@@ -70,3 +72,9 @@ def is_workshop_journaled_action(value: str | None) -> bool:
     except ValueError:
         return False
     return True
+
+
+def is_campaign_battle_start_action(value: str | None) -> bool:
+    """Return whether a stored intent action kind is the Campaign battle start."""
+
+    return value == Match3MutationKind.CAMPAIGN_BATTLE_START.value
