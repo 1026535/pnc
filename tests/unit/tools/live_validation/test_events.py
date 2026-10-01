@@ -56,8 +56,9 @@ class DispatchCollectorTests(unittest.TestCase):
 
     def test_receipt_event_id_matches_identity_within_the_case(self):
         collector = DispatchCollector()
-        receipt = tap_receipt(home_observation())
-        other = tap_receipt(home_observation())
+        source = home_observation()
+        receipt = tap_receipt(source)
+        other = tap_receipt(home_observation(), input_sequence=8)
         with collector.phase(AttributionPhase.CASE, case_id="v44_bank_body_menu"):
             collector.append(other)
             collector.append(receipt)
@@ -65,9 +66,31 @@ class DispatchCollectorTests(unittest.TestCase):
             "in-0002",
             collector.receipt_event_id(receipt, case_id="v44_bank_body_menu"),
         )
+        # A distinct object carrying the same physical identity still binds.
+        equal_but_distinct = tap_receipt(source)
+        self.assertIsNot(receipt, equal_but_distinct)
+        self.assertEqual(
+            "in-0002",
+            collector.receipt_event_id(
+                equal_but_distinct, case_id="v44_bank_body_menu"
+            ),
+        )
         self.assertIsNone(
             collector.receipt_event_id(receipt, case_id="v44_watchtower_body_menu")
         )
+
+    def test_duplicate_physical_identity_records_an_integrity_error(self):
+        collector = DispatchCollector()
+        source = home_observation()
+        with collector.phase(AttributionPhase.CASE, case_id="v44_bank_body_menu"):
+            collector.append(tap_receipt(source))
+            collector.append(tap_receipt(source))
+        self.assertEqual(1, len(collector.integrity_errors))
+        self.assertIn("duplicate physical input identity", collector.integrity_errors[0])
+        with self.assertRaisesRegex(RuntimeError, "share physical key"):
+            collector.receipt_event_id(
+                tap_receipt(source), case_id="v44_bank_body_menu"
+            )
 
 
 if __name__ == "__main__":

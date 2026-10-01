@@ -81,7 +81,8 @@ class DevelopmentalControlTests(unittest.TestCase):
             frame_ref=self._frame(2, 1),
         )
         self.scope = DevelopmentalControlScope(
-            assignment_id="assignment", case_id="bank_menu", case_spec_ref="frozen-case",
+            assignment_id="assignment", case_id="bank_menu", body_case_id="bank_menu",
+            case_spec_ref="frozen-case",
             purpose=DevelopmentalCasePurpose.CONTROL_DISCOVERY,
             operation_id="bank_menu_discovery", released_action_id="open_bank_menu",
             control_name="task_owned_menu_button", target=HomeCityObjectId.BANK,
@@ -133,6 +134,7 @@ class DevelopmentalControlTests(unittest.TestCase):
     def test_wrong_case_body_or_visual_proof_refuses_without_input(self) -> None:
         cases = (
             (replace(self.scope, case_id="other"), self.proof, self.current),
+            (replace(self.scope, body_case_id="other"), self.proof, self.current),
             (replace(self.scope, home_city_slot=object()), self.proof, self.current),
             (replace(self.scope, read_only=True), self.proof, self.current),
             (replace(self.scope, purpose=DevelopmentalCasePurpose.CAPTURE_ONLY), self.proof, self.current),

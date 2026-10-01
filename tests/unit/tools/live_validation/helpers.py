@@ -21,13 +21,19 @@ CANDIDATE_SHA = "d6a877ecc38538714385d27e58be0573f991bf8a"
 ENTRY_SHA = "0" * 64
 
 
-def frame_ref(sequence: int = 1, *, session_id: str = "sess-test") -> FrameRef:
+def frame_ref(
+    sequence: int = 1,
+    *,
+    session_id: str = "sess-test",
+    input_sequence: int | None = None,
+) -> FrameRef:
     return FrameRef(
         session_id=session_id,
         session_epoch=1,
         capture_sequence=sequence,
-        input_sequence=sequence - 1,
+        input_sequence=sequence - 1 if input_sequence is None else input_sequence,
         captured_at=datetime(2026, 10, 1, tzinfo=UTC),
+        captured_monotonic=float(sequence),
     )
 
 
@@ -44,6 +50,7 @@ def home_observation(
     sequence: int = 1,
     screen_type: ScreenType = ScreenType.PNC_HOME_CITY,
     blocked: bool = False,
+    input_sequence: int | None = None,
 ) -> Observation:
     return Observation(
         screen_type=screen_type,
@@ -52,7 +59,7 @@ def home_observation(
         artifact_path=artifact_path,
         image_size=(540, 960),
         frame_fingerprint=f"fp-{sequence}",
-        frame_ref=frame_ref(sequence),
+        frame_ref=frame_ref(sequence, input_sequence=input_sequence),
     )
 
 

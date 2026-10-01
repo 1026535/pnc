@@ -62,6 +62,7 @@ class LogicalAttemptJournalTests(unittest.TestCase):
             second, _ = journal.begin(
                 case_id="c1", control_name="x", operation_id="op",
                 number=2, limit=2, source_frame={},
+                intent="body_entry",
             )
             journal.finish(first, status=AttemptStatus.REFUSED, detail="no")
             journal.close()
@@ -70,6 +71,7 @@ class LogicalAttemptJournalTests(unittest.TestCase):
             self.assertEqual(1, len(pending))
             self.assertEqual(second, pending[0].attempt_id)
             self.assertEqual(2, pending[0].number)
+            self.assertEqual("body_entry", pending[0].intent)
 
     def test_reopening_continues_the_sequence(self):
         with tempfile.TemporaryDirectory() as raw:

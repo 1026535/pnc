@@ -19,6 +19,7 @@ from typing import Any
 SCHEMA_VERSION = 3
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
+_SAFE_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 _EXPECTED_CLEANUP_KEYS = frozenset({
     "session_closed",
@@ -26,6 +27,31 @@ _EXPECTED_CLEANUP_KEYS = frozenset({
     "observer_restored",
     "instance_preserved",
 })
+
+_ALLOWED_FIELDS = frozenset({
+    "schema_version",
+    "assignment_id",
+    "run_id",
+    "candidate_sha",
+    "source_root",
+    "import_root",
+    "report_root",
+    "entry_point",
+    "entry_sha256",
+    "target_account_id",
+    "target_castle_ref",
+    "target_instance_id",
+    "target_role",
+    "selected_cases",
+    "resource_allowance_ref",
+    "reservation_disposition",
+    "expected_cleanup",
+    "offline_evidence",
+    "config_path",
+    "read_only",
+})
+_ALLOWED_SELECTION_KEYS = frozenset({"case_id", "params"})
+_ALLOWED_EVIDENCE_KEYS = frozenset({"path", "sha256", "description"})
 
 
 class AssignmentBindingError(ValueError):
@@ -71,6 +97,7 @@ class AssignmentBinding:
     expected_cleanup: dict[str, bool]
     offline_evidence: tuple[OfflineEvidenceRef, ...]
     config_path: Path | None
+    read_only: bool
 
 
 def _require(condition: bool, message: str) -> None:
@@ -97,6 +124,8 @@ def load_assignment_binding(path: Path) -> AssignmentBinding:
     except (OSError, json.JSONDecodeError) as error:
         raise AssignmentBindingError(f"Assignment cannot be read as JSON: {error}") from error
     _require(isinstance(payload, dict), "Assignment document must be a JSON object.")
+    unknown = set(payload) - _ALLOWED_FIELDS
+    _require(not unknown, f"Assignment has unknown fields: {sorted(unknown)}.")
     _require(
         payload.get("schema_version") == SCHEMA_VERSION,
         f"Assignment schema_version must be {SCHEMA_VERSION}.",
@@ -107,6 +136,8 @@ def load_assignment_binding(path: Path) -> AssignmentBinding:
     selected: list[CaseSelection] = []
     for index, entry in enumerate(selected_raw):
         _require(isinstance(entry, dict), f"selected_cases[{index}] must be an object.")
+        extra = set(entry) - _ALLOWED_SELECTION_KEYS
+        _require(not extra, f"selected_cases[{index}] has unknown fields: {sorted(extra)}.")
         case_id = entry.get("case_id")
         params = entry.get("params", {})
         _require(isinstance(case_id, str) and case_id.strip(), f"selected_cases[{index}].case_id is required.")
@@ -120,6 +151,8 @@ def load_assignment_binding(path: Path) -> AssignmentBinding:
     offline_evidence: list[OfflineEvidenceRef] = []
     for index, entry in enumerate(evidence_raw):
         _require(isinstance(entry, dict), f"offline_evidence[{index}] must be an object.")
+        extra = set(entry) - _ALLOWED_EVIDENCE_KEYS
+        _require(not extra, f"offline_evidence[{index}] has unknown fields: {sorted(extra)}.")
         ref_path = entry.get("path")
         ref_sha = entry.get("sha256")
         description = entry.get("description", "")
@@ -156,10 +189,19 @@ def load_assignment_binding(path: Path) -> AssignmentBinding:
         config_path_raw is None or (isinstance(config_path_raw, str) and config_path_raw.strip()),
         "Assignment config_path must be a nonempty string when present.",
     )
+    read_only = payload.get("read_only", False)
+    _require(isinstance(read_only, bool), "Assignment read_only must be a boolean when present.")
+    assignment_id = _require_str(payload, "assignment_id")
+    run_id = _require_str(payload, "run_id")
+    for key, token in (("assignment_id", assignment_id), ("run_id", run_id)):
+        _require(
+            _SAFE_TOKEN.fullmatch(token) is not None and ".." not in token,
+            f"Assignment {key} must be a path-safe token (no separators or drive letters).",
+        )
 
     return AssignmentBinding(
-        assignment_id=_require_str(payload, "assignment_id"),
-        run_id=_require_str(payload, "run_id"),
+        assignment_id=assignment_id,
+        run_id=run_id,
         candidate_sha=candidate_sha,
         source_root=_require_path(payload, "source_root"),
         import_root=_require_path(payload, "import_root"),
@@ -180,6 +222,7 @@ def load_assignment_binding(path: Path) -> AssignmentBinding:
         expected_cleanup=expected_cleanup,
         offline_evidence=tuple(offline_evidence),
         config_path=None if config_path_raw is None else Path(config_path_raw),
+        read_only=read_only,
     )
 
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +19,9 @@ from tests.unit.tools.live_validation.helpers import (
 )
 from tests.unit.tools.live_validation.test_evidence import _evidence
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_ENTRY = _REPO_ROOT / "tools" / "run_v44_live_cases.py"
+
 
 def _write_evidence_file(tmp: Path) -> Path:
     path = tmp / "reports" / "v44-test-001-run1" / "live_evidence.json"
@@ -24,6 +29,18 @@ def _write_evidence_file(tmp: Path) -> Path:
 
 
 class RunV44LiveCasesCliTests(unittest.TestCase):
+    def test_direct_launch_help(self):
+        """QR1: the tracked entry boots standalone and lists its subcommands."""
+        completed = subprocess.run(
+            [sys.executable, str(_ENTRY), "--help"],
+            capture_output=True,
+            text=True,
+            cwd=_REPO_ROOT,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        for command in ("run", "validate", "inspect-v2", "finalize", "example-assignment"):
+            self.assertIn(command, completed.stdout)
+
     def test_example_assignment_lists_every_frozen_case(self):
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "assignment.json"
@@ -67,6 +84,22 @@ class RunV44LiveCasesCliTests(unittest.TestCase):
                 )
             )
         self.assertEqual(0, code)
+
+    def test_finalize_seeds_pending_review_overlay(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            evidence_path = _write_evidence_file(tmp)
+            code = cli_main(("finalize", "--run-dir", str(evidence_path.parent)))
+            overlay = json.loads(
+                (evidence_path.parent / "finalization.json").read_text(encoding="utf-8")
+            )
+        self.assertEqual(0, code)
+        self.assertEqual("pending_tester_review", overlay["review_state"])
+
+    def test_finalize_refuses_when_no_evidence_exists(self):
+        with tempfile.TemporaryDirectory() as raw:
+            code = cli_main(("finalize", "--run-dir", raw))
+        self.assertEqual(2, code)
 
 
 if __name__ == "__main__":

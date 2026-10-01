@@ -33,6 +33,7 @@ class AnnotationRequest:
     request_id: str
     case_id: str
     control_name: str
+    foreground_target: str
     artifact_path: Path
     artifact_sha256: str
     frame_fingerprint: str
@@ -65,7 +66,12 @@ class AnnotationExchange:
         self._issued = 0
 
     def prepare(
-        self, *, case_id: str, control_name: str, observation: Observation
+        self,
+        *,
+        case_id: str,
+        control_name: str,
+        foreground_target: HomeCityObjectId,
+        observation: Observation,
     ) -> AnnotationRequest:
         """Writes one request file bound to the current persisted frame."""
 
@@ -85,6 +91,7 @@ class AnnotationExchange:
             request_id=request_id,
             case_id=case_id,
             control_name=control_name,
+            foreground_target=foreground_target.value,
             artifact_path=Path(observation.artifact_path),
             artifact_sha256=sha256_file(Path(observation.artifact_path)),
             frame_fingerprint=observation.frame_fingerprint,
@@ -101,6 +108,7 @@ class AnnotationExchange:
                     "request_id": request.request_id,
                     "case_id": request.case_id,
                     "control_name": request.control_name,
+                    "foreground_target": request.foreground_target,
                     "artifact_path": str(request.artifact_path),
                     "artifact_sha256": request.artifact_sha256,
                     "frame_fingerprint": request.frame_fingerprint,
@@ -109,9 +117,10 @@ class AnnotationExchange:
                     "frame": request.frame,
                     "issued_at": request.issued_at.isoformat(),
                     "instructions": (
-                        "Write the sibling .response.json with control_name, "
-                        "task_owned_foreground, visual_reason, bounds {x,y,width,height}, "
-                        "action_point {x,y}, and intended_effect."
+                        "Write the sibling .response.json echoing request_id, case_id, "
+                        "control_name, foreground_target, artifact_path, artifact_sha256, "
+                        "and frame exactly, plus task_owned_foreground, visual_reason, "
+                        "bounds {x,y,width,height}, action_point {x,y}, and intended_effect."
                     ),
                 },
                 indent=2,
@@ -152,7 +161,13 @@ class AnnotationExchange:
         *,
         foreground_target: HomeCityObjectId,
     ) -> MeasuredControlProof | None:
-        """Binds the tester's attestation to the request's exact frame."""
+        """Binds the tester's attestation to the request's exact frame.
+
+        Every provenance field must echo the request — request id, case,
+        control, target, artifact path and hash, and the full frame identity —
+        so a response written for a different frame, control, or request is
+        rejected instead of silently authorizing this input.
+        """
 
         try:
             payload = json.loads(request.response_path.read_text(encoding="utf-8"))
@@ -160,16 +175,30 @@ class AnnotationExchange:
             return None
         if not isinstance(payload, dict):
             return None
+        if payload.get("request_id") != request.request_id:
+            return None
+        if payload.get("case_id") != request.case_id:
+            return None
         if payload.get("control_name") != request.control_name:
             return None
-        if payload.get("artifact_sha256") not in (None, request.artifact_sha256):
+        if payload.get("foreground_target") != request.foreground_target:
+            return None
+        if payload.get("artifact_sha256") != request.artifact_sha256:
+            return None
+        artifact_path = payload.get("artifact_path")
+        if not isinstance(artifact_path, str):
+            return None
+        try:
+            if Path(artifact_path).resolve() != request.artifact_path.resolve():
+                return None
+        except OSError:
             return None
         frame = payload.get("frame")
-        if isinstance(frame, dict):
-            required = frame_ref_dict(observation.frame_ref)
-            for key in ("session_id", "session_epoch", "capture_sequence", "input_sequence"):
-                if frame.get(key) != required[key]:
-                    return None
+        if not isinstance(frame, dict):
+            return None
+        required = frame_ref_dict(observation.frame_ref)
+        if any(frame.get(key) != required[key] for key in required):
+            return None
         bounds_raw = payload.get("bounds")
         point_raw = payload.get("action_point")
         if not isinstance(bounds_raw, dict) or not isinstance(point_raw, dict):
@@ -199,8 +228,6 @@ class AnnotationExchange:
         try:
             intended_effect = WorkflowEffect(str(payload.get("intended_effect")))
         except ValueError:
-            return None
-        if payload.get("foreground_target") not in (None, foreground_target.value):
             return None
         if (
             observation.frame_ref is None

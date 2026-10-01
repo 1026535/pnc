@@ -25,11 +25,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
 
-from tools._script_bootstrap import ensure_repo_root_on_path
+from _script_bootstrap import ensure_repo_root_on_path
 
 ensure_repo_root_on_path()
 
@@ -40,11 +42,14 @@ from tools.live_validation.binding import (
     load_assignment_binding,
 )
 from tools.live_validation.cases import CASE_REGISTRY
+from tools.live_validation.finalize import FinalizationError, finalize_run
 from tools.live_validation.runner import (
     LiveCaseRunner,
     LiveConnection,
     PreflightRefusal,
     RunnerDeps,
+    admit_reservation,
+    compute_execution_identity,
     git_source_probe,
 )
 from tools.live_validation.v2 import inspect_report, inspect_v2_evidence
@@ -90,6 +95,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument("--result", type=Path, required=True)
 
+    finalize = subparsers.add_parser(
+        "finalize",
+        help="Refresh a run's finalization.json with tester annotations.",
+    )
+    finalize.add_argument(
+        "--run-dir", type=Path, required=True, help="Run directory holding live_evidence.json."
+    )
+    finalize.add_argument(
+        "--annotations",
+        type=Path,
+        default=None,
+        help="Tester annotation JSON; omit to re-seed pending review.",
+    )
+
     example = subparsers.add_parser(
         "example-assignment", help="Write an assignment JSON template."
     )
@@ -104,6 +123,9 @@ def _real_connection(
 
     from pnc_automation.app.entrypoints.app import build_application_runner
     from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+    from pnc_automation.bluestacks_management.instance_reservation import (
+        RESERVATION_RECEIPT_ENV,
+    )
     from pnc_automation.core.config.host import LiveAutomationRole
     from pnc_automation.core.infra.emulator.session import (
         BlueStacksSessionCleanupPolicy,
@@ -129,11 +151,12 @@ def _real_connection(
     statuses = script_runner.instance_lease_registry.reservation_status(
         (instance.display_name,)
     )
-    status = statuses[0]
-    if status.reservation_state == "active":
-        raise PreflightRefusal((
-            f"instance '{instance.display_name}' holds an active reservation; defer to it.",
-        ))
+    receipt_raw = os.environ.get(RESERVATION_RECEIPT_ENV)
+    admit_reservation(
+        statuses[0],
+        receipt_path=Path(receipt_raw) if receipt_raw else None,
+        renew=script_runner.instance_lease_registry.renew_reservation,
+    )
 
     bundle = script_runner.reserve_accounts((account.id,))
     try:
@@ -171,6 +194,7 @@ def _command_run(args: argparse.Namespace) -> int:
             binding=binding, run_dir=run_dir, observer=observer, config_path=config_path
         ),
         annotation_factory=annotation_factory,
+        execution_identity=lambda: compute_execution_identity(Path(__file__)),
     )
     evidence, path = LiveCaseRunner(binding, deps).run()
     counts = {result.case_id: result.status.value for result in evidence.case_results}
@@ -204,6 +228,26 @@ def _command_inspect_v2(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_finalize(args: argparse.Namespace) -> int:
+    finalization = finalize_run(
+        args.run_dir, annotations_path=args.annotations,
+        now=datetime.now(UTC),
+    )
+    print(
+        json.dumps(
+            {
+                "finalization": str(args.run_dir / "finalization.json"),
+                "review_state": finalization.review_state,
+                "incident_annotations": len(finalization.incident_annotations),
+                "resource_actions": len(finalization.resource_actions),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def _command_example_assignment(args: argparse.Namespace) -> int:
     example = {
         "schema_version": 3,
@@ -233,6 +277,7 @@ def _command_example_assignment(args: argparse.Namespace) -> int:
         },
         "offline_evidence": [],
         "config_path": None,
+        "read_only": False,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
@@ -251,9 +296,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _command_validate(args)
         if args.command == "inspect-v2":
             return _command_inspect_v2(args)
+        if args.command == "finalize":
+            return _command_finalize(args)
         return _command_example_assignment(args)
     except AssignmentBindingError as error:
         print(f"assignment refused: {error}", file=sys.stderr)
+        return 2
+    except FinalizationError as error:
+        print(f"finalization refused: {error}", file=sys.stderr)
         return 2
     except PreflightRefusal as error:
         print(f"preflight refused: {error}", file=sys.stderr)

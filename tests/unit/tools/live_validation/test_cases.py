@@ -17,6 +17,7 @@ from tools.live_validation.cases import (
     CaseSpec,
     frozen_case_ids,
     require_case,
+    validate_selected_order,
 )
 
 
@@ -35,7 +36,33 @@ class CaseRegistryTests(unittest.TestCase):
     def test_every_case_uses_the_body_entry_operation(self):
         for spec in CASE_REGISTRY.values():
             self.assertEqual(BODY_ENTRY_OPERATION_ID, spec.operation_id)
-            self.assertIn(CaseGate.GUARDED_HOME_CITY, spec.required_preconditions)
+            self.assertTrue(spec.required_postconditions)
+        for spec in CASE_REGISTRY.values():
+            if spec.purpose is CasePurpose.DISCOVERY:
+                self.assertIn(
+                    CaseGate.RAW_FOLLOW_UP_CAPTURED, spec.required_postconditions
+                )
+
+    def test_discovery_cases_own_their_body_entry(self):
+        for spec in CASE_REGISTRY.values():
+            if spec.purpose is CasePurpose.DISCOVERY:
+                self.assertEqual(spec.case_id, spec.body_case_id)
+                self.assertIn(
+                    CaseGate.GUARDED_HOME_CITY, spec.required_preconditions
+                )
+
+    def test_control_cases_depend_on_a_retained_body_context(self):
+        for spec in CASE_REGISTRY.values():
+            if spec.purpose is CasePurpose.DEVELOPMENT_VALIDATION:
+                owner = CASE_REGISTRY[spec.body_case_id]
+                self.assertIs(CasePurpose.DISCOVERY, owner.purpose)
+                self.assertEqual(owner.target, spec.target)
+                self.assertIn(
+                    CaseGate.RETAINED_BODY_CONTEXT, spec.required_preconditions
+                )
+                self.assertIn(
+                    CaseGate.GUARDED_HOME_CITY, spec.required_postconditions
+                )
 
     def test_discovery_cases_have_no_control(self):
         for spec in CASE_REGISTRY.values():
@@ -71,6 +98,7 @@ class CaseRegistryTests(unittest.TestCase):
                 control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                 allowed_source_screens=frozenset(),
                 max_control_attempts=0,
+                body_case_id="bad",
                 required_preconditions=frozenset(),
                 required_postconditions=frozenset(),
             )
@@ -86,6 +114,7 @@ class CaseRegistryTests(unittest.TestCase):
             released_action_id="x",
             control_name="return_home",
             control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+            body_case_id="v44_bank_body_menu",
             required_preconditions=frozenset(),
             required_postconditions=frozenset(),
         )
@@ -93,6 +122,32 @@ class CaseRegistryTests(unittest.TestCase):
             CaseSpec(**base, allowed_source_screens=frozenset(), max_control_attempts=1)
         with self.assertRaises(ValueError):
             CaseSpec(**base, allowed_source_screens=frozenset({"x"}), max_control_attempts=0)
+
+    def test_selected_order_requires_the_body_case_first(self):
+        validate_selected_order(["v44_bank_body_menu", "v44_bank_return_home"])
+        with self.assertRaises(KeyError):
+            validate_selected_order(["v44_bank_return_home", "v44_bank_body_menu"])
+        with self.assertRaises(KeyError):
+            validate_selected_order(["v44_bank_return_home"])
+
+    def test_discovery_case_may_not_delegate_its_body_entry(self):
+        with self.assertRaises(ValueError):
+            CaseSpec(
+                case_id="bad",
+                purpose=CasePurpose.DISCOVERY,
+                target=next(iter(CASE_REGISTRY.values())).target,
+                home_city_slot=None,
+                operation_id=BODY_ENTRY_OPERATION_ID,
+                entry_effect=WorkflowEffect.READ_ONLY,
+                released_action_id="x",
+                control_name=None,
+                control_effect=None,
+                allowed_source_screens=frozenset(),
+                max_control_attempts=0,
+                body_case_id="v44_bank_body_menu",
+                required_preconditions=frozenset(),
+                required_postconditions=frozenset(),
+            )
 
     def test_require_case_rejects_unreleased_id(self):
         with self.assertRaises(KeyError):

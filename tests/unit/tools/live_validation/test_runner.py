@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from pnc_automation.app.automation.engine.developmental_control import (
     DevelopmentalControlResult,
@@ -21,11 +22,13 @@ from tools.live_validation.binding import load_assignment_binding
 from tools.live_validation.evidence import CaseStatus
 from tools.live_validation.journal import pending_attempts, read_journal
 from tools.live_validation.runner import (
+    ExecutionIdentity,
     LiveCaseRunner,
     LiveConnection,
     PreflightRefusal,
     RunnerDeps,
     SourceProbe,
+    admit_reservation,
 )
 from tools.live_validation.validate import validate_live_evidence
 
@@ -60,29 +63,43 @@ class _FakeRuntime:
 
 
 class _FakeCore:
-    """Satisfies the runner's runtime seam without any emulator."""
+    """Stateful fake: current screen and input sequence model a real session."""
 
     def __init__(self, observer, run_dir: Path, *, entry_error=None,
-                 post_entry_screen: ScreenType = ScreenType.UNKNOWN,
+                 post_entry_screens: dict | None = None,
                  control_follow_up_screen: ScreenType = ScreenType.PNC_HOME_CITY) -> None:
         self._observer = observer
         self._dir = run_dir
         self._entry_error = entry_error
-        self._post_entry_screen = post_entry_screen
+        self._post_entry_screens = post_entry_screens or {}
         self._control_follow_up_screen = control_follow_up_screen
+        self._screen = ScreenType.PNC_HOME_CITY
+        self._input_seq = 0
         self.executor = _FakeExecutor()
         self.runtime = _FakeRuntime(self.executor)
         self._seq = 0
         self.closed = False
+        self.entry_calls = []
         self.control_calls = []
 
     def _frame(self, name: str, screen: ScreenType):
         self._seq += 1
         path = write_frame_file(self._dir / "frames", f"{self._seq:03d}-{name}.png")
-        return home_observation(artifact_path=path, sequence=self._seq, screen_type=screen)
+        return home_observation(
+            artifact_path=path,
+            sequence=self._seq,
+            screen_type=screen,
+            input_sequence=self._input_seq,
+        )
+
+    def _send_tap(self, source):
+        self._input_seq += 1
+        receipt = tap_receipt(source, input_sequence=self._input_seq)
+        self._observer(receipt)
+        return receipt
 
     def capture_once(self, label: str, *, include_content: bool = False, request=None):
-        return self._frame(label, ScreenType.PNC_HOME_CITY)
+        return self._frame(label, self._screen)
 
     def preflight_active_castle_identity(self):
         return CastleIdentity(kingdom="k1", castle_name="Castle")
@@ -92,21 +109,25 @@ class _FakeCore:
     ):
         if self._entry_error is not None:
             raise self._entry_error
+        self.entry_calls.append(target)
         source = self._frame("entry-src", ScreenType.PNC_HOME_CITY)
         action = TapSpatialObjectAction(
             target_point=(270, 520),
             reason="developmental_building_body_entry",
         )
         on_body_prepared(source, action)
-        self._observer(tap_receipt(source))
-        return source, action, self._frame("entry-follow", self._post_entry_screen)
+        self._send_tap(source)
+        self._screen = self._post_entry_screens.get(target, ScreenType.UNKNOWN)
+        return source, action, self._frame("entry-follow", self._screen)
 
     def execute_developmental_control(self, scope, proof, observation):
         self.control_calls.append(scope)
-        follow = self._frame("control-follow", self._control_follow_up_screen)
-        receipt = tap_receipt(observation)
-        self._observer(receipt)
-        return DevelopmentalControlResult(receipt=receipt, follow_up=follow)
+        receipt = self._send_tap(observation)
+        self._screen = self._control_follow_up_screen
+        return DevelopmentalControlResult(
+            receipt=receipt,
+            follow_up=self._frame("control-follow", self._screen),
+        )
 
     def close(self):
         self.executor.input_dispatch_recorder = None
@@ -119,6 +140,16 @@ class _FakeBundle:
 
     def close(self):
         self.closed = True
+
+
+def _execution_identity(tmp: Path):
+    return lambda: ExecutionIdentity(
+        entry_point=tmp / "entry.py",
+        import_root=tmp,
+        tool_root=tmp,
+        git_toplevel=tmp,
+        entry_tracked=True,
+    )
 
 
 def _deps(tmp: Path, core_holder: dict, *, annotation_factory=None) -> RunnerDeps:
@@ -136,6 +167,7 @@ def _deps(tmp: Path, core_holder: dict, *, annotation_factory=None) -> RunnerDep
         ),
         connect=_connect,
         annotation_factory=annotation_factory,
+        execution_identity=_execution_identity(tmp),
         sleep=lambda _: None,
         postcondition_timeout_seconds=0.01,
     )
@@ -145,6 +177,41 @@ def _binding(tmp: Path, *case_ids: str):
     return load_assignment_binding(
         write_assignment(tmp, assignment_payload(tmp, case_ids=case_ids))
     )
+
+
+def _write_valid_response(request) -> None:
+    request.response_path.write_text(json.dumps({
+        "request_id": request.request_id,
+        "case_id": request.case_id,
+        "control_name": request.control_name,
+        "foreground_target": request.foreground_target,
+        "artifact_path": str(request.artifact_path),
+        "artifact_sha256": request.artifact_sha256,
+        "frame": request.frame,
+        "bounds": {"x": 10, "y": 10, "width": 100, "height": 50},
+        "action_point": {"x": 40, "y": 30},
+        "task_owned_foreground": True,
+        "visual_reason": "back control in the panel",
+        "intended_effect": "nonspending_state_change",
+    }), encoding="utf-8")
+
+
+def _armed_exchange(directory: Path) -> AnnotationExchange:
+    """An exchange whose tester answers every request immediately."""
+
+    exchange = AnnotationExchange(
+        directory, timeout_seconds=5.0, poll_seconds=0.01,
+        sleep=lambda _: None,
+    )
+    original_prepare = exchange.prepare
+
+    def _armed_prepare(**kwargs):
+        request = original_prepare(**kwargs)
+        _write_valid_response(request)
+        return request
+
+    exchange.prepare = _armed_prepare
+    return exchange
 
 
 class LiveCaseRunnerTests(unittest.TestCase):
@@ -159,8 +226,10 @@ class LiveCaseRunnerTests(unittest.TestCase):
             result = evidence.case_results[0]
             self.assertEqual(CaseStatus.PASSED, result.status)
             self.assertIsNotNone(result.body_entry_event_id)
+            self.assertEqual("v44_bank_body_menu", result.body_case_id)
             self.assertIsNotNone(result.source_artifact)
             self.assertIsNotNone(result.follow_up_artifact)
+            self.assertIsNotNone(result.postcondition)
             self.assertTrue(holder["core"].closed)
             self.assertTrue(holder["bundle"].closed)
             report = validate_live_evidence(binding, path)
@@ -178,7 +247,6 @@ class LiveCaseRunnerTests(unittest.TestCase):
             holder: dict = {"core_kwargs": {"entry_error": SelectorResolutionError("no qualified body")}}
             evidence, _ = LiveCaseRunner(binding, _deps(tmp, holder)).run()
             statuses = {r.case_id: r.status for r in evidence.case_results}
-        # Both cases fail entry, but the run completes and emits both results.
         self.assertEqual(CaseStatus.FAILED, statuses["v44_bank_body_menu"])
         self.assertEqual(CaseStatus.FAILED, statuses["v44_watchtower_body_menu"])
         self.assertEqual("qualified_body_entry",
@@ -206,6 +274,7 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 ),
                 connect=_connect,
                 annotation_factory=None,
+                execution_identity=_execution_identity(tmp),
                 sleep=lambda _: None,
             )
             evidence, _ = LiveCaseRunner(binding, deps).run()
@@ -213,61 +282,109 @@ class LiveCaseRunnerTests(unittest.TestCase):
         self.assertEqual(CaseStatus.BLOCKED, result.status)
         self.assertEqual("precondition", result.unresolved_boundary)
 
-    def test_validation_case_owns_its_body_entry_and_journals_attempts(self):
+    def test_four_cases_make_two_body_entries_and_two_returns(self):
+        """QR2: two retained-witness returns; the buildings are never reopened."""
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
-            binding = _binding(tmp, "v44_bank_return_home")
-            holder: dict = {}
-            annotation_dir = tmp / "annotation"
-
-            exchange = AnnotationExchange(
-                annotation_dir, timeout_seconds=5.0, poll_seconds=0.01,
-                sleep=lambda _: None,
+            binding = _binding(
+                tmp,
+                "v44_bank_body_menu",
+                "v44_bank_return_home",
+                "v44_watchtower_body_menu",
+                "v44_watchtower_return_home",
             )
+            holder: dict = {
+                "core_kwargs": {
+                    "post_entry_screens": {
+                        HomeCityObjectId.BANK: ScreenType.UNKNOWN,
+                        HomeCityObjectId.WATCHTOWER: ScreenType.PNC_WATCHTOWER,
+                    }
+                }
+            }
+            exchange = _armed_exchange(tmp / "annotation")
             deps = _deps(tmp, holder, annotation_factory=lambda _: exchange)
 
-            # Pre-arm the tester: respond as soon as the request file appears.
-            original_prepare = exchange.prepare
-            def _armed_prepare(**kwargs):
-                request = original_prepare(**kwargs)
-                request.response_path.write_text(json.dumps({
-                    "control_name": request.control_name,
-                    "artifact_sha256": request.artifact_sha256,
-                    "frame": request.frame,
-                    "bounds": {"x": 10, "y": 10, "width": 100, "height": 50},
-                    "action_point": {"x": 40, "y": 30},
-                    "task_owned_foreground": True,
-                    "visual_reason": "back control in the panel",
-                    "intended_effect": "nonspending_state_change",
-                    "foreground_target": HomeCityObjectId.BANK.value,
-                }), encoding="utf-8")
-                return request
-            exchange.prepare = _armed_prepare
-
             evidence, path = LiveCaseRunner(binding, deps).run()
-            result = evidence.case_results[0]
-            self.assertEqual(CaseStatus.PASSED, result.status)
             core = holder["core"]
-            self.assertEqual(1, len(core.control_calls))
-            scope = core.control_calls[0]
-            self.assertEqual("v44_bank_return_home", scope.case_id)
-            self.assertEqual("v44_bank_return_home", scope.body_entry.case_id)
+
+            statuses = {r.case_id: r.status for r in evidence.case_results}
+            self.assertEqual(
+                {
+                    "v44_bank_body_menu": CaseStatus.PASSED,
+                    "v44_bank_return_home": CaseStatus.PASSED,
+                    "v44_watchtower_body_menu": CaseStatus.PASSED,
+                    "v44_watchtower_return_home": CaseStatus.PASSED,
+                },
+                statuses,
+            )
+            # Exactly two body entries — the returns never reopen a building.
+            self.assertEqual(
+                [HomeCityObjectId.BANK, HomeCityObjectId.WATCHTOWER],
+                core.entry_calls,
+            )
+            self.assertEqual(2, len(core.control_calls))
+            bank_scope, tower_scope = core.control_calls
+            self.assertEqual("v44_bank_return_home", bank_scope.case_id)
+            self.assertEqual("v44_bank_body_menu", bank_scope.body_case_id)
+            self.assertEqual("v44_bank_body_menu", bank_scope.body_entry.case_id)
+            self.assertEqual("v44_watchtower_return_home", tower_scope.case_id)
+            self.assertEqual(
+                "v44_watchtower_body_menu", tower_scope.body_entry.case_id
+            )
+            results = {r.case_id: r for r in evidence.case_results}
+            self.assertEqual(
+                "v44_bank_body_menu", results["v44_bank_return_home"].body_case_id
+            )
+            self.assertEqual(
+                results["v44_bank_body_menu"].body_entry_event_id,
+                results["v44_bank_return_home"].body_entry_event_id,
+            )
             journal_path = Path(binding.report_root) / binding.run_id / "attempts.jsonl"
-            self.assertTrue(journal_path.exists())
-            self.assertEqual((), pending_attempts(journal_path))
             entries = read_journal(journal_path)
-            self.assertEqual(("attempt_begin", "attempt_finish"),
-                             tuple(e.record_type for e in entries))
+            self.assertEqual((), pending_attempts(journal_path))
+            begins = [e for e in entries if e.record_type == "attempt_begin"]
+            finishes = [e for e in entries if e.record_type == "attempt_finish"]
+            self.assertEqual(
+                ["body_entry", "control", "body_entry", "control"],
+                [e.payload.get("intent") for e in begins],
+            )
+            self.assertEqual(4, len(finishes))
+            self.assertEqual(
+                [e.attempt_id for e in begins],
+                [e.attempt_id for e in finishes],
+            )
+            sequences = [
+                e.event.dispatch.input_sequence
+                for e in evidence.attributed_dispatches
+                if hasattr(e.event, "dispatch")
+            ]
+            self.assertEqual([1, 2, 3, 4], sequences)
             report = validate_live_evidence(binding, path)
             self.assertTrue(
                 report.valid,
                 [f"{f.check}: {f.detail}" for f in report.findings],
             )
+            # The typed finalization overlay exists beside the sealed evidence.
+            finalization = Path(binding.report_root) / binding.run_id / "finalization.json"
+            self.assertTrue(finalization.exists())
+            self.assertEqual(
+                "pending_tester_review",
+                json.loads(finalization.read_text(encoding="utf-8"))["review_state"],
+            )
+
+    def test_control_case_without_its_body_case_is_refused(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_return_home")
+            holder: dict = {}
+            with self.assertRaises(PreflightRefusal):
+                LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            self.assertNotIn("core", holder)
 
     def test_annotation_timeout_blocks_the_case_and_closes_the_attempt(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
-            binding = _binding(tmp, "v44_bank_return_home")
+            binding = _binding(tmp, "v44_bank_body_menu", "v44_bank_return_home")
             holder: dict = {}
             clock = {"t": 0.0}
             exchange = AnnotationExchange(
@@ -277,47 +394,108 @@ class LiveCaseRunnerTests(unittest.TestCase):
             )
             deps = _deps(tmp, holder, annotation_factory=lambda _: exchange)
             evidence, _ = LiveCaseRunner(binding, deps).run()
-            result = evidence.case_results[0]
+            results = {r.case_id: r for r in evidence.case_results}
             journal_path = Path(binding.report_root) / binding.run_id / "attempts.jsonl"
-            self.assertTrue(journal_path.exists())
             pending = pending_attempts(journal_path)
+        self.assertEqual(CaseStatus.PASSED, results["v44_bank_body_menu"].status)
+        result = results["v44_bank_return_home"]
         self.assertEqual(CaseStatus.BLOCKED, result.status)
         self.assertEqual("annotation_timeout", result.unresolved_boundary)
+        self.assertEqual(
+            results["v44_bank_body_menu"].body_entry_event_id,
+            result.body_entry_event_id,
+        )
         self.assertEqual((), pending)
         self.assertEqual(
             "annotation_timeout",
-            evidence.logical_attempts[0].status,
+            evidence.logical_attempts[-1].status,
+        )
+        self.assertEqual(
+            "control", evidence.logical_attempts[-1].intent
         )
 
-    def test_unprovenanced_follow_up_blocks_before_any_attempt(self):
+    def test_unprovenanced_resume_frame_halts_the_run(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
-            binding = _binding(tmp, "v44_bank_return_home")
+            binding = _binding(
+                tmp,
+                "v44_bank_body_menu",
+                "v44_bank_return_home",
+                "v44_watchtower_body_menu",
+            )
             holder: dict = {}
+            exchange = _armed_exchange(tmp / "annotation")
 
-            base_connect = _deps(tmp, holder, annotation_factory=lambda _: None)
-            original_connect = base_connect.connect
+            base_deps = _deps(tmp, holder, annotation_factory=lambda _: exchange)
+            original_connect = base_deps.connect
+
             def _connect(*, binding, run_dir, observer):
-                connection = original_connect(binding=binding, run_dir=run_dir, observer=observer)
+                connection = original_connect(
+                    binding=binding, run_dir=run_dir, observer=observer
+                )
                 core = connection.core
-                original_enter = core.enter_building_body_for_discovery
-                def _enter(target, **kwargs):
-                    source, action, follow = original_enter(target, **kwargs)
-                    object.__setattr__(follow, "frame_ref", None)
-                    return source, action, follow
-                core.enter_building_body_for_discovery = _enter
+                original_capture = core.capture_once
+
+                def _capture(label, **kwargs):
+                    observation = original_capture(label, **kwargs)
+                    if "resume_state" in label:
+                        object.__setattr__(observation, "frame_ref", None)
+                    return observation
+
+                core.capture_once = _capture
                 return connection
+
             deps = RunnerDeps(
-                probe_source=base_connect.probe_source,
+                probe_source=base_deps.probe_source,
                 connect=_connect,
-                annotation_factory=base_connect.annotation_factory,
+                annotation_factory=base_deps.annotation_factory,
+                execution_identity=base_deps.execution_identity,
                 sleep=lambda _: None,
             )
-            # Follow-up without provenance is not an allowed source anyway;
-            # assert the run still terminates with one typed result.
             evidence, _ = LiveCaseRunner(binding, deps).run()
-            result = evidence.case_results[0]
-        self.assertIn(result.status, (CaseStatus.BLOCKED, CaseStatus.FAILED))
+            results = {r.case_id: r for r in evidence.case_results}
+        self.assertEqual(CaseStatus.PASSED, results["v44_bank_body_menu"].status)
+        self.assertEqual(CaseStatus.FAILED, results["v44_bank_return_home"].status)
+        self.assertEqual(
+            "resume_provenance", results["v44_bank_return_home"].unresolved_boundary
+        )
+        self.assertEqual(
+            CaseStatus.NOT_RUN, results["v44_watchtower_body_menu"].status
+        )
+
+    def test_reused_run_id_refuses_before_connecting(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_body_menu")
+            (tmp / "reports" / binding.run_id).mkdir(parents=True)
+            holder: dict = {}
+            with self.assertRaises(PreflightRefusal):
+                LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            self.assertNotIn("core", holder)
+
+    def test_execution_identity_mismatch_refuses_before_connecting(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_body_menu")
+            holder: dict = {}
+            deps = RunnerDeps(
+                probe_source=lambda binding: SourceProbe(
+                    head_sha=CANDIDATE_SHA, dirty_paths=(), source_root=binding.source_root
+                ),
+                connect=lambda **kw: self.fail("connect must not run"),
+                annotation_factory=None,
+                execution_identity=lambda: ExecutionIdentity(
+                    entry_point=tmp / "elsewhere.py",
+                    import_root=tmp,
+                    tool_root=tmp,
+                    git_toplevel=tmp,
+                    entry_tracked=False,
+                ),
+            )
+            with self.assertRaises(PreflightRefusal) as raised:
+                LiveCaseRunner(binding, deps).run()
+            self.assertTrue(any("entry" in f for f in raised.exception.findings))
+            self.assertNotIn("core", holder)
 
     def test_wrong_castle_refuses_before_any_case(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -338,11 +516,73 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 probe_source=deps.probe_source,
                 connect=_connect,
                 annotation_factory=None,
+                execution_identity=deps.execution_identity,
             )
             runner = LiveCaseRunner(binding, deps)
             with self.assertRaises(PreflightRefusal):
                 runner.run()
             self.assertTrue(holder["bundle"].closed)
+
+
+class AdmitReservationTests(unittest.TestCase):
+    def _status(self, state="active", display_name="BS-Testing", scope_id="scope-9"):
+        return SimpleNamespace(
+            reservation_state=state,
+            owner_label="owner",
+            scope_id=scope_id,
+            display_name=display_name,
+        )
+
+    def test_inactive_states_pass_through(self):
+        self.assertEqual(
+            "none",
+            admit_reservation(
+                self._status("none"), receipt_path=None, renew=lambda p: None
+            ),
+        )
+        self.assertEqual(
+            "expired",
+            admit_reservation(
+                self._status("expired"), receipt_path=None, renew=lambda p: None
+            ),
+        )
+
+    def test_foreign_active_reservation_defers_without_a_receipt(self):
+        with self.assertRaises(PreflightRefusal) as raised:
+            admit_reservation(
+                self._status(), receipt_path=None, renew=lambda p: None
+            )
+        self.assertIn("owner:scope-9", str(raised.exception))
+
+    def test_own_active_reservation_renews_and_admits(self):
+        renewed = SimpleNamespace(instance_keys={"bs-testing"}, scope_id="scope-9")
+        calls = []
+        result = admit_reservation(
+            self._status(),
+            receipt_path=Path("receipt.json"),
+            renew=lambda p: (calls.append(p), renewed)[1],
+        )
+        self.assertEqual("own", result)
+        self.assertEqual([Path("receipt.json")], calls)
+
+    def test_foreign_receipt_that_does_not_renew_defers(self):
+        def _deny(path):
+            raise RuntimeError("foreign capability")
+
+        with self.assertRaises(PreflightRefusal):
+            admit_reservation(
+                self._status(), receipt_path=Path("receipt.json"), renew=_deny
+            )
+
+    def test_own_receipt_not_covering_the_instance_defers(self):
+        renewed = SimpleNamespace(instance_keys={"other-instance"}, scope_id="scope-9")
+        with self.assertRaises(PreflightRefusal) as raised:
+            admit_reservation(
+                self._status(),
+                receipt_path=Path("receipt.json"),
+                renew=lambda p: renewed,
+            )
+        self.assertIn("does not cover", str(raised.exception))
 
 
 if __name__ == "__main__":

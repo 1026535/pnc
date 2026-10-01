@@ -69,6 +69,30 @@ class AssignmentBindingTests(unittest.TestCase):
             with self.assertRaisesRegex(AssignmentBindingError, "entry_sha256"):
                 self._load(payload, tmp)
 
+    def test_rejects_unknown_top_level_field(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            payload = assignment_payload(tmp)
+            payload["developer_notes"] = "not part of the release"
+            with self.assertRaisesRegex(AssignmentBindingError, "unknown fields"):
+                self._load(payload, tmp)
+
+    def test_rejects_unsafe_run_id_token(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            payload = assignment_payload(tmp)
+            payload["run_id"] = "../escape"
+            with self.assertRaisesRegex(AssignmentBindingError, "run_id"):
+                self._load(payload, tmp)
+
+    def test_rejects_non_boolean_read_only(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            payload = assignment_payload(tmp)
+            payload["read_only"] = "yes"
+            with self.assertRaisesRegex(AssignmentBindingError, "read_only"):
+                self._load(payload, tmp)
+
     def test_rejects_unknown_cleanup_key(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)

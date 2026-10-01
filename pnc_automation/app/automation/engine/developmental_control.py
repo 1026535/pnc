@@ -57,11 +57,15 @@ class DevelopmentalControlScope:
     Construction does not itself grant a case. The tracked runner must derive
     this value from its frozen CaseSpec and consume the case attempt first.
     ``input_chain`` starts with ``body_entry.receipt`` and contains every
-    case-attributed physical input since that body entry.
+    case-attributed physical input since that body entry. ``body_case_id``
+    names the released case that owns ``body_entry``; for a case that performs
+    its own body entry it equals ``case_id``, while a dependent case keeps the
+    physical body event attributed to its declared discovery case.
     """
 
     assignment_id: str
     case_id: str
+    body_case_id: str
     case_spec_ref: str
     purpose: DevelopmentalCasePurpose
     operation_id: str

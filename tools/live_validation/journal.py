@@ -29,6 +29,13 @@ class AttemptStatus(StrEnum):
     ANNOTATION_TIMEOUT = "annotation_timeout"
 
 
+class AttemptIntent(StrEnum):
+    """The physical input one journaled attempt intended to send."""
+
+    BODY_ENTRY = "body_entry"
+    CONTROL = "control"
+
+
 @dataclass(frozen=True, slots=True)
 class JournalEntry:
     """One deserialized journal row."""
@@ -47,6 +54,9 @@ class PendingAttempt:
     case_id: str
     control_name: str
     number: int
+    limit: int
+    intent: str
+    journal_ref: str
     begin_seq: int
 
 
@@ -80,11 +90,14 @@ class LogicalAttemptJournal:
         number: int,
         limit: int,
         source_frame: dict[str, object],
+        intent: str = AttemptIntent.CONTROL,
     ) -> tuple[str, ConsumedCaseAttempt]:
         """Consumes one logical attempt and returns its journal-anchored handle.
 
         The consumed attempt is handed to the executor scope; its
-        ``journal_ref`` points at this journal's begin row.
+        ``journal_ref`` points at this journal's begin row. ``intent`` names
+        the physical input this attempt intends to send and is fsynced before
+        that send.
         """
 
         self._seq += 1
@@ -100,6 +113,7 @@ class LogicalAttemptJournal:
                 "operation_id": operation_id,
                 "number": number,
                 "limit": limit,
+                "intent": str(intent),
                 "source_frame": source_frame,
             }
         )
@@ -177,6 +191,9 @@ def pending_attempts(path: Path) -> tuple[PendingAttempt, ...]:
                 case_id=str(entry.payload.get("case_id")),
                 control_name=str(entry.payload.get("control_name")),
                 number=int(entry.payload.get("number", 0)),
+                limit=int(entry.payload.get("limit", 0)),
+                intent=str(entry.payload.get("intent", AttemptIntent.CONTROL.value)),
+                journal_ref=f"{path.name}#{entry.seq}",
                 begin_seq=entry.seq,
             )
         )

@@ -117,6 +117,66 @@ class ValidateLiveEvidenceTests(unittest.TestCase):
             report = validate_live_evidence(binding, path)
         self.assertFalse(report.valid)
 
+    def test_frame_missing_captured_monotonic_fails(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            _binding, _ev, path = self._setup(tmp)
+            binding = load_assignment_binding(
+                write_assignment(tmp, assignment_payload(tmp))
+            )
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            doc["attributed_dispatches"][0]["source_frame"].pop("captured_monotonic")
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            report = validate_live_evidence(binding, path)
+        self.assertFalse(report.valid)
+        self.assertTrue(any("captured_monotonic" in f.detail for f in report.findings))
+
+    def test_duplicate_physical_input_identity_fails(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            _binding, _ev, path = self._setup(tmp)
+            binding = load_assignment_binding(
+                write_assignment(tmp, assignment_payload(tmp))
+            )
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            duplicate = dict(doc["attributed_dispatches"][0])
+            duplicate["event_id"] = "in-0002"
+            doc["attributed_dispatches"].append(duplicate)
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            report = validate_live_evidence(binding, path)
+        self.assertFalse(report.valid)
+        self.assertTrue(
+            any("physical identity" in f.detail for f in report.findings)
+        )
+
+    def test_passed_case_without_postcondition_fails(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            _binding, _ev, path = self._setup(tmp)
+            binding = load_assignment_binding(
+                write_assignment(tmp, assignment_payload(tmp))
+            )
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            doc["case_results"][0]["postcondition"] = None
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            report = validate_live_evidence(binding, path)
+        self.assertFalse(report.valid)
+        self.assertTrue(any("postcondition" in f.detail for f in report.findings))
+
+    def test_body_entry_event_attributed_to_the_wrong_case_fails(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            _binding, _ev, path = self._setup(tmp)
+            binding = load_assignment_binding(
+                write_assignment(tmp, assignment_payload(tmp))
+            )
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            doc["attributed_dispatches"][0]["case_id"] = "v44_watchtower_body_menu"
+            doc["attributed_dispatches"][0]["phase"] = "case"
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            report = validate_live_evidence(binding, path)
+        self.assertFalse(report.valid)
+
     def test_unbound_terminal_source_fails(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)

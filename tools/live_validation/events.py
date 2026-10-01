@@ -44,27 +44,63 @@ class AttributedDispatch:
             raise ValueError("Non-case dispatch events must not carry a case_id.")
 
 
+class ReceiptIntegrityError(RuntimeError):
+    """Physical input identity is duplicated or cannot be resolved exactly."""
+
+
+def receipt_physical_key(event: InputDispatchEvent) -> tuple[str, int, int] | None:
+    """Returns ``(session_id, session_epoch, input_sequence)`` for a receipt.
+
+    This tuple is a physical input's unique identity within one session.
+    Failure records carry no confirmed dispatch and return ``None``.
+    """
+
+    if not isinstance(event, InputDispatchRecord):
+        return None
+    frame = event.source_frame
+    return (frame.session_id, frame.session_epoch, event.dispatch.input_sequence)
+
+
 class DispatchCollector:
     """Attributes every observer event to the current run phase.
 
     The collector preserves executor evidence verbatim: it never mutates a
     receipt, never converts a failure into a receipt, and never manufactures a
-    record for an input the runtime did not report.
+    record for an input the runtime did not report. Physical receipt keys must
+    stay unique for the whole run; a duplicate is recorded as an integrity
+    error for the caller to halt on.
     """
 
     def __init__(self) -> None:
         self._phase: AttributionPhase = AttributionPhase.SETUP
         self._case_id: str | None = None
         self._events: list[AttributedDispatch] = []
+        self._physical_keys: dict[tuple[str, int, int], str] = {}
+        self._integrity_errors: list[str] = []
 
     @property
     def events(self) -> tuple[AttributedDispatch, ...]:
         return tuple(self._events)
 
+    @property
+    def integrity_errors(self) -> tuple[str, ...]:
+        return tuple(self._integrity_errors)
+
     def append(self, event: InputDispatchEvent) -> None:
+        event_id = f"in-{len(self._events) + 1:04d}"
+        key = receipt_physical_key(event)
+        if key is not None:
+            owner = self._physical_keys.get(key)
+            if owner is not None:
+                self._integrity_errors.append(
+                    f"duplicate physical input identity {key}: events "
+                    f"{owner} and {event_id} claim the same dispatch."
+                )
+            else:
+                self._physical_keys[key] = event_id
         self._events.append(
             AttributedDispatch(
-                event_id=f"in-{len(self._events) + 1:04d}",
+                event_id=event_id,
                 phase=self._phase,
                 case_id=self._case_id,
                 event=event,
@@ -104,9 +140,24 @@ class DispatchCollector:
         )
 
     def receipt_event_id(self, receipt: InputDispatchRecord, *, case_id: str) -> str | None:
-        """Finds the event id of one exact receipt object within a case."""
+        """Finds the event id of one receipt's exact physical identity in a case.
 
-        for attributed in self._events:
-            if attributed.case_id == case_id and attributed.event is receipt:
-                return attributed.event_id
-        return None
+        Matching is by source identity — equal session, epoch, and input
+        sequence — not object identity, so a distinct equal receipt still
+        binds. ``None`` means no attributed receipt carries that identity;
+        ``ReceiptIntegrityError`` means more than one does.
+        """
+
+        key = receipt_physical_key(receipt)
+        matches = [
+            attributed.event_id
+            for attributed in self._events
+            if attributed.case_id == case_id
+            and isinstance(attributed.event, InputDispatchRecord)
+            and receipt_physical_key(attributed.event) == key
+        ]
+        if len(matches) > 1:
+            raise ReceiptIntegrityError(
+                f"{len(matches)} case '{case_id}' receipts share physical key {key}."
+            )
+        return matches[0] if matches else None

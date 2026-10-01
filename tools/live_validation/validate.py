@@ -36,7 +36,14 @@ class ValidationReport:
     findings: tuple[ValidationFinding, ...]
 
 
-_FRAME_KEYS = ("session_id", "session_epoch", "capture_sequence", "input_sequence", "captured_at")
+_FRAME_KEYS = (
+    "session_id",
+    "session_epoch",
+    "capture_sequence",
+    "input_sequence",
+    "captured_at",
+    "captured_monotonic",
+)
 _PRIMITIVE_FIELDS: Mapping[str, frozenset[str]] = {
     "tap": frozenset({"point", "input_sequence"}),
     "swipe": frozenset(
@@ -45,7 +52,10 @@ _PRIMITIVE_FIELDS: Mapping[str, frozenset[str]] = {
     "wheel": frozenset({"point", "frame_size", "vertical_detent", "transport", "input_sequence"}),
 }
 _STATUSES = frozenset({"passed", "failed", "blocked", "not_run"})
-_ATTEMPT_STATUSES = frozenset({"dispatched", "refused", "uncertain", "annotation_timeout"})
+_ATTEMPT_STATUSES = frozenset(
+    {"dispatched", "refused", "uncertain", "annotation_timeout", "unfinished"}
+)
+_ATTEMPT_INTENTS = frozenset({"body_entry", "control"})
 
 
 def _is_iso(value: object) -> bool:
@@ -72,6 +82,12 @@ def _frame_findings(frame: object, where: str) -> list[ValidationFinding]:
             findings.append(ValidationFinding("frame", f"{where} frame {key} must be an int."))
     if "captured_at" in frame and not _is_iso(frame["captured_at"]):
         findings.append(ValidationFinding("frame", f"{where} frame captured_at must be ISO-8601."))
+    if "captured_monotonic" in frame and not isinstance(
+        frame["captured_monotonic"], (int, float)
+    ):
+        findings.append(
+            ValidationFinding("frame", f"{where} frame captured_monotonic must be numeric.")
+        )
     return findings
 
 
@@ -163,6 +179,12 @@ def validate_live_evidence(
             fail("case_results", f"{case_id}: purpose {row.get('purpose')!r} != spec '{spec.purpose.value}'.")
         if row.get("status") not in _STATUSES:
             fail("case_results", f"{case_id}: status must be one of {sorted(_STATUSES)}.")
+        if spec is not None and row.get("body_case_id") != spec.body_case_id:
+            fail(
+                "case_results",
+                f"{case_id}: body_case_id {row.get('body_case_id')!r} != "
+                f"spec '{spec.body_case_id}'.",
+            )
 
     # --- Artifact index -----------------------------------------------------
     artifacts = doc.get("artifacts")
@@ -258,6 +280,46 @@ def validate_live_evidence(
         else:
             fail("events", f"{event_id}: kind must be receipt/failure.")
 
+    # --- Physical input identity and continuity -----------------------------
+    seen_physical: dict[tuple[str, int, int], str] = {}
+    last_sequence_by_session: dict[tuple[str, int], int] = {}
+    for entry in event_by_id.values():
+        if entry.get("kind") != "receipt":
+            continue
+        source_frame = entry.get("source_frame")
+        dispatch = entry.get("dispatch")
+        if not isinstance(source_frame, dict) or not isinstance(dispatch, dict):
+            continue
+        session_key = (
+            source_frame.get("session_id"),
+            source_frame.get("session_epoch"),
+        )
+        input_sequence = dispatch.get("input_sequence")
+        if not (
+            isinstance(session_key[0], str)
+            and isinstance(session_key[1], int)
+            and isinstance(input_sequence, int)
+        ):
+            continue
+        physical = (session_key[0], session_key[1], input_sequence)
+        prior = seen_physical.get(physical)
+        if prior is not None:
+            fail(
+                "events",
+                f"receipts '{prior}' and '{entry.get('event_id')}' share the same "
+                "physical identity (session, epoch, input_sequence).",
+            )
+        else:
+            seen_physical[physical] = entry.get("event_id")
+        previous = last_sequence_by_session.get(session_key)
+        if previous is not None and input_sequence <= previous:
+            fail(
+                "events",
+                f"'{entry.get('event_id')}' input_sequence {input_sequence} does not "
+                f"advance session {session_key[0]}/{session_key[1]} past {previous}.",
+            )
+        last_sequence_by_session[session_key] = input_sequence
+
     # --- Case/event binding --------------------------------------------------
     for row in result_by_id.values():
         case_id = str(row.get("case_id"))
@@ -279,6 +341,7 @@ def validate_live_evidence(
             if event is not None and event.get("kind") != "receipt":
                 fail("binding", f"{case_id}: receipt_event_ids must name receipt events only.")
         body_id = row.get("body_entry_event_id")
+        body_owner = spec.body_case_id if spec is not None else case_id
         if body_id is not None:
             event = event_by_id.get(body_id)
             if event is None:
@@ -286,12 +349,42 @@ def validate_live_evidence(
             elif (
                 event.get("kind") != "receipt"
                 or event.get("primitive") != "tap"
-                or event.get("case_id") != case_id
+                or event.get("case_id") != body_owner
             ):
-                fail("binding", f"{case_id}: body entry must be a case-attributed tap receipt.")
+                fail(
+                    "binding",
+                    f"{case_id}: body entry must be a tap receipt attributed to "
+                    f"its owner case '{body_owner}'.",
+                )
         if spec is not None and row.get("status") == "passed":
             if body_id is None:
-                fail("binding", f"{case_id}: a passed case requires its own body-entry receipt.")
+                fail(
+                    "binding",
+                    f"{case_id}: a passed case requires a body-entry receipt "
+                    f"owned by '{body_owner}'.",
+                )
+            if row.get("source_artifact") is None:
+                fail("binding", f"{case_id}: a passed case requires a source_artifact.")
+            if row.get("follow_up_artifact") is None:
+                fail("binding", f"{case_id}: a passed case requires a follow_up_artifact.")
+            postcondition = row.get("postcondition")
+            if not isinstance(postcondition, dict):
+                fail("binding", f"{case_id}: a passed case requires a postcondition record.")
+            elif "screen_type" not in postcondition:
+                fail("binding", f"{case_id}: postcondition requires a screen_type.")
+            if spec.purpose.value == "development_validation":
+                kinds = {
+                    ref.get("kind")
+                    for ref in row.get("artifacts") or []
+                    if isinstance(ref, dict)
+                }
+                for required_kind in ("annotation_request", "annotation_response"):
+                    if required_kind not in kinds:
+                        fail(
+                            "binding",
+                            f"{case_id}: a passed validation case requires a "
+                            f"'{required_kind}' artifact.",
+                        )
 
     # --- Logical attempts ----------------------------------------------------
     attempts = doc.get("logical_attempts")
@@ -315,18 +408,48 @@ def validate_live_evidence(
         if spec is None:
             fail("attempts", f"{where} case_id must be a selected case.")
             continue
-        if entry.get("control_name") != spec.control_name:
-            fail("attempts", f"{attempt_id}: control_name != spec control '{spec.control_name}'.")
+        if entry.get("control_name") != (spec.control_name or spec.operation_id):
+            fail(
+                "attempts",
+                f"{attempt_id}: control_name must be the spec control "
+                f"'{spec.control_name}' or operation '{spec.operation_id}'.",
+            )
         number, limit = entry.get("number"), entry.get("limit")
         if not isinstance(number, int) or not isinstance(limit, int) or number < 1 or limit < 1 or number > limit:
             fail("attempts", f"{attempt_id}: requires 1 <= number <= limit.")
-        if isinstance(limit, int) and limit > spec.max_control_attempts:
-            fail("attempts", f"{attempt_id}: limit exceeds the released bound {spec.max_control_attempts}.")
         if entry.get("status") not in _ATTEMPT_STATUSES:
             fail("attempts", f"{attempt_id}: invalid status {entry.get('status')!r}.")
+        intent = entry.get("intent")
+        if intent not in _ATTEMPT_INTENTS:
+            fail(
+                "attempts",
+                f"{attempt_id}: intent must be one of {sorted(_ATTEMPT_INTENTS)}.",
+            )
+        elif intent == "body_entry":
+            if spec.purpose.value != "discovery":
+                fail(
+                    "attempts",
+                    f"{attempt_id}: body_entry intent is only valid on a discovery case.",
+                )
+            elif number != 1 or limit != 1:
+                fail(
+                    "attempts",
+                    f"{attempt_id}: a body-entry intent is exactly 1 of 1.",
+                )
+        elif isinstance(limit, int) and limit > spec.max_control_attempts:
+            fail("attempts", f"{attempt_id}: limit exceeds the released bound {spec.max_control_attempts}.")
         if not isinstance(entry.get("journal_ref"), str) or not entry.get("journal_ref"):
             fail("attempts", f"{attempt_id}: requires a nonempty journal_ref.")
         dispatch_event_id = entry.get("dispatch_event_id")
+        if entry.get("status") == "dispatched" and dispatch_event_id is None:
+            fail("attempts", f"{attempt_id}: a dispatched attempt requires a dispatch_event_id.")
+        if entry.get("status") in {"refused", "annotation_timeout", "unfinished"} and (
+            dispatch_event_id is not None
+        ):
+            fail(
+                "attempts",
+                f"{attempt_id}: a {entry.get('status')} attempt must not carry a dispatch_event_id.",
+            )
         if dispatch_event_id is not None:
             event = event_by_id.get(dispatch_event_id)
             if event is None or event.get("case_id") != case_id:

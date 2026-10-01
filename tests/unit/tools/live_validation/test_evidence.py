@@ -51,8 +51,15 @@ def _evidence(tmp: Path, **overrides) -> LiveEvidence:
         receipt_event_ids=("in-0001",),
         dispatch_event_ids=("in-0001",),
         body_entry_event_id="in-0001",
+        body_case_id="v44_bank_body_menu",
         source_artifact=artifact_path,
         follow_up_artifact=artifact_path,
+        postcondition={
+            "screen_type": "pnc_bank",
+            "blocking_popup": False,
+            "artifact_path": str(artifact_path),
+            "frame_fingerprint": "fp-1",
+        },
         unresolved_boundary=None,
         detail="ok",
     )
@@ -162,7 +169,8 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(
             {"session_id": "sess-test", "session_epoch": 1,
              "capture_sequence": 3, "input_sequence": 2,
-             "captured_at": "2026-10-01T00:00:00+00:00"},
+             "captured_at": "2026-10-01T00:00:00+00:00",
+             "captured_monotonic": 3.0},
             row,
         )
 

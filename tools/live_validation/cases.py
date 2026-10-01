@@ -3,9 +3,11 @@
 Selection, execution, and result rows all derive from this one frozen set.
 Python definitions are the released contract; no YAML commands, plugin
 loading, or free-form input exists. ``discovery`` invokes the qualified body
-entry and preserves one raw follow-up; ``development_validation`` additionally
-consumes a tester-attested measured control through the dedicated executor
-operation. A captured task-owned menu never satisfies an ``acceptance`` route.
+entry and preserves one raw follow-up; ``development_validation`` consumes a
+tester-attested measured control through the dedicated executor operation
+while reusing its declared discovery case's retained body witness — a return
+case never re-enters the building itself. A captured task-owned menu never
+satisfies an ``acceptance`` route.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from pnc_automation.app.automation.engine.developmental_control import (
     DevelopmentalCasePurpose,
@@ -37,6 +39,7 @@ class CaseGate(StrEnum):
 
     GUARDED_HOME_CITY = "guarded_home_city"
     RAW_FOLLOW_UP_CAPTURED = "raw_follow_up_captured"
+    RETAINED_BODY_CONTEXT = "retained_body_context"
 
 
 BODY_ENTRY_OPERATION_ID = "enter_building_body_for_discovery"
@@ -45,7 +48,13 @@ BODY_ENTRY_OPERATION_ID = "enter_building_body_for_discovery"
 
 @dataclass(frozen=True, slots=True)
 class CaseSpec:
-    """One frozen case definition a released assignment may select."""
+    """One frozen case definition a released assignment may select.
+
+    ``body_case_id`` names the case that owns the building body entry a
+    control case relies on. Discovery cases always own their own body entry
+    (``body_case_id == case_id``); a dependent case names the discovery case
+    whose retained witness authorizes its control without a second body tap.
+    """
 
     case_id: str
     purpose: CasePurpose
@@ -58,6 +67,7 @@ class CaseSpec:
     control_effect: WorkflowEffect | None
     allowed_source_screens: frozenset[ScreenType]
     max_control_attempts: int
+    body_case_id: str
     required_preconditions: frozenset[CaseGate]
     required_postconditions: frozenset[CaseGate]
     params: Mapping[str, Any] = field(default=MappingProxyType({}))
@@ -68,6 +78,8 @@ class CaseSpec:
                 raise ValueError(f"Discovery case '{self.case_id}' cannot name a control.")
             if self.max_control_attempts != 0:
                 raise ValueError(f"Discovery case '{self.case_id}' cannot allow control attempts.")
+            if self.body_case_id != self.case_id:
+                raise ValueError(f"Discovery case '{self.case_id}' must own its body entry.")
         else:
             if not self.control_name or self.control_effect is None:
                 raise ValueError(f"Control case '{self.case_id}' requires a named control and effect.")
@@ -92,10 +104,12 @@ def _spec(
     target: HomeCityObjectId,
     home_city_slot: HomeCitySlotSelector | None,
     released_action_id: str,
+    body_case_id: str | None = None,
     control_name: str | None = None,
     control_effect: WorkflowEffect | None = None,
     allowed_source_screens: frozenset[ScreenType] = frozenset(),
     max_control_attempts: int = 0,
+    required_preconditions: frozenset[CaseGate] | None = None,
     required_postconditions: frozenset[CaseGate],
 ) -> CaseSpec:
     return CaseSpec(
@@ -110,7 +124,12 @@ def _spec(
         control_effect=control_effect,
         allowed_source_screens=allowed_source_screens,
         max_control_attempts=max_control_attempts,
-        required_preconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
+        body_case_id=body_case_id or case_id,
+        required_preconditions=(
+            frozenset({CaseGate.GUARDED_HOME_CITY})
+            if required_preconditions is None
+            else required_preconditions
+        ),
         required_postconditions=required_postconditions,
     )
 
@@ -133,10 +152,12 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 target=HomeCityObjectId.BANK,
                 home_city_slot=None,
                 released_action_id="v44_bank_menu_return_home",
+                body_case_id="v44_bank_body_menu",
                 control_name="return_home",
                 control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                 allowed_source_screens=frozenset({ScreenType.UNKNOWN, ScreenType.PNC_POPUP}),
                 max_control_attempts=2,
+                required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
                 required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
             ),
             _spec(
@@ -153,12 +174,14 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 target=HomeCityObjectId.WATCHTOWER,
                 home_city_slot=HomeCitySlotSelector(slot_index=4),
                 released_action_id="v44_watchtower_menu_return_home",
+                body_case_id="v44_watchtower_body_menu",
                 control_name="return_home",
                 control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                 allowed_source_screens=frozenset(
                     {ScreenType.PNC_WATCHTOWER, ScreenType.UNKNOWN, ScreenType.PNC_POPUP}
                 ),
                 max_control_attempts=2,
+                required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
                 required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
             ),
         )
@@ -179,3 +202,43 @@ def frozen_case_ids() -> frozenset[str]:
     """Returns every released case id."""
 
     return frozenset(CASE_REGISTRY)
+
+
+def validate_case_registry() -> None:
+    """Proves every declared body dependency targets a compatible discovery case."""
+
+    for spec in CASE_REGISTRY.values():
+        if spec.body_case_id == spec.case_id:
+            continue
+        owner = CASE_REGISTRY.get(spec.body_case_id)
+        if owner is None or owner.purpose is not CasePurpose.DISCOVERY:
+            raise ValueError(
+                f"Case '{spec.case_id}' declares body case '{spec.body_case_id}' "
+                "which is not a frozen discovery case."
+            )
+        if owner.target != spec.target or owner.home_city_slot != spec.home_city_slot:
+            raise ValueError(
+                f"Case '{spec.case_id}' targets a different building than its "
+                f"declared body case '{spec.body_case_id}'."
+            )
+
+
+def validate_selected_order(selected: Sequence[str]) -> None:
+    """Requires each selected case's declared body case to precede it.
+
+    A discovery case supplies its own body witness; a dependent case is only
+    meaningful when its discovery case was already selected and executed.
+    """
+
+    seen: set[str] = set()
+    for case_id in selected:
+        spec = require_case(case_id)
+        if spec.body_case_id != spec.case_id and spec.body_case_id not in seen:
+            raise KeyError(
+                f"Case '{case_id}' requires its discovery case "
+                f"'{spec.body_case_id}' to be selected and ordered before it."
+            )
+        seen.add(case_id)
+
+
+validate_case_registry()

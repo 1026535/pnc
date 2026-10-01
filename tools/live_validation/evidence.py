@@ -65,8 +65,10 @@ class CaseResult:
     receipt_event_ids: tuple[str, ...]
     dispatch_event_ids: tuple[str, ...]
     body_entry_event_id: str | None
+    body_case_id: str | None
     source_artifact: Path | None
     follow_up_artifact: Path | None
+    postcondition: dict[str, Any] | None
     unresolved_boundary: str | None
     detail: str
 
@@ -83,6 +85,7 @@ class LogicalAttemptRecord:
     status: str
     journal_ref: str
     dispatch_event_id: str | None
+    intent: str = "control"
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +135,7 @@ def frame_ref_dict(frame: FrameRef) -> dict[str, object]:
         "capture_sequence": frame.capture_sequence,
         "input_sequence": frame.input_sequence,
         "captured_at": frame.captured_at.isoformat(),
+        "captured_monotonic": frame.captured_monotonic,
     }
 
 
@@ -223,6 +227,8 @@ def case_result_dict(result: CaseResult) -> dict[str, object]:
         "receipt_event_ids": list(result.receipt_event_ids),
         "dispatch_event_ids": list(result.dispatch_event_ids),
         "body_entry_event_id": result.body_entry_event_id,
+        "body_case_id": result.body_case_id,
+        "postcondition": result.postcondition,
         "source_artifact": (
             None if result.source_artifact is None else str(result.source_artifact)
         ),
@@ -289,6 +295,7 @@ def serialize_live_evidence(evidence: LiveEvidence) -> dict[str, object]:
                 "status": record.status,
                 "journal_ref": record.journal_ref,
                 "dispatch_event_id": record.dispatch_event_id,
+                "intent": record.intent,
             }
             for record in evidence.logical_attempts
         ],

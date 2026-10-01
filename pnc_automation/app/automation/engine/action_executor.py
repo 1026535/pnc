@@ -155,8 +155,8 @@ class ActionExecutor:
         if scope.effect == WorkflowEffect.RESOURCE_CHANGING and not scope.resource_allowance_ref:
             refuse("Resource-changing control lacks the released allowance reference.")
         if (not isinstance(scope.target, HomeCityObjectId)
-                or not all((scope.assignment_id, scope.case_id, scope.case_spec_ref, scope.operation_id,
-                    scope.released_action_id, scope.control_name))):
+                or not all((scope.assignment_id, scope.case_id, scope.body_case_id, scope.case_spec_ref,
+                    scope.operation_id, scope.released_action_id, scope.control_name))):
             refuse("Developmental control lacks a named released case or action.")
         attempt = scope.attempt
         if (attempt.case_id != scope.case_id or attempt.control_name != scope.control_name
@@ -208,7 +208,7 @@ class ActionExecutor:
         if (source.frame_ref is None or source.artifact_path is None
                 or source.frame_fingerprint is None
                 or source.image_size is None or not is_reviewed_viewport(source.image_size)
-                or witness.case_id != scope.case_id
+                or witness.case_id != scope.body_case_id
                 or witness.operation_id != scope.operation_id
                 or receipt.source_frame != source.frame_ref
                 or receipt.artifact_path != source.artifact_path

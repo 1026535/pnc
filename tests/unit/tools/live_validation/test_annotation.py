@@ -35,7 +35,11 @@ def _exchange(directory: Path, **kwargs) -> AnnotationExchange:
 
 def _response(request, **overrides) -> dict:
     payload = {
+        "request_id": request.request_id,
+        "case_id": request.case_id,
         "control_name": request.control_name,
+        "foreground_target": request.foreground_target,
+        "artifact_path": str(request.artifact_path),
         "artifact_sha256": request.artifact_sha256,
         "frame": request.frame,
         "bounds": {"x": 100, "y": 800, "width": 200, "height": 60},
@@ -43,7 +47,6 @@ def _response(request, **overrides) -> dict:
         "task_owned_foreground": True,
         "visual_reason": "bottom-left back affordance inside the panel frame",
         "intended_effect": "nonspending_state_change",
-        "foreground_target": HomeCityObjectId.BANK.value,
     }
     payload.update(overrides)
     return payload
@@ -62,6 +65,7 @@ class AnnotationExchangeTests(unittest.TestCase):
             request = _exchange(tmp / "exchange").prepare(
                 case_id="v44_bank_return_home",
                 control_name="return_home",
+                foreground_target=HomeCityObjectId.BANK,
                 observation=observation,
             )
             doc = json.loads(request.request_path.read_text(encoding="utf-8"))
@@ -84,6 +88,7 @@ class AnnotationExchangeTests(unittest.TestCase):
                 _exchange(tmp / "exchange").prepare(
                     case_id="v44_bank_return_home",
                     control_name="return_home",
+                    foreground_target=HomeCityObjectId.BANK,
                     observation=bare,
                 )
 
@@ -96,6 +101,7 @@ class AnnotationExchangeTests(unittest.TestCase):
             request = exchange.prepare(
                 case_id="v44_bank_return_home",
                 control_name="return_home",
+                foreground_target=HomeCityObjectId.BANK,
                 observation=observation,
             )
             request.response_path.write_text(
@@ -121,6 +127,7 @@ class AnnotationExchangeTests(unittest.TestCase):
             request = exchange.prepare(
                 case_id="v44_bank_return_home",
                 control_name="return_home",
+                foreground_target=HomeCityObjectId.BANK,
                 observation=observation,
             )
             request.response_path.write_text(
@@ -141,6 +148,7 @@ class AnnotationExchangeTests(unittest.TestCase):
             request = exchange.prepare(
                 case_id="v44_bank_return_home",
                 control_name="return_home",
+                foreground_target=HomeCityObjectId.BANK,
                 observation=observation,
             )
             request.response_path.write_text(
@@ -161,6 +169,7 @@ class AnnotationExchangeTests(unittest.TestCase):
             request = exchange.prepare(
                 case_id="v44_bank_return_home",
                 control_name="return_home",
+                foreground_target=HomeCityObjectId.BANK,
                 observation=observation,
             )
             self.assertIsNone(
