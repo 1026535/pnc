@@ -111,8 +111,7 @@ class CoreRuntime:
     ) -> Observation:
         """Captures one frame, then delegates safe interruption recovery to the connected executor."""
 
-        if request is not None and not include_content:
-            raise ValueError("Explicit core observation requests require include_content=True.")
+        self._validate_observe_scope(include_content=include_content, request=request)
         self._last_observe_recovered = False
         observation = self._observe_once(label, include_content=include_content, request=request)
         if self._observed_action_executor is None:
@@ -151,6 +150,31 @@ class CoreRuntime:
                 request=requested_scope,
             )
         return recovered
+
+    def capture_once(
+        self,
+        label: str,
+        *,
+        include_content: bool = False,
+        request: ObservationRequest | None = None,
+    ) -> Observation:
+        """Captures exactly one fresh frame without popup, loading, or unknown-screen recovery.
+
+        Bounded and non-retrying: an UNKNOWN or blocking-popup result is
+        returned as observed so the caller can bind input to fresh provenance
+        and own any recovery decision itself.
+        """
+
+        self._validate_observe_scope(include_content=include_content, request=request)
+        self._last_observe_recovered = False
+        return self._observe_once(label, include_content=include_content, request=request)
+
+    @staticmethod
+    def _validate_observe_scope(*, include_content: bool, request: ObservationRequest | None) -> None:
+        """Requires full content when an explicit observation request scopes the frame."""
+
+        if request is not None and not include_content:
+            raise ValueError("Explicit core observation requests require include_content=True.")
 
     def observe_ready(self, label: str, *, include_content: bool = False) -> Observation:
         """Capture one frame and pass only published loading through passive settling."""
@@ -381,8 +405,15 @@ def build_core_runtime(
     trace_path: Path | None = None,
     required_role: LiveAutomationRole | None = None,
     session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    input_dispatch_observer: Callable[[InputDispatchEvent], None] | None = None,
 ) -> CoreRuntime:
-    """Builds exactly one connected runtime graph for replacement-core work."""
+    """Builds exactly one connected runtime graph for replacement-core work.
+
+    The optional ``input_dispatch_observer`` receives every typed
+    tap/swipe/wheel dispatch event before the sanitized Home-only trace filter.
+    It is not a complete input audit: keypress and text-payload primitives emit
+    no typed receipts.
+    """
 
     if not artifact_directory.strip():
         raise ValueError("Core runtime artifact_directory cannot be empty.")
@@ -399,6 +430,7 @@ def build_core_runtime(
             artifact_directory=artifact_directory,
             policy=policy,
             trace_path=trace_path,
+            input_dispatch_observer=input_dispatch_observer,
         )
     except BaseException as error:
         close_preserving_error(
@@ -417,8 +449,14 @@ def assemble_core_runtime(
     artifact_directory: str,
     policy: NavigationPolicy | None,
     trace_path: Path | None,
+    input_dispatch_observer: Callable[[InputDispatchEvent], None] | None = None,
 ) -> CoreRuntime:
-    """Assembles replacement-core services while the caller owns the connected runtime."""
+    """Assembles replacement-core services while the caller owns the connected runtime.
+
+    ``input_dispatch_observer`` receives every typed tap/swipe/wheel dispatch
+    event before the sanitized Home-only trace filter. It is not a complete
+    input audit: keypress and text-payload primitives emit no typed receipts.
+    """
 
     performance_run = current_performance_run()
     if performance_run is not None:
@@ -462,7 +500,10 @@ def assemble_core_runtime(
         holder["runtime"].record(entry)
 
     previous_input_dispatch_recorder = observed_action_executor.action_executor.input_dispatch_recorder
-    input_dispatch_recorder = _make_input_dispatch_recorder(record)
+    input_dispatch_recorder = _compose_input_dispatch_recorders(
+        input_dispatch_observer,
+        _make_input_dispatch_recorder(record),
+    )
     observed_action_executor.action_executor.input_dispatch_recorder = input_dispatch_recorder
     navigation = NavigationCore(
         observed_action_executor.action_executor,
@@ -542,6 +583,36 @@ def _make_input_dispatch_recorder(
             record(entry)
             return
         raise TypeError(f"Unsupported input dispatch event type: {type(event).__name__}.")
+
+    return handle
+
+
+def _compose_input_dispatch_recorders(
+    observer: Callable[[InputDispatchEvent], None] | None,
+    trace_recorder: Callable[[InputDispatchEvent], None],
+) -> Callable[[InputDispatchEvent], None]:
+    """Fans out one dispatch event to the external observer, then the trace recorder.
+
+    Each callback gets one attempt even when the other raises: a single
+    failure propagates unchanged while a dual failure raises a group that
+    preserves both errors. A callback failure can never manufacture another
+    input attempt or a fabricated send-failure event.
+    """
+
+    if observer is None:
+        return trace_recorder
+
+    def handle(event: InputDispatchEvent) -> None:
+        errors: list[BaseException] = []
+        for callback in (observer, trace_recorder):
+            try:
+                callback(event)
+            except BaseException as error:
+                errors.append(error)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BaseExceptionGroup("Core input dispatch callbacks failed.", errors)
 
     return handle
 

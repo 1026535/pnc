@@ -41,6 +41,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     resolve_swipe_points_for_action,
 )
 from pnc_automation.app.pnc.domain.observation import (
+    Bounds,
     DetectedListEntry,
     DetectedSpatialObject,
     ListEntryKind,
@@ -154,13 +155,13 @@ class ActionExecutor:
             target = element.action_point if element.action_point is not None else element.bounds.center()
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self._emit_dispatch_record(action, observation, self.session.tap_point(*target))
+                self._dispatch_tap_point(action, observation, *target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapPointAction):
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self._emit_dispatch_record(action, observation, self.session.tap_point(action.x, action.y))
+                self._dispatch_tap_point(action, observation, action.x, action.y)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapListEntryAction):
@@ -179,7 +180,7 @@ class ActionExecutor:
                 target = entry.action_point if action.use_action_point and entry.action_point is not None else entry.bounds.center()
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self._emit_dispatch_record(action, observation, self.session.tap_point(*target))
+                self._dispatch_tap_point(action, observation, *target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapSpatialObjectAction):
@@ -274,18 +275,15 @@ class ActionExecutor:
                 self._record_input_attempt(action, observation)
                 if action.exact_geometry:
                     assert action.expected_object is not None and action.expected_object.action_bounds is not None
-                    try:
-                        dispatch = self.session.tap_point(
-                            *target,
-                            exact_geometry=True,
-                            safe_bounds=action.expected_object.action_bounds,
-                        )
-                    except Exception as error:
-                        self._emit_dispatch_failure(action, observation, error, input_kind="tap")
-                        raise
+                    self._dispatch_tap_point(
+                        action,
+                        observation,
+                        *target,
+                        exact_geometry=True,
+                        safe_bounds=action.expected_object.action_bounds,
+                    )
                 else:
-                    dispatch = self.session.tap_point(*target)
-                self._emit_dispatch_record(action, observation, dispatch)
+                    self._dispatch_tap_point(action, observation, *target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, SelectChatChannelAction):
@@ -303,7 +301,7 @@ class ActionExecutor:
             target = element.action_point if element.action_point is not None else element.bounds.center()
             with self._authorized_input(action, observation):
                 self._record_input_attempt(action, observation)
-                self._emit_dispatch_record(action, observation, self.session.tap_point(*target))
+                self._dispatch_tap_point(action, observation, *target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, InputTextAction):
@@ -317,7 +315,7 @@ class ActionExecutor:
             with self._authorized_input(action, observation):
                 if action.selector_id is not None:
                     self._record_input_attempt(action, observation)
-                    self._emit_dispatch_record(action, observation, self.session.tap_point(x, y))
+                    self._dispatch_tap_point(action, observation, x, y)
                     self._sleep_ms(self._stable_delay_ms_for(action))
                     self._clear_existing_text(action, observation)
                 self._input_text(action, observation)
@@ -570,6 +568,40 @@ class ActionExecutor:
         if isinstance(action, TapSpatialObjectAction):
             return action.exact_geometry
         return False
+
+    def _dispatch_tap_point(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        x: int,
+        y: int,
+        *,
+        exact_geometry: bool = False,
+        safe_bounds: Bounds | None = None,
+    ) -> None:
+        """Sends one tap and binds that send boundary to exactly one typed event.
+
+        A send failure emits one InputDispatchFailure, then preserves the
+        original exception — keeping the send error as the primary error even
+        when reporting it also fails. The dispatch receipt is emitted only
+        after the send returned, so a successful-send reporting failure can
+        never fabricate a send-failure event or a second tap.
+        """
+
+        try:
+            dispatch = self.session.tap_point(
+                x,
+                y,
+                exact_geometry=exact_geometry,
+                safe_bounds=safe_bounds,
+            )
+        except Exception as error:
+            try:
+                self._emit_dispatch_failure(action, observation, error, input_kind="tap")
+            except BaseException as report_error:
+                raise error from report_error
+            raise
+        self._emit_dispatch_record(action, observation, dispatch)
 
     def _emit_dispatch_record(
         self,

@@ -38,6 +38,7 @@ class FakeSession:
     wheel_prepare_error: Exception | None = None
     wheel_send_error: Exception | None = None
     swipe_error: Exception | None = None
+    tap_error: Exception | None = None
     _input_sequence: int = field(default=0, init=False, repr=False)
     _consumed_frame_identity: tuple[str, int, int, int] | None = field(default=None, init=False, repr=False)
 
@@ -98,6 +99,8 @@ class FakeSession:
         self.taps.append((x, y))
         self.tap_exact_geometry.append(exact_geometry)
         self.tap_safe_bounds.append(safe_bounds)
+        if self.tap_error is not None:
+            raise self.tap_error
         self._input_sequence += 1
         return TapDispatch(point=(x, y), input_sequence=self._input_sequence)
 

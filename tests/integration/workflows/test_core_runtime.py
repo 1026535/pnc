@@ -19,7 +19,9 @@ from PIL import Image
 
 from pnc_automation.app.automation.engine.core_runtime import (
     CoreRuntime,
+    _compose_input_dispatch_recorders,
     _make_input_dispatch_recorder,
+    assemble_core_runtime,
     build_core_runtime,
 )
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -1221,6 +1223,309 @@ class CoreRuntimeTests(unittest.TestCase):
 
         self.assertIs(foreign, action_executor.input_dispatch_recorder)
         connected.close.assert_called_once_with()
+
+    def test_capture_once_returns_unknown_and_popup_frames_without_recovery(self) -> None:
+        """Delivers bounded UNKNOWN and blocking-popup frames without dispatching recovery input."""
+
+        captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
+        for frame in (
+            _frame_at(ScreenType.UNKNOWN, captured_at),
+            _frame_at(ScreenType.PNC_POPUP, captured_at, blocking_popup=True),
+        ):
+            with self.subTest(screen=frame.screen_type, blocked=frame.blocking_popup):
+                screenshot = CapturedScreenshot(
+                    artifact=ArtifactRecord(
+                        path=Path("capture.png"), captured_at=captured_at,
+                        size_bytes=1, sha256="sha", label="capture",
+                    ),
+                    image=Image.new("RGB", (2, 2)), image_format="PNG",
+                )
+                screenshot_service = Mock()
+                screenshot_service.capture.return_value = screenshot
+                perception = Mock()
+                perception.build.return_value = frame
+                executor = Mock()
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    trace_path = Path(temporary_directory) / "trace.jsonl"
+                    runtime = CoreRuntime(
+                        runtime=SimpleNamespace(
+                            session=object(),
+                            observation_service=SimpleNamespace(screenshot_service=screenshot_service),
+                        ),
+                        navigation=Mock(),
+                        artifact_directory="account",
+                        trace_path=trace_path,
+                        _perception=perception,
+                        _run_id="run",
+                        _observed_action_executor=executor,
+                    )
+
+                    result = runtime.capture_once("probe")
+
+                    self.assertIs(frame, result)
+                    self.assertIs(frame, runtime.last_observation)
+                    self.assertEqual(1, runtime.observation_count)
+                    executor.recover_interruption_if_required.assert_not_called()
+                    screenshot_service.capture.assert_called_once()
+                    perception.build.assert_called_once_with(
+                        screenshot, include_content=False, request=None,
+                    )
+                    trace = trace_path.read_text(encoding="utf-8")
+                    self.assertEqual(1, trace.count('"event": "capture"'))
+                    self.assertEqual(1, trace.count('"event": "observation"'))
+
+    def test_capture_once_rejects_explicit_request_without_content_before_capturing(self) -> None:
+        """Applies request validation before any screenshot is taken."""
+
+        screenshot_service = Mock()
+        perception = Mock()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(
+                    session=object(),
+                    observation_service=SimpleNamespace(screenshot_service=screenshot_service),
+                ),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=trace_path,
+                _perception=perception,
+                _run_id="run",
+            )
+
+            with self.assertRaisesRegex(ValueError, "include_content"):
+                runtime.capture_once("probe", request=ObservationRequest.full_runtime_default())
+
+            screenshot_service.capture.assert_not_called()
+            perception.build.assert_not_called()
+            self.assertEqual(0, runtime.observation_count)
+            self.assertIsNone(runtime.last_observation)
+            self.assertFalse(trace_path.exists())
+
+    def test_capture_once_forwards_explicit_request_and_content_scope(self) -> None:
+        """Passes the validated observation request through the shared capture path."""
+
+        captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
+        frame = _frame_at(ScreenType.PNC_HOME_CITY, captured_at)
+        screenshot = CapturedScreenshot(
+            artifact=ArtifactRecord(
+                path=Path("capture.png"), captured_at=captured_at,
+                size_bytes=1, sha256="sha", label="capture",
+            ),
+            image=Image.new("RGB", (2, 2)), image_format="PNG",
+        )
+        screenshot_service = Mock()
+        screenshot_service.capture.return_value = screenshot
+        perception = Mock()
+        perception.build.return_value = frame
+        request = ObservationRequest.full_runtime_default()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(
+                    session=object(),
+                    observation_service=SimpleNamespace(screenshot_service=screenshot_service),
+                ),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=Path(temporary_directory) / "trace.jsonl",
+                _perception=perception,
+                _run_id="run",
+            )
+
+            result = runtime.capture_once("probe", include_content=True, request=request)
+
+            self.assertIs(frame, result)
+            self.assertIs(frame, runtime.last_observation)
+            self.assertEqual(1, runtime.observation_count)
+            perception.build.assert_called_once_with(
+                screenshot, include_content=True, request=request,
+            )
+
+    def test_input_dispatch_observer_receives_events_before_the_home_trace_filter(self) -> None:
+        """Delivers every typed event to the observer while the trace keeps Home-only entries."""
+
+        action_executor = SimpleNamespace(input_dispatch_recorder=None)
+        connected = Mock()
+        connected.require_observed_action_executor.return_value = SimpleNamespace(
+            action_executor=action_executor,
+        )
+        connected.observation_service.observation_builder.visual_recognizer = object()
+        connected.observation_service.observation_builder.enricher = object()
+        events: list[object] = []
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            with (
+                patch("pnc_automation.app.automation.engine.core_runtime.NavigationPerception"),
+                patch("pnc_automation.app.automation.engine.core_runtime.NavigationCore"),
+            ):
+                runtime = assemble_core_runtime(
+                    script_runner=Mock(),
+                    connected_runtime=connected,
+                    account=SimpleNamespace(artifact_directory_name="account"),
+                    artifact_directory="account",
+                    policy=None,
+                    trace_path=trace_path,
+                    input_dispatch_observer=events.append,
+                )
+
+            recorder = action_executor.input_dispatch_recorder
+            frame_ref = FrameRef(
+                session_id="session-1", session_epoch=2, capture_sequence=3,
+                input_sequence=4, captured_at=datetime.now(tz=UTC),
+            )
+            non_home_record = InputDispatchRecord(
+                source_frame=frame_ref,
+                dispatch=TapDispatch(point=(1, 1), input_sequence=4),
+                home_city=False,
+            )
+            non_home_failure = InputDispatchFailure(
+                source_frame=frame_ref,
+                input_kind="tap",
+                failure_phase="dispatch",
+                exception_type="DeviceConnectionError",
+                home_city=False,
+            )
+            home_record = InputDispatchRecord(
+                source_frame=frame_ref,
+                dispatch=TapDispatch(point=(2, 2), input_sequence=5),
+                home_city=True,
+            )
+
+            recorder(non_home_record)
+            recorder(non_home_failure)
+            recorder(home_record)
+
+            self.assertEqual([non_home_record, non_home_failure, home_record], events)
+            entries = [
+                json.loads(line)
+                for line in trace_path.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(
+                ["home_city_input_dispatched"],
+                [entry["event"] for entry in entries],
+            )
+
+            runtime.close()
+
+            self.assertIsNone(action_executor.input_dispatch_recorder)
+            connected.close.assert_called_once_with()
+
+    def test_input_dispatch_observer_runs_before_the_trace_recorder(self) -> None:
+        """The composed recorder delivers the event to the external observer first."""
+
+        calls: list[str] = []
+        recorder = _compose_input_dispatch_recorders(
+            lambda _event: calls.append("observer"),
+            lambda _event: calls.append("trace"),
+        )
+
+        recorder(
+            InputDispatchRecord(
+                source_frame=None,
+                dispatch=TapDispatch(point=(1, 1), input_sequence=1),
+                home_city=False,
+            )
+        )
+
+        self.assertEqual(["observer", "trace"], calls)
+
+    def test_input_dispatch_recorder_is_the_trace_recorder_without_an_observer(self) -> None:
+        """Keeps the existing recorder installed unchanged when no observer is supplied."""
+
+        trace_recorder = _make_input_dispatch_recorder(lambda entry: None)
+
+        self.assertIs(trace_recorder, _compose_input_dispatch_recorders(None, trace_recorder))
+
+    def test_input_dispatch_observer_failure_still_reaches_the_trace_recorder(self) -> None:
+        """An observer error propagates after the trace recorder received its one attempt."""
+
+        observer_error = ValueError("observer failed")
+        traced: list[object] = []
+
+        def observer(_event: object) -> None:
+            raise observer_error
+
+        recorder = _compose_input_dispatch_recorders(observer, traced.append)
+        event = InputDispatchFailure(
+            source_frame=None,
+            input_kind="tap",
+            failure_phase="dispatch",
+            exception_type="DeviceConnectionError",
+            home_city=True,
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            recorder(event)
+
+        self.assertIs(observer_error, raised.exception)
+        self.assertEqual([event], traced)
+
+    def test_input_dispatch_trace_failure_still_reaches_the_observer_first(self) -> None:
+        """A trace error propagates after the observer received its one attempt."""
+
+        trace_error = RuntimeError("trace failed")
+        observed: list[object] = []
+
+        def trace_recorder(_event: object) -> None:
+            raise trace_error
+
+        recorder = _compose_input_dispatch_recorders(observed.append, trace_recorder)
+        event = InputDispatchRecord(
+            source_frame=None,
+            dispatch=TapDispatch(point=(1, 1), input_sequence=1),
+            home_city=True,
+        )
+
+        with self.assertRaises(RuntimeError) as raised:
+            recorder(event)
+
+        self.assertIs(trace_error, raised.exception)
+        self.assertEqual([event], observed)
+
+    def test_input_dispatch_observer_and_trace_failures_preserve_both_errors(self) -> None:
+        """Both callback failures surface together in one preserving group."""
+
+        observer_error = ValueError("observer failed")
+        trace_error = RuntimeError("trace failed")
+
+        def observer(_event: object) -> None:
+            raise observer_error
+
+        def trace_recorder(_event: object) -> None:
+            raise trace_error
+
+        recorder = _compose_input_dispatch_recorders(observer, trace_recorder)
+        event = InputDispatchRecord(
+            source_frame=None,
+            dispatch=TapDispatch(point=(1, 1), input_sequence=1),
+            home_city=False,
+        )
+
+        with self.assertRaises(BaseExceptionGroup) as raised:
+            recorder(event)
+
+        self.assertEqual((observer_error, trace_error), raised.exception.exceptions)
+
+    def test_build_core_runtime_forwards_the_input_dispatch_observer(self) -> None:
+        """Passes the optional observer through composition to the assembled runtime."""
+
+        connected = Mock()
+        script_runner = Mock()
+        script_runner.build_connected_runtime.return_value = connected
+        observer = Mock()
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_runtime.assemble_core_runtime",
+            return_value=Mock(),
+        ) as assemble:
+            build_core_runtime(
+                script_runner,
+                SimpleNamespace(artifact_directory_name="account"),
+                "account",
+                input_dispatch_observer=observer,
+            )
+
+        self.assertIs(observer, assemble.call_args.kwargs["input_dispatch_observer"])
 
     def test_navigation_perception_clear_screen_keeps_measured_navigation_controls(self) -> None:
         """CLEAR visually-proved screens keep OCR-anchored navigation selectors.
