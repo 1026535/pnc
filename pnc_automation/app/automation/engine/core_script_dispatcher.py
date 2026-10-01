@@ -29,10 +29,10 @@ from pnc_automation.app.automation.buildings import (
     BuildingMutationResult,
     BuildingUpgradeWorkflow,
 )
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflowResult,
     CoreWorkflowRunner,
-    WorkflowEffect,
 )
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep

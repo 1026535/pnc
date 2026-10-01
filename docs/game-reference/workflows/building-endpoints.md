@@ -164,6 +164,21 @@ routes. Their next prerequisite is a native primary-panel capture with visible
 family identity and Back, plus an independent capture/return group; labels or the
 shared prefab do not authorize copying a sibling's identity or Back geometry.
 
+**Entry-effect correction, September 30:** Live021 Cavalry entry showed a
+completed-training poptip and a completion banner in the opened panel. The
+recovered 5.0.203 `CAMP_PANEL` path calls `CampData:BuildFinish`; an ended
+nonempty queue can then send `RequireRecruitFinish`. The installed build and
+exact resulting troop delta remain unknown. The four barracks, five resource
+buildings, and Trap Workshop therefore declare possible automatic collection
+as `NONSPENDING_STATE_CHANGE` for an ordinary entry workflow. A direct
+navigation call defaults to `READ_ONLY`, and an enabled read-only probe rejects
+those body taps. On authorized non-Main test instances incidental collection is
+allowed, but the effect classification alone supplies no missing body,
+destination, or return route. Passive body location and a measured return from
+an already-open panel remain separate. Provenance:
+`.local-data/devin-vision-pipeline/v44-military-entry-auto-collection-20260930.md`
+and the reviewed live021 Cavalry incident.
+
 ## Measured body evidence — September 29, 2026
 
 The V44-4 sepia-taleggio package measured two Home-city bodies from the

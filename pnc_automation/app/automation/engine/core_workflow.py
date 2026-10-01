@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Generic, Literal, Protocol, TypeVar
 
 from pnc_automation.app.automation.daily_maintenance.coordinator import (
@@ -15,8 +14,10 @@ from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutatio
 from pnc_automation.core.infra.diagnostics.performance import performance_span
 from pnc_automation.app.automation.engine.navigation_core import (
     HomeCityObservationRequest,
+    require_building_entry_effect,
     require_resource_inventory_surface,
 )
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.automation.tasks.building_workflow_support import (
     build_queue_first_slot_is_idle,
     can_open_build_queue,
@@ -116,14 +117,6 @@ def _resolve_unique_home_building_identity(
     return instance_key
 
 
-
-
-class WorkflowEffect(StrEnum):
-    """Declares the bounded effect class permitted by the core runner."""
-
-    READ_ONLY = "read_only"
-    NONSPENDING_STATE_CHANGE = "nonspending_state_change"
-    RESOURCE_CHANGING = "resource_changing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -641,11 +634,13 @@ class WorkflowContext:
 
         if not isinstance(target, HomeCityObjectId):
             raise ValueError("Building navigation requires a known HomeCityObjectId target.")
+        require_building_entry_effect(target, self._effect)
         self._research_node = None
         observation = self._runtime.navigation.open_building(
             target,
             observe_content=self._observe_home_city_navigation,
             home_city_slot=home_city_slot,
+            entry_effect=self._effect,
         )
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
@@ -680,6 +675,7 @@ class WorkflowContext:
 
         if not isinstance(target, HomeCityObjectId):
             raise ValueError("Building navigation requires a known HomeCityObjectId target.")
+        require_building_entry_effect(target, self._effect)
         acquired: list[str] = []
 
         def remember(object_: object) -> None:
@@ -700,6 +696,7 @@ class WorkflowContext:
             observe_content=self._observe_home_city_navigation,
             on_target_acquired=remember,
             home_city_slot=home_city_slot,
+            entry_effect=self._effect,
         )
         if len(acquired) != 1:
             raise RuntimeError("Building navigation did not publish one exact dispatch identity.")

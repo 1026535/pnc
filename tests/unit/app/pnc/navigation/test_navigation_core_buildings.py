@@ -10,6 +10,7 @@ from pnc_automation.app.automation.engine.navigation_core import (
     NavigationPolicy,
     reviewed_navigation_edges,
 )
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.action_requests import (
     SwipeAction,
     TapSpatialObjectAction,
@@ -439,6 +440,66 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
                 self.assertIsInstance(actuator.actions[0], SwipeAction)
 
 
+    def test_read_only_collecting_entry_refuses_before_observation(self) -> None:
+        """An authored body and route cannot waive a read-only effect."""
+        for target in (
+            HomeCityObjectId.TRAP_WORKSHOP,
+            HomeCityObjectId.FARM,
+            HomeCityObjectId.LUMBER_CAMP,
+            HomeCityObjectId.MOON_WELL,
+            HomeCityObjectId.IRON_MINE,
+            HomeCityObjectId.GOLD_MINE,
+            HomeCityObjectId.INFANTRY_BARRACKS,
+            HomeCityObjectId.CAVALRY_BARRACKS,
+            HomeCityObjectId.RANGED_BARRACKS,
+            HomeCityObjectId.SIEGE_FACTORY,
+        ):
+            for method in ("open_building", "open_visible_building"):
+                with self.subTest(target=target, method=method):
+                    observed = Mock()
+                    actuator = Actuator()
+                    core = NavigationCore(
+                        actuator, observed, reviewed_navigation_edges(),
+                        NavigationPolicy(max_observations=4), sleep=lambda _: None,
+                    )
+                    with self.assertRaisesRegex(PermissionError, "automatically collect completed output"):
+                        getattr(core, method)(target, observe_content=observed)
+                    observed.assert_not_called()
+                    self.assertEqual([], actuator.actions)
+
+    def test_nonspending_military_entry_keeps_measured_body_and_exact_endpoint(self) -> None:
+        target = measured_building_object(
+            HomeCityObjectId.RANGED_BARRACKS,
+            bounds=Bounds(220, 470, 100, 100),
+            action_point=(270, 520),
+            action_bounds=Bounds(264, 514, 12, 12),
+        )
+        now = datetime.now(UTC)
+        content_frames = iter(
+            camera_home_frame((target,), captured_at=now + timedelta(seconds=index))
+            for index in (1, 2)
+        )
+        destination_frames = iter(
+            mail_frame(ScreenType.PNC_RANGED_BARRACKS, captured_at=now + timedelta(seconds=index))
+            for index in (3, 4)
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(destination_frames), reviewed_navigation_edges(),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_visible_building(
+            HomeCityObjectId.RANGED_BARRACKS,
+            observe_content=lambda _: next(content_frames),
+            entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+        )
+
+        self.assertEqual(ScreenType.PNC_RANGED_BARRACKS, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual(target.action_point, actuator.actions[0].target_point)
+
     def test_open_building_rejects_unsupported_route_before_observation(self) -> None:
         """An unqualified endpoint cannot dispatch its potentially mutating body tap."""
         for target in (
@@ -450,6 +511,9 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             HomeCityObjectId.MOON_WELL,
             HomeCityObjectId.IRON_MINE,
             HomeCityObjectId.GOLD_MINE,
+            HomeCityObjectId.TRAP_WORKSHOP,
+            HomeCityObjectId.CAVALRY_BARRACKS,
+            HomeCityObjectId.SIEGE_FACTORY,
         ):
             for method in ("open_building", "open_visible_building"):
                 with self.subTest(target=target, method=method):
@@ -461,7 +525,10 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
                     )
 
                     with self.assertRaisesRegex(ValueError, "return route"):
-                        getattr(core, method)(target, observe_content=observed)
+                        getattr(core, method)(
+                            target, observe_content=observed,
+                            entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                        )
 
                     observed.assert_not_called()
                     self.assertEqual([], actuator.actions)

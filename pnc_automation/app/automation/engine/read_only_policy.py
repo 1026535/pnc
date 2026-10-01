@@ -17,6 +17,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_from_metadata,
+    building_entry_may_collect,
 )
 from pnc_automation.app.pnc.domain.observation import (
     Observation,
@@ -78,6 +79,16 @@ class ReadOnlyProbePolicy:
             # executor still owns current-object/provenance and geometry checks.
             body = action.expected_object
             surface = observation.spatial_surface
+            object_id = (
+                None if body is None else home_city_object_id_from_metadata(body.metadata)
+            )
+            if object_id is not None and building_entry_may_collect(object_id):
+                raise SelectorResolutionError(
+                    "Read-only probe rejected collecting building entry: a body tap may "
+                    "automatically collect completed output.",
+                    action_type=type(action).__name__,
+                    screen_type=observation.screen_type,
+                )
             if (
                 observation.screen_type == ScreenType.PNC_HOME_CITY
                 and surface is not None

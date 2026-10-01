@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
     WorkflowContext,
-    WorkflowEffect,
     WorkflowSpec,
 )
 from pnc_automation.app.automation.daily_maintenance.coordinator import (

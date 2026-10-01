@@ -16,6 +16,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     SwipeAction,
     SwipeInputSource,
     SwipePurpose,
+    TapAction,
     TapSpatialObjectAction,
     WheelAction,
 )
@@ -27,6 +28,7 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialSurfaceType,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.errors import (
     DeviceConnectionError,
     FrameProvenanceError,
@@ -440,6 +442,67 @@ class SwipeInputTests(MailWorkflowFixtures, unittest.TestCase):
         self.assertEqual((50, 50), record.dispatch.point)
         self.assertTrue(record.home_city)
         self.assertIs(policy, executor.read_only_policy)
+
+    def test_read_only_probe_allowlist_cannot_send_collecting_body_tap(self) -> None:
+        """An exact measured body cannot override an automatic collection effect."""
+        for target in (
+            HomeCityObjectId.TRAP_WORKSHOP,
+            HomeCityObjectId.FARM,
+            HomeCityObjectId.LUMBER_CAMP,
+            HomeCityObjectId.MOON_WELL,
+            HomeCityObjectId.IRON_MINE,
+            HomeCityObjectId.GOLD_MINE,
+            HomeCityObjectId.INFANTRY_BARRACKS,
+            HomeCityObjectId.CAVALRY_BARRACKS,
+            HomeCityObjectId.RANGED_BARRACKS,
+            HomeCityObjectId.SIEGE_FACTORY,
+        ):
+            with self.subTest(target=target):
+                session = FakeSession()
+                policy = ReadOnlyProbePolicy(
+                    enabled=True, allowed_home_buildings=frozenset({target}),
+                )
+                executor = self._make_executor(session=session, read_only_policy=policy)
+                frame_ref = FrameRef(
+                    session_id="military-admission-test", session_epoch=1,
+                    capture_sequence=7, input_sequence=0, captured_at=datetime.now(tz=UTC),
+                )
+                body = replace(
+                    make_spatial_object(SpatialObjectKind.HOME_BUILDING, action_point=(50, 50)),
+                    action_bounds=Bounds(45, 45, 10, 10),
+                    frame_ref=frame_ref,
+                    source_kind=SpatialObjectSourceKind.TEMPLATE,
+                    metadata={"home_city_object_id": target.value},
+                )
+                observation = make_observation(
+                    ScreenType.PNC_HOME_CITY,
+                    spatial_surface=make_spatial_surface(
+                        SpatialSurfaceType.HOME_CITY_SURFACE, objects=(body,),
+                    ),
+                    frame_ref=frame_ref,
+                )
+                with self.assertRaisesRegex(SelectorResolutionError, "automatically collect completed output"):
+                    executor.execute_action(
+                        TapSpatialObjectAction(
+                            target_point=(50, 50), expected_object=body, exact_geometry=True,
+                        ),
+                        observation,
+                    )
+                self.assertEqual([], session.taps)
+
+    def test_military_entry_denial_preserves_typed_cavalry_back_permission(self) -> None:
+        policy = ReadOnlyProbePolicy(
+            enabled=True,
+            allowed_selectors=frozenset({UiElementId.PNC_BACK_BUTTON_TOP_LEFT}),
+            allowed_selector_screens=((
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                frozenset({ScreenType.PNC_CAVALRY_BARRACKS}),
+            ),),
+        )
+        policy.validate(
+            TapAction(selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            make_observation(ScreenType.PNC_CAVALRY_BARRACKS),
+        )
 
     def test_building_probe_permission_is_explicit_and_target_scoped(self) -> None:
         body = replace(

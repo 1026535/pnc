@@ -13,6 +13,11 @@ from uuid import uuid4
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.automation.engine.developmental_control import (
+    DevelopmentalControlResult,
+    DevelopmentalControlScope,
+    MeasuredControlProof,
+)
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     ListEntryKind,
@@ -168,6 +173,26 @@ class CoreRuntime:
         self._validate_observe_scope(include_content=include_content, request=request)
         self._last_observe_recovered = False
         return self._observe_once(label, include_content=include_content, request=request)
+
+    def execute_developmental_control(
+        self,
+        scope: DevelopmentalControlScope,
+        proof: MeasuredControlProof,
+        observation: Observation,
+    ) -> DevelopmentalControlResult:
+        """Send one case-bound control, then persist its immediate raw follow-up.
+
+        A follow-up capture failure does not undo or authorize replay of the
+        physical input. The input observer retains its actual dispatch event.
+        """
+
+        if self._observed_action_executor is None:
+            raise RuntimeError("Developmental controls require the connected action executor.")
+        receipt = self._observed_action_executor.action_executor.execute_developmental_control(
+            scope, proof, observation,
+        )
+        follow_up = self.capture_once("developmental_control_after_input", include_content=True)
+        return DevelopmentalControlResult(receipt=receipt, follow_up=follow_up)
 
     @staticmethod
     def _validate_observe_scope(*, include_content: bool, request: ObservationRequest | None) -> None:

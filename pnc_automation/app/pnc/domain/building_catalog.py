@@ -854,6 +854,31 @@ def home_city_object_definition(home_city_object_id: HomeCityObjectId) -> HomeCi
     return _HOME_CITY_OBJECT_DEFINITION_BY_ID[home_city_object_id]
 
 
+_AUTO_COLLECTING_ENTRY_BUILDINGS = frozenset({
+    HomeCityObjectId.TRAP_WORKSHOP,
+    HomeCityObjectId.FARM,
+    HomeCityObjectId.LUMBER_CAMP,
+    HomeCityObjectId.MOON_WELL,
+    HomeCityObjectId.IRON_MINE,
+    HomeCityObjectId.GOLD_MINE,
+    HomeCityObjectId.INFANTRY_BARRACKS,
+    HomeCityObjectId.CAVALRY_BARRACKS,
+    HomeCityObjectId.RANGED_BARRACKS,
+    HomeCityObjectId.SIEGE_FACTORY,
+})
+
+
+def building_entry_may_collect(home_city_object_id: HomeCityObjectId) -> bool:
+    """Identify body entries that may collect output before or during panel opening.
+
+    The recovered client has five resource harvest branches, a Trap completion
+    branch, and four barracks panel-completion branches. This effect fact does
+    not establish a reviewed body, destination, or return route.
+    """
+
+    return home_city_object_id in _AUTO_COLLECTING_ENTRY_BUILDINGS
+
+
 def home_city_object_definition_for_label(label_text: str) -> HomeCityObjectDefinition | None:
     """Returns the canonical home-city object definition implied by one OCR-visible label."""
 

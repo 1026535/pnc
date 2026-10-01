@@ -21,6 +21,13 @@ from pnc_automation.core.infra.emulator.input_dispatch import (
 from pnc_automation.core.errors import FrameProvenanceError, SelectorResolutionError
 from pnc_automation.core.infra.diagnostics.performance import performance_wait
 from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
+from pnc_automation.app.automation.engine.developmental_control import (
+    DevelopmentalCasePurpose,
+    DevelopmentalControlScope,
+    MeasuredControlProof,
+)
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
+from pnc_automation.app.pnc.domain.building_catalog import home_city_object_id_from_metadata
 from pnc_automation.app.pnc.domain.chat import chat_channel_selector_id
 from pnc_automation.app.pnc.domain.mail import multiline_text_field_selector_ids
 from pnc_automation.app.pnc.domain.action_requests import (
@@ -55,6 +62,7 @@ from pnc_automation.app.pnc.domain.observation import (
     list_entry_matches,
 )
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
+from pnc_automation.app.pnc.domain.screen_decision import is_reviewed_viewport
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -88,6 +96,163 @@ class ActionExecutor:
     human_mode: bool = False
     rng: random.Random = field(default_factory=random.Random, repr=False)
     input_dispatch_recorder: Callable[[InputDispatchEvent], None] | None = None
+
+    def execute_developmental_control(
+        self,
+        scope: DevelopmentalControlScope,
+        proof: MeasuredControlProof,
+        observation: Observation,
+    ) -> InputDispatchRecord:
+        """Send one released, freshly measured task-owned control.
+
+        The caller owns the frozen CaseSpec and consumes its case attempt before
+        calling. This operation verifies their typed relationships; it does not
+        infer visual meaning from UNKNOWN or promote a production selector.
+        Use CoreRuntime's wrapper for the mandatory immediate follow-up capture.
+        """
+
+        self._validate_developmental_control(scope, proof, observation)
+        with self._authorized_frame_input(scope, observation):
+            self._record_input_attempt(scope, observation)
+            dispatch = self._dispatch_tap_point(
+                scope, observation, *proof.action_point,
+                exact_geometry=True, safe_bounds=proof.bounds,
+            )
+        assert observation.frame_ref is not None
+        return InputDispatchRecord(
+            source_frame=observation.frame_ref,
+            dispatch=dispatch,
+            artifact_path=observation.artifact_path,
+        )
+
+    def _validate_developmental_control(
+        self,
+        scope: DevelopmentalControlScope,
+        proof: MeasuredControlProof,
+        observation: Observation,
+    ) -> None:
+        """Check released-case, physical-body, and current-frame relations."""
+
+        def refuse(reason: str) -> None:
+            raise SelectorResolutionError(reason, case_id=scope.case_id, control=scope.control_name)
+
+        if self.read_only_policy.enabled or scope.read_only:
+            refuse("A read-only scope cannot send a developmental control.")
+        if self.max_input_attempts is None or self.input_attempt_deadline is None:
+            refuse("Developmental control requires an active cumulative input and duration budget.")
+        if scope.purpose not in {
+            DevelopmentalCasePurpose.CONTROL_DISCOVERY,
+            DevelopmentalCasePurpose.CONTROL_VALIDATION,
+        }:
+            refuse("This released case does not authorize a developmental control input.")
+        if not isinstance(scope.effect, WorkflowEffect) or not isinstance(proof.intended_effect, WorkflowEffect):
+            refuse("Developmental control requires one typed, known effect.")
+        if scope.effect != proof.intended_effect:
+            refuse("Measured control effect differs from the released case effect.")
+        if scope.effect == WorkflowEffect.RESOURCE_CHANGING and not scope.resource_allowance_ref:
+            refuse("Resource-changing control lacks the released allowance reference.")
+        if (not isinstance(scope.target, HomeCityObjectId)
+                or not all((scope.assignment_id, scope.case_id, scope.case_spec_ref, scope.operation_id,
+                    scope.released_action_id, scope.control_name))):
+            refuse("Developmental control lacks a named released case or action.")
+        attempt = scope.attempt
+        if (attempt.case_id != scope.case_id or attempt.control_name != scope.control_name
+                or not attempt.journal_ref or attempt.limit < 1
+                or not 1 <= attempt.number <= attempt.limit):
+            refuse("Developmental control lacks a matching consumed case attempt.")
+        if proof.control_name != scope.control_name or proof.foreground_target != scope.target:
+            refuse("Measured foreground control differs from the released target or control.")
+        if not proof.task_owned_foreground or not proof.visual_reason.strip():
+            refuse("Measured control lacks explicit task-owned foreground visual evidence.")
+        if (not scope.allowed_source_screens
+                or not all(isinstance(screen, ScreenType) for screen in scope.allowed_source_screens)
+                or observation.screen_type not in scope.allowed_source_screens
+                or observation.screen_type in {
+                    ScreenType.PNC_LOADING, ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP,
+                }):
+            refuse("This current screen is not an assigned task-owned control source.")
+        if observation.frame_ref is None or observation.artifact_path is None:
+            refuse("Developmental control requires a persisted current frame.")
+        if (proof.frame_ref != observation.frame_ref or proof.artifact_path != observation.artifact_path
+                or proof.frame_fingerprint != observation.frame_fingerprint
+                or proof.image_size != observation.image_size or proof.decision != observation.decision
+                or proof.screen_type != observation.screen_type or not proof.frame_fingerprint):
+            refuse("Measured control annotation does not bind the current persisted frame.")
+        if observation.image_size is None or not is_reviewed_viewport(observation.image_size):
+            refuse("Measured control lacks a reviewed native viewport.")
+        width, height = observation.image_size
+        if (proof.bounds.width <= 0 or proof.bounds.height <= 0
+                or proof.bounds.x < 0 or proof.bounds.y < 0
+                or proof.bounds.x + proof.bounds.width > width
+                or proof.bounds.y + proof.bounds.height > height
+                or not proof.bounds.contains_point(proof.action_point)):
+            refuse("Measured control point and bounds must lie inside the native frame.")
+        self._validate_developmental_input_chain(scope, observation)
+
+    @staticmethod
+    def _validate_developmental_input_chain(
+        scope: DevelopmentalControlScope, observation: Observation,
+    ) -> None:
+        """Require one exact body receipt and no intervening physical input."""
+
+        def refuse(reason: str) -> None:
+            raise SelectorResolutionError(reason, case_id=scope.case_id)
+
+        witness = scope.body_entry
+        source = witness.observation
+        body = witness.action.expected_object
+        receipt = witness.receipt
+        if (source.frame_ref is None or source.artifact_path is None
+                or source.frame_fingerprint is None
+                or source.image_size is None or not is_reviewed_viewport(source.image_size)
+                or witness.case_id != scope.case_id
+                or witness.operation_id != scope.operation_id
+                or receipt.source_frame != source.frame_ref
+                or receipt.artifact_path != source.artifact_path
+                or source.screen_type != ScreenType.PNC_HOME_CITY
+                or source.decision.guard != GuardVerdict.CLEAR
+                or not witness.action.exact_geometry or body is None
+                or body.kind != SpatialObjectKind.HOME_BUILDING
+                or body.source_kind != SpatialObjectSourceKind.TEMPLATE
+                or body.frame_ref != source.frame_ref
+                or body.source_screen != source.screen_type
+                or body.source_layout_id != source.decision.layout_id
+                or body.home_city_slot != scope.home_city_slot
+                or home_city_object_id_from_metadata(body.metadata) != scope.target
+                or body.action_bounds is None or body.action_point is None
+                or not body.action_bounds.contains_point(body.action_point)
+                or witness.action.target_point != body.action_point
+                or not isinstance(receipt.dispatch, TapDispatch)
+                or receipt.dispatch.point != body.action_point
+                or receipt.dispatch.input_sequence != source.frame_ref.input_sequence + 1):
+            refuse("Developmental control lacks an exact semantic body-entry receipt.")
+        source.require_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE).require_visible_object(body)
+        chain = scope.input_chain
+        if not chain or chain[0] != receipt or scope.attempt.number != len(chain):
+            refuse("Developmental control input chain differs from the consumed case attempt.")
+        previous = receipt
+        for current in chain[1:]:
+            if (not isinstance(current.dispatch, TapDispatch)
+                    or current.source_frame.session_id != previous.source_frame.session_id
+                    or current.source_frame.session_epoch != previous.source_frame.session_epoch
+                    or current.source_frame.input_sequence != previous.dispatch.input_sequence
+                    or current.dispatch.input_sequence != current.source_frame.input_sequence + 1):
+                refuse("Developmental control input chain has an unrecorded or foreign input.")
+            previous = current
+        first = scope.first_follow_up
+        first_ref = first.frame_ref
+        current_ref = observation.frame_ref
+        if (first_ref is None or current_ref is None or first.artifact_path is None
+                or first.frame_fingerprint is None
+                or first_ref.session_id != previous.source_frame.session_id
+                or first_ref.session_epoch != previous.source_frame.session_epoch
+                or first_ref.input_sequence != previous.dispatch.input_sequence
+                or first_ref.capture_sequence != previous.source_frame.capture_sequence + 1
+                or current_ref.session_id != first_ref.session_id
+                or current_ref.session_epoch != first_ref.session_epoch
+                or current_ref.input_sequence != first_ref.input_sequence
+                or current_ref.capture_sequence < first_ref.capture_sequence):
+            refuse("Developmental control requires an immediate follow-up or fresh no-input recapture.")
 
     def execute_actions(
         self,
@@ -510,6 +675,15 @@ class ActionExecutor:
                 screen_type=observation.screen_type,
             )
 
+        with self._authorized_frame_input(action, observation):
+            yield
+
+    @contextmanager
+    def _authorized_frame_input(
+        self, action: ActionRequest | DevelopmentalControlScope, observation: Observation,
+    ):
+        """Reuse the session's epoch, age, latest-frame, and once-only lock."""
+
         frame_ref = observation.frame_ref
         if frame_ref is None:
             raise SelectorResolutionError(
@@ -558,7 +732,7 @@ class ActionExecutor:
             )
 
     @staticmethod
-    def _home_city_input(action: ActionRequest) -> bool:
+    def _home_city_input(action: ActionRequest | DevelopmentalControlScope) -> bool:
         """Returns whether one action is canonical Home-city input for typed traces."""
 
         if isinstance(action, WheelAction):
@@ -571,14 +745,14 @@ class ActionExecutor:
 
     def _dispatch_tap_point(
         self,
-        action: ActionRequest,
+        action: ActionRequest | DevelopmentalControlScope,
         observation: Observation,
         x: int,
         y: int,
         *,
         exact_geometry: bool = False,
         safe_bounds: Bounds | None = None,
-    ) -> None:
+    ) -> TapDispatch:
         """Sends one tap and binds that send boundary to exactly one typed event.
 
         A send failure emits one InputDispatchFailure, then preserves the
@@ -605,10 +779,11 @@ class ActionExecutor:
                 raise error from report_error
             raise
         self._emit_dispatch_record(action, observation, dispatch)
+        return dispatch
 
     def _emit_dispatch_record(
         self,
-        action: ActionRequest,
+        action: ActionRequest | DevelopmentalControlScope,
         observation: Observation,
         dispatch: SwipeDispatch | WheelDispatch | TapDispatch,
     ) -> None:
@@ -628,7 +803,7 @@ class ActionExecutor:
 
     def _emit_dispatch_failure(
         self,
-        action: ActionRequest,
+        action: ActionRequest | DevelopmentalControlScope,
         observation: Observation,
         error: BaseException,
         *,
@@ -779,7 +954,9 @@ class ActionExecutor:
             required_update_relaunch=required_update_relaunch,
         )
 
-    def _record_input_attempt(self, action: ActionRequest, observation: Observation) -> None:
+    def _record_input_attempt(
+        self, action: ActionRequest | DevelopmentalControlScope, observation: Observation,
+    ) -> None:
         """Counts one imminent low-level input and enforces a bounded probe budget."""
 
         self.input_attempts += 1

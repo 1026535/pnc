@@ -1,4 +1,4 @@
-"""Read-only opening of one modeled home-city building on the replacement core."""
+"""Effect-aware opening of one modeled home-city building on the replacement core."""
 
 from __future__ import annotations
 
@@ -6,14 +6,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from collections.abc import Mapping
 
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
     WorkflowContext,
-    WorkflowEffect,
     WorkflowSpec,
 )
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
+    building_entry_may_collect,
     primary_screen_type_for_home_city_object,
 )
 from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
@@ -63,13 +64,17 @@ class OpenBuildingWorkflow(CoreWorkflow[OpenBuildingResult]):
                 name="open_building",
                 entry_screen=ScreenType.PNC_HOME_CITY,
                 exit_screen=destination,
-                effect=WorkflowEffect.READ_ONLY,
+                effect=(
+                    WorkflowEffect.NONSPENDING_STATE_CHANGE
+                    if building_entry_may_collect(self.policy.building)
+                    else WorkflowEffect.READ_ONLY
+                ),
             ),
         )
 
     @property
     def spec(self) -> WorkflowSpec:
-        """Returns the Home-to-exact-building read-only contract."""
+        """Returns the Home-to-exact-building effect and endpoint contract."""
 
         return self._spec
 

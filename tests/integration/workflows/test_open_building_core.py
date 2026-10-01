@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import WorkflowContext
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.automation.engine.navigation_core import (
     NavigationCore,
     NavigationPolicy,
@@ -26,6 +27,7 @@ from pnc_automation.app.automation.open_building import (
 from pnc_automation.app.pnc.domain.action_requests import TapAction, TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
+    building_entry_may_collect,
     home_city_object_id_for_screen,
     primary_screen_type_for_home_city_object,
 )
@@ -74,6 +76,79 @@ def _building_panel(
 
 class OpenBuildingCoreTests(unittest.TestCase):
     """Covers the typed workflow and constrained context."""
+
+    def test_collecting_building_workflows_declare_nonspending_state_change(self) -> None:
+        for building in (
+            HomeCityObjectId.TRAP_WORKSHOP,
+            HomeCityObjectId.INFANTRY_BARRACKS,
+            HomeCityObjectId.CAVALRY_BARRACKS,
+            HomeCityObjectId.RANGED_BARRACKS,
+            HomeCityObjectId.SIEGE_FACTORY,
+        ):
+            with self.subTest(building=building):
+                workflow = build_open_building_workflow({"building": building.value})
+                self.assertEqual(WorkflowEffect.NONSPENDING_STATE_CHANGE, workflow.spec.effect)
+        self.assertEqual(
+            WorkflowEffect.READ_ONLY,
+            build_open_building_workflow({"building": HomeCityObjectId.INSTITUTE.value}).spec.effect,
+        )
+        for building in (
+            HomeCityObjectId.RECRUITING_CENTER,
+            HomeCityObjectId.INFIRMARY,
+            HomeCityObjectId.WATCHTOWER,
+            HomeCityObjectId.BANK,
+        ):
+            with self.subTest(noncollecting=building):
+                self.assertFalse(building_entry_may_collect(building))
+
+    def test_read_only_context_refuses_collecting_entry_before_navigation(self) -> None:
+        runtime = Mock()
+        runtime.observation_count = 0
+        context = WorkflowContext(
+            runtime,
+            last_observation=make_observation(ScreenType.PNC_HOME_CITY),
+            effect=WorkflowEffect.READ_ONLY,
+        )
+        for building in (
+            HomeCityObjectId.TRAP_WORKSHOP,
+            HomeCityObjectId.FARM,
+            HomeCityObjectId.LUMBER_CAMP,
+            HomeCityObjectId.MOON_WELL,
+            HomeCityObjectId.IRON_MINE,
+            HomeCityObjectId.GOLD_MINE,
+            HomeCityObjectId.INFANTRY_BARRACKS,
+            HomeCityObjectId.CAVALRY_BARRACKS,
+            HomeCityObjectId.RANGED_BARRACKS,
+            HomeCityObjectId.SIEGE_FACTORY,
+        ):
+            with self.subTest(building=building):
+                with self.assertRaisesRegex(PermissionError, "read-only navigation"):
+                    context.open_building(building)
+                with self.assertRaisesRegex(PermissionError, "read-only navigation"):
+                    context.open_building_with_identity(building)
+        runtime.navigation.open_building.assert_not_called()
+
+    def test_nonspending_context_carries_effect_to_supported_military_entry(self) -> None:
+        runtime = Mock()
+        runtime.observation_count = 0
+        runtime.navigation.open_building.return_value = make_observation(
+            ScreenType.PNC_RANGED_BARRACKS
+        )
+        context = WorkflowContext(
+            runtime,
+            last_observation=make_observation(ScreenType.PNC_HOME_CITY),
+            effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+        )
+
+        result = context.open_building(HomeCityObjectId.RANGED_BARRACKS)
+
+        self.assertEqual(ScreenType.PNC_RANGED_BARRACKS, result.screen_type)
+        runtime.navigation.open_building.assert_called_once_with(
+            HomeCityObjectId.RANGED_BARRACKS,
+            observe_content=context._observe_home_city_navigation,
+            home_city_slot=None,
+            entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+        )
 
     def test_workflow_uses_dynamic_exact_endpoint_and_typed_result(self) -> None:
         workflow = build_open_building_workflow({"building": HomeCityObjectId.INSTITUTE.value})
@@ -161,6 +236,7 @@ class OpenBuildingCoreTests(unittest.TestCase):
             HomeCityObjectId.BLACKSMITH,
             observe_content=context._observe_home_city_navigation,
             home_city_slot=HomeCitySlotSelector(slot_index=12),
+            entry_effect=WorkflowEffect.READ_ONLY,
         )
 
     def test_reviewed_targets_use_canonical_primary_screen_and_workflow_endpoint(self) -> None:

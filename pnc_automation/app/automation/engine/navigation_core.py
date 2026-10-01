@@ -25,10 +25,12 @@ from pnc_automation.app.pnc.domain.action_requests import (
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_from_metadata,
+    building_entry_may_collect,
     primary_screen_type_for_home_city_object,
     upgrade_entry_selector_for_screen,
 )
 from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import (
     HomeCityCameraScanMode,
@@ -475,8 +477,10 @@ class NavigationCore:
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
         require_measured: bool = False,
         home_city_slot: HomeCitySlotSelector | None = None,
+        entry_effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
     ) -> Observation:
         """Open one observed city object without atlas estimates or camera prediction."""
+        require_building_entry_effect(target, entry_effect)
         _require_reviewed_building_route(target=target, edges=self.edges)
         validate_home_city_slot_selector(target, home_city_slot)
         spec = home_city_camera_target(target)
@@ -495,8 +499,10 @@ class NavigationCore:
         observe_content: Callable[[HomeCityObservationRequest], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
         home_city_slot: HomeCitySlotSelector | None = None,
+        entry_effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
     ) -> Observation:
         """Acquire a fresh body through the catalog's measured scan contract."""
+        require_building_entry_effect(target, entry_effect)
         _require_reviewed_building_route(target=target, edges=self.edges)
         current, operation = self._locate_building(
             target=target, observe_content=observe_content, home_city_slot=home_city_slot,
@@ -1917,6 +1923,18 @@ def require_resource_inventory_surface(observation: Observation) -> None:
         or not _template_control(observation, UiElementId.PNC_BAG_SUBTAB_RESOURCE)
     ):
         raise RuntimeError("Resource inventory requires a guarded Bag with the selected Resource tab.")
+
+
+def require_building_entry_effect(target: HomeCityObjectId, effect: WorkflowEffect) -> None:
+    """Require a declared state-change effect before a collecting body route."""
+
+    if not isinstance(effect, WorkflowEffect):
+        raise TypeError("Building entry requires a WorkflowEffect.")
+    if building_entry_may_collect(target) and effect == WorkflowEffect.READ_ONLY:
+        raise PermissionError(
+            "Building entry may automatically collect completed output; "
+            "read-only navigation cannot open it."
+        )
 
 
 def _require_reviewed_building_route(
