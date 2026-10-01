@@ -107,7 +107,7 @@ portal. The original 900×1600 image is tracked as
 requires the visually distinct locked Costa Dorad text and gold Misty Bay row,
 both cropped from the observed map body outside the tutorial arrow, promotions,
 and HUD. Both score 1.0 on the source against 0.95 and 0.9999997/0.99849 on a
-second native frame captured seven seconds earlier during a changing promotion.
+second native frame captured shortly before the reference during a changing promotion.
 The second frame is same-session correlated validation, not an independent
 holdout. Existing later map, Chapter, Stage, Home, and World fixtures do not
 qualify the new anchors. The measured Home portal selector and Campaign-to-Home

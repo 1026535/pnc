@@ -1257,7 +1257,7 @@
       "expected_visual_screens": ["PNC_CAMPAIGN_MAP"],
       "source_artifact": "20260930T224602Z_core_20260930T224553Z_84d7c398_0002_takeover_reconcile.png",
       "source_sha256": "b458158189b0004be84756e56eb1df4c1048f098d9e3aede92406fc696c9d034",
-      "annotation": "Same-session correlated frame seven seconds before the reference with a changing promotion effect; it checks those excluded pixels but is not an independent holdout or live return proof."
+      "annotation": "Same-session correlated frame shortly before the reference with a changing promotion effect; it checks those excluded pixels but is not an independent holdout or live return proof."
     },
     {
       "image": "research_node_detail_max_20260916.png",
