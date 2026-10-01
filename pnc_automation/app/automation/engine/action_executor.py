@@ -589,12 +589,15 @@ class ActionExecutor:
         """
 
         try:
-            dispatch = self.session.tap_point(
-                x,
-                y,
-                exact_geometry=exact_geometry,
-                safe_bounds=safe_bounds,
-            )
+            if exact_geometry or safe_bounds is not None:
+                dispatch = self.session.tap_point(
+                    x,
+                    y,
+                    exact_geometry=exact_geometry,
+                    safe_bounds=safe_bounds,
+                )
+            else:
+                dispatch = self.session.tap_point(x, y)
         except Exception as error:
             try:
                 self._emit_dispatch_failure(action, observation, error, input_kind="tap")
