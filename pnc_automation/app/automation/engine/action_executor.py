@@ -27,7 +27,10 @@ from pnc_automation.app.automation.engine.developmental_control import (
     MeasuredControlProof,
 )
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
-from pnc_automation.app.pnc.domain.building_catalog import home_city_object_id_from_metadata
+from pnc_automation.app.pnc.domain.building_catalog import (
+    HomeCityObjectId,
+    home_city_object_id_from_metadata,
+)
 from pnc_automation.app.pnc.domain.chat import chat_channel_selector_id
 from pnc_automation.app.pnc.domain.mail import multiline_text_field_selector_ids
 from pnc_automation.app.pnc.domain.action_requests import (

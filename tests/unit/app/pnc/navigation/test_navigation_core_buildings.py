@@ -249,6 +249,7 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
                     opened = getattr(core, method)(
                         target, home_city_slot=selector,
                         observe_content=lambda _: next(content_frames),
+                        entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                     )
                     returned = core.navigate(ScreenType.PNC_HOME_CITY)
 
