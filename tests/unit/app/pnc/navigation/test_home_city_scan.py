@@ -20,6 +20,7 @@ from pnc_automation.app.pnc.navigation.home_city_scan import (
     projected_body_region,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import plan_home_city_camera_step
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
@@ -146,7 +147,11 @@ class HomeCityTargetLocationTests(unittest.TestCase):
         self.assertIs(body, located.spatial_surface.objects[0])
         self.assertEqual([], actions)
         with self.assertRaisesRegex(ValueError, "reviewed"):
-            core.open_building(target, observe_content=lambda _: self.fail("public route observed"))
+            core.open_building(
+                target,
+                observe_content=lambda _: self.fail("public route observed"),
+                entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+            )
         self.assertEqual([], actions)
 
     def test_target_only_scan_returns_current_post_pan_body_without_tap(self):

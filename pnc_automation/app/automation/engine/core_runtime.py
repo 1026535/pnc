@@ -11,13 +11,17 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
+from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.developmental_control import (
     DevelopmentalControlResult,
     DevelopmentalControlScope,
     MeasuredControlProof,
 )
+from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     ListEntryKind,
@@ -27,6 +31,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.automation.engine.navigation_core import (
+    HomeCityObservationRequest,
     NavigationCore,
     NavigationPolicy,
     reviewed_navigation_edges,
@@ -193,6 +198,38 @@ class CoreRuntime:
         )
         follow_up = self.capture_once("developmental_control_after_input", include_content=True)
         return DevelopmentalControlResult(receipt=receipt, follow_up=follow_up)
+
+    def enter_building_body_for_discovery(
+        self,
+        target: HomeCityObjectId,
+        *,
+        entry_effect: WorkflowEffect,
+        on_body_prepared: Callable[[Observation, TapSpatialObjectAction], None],
+        home_city_slot: HomeCitySlotSelector | None = None,
+    ) -> tuple[Observation, TapSpatialObjectAction, Observation]:
+        """Enter one measured building body and capture its raw post-tap state.
+
+        Supplies the canonical Home observation adapter for the qualified
+        acquisition and a raw ``capture_once`` follow-up; no destination is
+        polled or claimed. ``on_body_prepared`` receives the authorizing source
+        frame and exact action immediately before the single send.
+        """
+
+        def observe_content(request: HomeCityObservationRequest) -> Observation:
+            return self.observe(
+                request.label,
+                include_content=True,
+                request=ObservationRequest.home_city_navigation(mode=request.camera_mode),
+            )
+
+        return self.navigation.enter_building_body_for_discovery(
+            target,
+            entry_effect=entry_effect,
+            observe_content=observe_content,
+            on_body_prepared=on_body_prepared,
+            capture_follow_up=lambda label: self.capture_once(label, include_content=True),
+            home_city_slot=home_city_slot,
+        )
 
     @staticmethod
     def _validate_observe_scope(*, include_content: bool, request: ObservationRequest | None) -> None:

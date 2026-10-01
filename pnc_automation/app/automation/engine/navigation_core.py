@@ -800,33 +800,18 @@ class NavigationCore:
         Session provenance still rejects a stale source at actual dispatch.
         """
         destination = _require_reviewed_building_route(target=target, edges=self.edges)
-
-        def acquire(before: Observation) -> tuple[Observation, DetectedSpatialObject, tuple[int, int]]:
-            operation.check_deadline()
-            view = operation.view(before)
-            if view is not None and view.zoom_status == HomeCityZoomStatus.NOT_AT_ENDPOINT:
-                operation.stop(HomeCityScanStopReason.ZOOM_CHANGED,
-                               "Home scale changed before the building tap.")
-            if not operation.endpoint(before) or view.calibration_id != operation.calibration_id:
-                operation.stop(HomeCityScanStopReason.LOCALIZATION_UNRESOLVED,
-                               "Final building frame has no current normalized pose; no tap sent.")
-            resolved = _resolve_observed_building_target(
-                before, target=target, require_measured=True, home_city_slot=home_city_slot,
-            )
-            if resolved is None:
-                operation.stop(HomeCityScanStopReason.NO_QUALIFIED_ROUTE,
-                               "Building is absent or ambiguous on the final frame; no tap sent.")
-            body, point = resolved
-            if not _is_hud_safe_building_point(point, image_size=before.image_size):
-                operation.stop(HomeCityScanStopReason.NO_SAFE_GESTURE,
-                               "Final building body overlaps the HUD; no tap sent.")
-            return before, body, point
-
-        before, body, point = acquire(source)
+        before, body, point = self._acquire_final_building_body(
+            target=target, operation=operation, before=source, home_city_slot=home_city_slot,
+        )
         home_city_slot = home_city_slot or body.home_city_slot
         if on_target_acquired is not None:
             on_target_acquired(body)
-            before, body, point = acquire(operation.capture(before, "body_after_callback"))
+            before, body, point = self._acquire_final_building_body(
+                target=target,
+                operation=operation,
+                before=operation.capture(before, "body_after_callback"),
+                home_city_slot=home_city_slot,
+            )
         self.record({"event": "pending_building", "target": target.value,
                      "artifact": str(before.artifact_path), "point": point})
         operation.trace(before, "tap", target=target, slot=home_city_slot)
@@ -836,6 +821,86 @@ class NavigationCore:
             before, frozenset({destination}), operation.label,
             home_operation=operation,
         )
+
+    def _acquire_final_building_body(
+        self,
+        *,
+        target: HomeCityObjectId,
+        operation: "_HomeCityOperation",
+        before: Observation,
+        home_city_slot: HomeCitySlotSelector | None,
+    ) -> tuple[Observation, DetectedSpatialObject, tuple[int, int]]:
+        """Revalidate the measured target body on the final authorizing frame.
+
+        Returns the same frame plus the exact body and tap point; no input is
+        sent here. Shared by the reviewed-route open path and the qualified
+        discovery body entry.
+        """
+
+        operation.check_deadline()
+        view = operation.view(before)
+        if view is not None and view.zoom_status == HomeCityZoomStatus.NOT_AT_ENDPOINT:
+            operation.stop(HomeCityScanStopReason.ZOOM_CHANGED,
+                           "Home scale changed before the building tap.")
+        if not operation.endpoint(before) or view.calibration_id != operation.calibration_id:
+            operation.stop(HomeCityScanStopReason.LOCALIZATION_UNRESOLVED,
+                           "Final building frame has no current normalized pose; no tap sent.")
+        resolved = _resolve_observed_building_target(
+            before, target=target, require_measured=True, home_city_slot=home_city_slot,
+        )
+        if resolved is None:
+            operation.stop(HomeCityScanStopReason.NO_QUALIFIED_ROUTE,
+                           "Building is absent or ambiguous on the final frame; no tap sent.")
+        body, point = resolved
+        if not _is_hud_safe_building_point(point, image_size=before.image_size):
+            operation.stop(HomeCityScanStopReason.NO_SAFE_GESTURE,
+                           "Final building body overlaps the HUD; no tap sent.")
+        return before, body, point
+
+    def enter_building_body_for_discovery(
+        self,
+        target: HomeCityObjectId,
+        *,
+        entry_effect: WorkflowEffect,
+        observe_content: Callable[[HomeCityObservationRequest], Observation],
+        on_body_prepared: Callable[[Observation, TapSpatialObjectAction], None],
+        capture_follow_up: Callable[[str], Observation],
+        home_city_slot: HomeCitySlotSelector | None = None,
+    ) -> tuple[Observation, TapSpatialObjectAction, Observation]:
+        """Send one qualified body tap, then capture the raw observed post-tap state.
+
+        Discovery keeps the full acquisition, endpoint, calibration, slot,
+        HUD-safety, and provenance gate but does not require a reviewed
+        destination route: the task-owned menu may be UNKNOWN or PNC_POPUP.
+        ``on_body_prepared`` runs immediately before the single canonical send
+        so the owning case can bind its durable input intent; the follow-up is
+        one raw ``capture_once`` with no recovery or destination polling. A
+        captured menu is evidence, not acceptance, and this path never claims
+        a production route.
+        """
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Building body discovery requires a known HomeCityObjectId target.")
+        require_building_entry_effect(target, entry_effect)
+        current, operation = self._locate_building(
+            target=target,
+            observe_content=observe_content,
+            home_city_slot=home_city_slot,
+        )
+        before, body, point = self._acquire_final_building_body(
+            target=target, operation=operation, before=current, home_city_slot=home_city_slot,
+        )
+        action = TapSpatialObjectAction(
+            target_point=point, expected_object=body, exact_geometry=True,
+            reason="developmental_building_body_entry",
+        )
+        self.record({"event": "pending_building", "target": target.value,
+                     "artifact": str(before.artifact_path), "point": point})
+        operation.trace(before, "tap", target=target, slot=home_city_slot or body.home_city_slot)
+        on_body_prepared(before, action)
+        operation.send(action, before)
+        follow_up = capture_follow_up(f"{operation.label}_body_discovery")
+        return before, action, follow_up
 
     def open_building_upgrade_detail(
         self,
