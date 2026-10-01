@@ -90,6 +90,35 @@ Cropping the existing reference patch to the Grandia Ruins label yields
 0.9451/0.9490 on those frames without lowering its0.93 threshold. The independent
 scene anchor and measured Home portal are unchanged. The two native map fixtures share one correlated validation group. The shared Home-to-Campaign entry and Home return passed the independently reviewed V44 turn012 route. Campaign chapter/stage parsing and formation remain separately owned.
 
+## Early Chapter 2 map on K226, September 30
+
+**Artifact-observed:** the M1 continuation discovery on `testing`/K226 saved a
+native 900×1600 Campaign map at
+`20260930T224605Z_core_20260930T224553Z_84d7c398_0003_d4_return_source.png`.
+Misty Bay is a gold available row, Costa Dorad is locked, and the blue Home
+portal is visible. The installed game build is unknown. The later-progress
+southern-map Costa/Misty row anchors score 0.54352/0.60857 against their 0.90
+bounds on this frame, while the existing Home portal scores 0.98280 against
+0.95. Both observation publishers previously returned UNKNOWN and withheld the
+portal. The original 900×1600 image is tracked as
+`campaign_map_early_chapter2_20260930.png` with source hash in the manifest.
+
+**Offline qualification:** a separate `campaign_map_early_chapter2` profile
+requires the visually distinct locked Costa Dorad text and gold Misty Bay row,
+both cropped from the observed map body outside the tutorial arrow, promotions,
+and HUD. Both score 1.0 on the source against 0.95 and 0.9999997/0.99849 on a
+second native frame captured seven seconds earlier during a changing promotion.
+The second frame is same-session correlated validation, not an independent
+holdout. Existing later map, Chapter, Stage, Home, and World fixtures do not
+qualify the new anchors. The measured Home portal selector and Campaign-to-Home
+edge are unchanged.
+
+**Automation implication:** the saved frame can now publish a typed Campaign
+map and fresh portal control. This does not prove a live portal tap or Home
+return from K226. The next distinct live case is one observed portal action from
+a freshly verified early map, followed by fresh Home and castle identity proof;
+no stage, battle, or spending action follows from this profile.
+
 ## Chapter 10 locked path, September 30
 
 **Live-observed:** V44 turn025 on `157_farm` opened Campaign and tapped the

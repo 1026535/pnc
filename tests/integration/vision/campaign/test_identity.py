@@ -103,6 +103,57 @@ class CampaignIdentityTests(unittest.TestCase):
         recognition = load_visual_screen_recognizer().recognize(erased)
         self.assertNotIn("campaign_map_southern_view", recognition.profile_ids)
 
+    def test_native_early_map_requires_both_progress_rows_and_retains_home_portal(self) -> None:
+        """The K226 map and correlated promo frame keep frame-bound return proof."""
+        recognizer = load_visual_screen_recognizer()
+        for name in (
+            "campaign_map_early_chapter2_20260930.png",
+            "campaign_map_early_chapter2_promo_20260930.png",
+        ):
+            with self.subTest(name=name):
+                image = _image(name)
+                self.assertEqual((900, 1600), image.size)
+                capture = _capture(image)
+                self.assertEqual(("campaign_map_early_chapter2",), recognizer.recognize(image).profile_ids)
+                for publisher in ("builder", "navigation"):
+                    with self.subTest(publisher=publisher):
+                        observation = (
+                            _builder().build(capture)
+                            if publisher == "builder"
+                            else _navigation_perception().build(capture, include_content=True)
+                        )
+                        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, observation.screen_type)
+                        self.assertEqual("campaign_map", observation.decision.layout_id)
+                        self.assertFalse(observation.blocking_popup)
+                        portal = observation.get(UiElementId.PNC_CAMPAIGN_HOME_PORTAL)
+                        self.assertIsNotNone(portal)
+                        self.assertEqual(VisibleElementSourceKind.TEMPLATE, portal.source_kind)
+                        self.assertEqual(Bounds(777, 1292, 91, 75), portal.bounds)
+                        self.assertEqual(capture.frame_ref, portal.frame_ref)
+                        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, portal.source_screen)
+                        self.assertEqual("campaign_map", portal.source_layout_id)
+
+        source = _image("campaign_map_early_chapter2_20260930.png")
+        for erased in ((352, 283, 560, 335), (408, 795, 673, 867)):
+            with self.subTest(erased=erased):
+                partial = source.copy()
+                ImageDraw.Draw(partial).rectangle(erased, fill=(0, 0, 0))
+                recognition = recognizer.recognize(partial)
+                self.assertNotIn("campaign_map_early_chapter2", recognition.profile_ids)
+                self.assertNotIn(
+                    UiElementId.PNC_CAMPAIGN_HOME_PORTAL,
+                    {control.selector_id for control in recognition.controls},
+                )
+
+        for name in (
+            "campaign_map.png", "campaign_map_chapter_6.png",
+            "campaign_map_southern_view_20260916.png", "campaign_map_recentered_20260916.png",
+            "campaign_chapter_10.png", "campaign_stage_10_3.png",
+            "home_city_core.png", "world_map_core.png",
+        ):
+            with self.subTest(negative=name):
+                self.assertNotIn("campaign_map_early_chapter2", recognizer.recognize(_image(name)).profile_ids)
+
     def test_campaign_profiles_are_mutually_exclusive_at_reference_and_scaled_sizes(self) -> None:
         recognizer = load_visual_screen_recognizer()
         expected = {
@@ -112,6 +163,14 @@ class CampaignIdentityTests(unittest.TestCase):
                 {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
             ),
             "campaign_map_chapter_6_pulse.png": (
+                ScreenType.PNC_CAMPAIGN_MAP,
+                {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
+            ),
+            "campaign_map_early_chapter2_20260930.png": (
+                ScreenType.PNC_CAMPAIGN_MAP,
+                {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
+            ),
+            "campaign_map_early_chapter2_promo_20260930.png": (
                 ScreenType.PNC_CAMPAIGN_MAP,
                 {UiElementId.PNC_CAMPAIGN_HOME_PORTAL},
             ),

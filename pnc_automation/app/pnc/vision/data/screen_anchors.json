@@ -5468,6 +5468,46 @@
       ]
     },
     {
+      "id": "campaign_map_early_chapter2",
+      "layout_id": "campaign_map",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_map_early_chapter2_20260930.png",
+        "decoded_sha256": "c9ba2cd0cd6cb7fa5236fad537b4ab386ddce89f5cd1ef590b595fe4870c244d",
+        "capture_group": "2026-09-30/testing/m1-continuation-discovery-16b"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "K226 early Campaign map identity requires distinct locked Costa Dorad and available gold Misty Bay rows. Crops exclude the tutorial arrow, promotions, and HUD; the existing independently measured blue Home portal remains the return control. Same-session second frame is correlated validation, not independent acceptance.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_map_early_locked_costa_dorad.png",
+          "search_region": [0, 110, 465, 360],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_map_early_gold_misty_bay.png",
+          "search_region": [0, 340, 465, 440],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_HOME_PORTAL",
+          "anchor": {
+            "image": "screen_anchors/campaign_home_portal.png",
+            "search_region": [466, 775, 55, 45],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
       "id": "research_tree_node_detail_max",
       "layout_id": "research_tree_node_detail_max",
       "screen": "PNC_RESEARCH_TREE",

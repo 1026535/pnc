@@ -1238,6 +1238,28 @@
       "annotation": "V02 Home portal tap reached a persisted southern Campaign map view. Both distinct numbered chapter rows own this profile; no event overlay or header chapter text supplies identity."
     },
     {
+      "image": "campaign_map_early_chapter2_20260930.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "reference",
+      "group": "2026-09-30/testing/m1-continuation-discovery-16b",
+      "sha256": "c9ba2cd0cd6cb7fa5236fad537b4ab386ddce89f5cd1ef590b595fe4870c244d",
+      "expected_visual_screens": ["PNC_CAMPAIGN_MAP"],
+      "source_artifact": "20260930T224605Z_core_20260930T224553Z_84d7c398_0003_d4_return_source.png",
+      "source_sha256": "87e9bd6d64c502de5bc1cd50ca1f92201a9b23423daa4884fb80914ada5c25b2",
+      "annotation": "Native 900x1600 K226 early Campaign map, visually confirmed at M continuation discovery. Locked Costa Dorad and gold Misty Bay independently own identity; the measured blue Home portal is the return control. Installed game build unknown."
+    },
+    {
+      "image": "campaign_map_early_chapter2_promo_20260930.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "validation",
+      "group": "2026-09-30/testing/m1-continuation-discovery-16b",
+      "sha256": "7645b2ad609edbdf8665fa8da450554518f5be19f0feee42fd8573915f001516",
+      "expected_visual_screens": ["PNC_CAMPAIGN_MAP"],
+      "source_artifact": "20260930T224602Z_core_20260930T224553Z_84d7c398_0002_takeover_reconcile.png",
+      "source_sha256": "b458158189b0004be84756e56eb1df4c1048f098d9e3aede92406fc696c9d034",
+      "annotation": "Same-session correlated frame seven seconds before the reference with a changing promotion effect; it checks those excluded pixels but is not an independent holdout or live return proof."
+    },
+    {
       "image": "research_node_detail_max_20260916.png",
       "screen": "PNC_RESEARCH_TREE",
       "split": "reference",
