@@ -33,9 +33,13 @@ from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.navigation.home_city_scan import HomeCityScanError
+from pnc_automation.app.pnc.navigation.home_city_scan import (
+    HomeCityScanError,
+    HomeCityScanStopReason,
+)
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.input_dispatch import (
+    InputDispatchFailure,
     InputDispatchRecord,
     TapDispatch,
 )
@@ -740,14 +744,6 @@ class LiveCaseRunner:
             return CaseGate.GUARDED_HOME_CITY.value
         return None
 
-    def _sent_since(self, collector: DispatchCollector, mark: int) -> bool:
-        """Whether any dispatch receipt was observed after the mark."""
-
-        return any(
-            isinstance(attributed.event, InputDispatchRecord)
-            for attributed in collector.events_since(mark)
-        )
-
     def _finish_body_intent(
         self,
         holder: dict[str, Any],
@@ -833,26 +829,38 @@ class LiveCaseRunner:
         except Exception as error:
             known = (self._find_body_tap(collector, mark, holder["source"], holder["action"])
                      if "source" in holder else None)
-            if "id" in holder or self._sent_since(collector, mark):
+            # Acquisition can send confirmed camera inputs before a body is
+            # found. Those receipts do not imply an uncertain building tap.
+            # The callback journals body intent before its send; failures at
+            # either input boundary still stop dependent input without replay.
+            acquisition_uncertain = any(
+                isinstance(attributed.event, InputDispatchFailure)
+                for attributed in collector.events_since(mark)
+            ) or (
+                isinstance(error, HomeCityScanError)
+                and error.result.stop_reason is HomeCityScanStopReason.INPUT_UNCERTAIN
+            )
+            if "id" in holder or acquisition_uncertain:
                 self._finish_body_intent(
                     holder,
                     journal,
                     attempts,
                     status=AttemptStatus.DISPATCHED if known else AttemptStatus.UNCERTAIN,
                     dispatch_event_id=known,
-                    detail=f"body send ended uncertain: {_detail(error)}",
+                    detail=f"Body input recorded but follow-up failed: {_detail(error)}"
+                           if known else f"Input dispatch unresolved: {_detail(error)}",
                 )
                 return (
                     self._case_outcome(
                         spec, collector, mark=mark, status=CaseStatus.FAILED,
                         detail=(
-                            "Body entry ended uncertain after inputs were sent; "
+                            "Input outcome or body follow-up is unresolved; "
                             f"later inputs are halted: {_detail(error)}"
                         ),
                         body_entry_event_id=known,
                         unresolved_boundary="follow_up_capture" if known else "uncertain_send",
                     ),
-                    f"uncertain body send in {spec.case_id}: {_detail(error)}",
+                    f"unresolved input or body follow-up in {spec.case_id}: {_detail(error)}",
                 )
             return (
                 self._case_outcome(

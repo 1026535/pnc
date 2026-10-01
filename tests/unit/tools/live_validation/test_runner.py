@@ -16,7 +16,18 @@ from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.navigation.home_city_scan import (
+    HomeCityScanError,
+    HomeCityScanState,
+    HomeCityScanStopReason,
+)
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.input_dispatch import (
+    InputDispatchFailure,
+    InputDispatchRecord,
+    SwipeDispatch,
+    WheelDispatch,
+)
 
 from tools.live_validation.annotation import AnnotationExchange
 from tools.live_validation.binding import load_assignment_binding
@@ -310,6 +321,120 @@ class LiveCaseRunnerTests(unittest.TestCase):
         self.assertEqual(CaseStatus.FAILED, statuses["v44_watchtower_body_menu"])
         self.assertEqual("qualified_body_entry",
                          evidence.case_results[0].unresolved_boundary)
+
+    def test_confirmed_camera_scan_failure_keeps_independent_cases_runnable(self):
+        errors = (
+            SelectorResolutionError("no measured body"),
+            HomeCityScanError("no qualified route", HomeCityScanState().result(
+                HomeCityScanStopReason.NO_QUALIFIED_ROUTE)),
+        )
+        for error in errors:
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as raw:
+                tmp = Path(raw)
+                binding = _binding(tmp, "v44_bank_body_menu", "v44_bank_return_home",
+                                   "v44_watchtower_body_menu", "v44_watchtower_return_home")
+                holder = {}
+                deps = _deps(tmp, holder, annotation_factory=_armed_exchange)
+                connect = deps.connect
+
+                def camera_connect(**kwargs):
+                    connection = connect(**kwargs)
+                    core = connection.core
+                    enter = core.enter_building_body_for_discovery
+
+                    def scan(target, **kw):
+                        if target is not HomeCityObjectId.BANK:
+                            return enter(target, **kw)
+                        for kind in ("wheel", "swipe"):
+                            source = core._frame(kind, ScreenType.PNC_HOME_CITY)
+                            core._input_seq += 1
+                            dispatch = (
+                                WheelDispatch((450, 500), (900, 1600), -1,
+                                              "test", core._input_seq)
+                                if kind == "wheel" else
+                                SwipeDispatch((450, 600), (450, 400), 250,
+                                              "test", "swipe", core._input_seq)
+                            )
+                            core._observer(InputDispatchRecord(
+                                source.frame_ref, dispatch, source.artifact_path, True))
+                        raise error
+
+                    core.enter_building_body_for_discovery = scan
+                    return connection
+
+                evidence, path = LiveCaseRunner(
+                    binding, replace(deps, connect=camera_connect)).run()
+                bank, bank_return, tower, tower_return = evidence.case_results
+                self.assertEqual(CaseStatus.FAILED, bank.status)
+                self.assertEqual("qualified_body_entry", bank.unresolved_boundary)
+                self.assertIsNone(bank.body_entry_event_id)
+                self.assertEqual(2, len(bank.receipt_event_ids))
+                self.assertEqual("body_dependency", bank_return.unresolved_boundary)
+                self.assertEqual(CaseStatus.BLOCKED, bank_return.status)
+                self.assertEqual(CaseStatus.PASSED, tower.status)
+                self.assertEqual(CaseStatus.PASSED, tower_return.status)
+                self.assertFalse(any(a.case_id == bank.case_id
+                                     for a in evidence.logical_attempts))
+                report = validate_live_evidence(binding, path)
+                self.assertTrue(report.valid, report.findings)
+
+    def test_uncertain_acquisition_input_halts_even_without_body_intent(self):
+        for failure_event in (True, False):
+            with self.subTest(failure_event=failure_event), tempfile.TemporaryDirectory() as raw:
+                tmp = Path(raw)
+                binding = _binding(tmp, "v44_bank_body_menu", "v44_watchtower_body_menu")
+                holder = {}
+                deps = _deps(tmp, holder)
+                connect = deps.connect
+
+                def uncertain_connect(**kwargs):
+                    connection = connect(**kwargs)
+                    core = connection.core
+
+                    def scan(*args, **kw):
+                        if failure_event:
+                            source = core._frame("failed-pan", ScreenType.PNC_HOME_CITY)
+                            core._observer(InputDispatchFailure(
+                                source.frame_ref, "swipe", "dispatch", "RuntimeError",
+                                artifact_path=source.artifact_path, home_city=True))
+                            raise SelectorResolutionError("camera dispatch failed")
+                        raise HomeCityScanError("input not confirmed", HomeCityScanState().result(
+                            HomeCityScanStopReason.INPUT_UNCERTAIN))
+
+                    core.enter_building_body_for_discovery = scan
+                    return connection
+
+                evidence, _ = LiveCaseRunner(
+                    binding, replace(deps, connect=uncertain_connect)).run()
+                self.assertEqual("uncertain_send", evidence.case_results[0].unresolved_boundary)
+                self.assertEqual(CaseStatus.NOT_RUN, evidence.case_results[1].status)
+                self.assertFalse(evidence.logical_attempts)
+
+    def test_confirmed_body_with_failed_capture_still_halts_later_cases(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_body_menu", "v44_watchtower_body_menu")
+            holder = {}
+            deps = _deps(tmp, holder)
+            connect = deps.connect
+
+            def capture_failure_connect(**kwargs):
+                connection = connect(**kwargs)
+                enter = connection.core.enter_building_body_for_discovery
+
+                def fail_after_body(*args, **kw):
+                    enter(*args, **kw)
+                    raise SelectorResolutionError("post-body capture failed")
+
+                connection.core.enter_building_body_for_discovery = fail_after_body
+                return connection
+
+            evidence, _ = LiveCaseRunner(
+                binding, replace(deps, connect=capture_failure_connect)).run()
+            self.assertEqual("follow_up_capture", evidence.case_results[0].unresolved_boundary)
+            self.assertEqual("dispatched", evidence.logical_attempts[0].status)
+            self.assertEqual(CaseStatus.NOT_RUN, evidence.case_results[1].status)
+            self.assertEqual(1, len(holder["core"].entry_calls))
 
     def test_blocked_precondition_marks_case_blocked(self):
         with tempfile.TemporaryDirectory() as raw:
