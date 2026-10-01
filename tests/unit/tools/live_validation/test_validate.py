@@ -19,6 +19,37 @@ from tests.unit.tools.live_validation.test_evidence import _evidence
 
 
 class ValidateLiveEvidenceTests(unittest.TestCase):
+    def test_dispatch_must_advance_source_exactly_once(self):
+        with tempfile.TemporaryDirectory() as raw:
+            binding, _, path = self._setup(Path(raw))
+            doc = json.loads(path.read_text())
+            doc["attributed_dispatches"][0]["dispatch"]["input_sequence"] += 3
+            path.write_text(json.dumps(doc))
+            report = validate_live_evidence(binding, path)
+            self.assertTrue(any("advance its source by one" in f.detail for f in report.findings))
+
+    def test_passed_return_requires_control_receipt_and_guarded_home(self):
+        from tests.unit.tools.live_validation.test_runner import _binding, _deps, _armed_exchange
+        from tools.live_validation.runner import LiveCaseRunner
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_body_menu", "v44_bank_return_home")
+            _, path = LiveCaseRunner(binding, _deps(tmp, {}, annotation_factory=_armed_exchange)).run()
+            original = json.loads(path.read_text())
+            for defect in ("missing_control", "wrong_screen", "wrong_guard"):
+                with self.subTest(defect=defect):
+                    doc = json.loads(json.dumps(original))
+                    row = doc["case_results"][1]
+                    if defect == "missing_control":
+                        doc["logical_attempts"] = doc["logical_attempts"][:1]
+                        doc["totals"]["logical_attempts"] = 1
+                    elif defect == "wrong_screen":
+                        row["postcondition"]["screen_type"] = "unknown"
+                    else:
+                        row["postcondition"]["guard"] = "blocked"
+                    path.write_text(json.dumps(doc))
+                    self.assertFalse(validate_live_evidence(binding, path).valid)
+
     def _setup(self, tmp: Path, **overrides):
         binding = load_assignment_binding(write_assignment(tmp, assignment_payload(tmp)))
         evidence = _evidence(tmp, **overrides)

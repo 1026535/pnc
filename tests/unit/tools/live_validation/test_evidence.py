@@ -59,6 +59,7 @@ def _evidence(tmp: Path, **overrides) -> LiveEvidence:
             "blocking_popup": False,
             "artifact_path": str(artifact_path),
             "frame_fingerprint": "fp-1",
+            "frame": frame_ref_dict(frame_ref(2)),
         },
         unresolved_boundary=None,
         detail="ok",
@@ -70,7 +71,7 @@ def _evidence(tmp: Path, **overrides) -> LiveEvidence:
         candidate_sha=CANDIDATE_SHA,
         source_root=tmp,
         import_root=tmp,
-        report_root=tmp / "reports",
+        report_root=tmp / ".local-data" / "reports",
         entry_point=tmp / "entry.py",
         entry_sha256=(
             sha256_file(tmp / "entry.py") if (tmp / "entry.py").exists() else ENTRY_SHA
@@ -86,7 +87,11 @@ def _evidence(tmp: Path, **overrides) -> LiveEvidence:
         case_results=(result,),
         artifacts=(ref,),
         attributed_dispatches=(attributed,),
-        logical_attempts=(),
+        logical_attempts=(LogicalAttemptRecord(
+            attempt_id="attempt-1", case_id="v44_bank_body_menu",
+            control_name="enter_building_body_for_discovery", number=1, limit=1,
+            status="dispatched", journal_ref=str(tmp / "attempts.jsonl"),
+            dispatch_event_id="in-0001", intent="body_entry"),),
         incident_refs=(),
         resource_actions=(),
         coverage={
@@ -100,13 +105,15 @@ def _evidence(tmp: Path, **overrides) -> LiveEvidence:
             "artifact_path": str(artifact_path),
             "frame_fingerprint": "fp-1",
         },
-        totals=compute_totals((attributed,), ()),
+        totals={**compute_totals((attributed,), ()), "logical_attempts": 1},
         cleanup={"session_closed": True, "lease_released": True,
                  "observer_restored": True, "instance_preserved": True,
                  "reservation_disposition": "released"},
         terminal_binding_check={
             "head_matches": True,
             "tree_clean": True,
+            "entry_sha256_matches": True,
+            "execution_identity_matches": True,
             "dirty_paths": [],
             "checked_at": now.isoformat(),
         },
@@ -134,7 +141,7 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual("sess-test", event["source_frame"]["session_id"])
         self.assertEqual(1, doc["totals"]["tap"])
         self.assertEqual(1, doc["totals"]["dispatch_records"])
-        self.assertEqual(0, doc["totals"]["logical_attempts"])
+        self.assertEqual(1, doc["totals"]["logical_attempts"])
 
     def test_compute_totals_counts_receipts_failures_and_attempts(self):
         from pnc_automation.core.infra.emulator.input_dispatch import InputDispatchFailure

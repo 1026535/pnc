@@ -13,6 +13,8 @@ permission engine, parallel capture path, or incident index of its own.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import subprocess
 import time
@@ -78,6 +80,8 @@ from tools.live_validation.journal import (
     LogicalAttemptJournal,
     pending_attempts,
 )
+from tools.test_selection.contexts import fingerprint
+from tools.test_selection.git_changes import working_paths
 
 
 _NAV_INPUT_ALLOWANCE_PER_CASE = 24
@@ -101,6 +105,7 @@ class SourceProbe:
     head_sha: str
     dirty_paths: tuple[str, ...]
     source_root: Path
+    source_fingerprint: str = "0" * 64
 
     @property
     def tree_clean(self) -> bool:
@@ -189,6 +194,10 @@ def git_source_probe(binding: AssignmentBinding) -> SourceProbe:
         head_sha=head,
         dirty_paths=dirty,
         source_root=binding.source_root,
+        source_fingerprint=fingerprint({
+            path: hashlib.sha256((binding.source_root / path).read_bytes()).hexdigest()
+            for path in working_paths(binding.source_root)
+        }),
     )
 
 
@@ -339,13 +348,15 @@ class LiveCaseRunner:
             "session_closed": False,
             "lease_released": False,
             "observer_restored": False,
-            "instance_preserved": False,
+            "instance_preserved": None,
             "reservation_disposition": self._binding.reservation_disposition,
         }
         coverage_start = started
         connection: LiveConnection | None = None
         executor: Any = None
         installed_recorder: Any = None
+        actual_target: dict[str, Any] = {key: None for key in
+                                       ("account_id", "castle", "instance_id", "live_role")}
         setup_error: str | None = None
         halt_inputs: str | None = None
         contexts: dict[str, _RetainedBodyContext] = {}
@@ -362,12 +373,19 @@ class LiveCaseRunner:
                         "V44 live validation requires the canonical selector-backed action executor."
                     ).action_executor
                     installed_recorder = executor.input_dispatch_recorder
-                    executor.input_dispatch_recorder = observer
                     executor.configure_input_attempt_budget(
                         self._input_budget(),
                         duration_seconds=self._deps.operation_budget_seconds,
                     )
-                    self._preflight_target(core)
+                    actual_target.update(
+                        account_id=connection.account.id,
+                        instance_id=connection.account.instance_id,
+                        live_role=self._binding.target_role,
+                    )
+                    identity = core.preflight_active_castle_identity()
+                    actual_target["castle"] = f"{identity.kingdom}:{identity.castle_name}"
+                    if actual_target["castle"] != self._binding.target_castle_ref:
+                        raise PreflightRefusal(("Observed castle differs from the released target.",))
                 except Exception as error:  # noqa: BLE001 - setup failure is evidence
                     setup_error = _detail(error)
             if setup_error is None:
@@ -421,53 +439,53 @@ class LiveCaseRunner:
                             spec, f"Connected setup failed: {setup_error}"
                         )
                     )
-            with collector.phase(AttributionPhase.CLEANUP):
-                try:
-                    final = connection.core.capture_once(
-                        "v44_final_state", include_content=True
-                    )
-                    observed_final_state.update(
-                        {
-                            "screen_type": final.screen_type.value,
-                            "blocking_popup": final.blocking_popup,
-                            "artifact_path": (
-                                None
-                                if final.artifact_path is None
-                                else str(final.artifact_path)
-                            ),
-                            "frame_fingerprint": final.frame_fingerprint,
-                        }
-                    )
-                    self._curate(
-                        final.artifact_path,
-                        kind="final_state_frame",
-                        purpose="Observed final screen state after cleanup.",
-                        artifacts=[],
-                    )
-                except Exception as error:  # noqa: BLE001
-                    observed_final_state["capture_error"] = _detail(error)
-                try:
-                    connection.core.close()
-                    cleanup["session_closed"] = True
-                    cleanup["observer_restored"] = (
-                        executor is None
-                        or executor.input_dispatch_recorder is not observer
-                    )
-                except Exception as error:  # noqa: BLE001
-                    cleanup["session_close_error"] = _detail(error)
-                try:
-                    connection.bundle.close()
-                    cleanup["lease_released"] = True
-                except Exception as error:  # noqa: BLE001
-                    cleanup["lease_release_error"] = _detail(error)
-                cleanup["instance_preserved"] = bool(cleanup["lease_released"])
+        except Exception as error:
+            setup_error = setup_error or _detail(error)
+            completed = {row.case_id for row in results}
+            results.extend(self._not_run_result(spec, setup_error)
+                           for spec in self._specs.values() if spec.case_id not in completed)
         finally:
+            if connection is not None:
+                with collector.phase(AttributionPhase.CLEANUP):
+                    try:
+                        final = connection.core.capture_once(
+                            "v44_final_state", include_content=True
+                        )
+                        observed_final_state.update(
+                            {
+                                "screen_type": final.screen_type.value,
+                                "blocking_popup": final.blocking_popup,
+                                "artifact_path": (
+                                    None
+                                    if final.artifact_path is None
+                                    else str(final.artifact_path)
+                                ),
+                                "frame_fingerprint": final.frame_fingerprint,
+                            }
+                        )
+                        self._curate(
+                            final.artifact_path,
+                            kind="final_state_frame",
+                            purpose="Observed final screen state after cleanup.",
+                            artifacts=[],
+                        )
+                    except Exception as error:  # noqa: BLE001
+                        observed_final_state["capture_error"] = _detail(error)
+                    try:
+                        connection.core.close()
+                        cleanup["session_closed"] = True
+                        cleanup["observer_restored"] = (
+                            executor is None
+                            or executor.input_dispatch_recorder is not installed_recorder
+                        )
+                    except Exception as error:  # noqa: BLE001
+                        cleanup["session_close_error"] = _detail(error)
+                    try:
+                        connection.bundle.close()
+                        cleanup["lease_released"] = True
+                    except Exception as error:  # noqa: BLE001
+                        cleanup["lease_release_error"] = _detail(error)
             journal.close()
-            if connection is None:
-                try:
-                    run_dir.rmdir()
-                except OSError:
-                    pass
 
         for pending in pending_attempts(journal.path):
             attempts.append(
@@ -484,18 +502,24 @@ class LiveCaseRunner:
                 )
             )
         finished = self._deps.now_utc()
-        terminal_probe = self._deps.probe_source(self._binding)
         terminal_check = {
-            "head_matches": terminal_probe.head_sha == self._binding.candidate_sha,
-            "tree_clean": terminal_probe.tree_clean,
-            "dirty_paths": list(terminal_probe.dirty_paths),
-            "entry_sha256_matches": (
-                self._binding.entry_point.exists()
-                and sha256_file(self._binding.entry_point)
-                == self._binding.entry_sha256
-            ),
+            "head_matches": False,
+            "tree_clean": False,
+            "execution_identity_matches": False,
+            "entry_sha256_matches": False,
             "checked_at": finished.isoformat(),
         }
+        try:
+            terminal_probe = self._deps.probe_source(self._binding)
+            terminal_check.update(head_matches=terminal_probe.head_sha == self._binding.candidate_sha,
+                                  tree_clean=terminal_probe.tree_clean,
+                                  dirty_paths=list(terminal_probe.dirty_paths))
+            self._preflight_probe(terminal_probe)
+            self._preflight_execution_identity()
+            terminal_check["execution_identity_matches"] = True
+            terminal_check["entry_sha256_matches"] = True
+        except Exception as error:
+            terminal_check["error"] = _detail(error)
         evidence = LiveEvidence(
             assignment_id=self._binding.assignment_id,
             run_id=self._binding.run_id,
@@ -507,12 +531,7 @@ class LiveCaseRunner:
             entry_sha256=self._binding.entry_sha256,
             started_at=started,
             finished_at=finished,
-            actual_target={
-                "account_id": self._binding.target_account_id,
-                "castle": self._binding.target_castle_ref,
-                "instance_id": self._binding.target_instance_id,
-                "live_role": self._binding.target_role,
-            },
+            actual_target=actual_target,
             case_results=tuple(results),
             artifacts=tuple(self._artifact_index.values()),
             attributed_dispatches=collector.events,
@@ -566,11 +585,11 @@ class LiveCaseRunner:
         except (KeyError, ValueError) as error:
             findings.append(str(error))
         if self._binding.read_only and any(
-            spec.developmental_purpose is not None for spec in self._specs.values()
+            spec.entry_effect is not WorkflowEffect.READ_ONLY
+            or spec.developmental_purpose is not None for spec in self._specs.values()
         ):
             findings.append(
-                "a read_only assignment cannot select control cases; "
-                "control inputs require a non-read-only release."
+                "a read_only assignment cannot select state-changing building or control cases."
             )
         needs_allowance = any(
             spec.control_effect is WorkflowEffect.RESOURCE_CHANGING
@@ -610,6 +629,18 @@ class LiveCaseRunner:
                 findings.append(f"required offline evidence missing: {ref.path}")
             elif sha256_file(ref.path) != ref.sha256:
                 findings.append(f"offline evidence sha256 mismatch: {ref.path}")
+            else:
+                try:
+                    proof = json.loads(ref.path.read_text(encoding="utf-8"))
+                    metadata = proof["metadata"]
+                    if (proof.get("succeeded") is not True
+                            or metadata.get("commit_sha") != probe.head_sha
+                            or metadata.get("source_fingerprint") != probe.source_fingerprint):
+                        findings.append(f"offline evidence is not passing proof for this candidate: {ref.path}")
+                except (ValueError, KeyError, TypeError) as error:
+                    findings.append(f"offline evidence lacks repository result metadata: {ref.path}: {error}")
+        if not self._binding.offline_evidence:
+            findings.append("released live assignment requires exact-candidate offline evidence.")
         if findings:
             raise PreflightRefusal(tuple(findings))
 
@@ -628,6 +659,8 @@ class LiveCaseRunner:
                 f"imported pnc_automation root '{identity.import_root}' is not "
                 f"the bound import_root '{self._binding.import_root}'."
             )
+        if _norm(identity.import_root) != _norm(identity.tool_root):
+            findings.append("Imported production code and executing tools must share one checkout.")
         if _norm(identity.tool_root) != _norm(self._binding.source_root):
             findings.append(
                 f"executing tools root '{identity.tool_root}' is not the bound "
@@ -645,21 +678,13 @@ class LiveCaseRunner:
                 f"entry point '{self._binding.entry_point}' is not tracked in "
                 "the bound checkout."
             )
-        elif sha256_file(identity.entry_point) != self._binding.entry_sha256:
-            findings.append(
-                f"executing entry sha256 does not match the bound entry_sha256."
-            )
+        elif not identity.entry_point.is_file() or sha256_file(identity.entry_point) != self._binding.entry_sha256:
+            findings.append("executing entry sha256 does not match the bound entry_sha256.")
+        report_root = self._binding.report_root.resolve()
+        if not report_root.is_relative_to(self._binding.source_root.resolve() / ".local-data"):
+            findings.append("report_root must stay under the checkout's ignored .local-data directory.")
         if findings:
             raise PreflightRefusal(tuple(findings))
-
-    def _preflight_target(self, core: Any) -> None:
-        identity = core.preflight_active_castle_identity()
-        actual_castle = f"{identity.kingdom}:{identity.castle_name}"
-        if actual_castle != self._binding.target_castle_ref:
-            raise PreflightRefusal((
-                f"active castle '{actual_castle}' does not match the "
-                f"bound target '{self._binding.target_castle_ref}'.",
-            ))
 
     def _input_budget(self) -> int:
         controls = sum(spec.max_control_attempts for spec in self._specs.values())
@@ -795,6 +820,8 @@ class LiveCaseRunner:
             )
             holder["id"] = attempt_id
             holder["consumed"] = consumed
+            holder["source"] = source
+            holder["action"] = action
 
         try:
             source, action, follow_up = core.enter_building_body_for_discovery(
@@ -803,13 +830,16 @@ class LiveCaseRunner:
                 on_body_prepared=on_prepared,
                 home_city_slot=spec.home_city_slot,
             )
-        except (SelectorResolutionError, HomeCityScanError) as error:
+        except Exception as error:
+            known = (self._find_body_tap(collector, mark, holder["source"], holder["action"])
+                     if "source" in holder else None)
             if "id" in holder or self._sent_since(collector, mark):
                 self._finish_body_intent(
                     holder,
                     journal,
                     attempts,
-                    status=AttemptStatus.UNCERTAIN,
+                    status=AttemptStatus.DISPATCHED if known else AttemptStatus.UNCERTAIN,
+                    dispatch_event_id=known,
                     detail=f"body send ended uncertain: {_detail(error)}",
                 )
                 return (
@@ -819,7 +849,8 @@ class LiveCaseRunner:
                             "Body entry ended uncertain after inputs were sent; "
                             f"later inputs are halted: {_detail(error)}"
                         ),
-                        unresolved_boundary="uncertain_send",
+                        body_entry_event_id=known,
+                        unresolved_boundary="follow_up_capture" if known else "uncertain_send",
                     ),
                     f"uncertain body send in {spec.case_id}: {_detail(error)}",
                 )
@@ -829,27 +860,24 @@ class LiveCaseRunner:
                     detail=f"Body entry refused by the qualified navigation seam: {_detail(error)}",
                     unresolved_boundary="qualified_body_entry",
                 ),
-                None,
+                None if isinstance(error, (SelectorResolutionError, HomeCityScanError)) else _detail(error),
             )
-        body_event_id = self._find_body_tap(collector, mark, source)
+        body_event_id = self._find_body_tap(collector, mark, source, action)
         if "id" not in holder and body_event_id is not None:
             raise ReceiptIntegrityError(
                 f"{spec.case_id}: a body-entry receipt exists without a "
                 "journaled body intent."
             )
+        if body_event_id is not None:
+            self._finish_body_intent(holder, journal, attempts,
+                                     status=AttemptStatus.DISPATCHED,
+                                     dispatch_event_id=body_event_id)
         artifacts: list[ArtifactRef] = []
         self._curate(source.artifact_path, kind="source_frame",
                      purpose=f"{spec.case_id} authorizing source frame.", artifacts=artifacts)
         self._curate(follow_up.artifact_path, kind="follow_up_frame",
                      purpose=f"{spec.case_id} raw post-tap observed state.", artifacts=artifacts)
-        postcondition = {
-            "screen_type": follow_up.screen_type.value,
-            "blocking_popup": follow_up.blocking_popup,
-            "artifact_path": (
-                None if follow_up.artifact_path is None else str(follow_up.artifact_path)
-            ),
-            "frame_fingerprint": follow_up.frame_fingerprint,
-        }
+        postcondition = self._postcondition_dict(follow_up)
         if body_event_id is None:
             self._finish_body_intent(
                 holder,
@@ -875,13 +903,14 @@ class LiveCaseRunner:
             for attributed in collector.events_since(mark)
             if attributed.event_id == body_event_id
         )
-        self._finish_body_intent(
-            holder,
-            journal,
-            attempts,
-            status=AttemptStatus.DISPATCHED,
-            dispatch_event_id=body_event_id,
-        )
+        source_frame = source.frame_ref
+        after = follow_up.frame_ref
+        if (source_frame is None or after is None or follow_up.artifact_path is None
+                or after.session_id != source_frame.session_id
+                or after.session_epoch != source_frame.session_epoch
+                or after.input_sequence != body_receipt.dispatch.input_sequence
+                or after.capture_sequence != source_frame.capture_sequence + 1):
+            raise ReceiptIntegrityError("Body entry has no persisted immediate follow-up for its receipt.")
         witness = BodyEntryWitness(
             case_id=spec.case_id,
             operation_id=spec.operation_id,
@@ -895,6 +924,13 @@ class LiveCaseRunner:
             body_event_id=body_event_id,
             last_input_sequence=body_receipt.dispatch.input_sequence,
         )
+        if follow_up.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_LOADING}:
+            return (self._case_outcome(
+                spec, collector, mark=mark, status=CaseStatus.BLOCKED,
+                artifacts=artifacts, body_entry_event_id=body_event_id,
+                source_artifact=source.artifact_path, follow_up_artifact=follow_up.artifact_path,
+                postcondition=postcondition, detail="Body input recorded; a foreground menu is not yet observed.",
+                unresolved_boundary="body_menu_observation"), None)
         return (
             self._case_outcome(
                 spec, collector, mark=mark, status=CaseStatus.PASSED,
@@ -1073,8 +1109,21 @@ class LiveCaseRunner:
                 latest_input_follow_up=latest_follow_up,
             )
             try:
+                control_mark = collector.mark()
                 result = core.execute_developmental_control(scope, proof, current)
             except SelectorResolutionError as error:
+                known = self._find_tap(collector, control_mark, current, proof.action_point)
+                if known:
+                    journal.finish(attempt_id, status=AttemptStatus.DISPATCHED,
+                                   dispatch_event_id=known, detail=_detail(error))
+                    attempts.append(self._attempt_record(attempt_id, consumed, "dispatched", known))
+                    return (self._case_outcome(
+                        spec, collector, mark=mark, status=CaseStatus.FAILED,
+                        artifacts=artifacts, body_entry_event_id=context.body_event_id,
+                        source_artifact=current.artifact_path,
+                        detail=f"Control dispatched but follow-up failed: {_detail(error)}",
+                        unresolved_boundary="follow_up_capture"),
+                        f"{spec.case_id}: follow-up failure after confirmed send")
                 journal.finish(attempt_id, status=AttemptStatus.REFUSED,
                                detail=_detail(error))
                 attempts.append(
@@ -1107,10 +1156,12 @@ class LiveCaseRunner:
                              artifacts=artifacts)
                 continue
             except Exception as error:  # noqa: BLE001 - uncertain send, never replay
-                journal.finish(attempt_id, status=AttemptStatus.UNCERTAIN,
+                known = self._find_tap(collector, control_mark, current, proof.action_point)
+                state = AttemptStatus.DISPATCHED if known else AttemptStatus.UNCERTAIN
+                journal.finish(attempt_id, status=state, dispatch_event_id=known,
                                detail=_detail(error))
                 attempts.append(
-                    self._attempt_record(attempt_id, consumed, "uncertain", None)
+                    self._attempt_record(attempt_id, consumed, state.value, known)
                 )
                 return (
                     self._case_outcome(
@@ -1119,8 +1170,9 @@ class LiveCaseRunner:
                         body_entry_event_id=context.body_event_id,
                         source_artifact=current.artifact_path,
                         follow_up_artifact=follow_up_artifact_or_none(latest_follow_up),
-                        detail=f"Control dispatch ended uncertain; no replay: {_detail(error)}",
-                        unresolved_boundary="uncertain_send",
+                        detail=f"Control has a receipt but no follow-up: {_detail(error)}" if known
+                               else f"Control dispatch ended uncertain; no replay: {_detail(error)}",
+                        unresolved_boundary="follow_up_capture" if known else "uncertain_send",
                     ),
                     f"{spec.case_id}: uncertain control send",
                 )
@@ -1238,7 +1290,7 @@ class LiveCaseRunner:
                 "body entry; the body is no longer freshly bound.",
                 f"{spec.case_id}: intervening input since the retained entry",
             )
-        if current.screen_type not in spec.allowed_source_screens or current.blocking_popup:
+        if current.screen_type not in spec.allowed_source_screens:
             return (
                 "control_source_screen",
                 f"Resume screen '{current.screen_type.value}' is not an allowed "
@@ -1278,6 +1330,8 @@ class LiveCaseRunner:
                 None if observation.artifact_path is None else str(observation.artifact_path)
             ),
             "frame_fingerprint": observation.frame_fingerprint,
+            "guard": observation.decision.guard.value,
+            "frame": None if observation.frame_ref is None else frame_ref_dict(observation.frame_ref),
         }
 
     def _find_body_tap(
@@ -1285,7 +1339,13 @@ class LiveCaseRunner:
         collector: DispatchCollector,
         mark: int,
         source: Observation,
+        action: TapSpatialObjectAction,
     ) -> str | None:
+        return self._find_tap(collector, mark, source, action.target_point)
+
+    @staticmethod
+    def _find_tap(collector: DispatchCollector, mark: int, source: Observation,
+                  point: tuple[int, int]) -> str | None:
         """Binds the case's body-entry receipt to its authorizing frame.
 
         Exactly one attributed tap receipt may claim the source frame's
@@ -1304,10 +1364,10 @@ class LiveCaseRunner:
             if not isinstance(event.dispatch, TapDispatch):
                 continue
             if (
-                event.source_frame.session_id == frame.session_id
-                and event.source_frame.session_epoch == frame.session_epoch
-                and event.source_frame.capture_sequence == frame.capture_sequence
-                and event.source_frame.input_sequence == frame.input_sequence
+                event.source_frame == frame
+                and event.artifact_path == source.artifact_path
+                and event.dispatch.point == point
+                and event.dispatch.input_sequence == frame.input_sequence + 1
             ):
                 matches.append(attributed.event_id)
         if len(matches) > 1:
@@ -1389,7 +1449,8 @@ class LiveCaseRunner:
         follow_up_artifact: Path | None = None,
         postcondition: dict[str, Any] | None = None,
     ) -> CaseResult:
-        events = collector.events_since(mark) if mark is not None else ()
+        events = (collector.events_since(mark) if mark is not None else
+                  tuple(row for row in collector.events if row.case_id == spec.case_id))
         return CaseResult(
             case_id=spec.case_id,
             purpose=spec.purpose.value,

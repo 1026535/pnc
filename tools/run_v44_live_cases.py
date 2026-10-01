@@ -31,9 +31,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
 
-from _script_bootstrap import ensure_repo_root_on_path
-
-ensure_repo_root_on_path()
+if __package__ in {None, ""}:
+    from _script_bootstrap import ensure_repo_root_on_path
+    ensure_repo_root_on_path()
 
 from tools.live_validation.annotation import AnnotationExchange
 from tools.live_validation.binding import (
@@ -197,9 +197,12 @@ def _command_run(args: argparse.Namespace) -> int:
         execution_identity=lambda: compute_execution_identity(Path(__file__)),
     )
     evidence, path = LiveCaseRunner(binding, deps).run()
+    report = validate_live_evidence(binding, path)
     counts = {result.case_id: result.status.value for result in evidence.case_results}
-    print(json.dumps({"result": str(path), "cases": counts}, indent=2, sort_keys=True))
-    return 0
+    print(json.dumps({"result": str(path), "cases": counts, "valid": report.valid,
+                      "findings": [{"check": f.check, "detail": f.detail}
+                                   for f in report.findings]}, indent=2, sort_keys=True))
+    return 0 if report.valid else 1
 
 
 def _command_validate(args: argparse.Namespace) -> int:
@@ -273,7 +276,7 @@ def _command_example_assignment(args: argparse.Namespace) -> int:
             "session_closed": True,
             "lease_released": True,
             "observer_restored": True,
-            "instance_preserved": True,
+            "instance_preserved": False,
         },
         "offline_evidence": [],
         "config_path": None,

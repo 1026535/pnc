@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -92,9 +93,10 @@ class _FakeCore:
             input_sequence=self._input_seq,
         )
 
-    def _send_tap(self, source):
+    def _send_tap(self, source, *, point=(270, 520)):
         self._input_seq += 1
         receipt = tap_receipt(source, input_sequence=self._input_seq)
+        receipt = replace(receipt, dispatch=replace(receipt.dispatch, point=point))
         self._observer(receipt)
         return receipt
 
@@ -122,7 +124,7 @@ class _FakeCore:
 
     def execute_developmental_control(self, scope, proof, observation):
         self.control_calls.append(scope)
-        receipt = self._send_tap(observation)
+        receipt = self._send_tap(observation, point=proof.action_point)
         self._screen = self._control_follow_up_screen
         return DevelopmentalControlResult(
             receipt=receipt,
@@ -159,7 +161,7 @@ def _deps(tmp: Path, core_holder: dict, *, annotation_factory=None) -> RunnerDep
         core.executor.input_dispatch_recorder = observer
         core_holder["core"] = core
         core_holder["bundle"] = bundle
-        return LiveConnection(bundle=bundle, core=core, account=object())
+        return LiveConnection(bundle=bundle, core=core, account=SimpleNamespace(id="testing", instance_id="bluestacks-1"))
 
     return RunnerDeps(
         probe_source=lambda binding: SourceProbe(
@@ -215,6 +217,63 @@ def _armed_exchange(directory: Path) -> AnnotationExchange:
 
 
 class LiveCaseRunnerTests(unittest.TestCase):
+    def test_recorder_composition_is_preserved_until_core_cleanup(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_body_menu")
+            holder = {}
+            deps = _deps(tmp, holder)
+            original = deps.connect
+            def connect(**kwargs):
+                connection = original(**kwargs)
+                recorder = object()
+                connection.core.executor.input_dispatch_recorder = recorder
+                capture = connection.core.capture_once
+                def checked_capture(*args, **kw):
+                    self.assertIs(recorder, connection.core.executor.input_dispatch_recorder)
+                    return capture(*args, **kw)
+                connection.core.capture_once = checked_capture
+                return connection
+            evidence, _ = LiveCaseRunner(binding, replace(deps, connect=connect)).run()
+            self.assertTrue(evidence.cleanup["observer_restored"])
+            self.assertIsNone(evidence.cleanup["instance_preserved"])
+
+    def test_confirmed_control_with_failed_capture_is_not_retried_or_uncertain(self):
+        for error in (RuntimeError("capture failed"), SelectorResolutionError("capture failed")):
+            with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as raw:
+                tmp = Path(raw)
+                binding = _binding(tmp, "v44_bank_body_menu", "v44_bank_return_home",
+                                   "v44_watchtower_body_menu")
+                holder = {}
+                deps = _deps(tmp, holder, annotation_factory=_armed_exchange)
+                connect = deps.connect
+                def failing_connect(**kw):
+                    connection = connect(**kw)
+                    send = connection.core.execute_developmental_control
+                    def fail_after_send(*args):
+                        send(*args)
+                        raise error
+                    connection.core.execute_developmental_control = fail_after_send
+                    return connection
+                evidence, _ = LiveCaseRunner(binding, replace(deps, connect=failing_connect)).run()
+                self.assertEqual(1, len(holder["core"].control_calls))
+                self.assertEqual("dispatched", evidence.logical_attempts[-1].status)
+                self.assertIsNotNone(evidence.logical_attempts[-1].dispatch_event_id)
+                self.assertEqual("follow_up_capture", evidence.case_results[1].unresolved_boundary)
+                self.assertEqual(CaseStatus.NOT_RUN, evidence.case_results[2].status)
+
+    def test_offline_proof_for_different_candidate_refuses_before_connection(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_bank_body_menu")
+            holder = {}
+            deps = _deps(tmp, holder)
+            probe = deps.probe_source(binding)
+            with self.assertRaises(PreflightRefusal):
+                LiveCaseRunner(binding, replace(deps, probe_source=lambda _: replace(
+                    probe, source_fingerprint="f" * 64))).run()
+            self.assertNotIn("core", holder)
+
     def test_discovery_case_passes_and_evidence_validates(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
@@ -266,7 +325,7 @@ class LiveCaseRunnerTests(unittest.TestCase):
                     screen_type=ScreenType.PNC_POPUP,
                 )
                 holder["core"] = core
-                return LiveConnection(bundle=_FakeBundle(), core=core, account=object())
+                return LiveConnection(bundle=_FakeBundle(), core=core, account=SimpleNamespace(id="testing", instance_id="bluestacks-1"))
 
             deps = RunnerDeps(
                 probe_source=lambda binding: SourceProbe(
@@ -467,7 +526,7 @@ class LiveCaseRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
             binding = _binding(tmp, "v44_bank_body_menu")
-            (tmp / "reports" / binding.run_id).mkdir(parents=True)
+            (binding.report_root / binding.run_id).mkdir(parents=True)
             holder: dict = {}
             with self.assertRaises(PreflightRefusal):
                 LiveCaseRunner(binding, _deps(tmp, holder)).run()

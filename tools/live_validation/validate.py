@@ -302,6 +302,8 @@ def validate_live_evidence(
         ):
             continue
         physical = (session_key[0], session_key[1], input_sequence)
+        if input_sequence != source_frame.get("input_sequence", -2) + 1:
+            fail("events", f"'{entry.get('event_id')}' dispatch must advance its source by one input.")
         prior = seen_physical.get(physical)
         if prior is not None:
             fail(
@@ -312,11 +314,11 @@ def validate_live_evidence(
         else:
             seen_physical[physical] = entry.get("event_id")
         previous = last_sequence_by_session.get(session_key)
-        if previous is not None and input_sequence <= previous:
+        if previous is not None and input_sequence != previous + 1:
             fail(
                 "events",
                 f"'{entry.get('event_id')}' input_sequence {input_sequence} does not "
-                f"advance session {session_key[0]}/{session_key[1]} past {previous}.",
+                f"continue session {session_key[0]}/{session_key[1]} after {previous}; coverage gap.",
             )
         last_sequence_by_session[session_key] = input_sequence
 
@@ -335,6 +337,11 @@ def validate_live_evidence(
                     fail("binding", f"{case_id}.{key} references unknown event '{event_id}'.")
                 elif event.get("case_id") != case_id or event.get("phase") != "case":
                     fail("binding", f"{case_id}.{key} event '{event_id}' is not attributed to this case.")
+            expected = [eid for eid, event in event_by_id.items()
+                        if event.get("phase") == "case" and event.get("case_id") == case_id
+                        and (key == "dispatch_event_ids" or event.get("kind") == "receipt")]
+            if values != expected:
+                fail("binding", f"{case_id}.{key} must include all case events exactly once in order.")
         receipt_ids = row.get("receipt_event_ids") or []
         for event_id in receipt_ids:
             event = event_by_id.get(event_id)
@@ -372,7 +379,16 @@ def validate_live_evidence(
                 fail("binding", f"{case_id}: a passed case requires a postcondition record.")
             elif "screen_type" not in postcondition:
                 fail("binding", f"{case_id}: postcondition requires a screen_type.")
+            elif postcondition.get("artifact_path") != row.get("follow_up_artifact"):
+                fail("binding", f"{case_id}: postcondition must bind the persisted follow-up artifact.")
+            if isinstance(postcondition, dict):
+                findings.extend(_frame_findings(postcondition.get("frame"), f"{case_id} postcondition"))
             if spec.purpose.value == "development_validation":
+                if (not isinstance(postcondition, dict)
+                        or postcondition.get("screen_type") != "pnc_home_city"
+                        or postcondition.get("guard") != "clear"
+                        or postcondition.get("blocking_popup") is not False):
+                    fail("binding", f"{case_id}: passed return requires guarded Home proof.")
                 kinds = {
                     ref.get("kind")
                     for ref in row.get("artifacts") or []
@@ -452,13 +468,41 @@ def validate_live_evidence(
             )
         if dispatch_event_id is not None:
             event = event_by_id.get(dispatch_event_id)
-            if event is None or event.get("case_id") != case_id:
+            if (event is None or event.get("case_id") != case_id
+                    or event.get("kind") != "receipt"):
                 fail("attempts", f"{attempt_id}: dispatch_event_id must be a case event of this case.")
         if isinstance(number, int):
             per_case_numbers.setdefault(str(case_id), []).append(number)
     for case_id, numbers in per_case_numbers.items():
         if numbers != sorted(numbers) or len(set(numbers)) != len(numbers):
             fail("attempts", f"{case_id}: attempt numbers must be strictly increasing.")
+    for case_id, row in result_by_id.items():
+        if row.get("status") != "passed":
+            continue
+        spec = specs[case_id]
+        sent = [a for a in attempts if isinstance(a, dict) and a.get("case_id") == case_id
+                and a.get("status") == "dispatched"]
+        if len(sent) != 1:
+            fail("attempts", f"{case_id}: passed case requires one journaled confirmed dispatch.")
+        elif spec.purpose.value == "discovery":
+            if sent[0].get("dispatch_event_id") != row.get("body_entry_event_id"):
+                fail("attempts", f"{case_id}: body intent must bind the body receipt.")
+        else:
+            if sent[0].get("intent") != "control":
+                fail("attempts", f"{case_id}: passed return lacks its control intent.")
+            owner = result_by_id.get(spec.body_case_id, {})
+            if owner.get("body_entry_event_id") != row.get("body_entry_event_id"):
+                fail("binding", f"{case_id}: return must retain its declared discovery receipt.")
+        if len(sent) == 1:
+            event = event_by_id.get(sent[0].get("dispatch_event_id"), {})
+            frame = (row.get("postcondition") or {}).get("frame")
+            source = event.get("source_frame", {})
+            if isinstance(frame, dict) and source:
+                if (frame.get("session_id") != source.get("session_id")
+                        or frame.get("session_epoch") != source.get("session_epoch")
+                        or frame.get("input_sequence") != event.get("dispatch", {}).get("input_sequence")
+                        or frame.get("capture_sequence", -1) <= source.get("capture_sequence", -1)):
+                    fail("binding", f"{case_id}: postcondition frame does not follow its recorded input.")
 
     # --- Totals ---------------------------------------------------------------
     totals = doc.get("totals")
@@ -502,9 +546,9 @@ def validate_live_evidence(
     if not isinstance(terminal, dict):
         fail("terminal", "terminal_binding_check must be an object.")
     else:
-        for key in ("head_matches", "tree_clean"):
-            if not isinstance(terminal.get(key), bool):
-                fail("terminal", f"terminal_binding_check.{key} must be a boolean.")
+        for key in ("head_matches", "tree_clean", "entry_sha256_matches", "execution_identity_matches"):
+            if terminal.get(key) is not True:
+                fail("terminal", f"terminal_binding_check.{key} must be true.")
         if not _is_iso(terminal.get("checked_at")):
             fail("terminal", "terminal_binding_check.checked_at must be ISO-8601.")
         if terminal.get("head_matches") is False or terminal.get("tree_clean") is False:

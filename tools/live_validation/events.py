@@ -160,4 +160,6 @@ class DispatchCollector:
             raise ReceiptIntegrityError(
                 f"{len(matches)} case '{case_id}' receipts share physical key {key}."
             )
+        if matches and next(a.event for a in self._events if a.event_id == matches[0]) != receipt:
+            raise ReceiptIntegrityError("Receipt parameters disagree for the same physical input.")
         return matches[0] if matches else None

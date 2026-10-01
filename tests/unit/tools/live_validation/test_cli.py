@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from tools.live_validation.cases import frozen_case_ids
 from tools.live_validation.evidence import write_live_evidence
@@ -29,6 +31,22 @@ def _write_evidence_file(tmp: Path) -> Path:
 
 
 class RunV44LiveCasesCliTests(unittest.TestCase):
+    def test_run_reports_invalid_evidence_and_returns_failure(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            payload = assignment_payload(tmp)
+            payload["config_path"] = str(tmp / "accounts.yaml")
+            assignment = write_assignment(tmp, payload)
+            evidence = _evidence(tmp)
+            path = write_live_evidence(evidence, tmp / "live_evidence.json")
+            with patch("tools.run_v44_live_cases.LiveCaseRunner") as runner, patch(
+                "tools.run_v44_live_cases.validate_live_evidence"
+            ) as validate:
+                runner.return_value.run.return_value = evidence, path
+                validate.return_value = SimpleNamespace(valid=False, findings=[])
+                self.assertEqual(1, cli_main(("run", "--assignment", str(assignment))))
+                validate.assert_called_once()
+
     def test_direct_launch_help(self):
         """QR1: the tracked entry boots standalone and lists its subcommands."""
         completed = subprocess.run(

@@ -63,10 +63,11 @@ def home_observation(
     )
 
 
-def tap_receipt(source: Observation, *, input_sequence: int = 7) -> InputDispatchRecord:
+def tap_receipt(source: Observation, *, input_sequence: int | None = None) -> InputDispatchRecord:
     return InputDispatchRecord(
         source_frame=source.frame_ref,
-        dispatch=TapDispatch(point=(270, 520), input_sequence=input_sequence),
+        dispatch=TapDispatch(point=(270, 520), input_sequence=(
+            source.frame_ref.input_sequence + 1 if input_sequence is None else input_sequence)),
         artifact_path=source.artifact_path,
         home_city=True,
     )
@@ -85,7 +86,10 @@ def assignment_payload(
         entry.write_text("x = 1\n", encoding="utf-8")
     if entry_sha256 is None:
         entry_sha256 = sha256_file(entry)
-    report_root = tmp / "reports"
+    report_root = tmp / ".local-data" / "reports"
+    offline = tmp / "offline.json"
+    offline.write_text(json.dumps({"succeeded": True, "metadata": {
+        "commit_sha": CANDIDATE_SHA, "source_fingerprint": "0" * 64}}), encoding="utf-8")
     return {
         "schema_version": SCHEMA_VERSION,
         "assignment_id": "v44-test-001",
@@ -108,9 +112,10 @@ def assignment_payload(
             "session_closed": True,
             "lease_released": True,
             "observer_restored": True,
-            "instance_preserved": True,
+            "instance_preserved": False,
         },
-        "offline_evidence": [],
+        "offline_evidence": [{"path": str(offline), "sha256": sha256_file(offline),
+                              "description": "exact candidate test proof"}],
         "config_path": None,
     }
 
