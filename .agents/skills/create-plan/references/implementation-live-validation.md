@@ -14,7 +14,7 @@ For each live-dependent slice, state:
 - artifact needed to diagnose failure; and
 - a bounded stop condition.
 
-Run focused offline tests before live proof. Use the full portable suite only for broad shared behavior or final integration. A process exit does not replace an observed UI postcondition.
+Run focused offline tests before checkpoints on modified code. For final offline validation, follow the [repository's validation policy](../../../../AGENTS.md#offline-validation): use one affected gate for a source change with downstream consumers and accept its full fallback without a separate local `full` run; run local `full` only on explicit request or for a concrete risk the selector cannot cover. A process exit does not replace an observed UI postcondition.
 
 ## Targets
 
