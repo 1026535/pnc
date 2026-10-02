@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session, the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa), and the authorized 2026-09-30 ef03789c turn020 survey frames that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, the four single-type military bodies at slots 5 through 8, and the multi-slot Moon Well body. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
+  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session, the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa), the authorized 2026-09-30 ef03789c turn020 survey frames that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, the four single-type military bodies at slots 5 through 8, and the multi-slot Moon Well body, and the 2026-10-01 v44-q4-bank-watchtower live endpoint frame. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
   "samples": [
     {
       "image": "home_city_blacksmith_slot12_f1_20260922.png",
@@ -241,6 +241,21 @@
       ],
       "annotation": "f1171ffa attempt1 bank survey frame 0092 -- independent view, same session as 0022 but a distinct camera pose. Camera zoom 0.75, atlas translation (-152,-21): the Bank facade/blue dome measures at (88,971,120,97) score .9718, action point (147,1006) below the tap band. The same pose is the V44-4 military independent holdout: Infantry Barracks at (287,559,83,78) action (322,600), Cavalry Barracks at (124,624,100,42) action (180,656), Ranged Barracks at (262,734,120,34) action (317,752), Siege Factory at (84,740,72,84) action (117,789); each carries a readable building nameplate corroborating slot identity. The siege action point lands inside this view's left-HUD exclusion band -- a view-specific limitation, not a target defect.",
       "outside_mask_sha256": "13047d78813363a12c67a50e21215297fcc472314404202facd623156cdf44df"
+    },
+    {
+      "image": "home_city_bank_endpoint_0030_20261001.png",
+      "role": "bank_route_endpoint_institute_bridge",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "7fdeb971a7658795046a6355aefa7e317f55bbdf88d45cb43e81aa1c939be89d",
+      "sha256": "e1e0760441ace0d3bfd8ee13cba65c9b9023caa115dfde9615d677b3c9f98647",
+      "source_artifact": "20261001T223401Z_core_20261001T223250Z_4a4c0ff0_0030_core_6_home_endpoint_confirmation.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "4f3fe258315c1e9ac003c58dab0a02e2f15f003d243b59fdff9472c451a0db67",
+      "masked_rows": [1390, 1484],
+      "annotation": "2026-10-01 v44-q4-bank-watchtower live frame 0030 on 157_farm, before the Bank pan. Normalized endpoint zoom 0.75 and atlas translation (-288,44). The fixed Bank is clipped at the left edge and projects below the safe tap band. The production camera publisher measures Institute slot 9 at (634,807,60,56); the existing Institute bridge UP swipe has a fully qualified current-frame region (576,610,193,299) and exact stroke (664,836) to (737,629). This is route-order evidence only; no Bank tap or destination is proved.",
+      "outside_mask_sha256": "c337f00bfbc8d354d5957b7edd2b710eaff83ed9b5b43c5c041a58c9d69c1129"
     },
     {
       "image": "home_city_moon_well_slot17_0029_20260930.png",

@@ -4,10 +4,15 @@ from dataclasses import replace
 from datetime import UTC, datetime
 import unittest
 
+from PIL import Image
+
 from pnc_automation.app.pnc.domain.action_requests import SwipePurpose, resolve_swipe_points_for_action
-from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.building_catalog import (
+    HomeCityObjectId, home_city_object_id_from_metadata,
+)
 from pnc_automation.app.pnc.domain.home_city_camera import (
-    HomeCityCameraProof, HomeCityCameraStatus, HomeCityViewEvidence, HomeCityZoomStatus,
+    HomeCityCameraProof, HomeCityCameraScanMode, HomeCityCameraStatus,
+    HomeCityViewEvidence, HomeCityZoomStatus,
 )
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import (
@@ -19,7 +24,14 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
     plan_home_city_camera_pan, plan_home_city_camera_step,
 )
+from pnc_automation.app.pnc.vision.home_city_camera import (
+    HomeCityCameraLocalizer, load_home_city_camera_catalog,
+)
+from pnc_automation.app.pnc.vision.spatial_surfaces import build_home_city_spatial_surface
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+
+from tests.support.paths import TEST_DATA_ROOT
 
 
 def _body(target=HomeCityObjectId.INSTITUTE, *, bounds=Bounds(634, 863, 60, 56),
@@ -105,6 +117,61 @@ class HomeCityCameraPanTests(unittest.TestCase):
             target=HomeCityObjectId.ILLUSORY_BEAST_MANOR)
         self.assertEqual((666, 892, 739, 685), _points(action))
         self.assertEqual(770, action.safe_bounds.x + action.safe_bounds.width)
+
+    def test_bank_uses_measured_endpoint_bridge_before_horizontal_pan(self):
+        """The 2026-10-01 live endpoint has a measured slot-9 bridge source."""
+
+        path = (
+            TEST_DATA_ROOT / "home_city_slot_bodies"
+            / "home_city_bank_endpoint_0030_20261001.png"
+        )
+        with Image.open(path) as source:
+            self.assertEqual("RGBA", source.mode)
+            image = source.copy()
+        camera = HomeCityCameraLocalizer(
+            catalog=load_home_city_camera_catalog(), matcher=OpenCvTemplateMatcher(),
+        )
+        surface = build_home_city_spatial_surface(
+            image=image, lines=(), selector_registry=None, camera=camera,
+            camera_mode=HomeCityCameraScanMode.NORMALIZED_ENDPOINT,
+        )
+        self.assertEqual((-288, 44), surface.camera_proof.translation)
+        self.assertEqual(HomeCityZoomStatus.AT_ENDPOINT, surface.home_city_view.zoom_status)
+        institute = [
+            item for item in surface.objects
+            if home_city_object_id_from_metadata(item.metadata)
+            is HomeCityObjectId.INSTITUTE
+        ]
+        self.assertEqual(1, len(institute))
+        self.assertEqual(SpatialObjectSourceKind.TEMPLATE, institute[0].source_kind)
+        self.assertEqual(HomeCitySlotSelector(9), institute[0].home_city_slot)
+        self.assertEqual(Bounds(634, 807, 60, 56), institute[0].bounds)
+
+        observation = replace(_observation(), spatial_surface=surface)
+        step = plan_home_city_camera_step(observation=observation, target=HomeCityObjectId.BANK)
+        self.assertEqual("y", step.axis)
+        self.assertEqual("pan_home_city_institute_bridge_up", step.action.reason)
+        self.assertEqual(Bounds(576, 610, 193, 299), step.action.safe_bounds)
+        self.assertEqual((664, 836, 737, 629), _points(step.action))
+
+    def test_bank_keeps_horizontal_route_without_qualified_bridge(self):
+        """A missing or occluded bridge never becomes a guessed upward swipe."""
+
+        endpoint = _observation(translation=(-288, 44))
+        blocking_body = _body(
+            HomeCityObjectId.BLACKSMITH, bounds=Bounds(610, 700, 30, 25), slot=12,
+        )
+        for objects in ((), (_body(bounds=Bounds(634, 807, 60, 56)), blocking_body)):
+            with self.subTest(objects=objects):
+                observation = replace(
+                    endpoint,
+                    spatial_surface=replace(endpoint.spatial_surface, objects=objects),
+                )
+                step = plan_home_city_camera_step(
+                    observation=observation, target=HomeCityObjectId.BANK,
+                )
+                self.assertEqual("pan_home_city_courtyard_right", step.action.reason)
+                self.assertEqual("x", step.axis)
 
     def test_institute_bridge_refuses_unmatched_or_wrong_slot_body(self):
         for body in (_body(slot=None), _body(slot=12), replace(_body(), source_kind=SpatialObjectSourceKind.GEOMETRY)):

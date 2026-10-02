@@ -1085,6 +1085,7 @@ class FixtureIntegrityTests(unittest.TestCase):
                 "home_city_warehouse_slot3_0084_20260929.png",
                 "home_city_bank_sys1_0022_20260929.png",
                 "home_city_bank_sys1_0092_20260929.png",
+                "home_city_bank_endpoint_0030_20261001.png",
                 "home_city_moon_well_slot17_0029_20260930.png",
                 "home_city_moon_well_slot17_0030_20260930.png",
             },

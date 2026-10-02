@@ -2421,6 +2421,14 @@ def plan_home_city_camera_step(
                 if body is not None else
                 "Projected target anchor is inside the HUD-safe band but has no current-frame match.")
     axes = sorted((0, 1), key=lambda axis: abs(needed[axis]) / (width, height)[axis], reverse=True)
+    # A southwest target may need both axes while the measured Institute
+    # bridge is the only current upward lane. Moving right first can take its
+    # source body offscreen, so consume that qualified lane before the
+    # horizontal courtyard. Every subsequent step still remeasures the pose.
+    if needed[0] > 0 and needed[1] < 0:
+        upward = _home_city_profile_action(observation, "up")
+        if upward is not None and upward.reason == "pan_home_city_institute_bridge_up":
+            axes = [1, 0]
     # Preserve already qualified route choices on both axes before considering
     # the additional terrace. A new horizontal lane must not displace a usable
     # vertical correction on an accepted Campaign route.
