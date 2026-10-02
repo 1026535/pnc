@@ -383,6 +383,10 @@ class WorkerTests(unittest.TestCase):
 
     def setUp(self):
         """Give each test unique evidence and no previous writer record."""
+        # Model the fixture's parent launcher independently of who runs tests.
+        # The recursive-worker case sets its own marker and still proves the
+        # production guard; children of the fake CLI receive the real marker.
+        self.enterContext(patch.dict(os.environ, {worker.ROLE_VARIABLE: ""}))
         self.args = self.fixture.prepare(self.id())
         self.run_dir = self.fixture.run_dir
 

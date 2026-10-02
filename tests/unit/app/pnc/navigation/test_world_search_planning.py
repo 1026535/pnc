@@ -10,29 +10,27 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectRelationship,
     SpatialSurfaceType,
 )
-from pnc_automation.app.pnc.navigation.world_map_search import (
-    WorldMapBounds,
+from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapBounds
+from pnc_automation.app.pnc.navigation.world_map_search_contracts import (
     WorldMapMapCorner,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
     WorldMapSearchPattern,
-    WorldMapSearchService,
-    WorldMapTraversalCorner,
 )
+from pnc_automation.app.pnc.navigation.world_map_traversal import WorldMapTraversalCorner
 
 from tests.support.pnc.spatial import make_spatial_object
-from tests.support.pnc.world_search.world_map_search_fixtures import WorldMapSearchFixtures
 from tests.support.pnc.world_search.make_world_map_observation import _make_world_map_observation
+from tests.support.pnc.world_search.resolve_search_plan import _resolve_search_plan
 from tests.support.pnc.world_search.search_request import _search_request
 
 
-class WorldSearchPlanningTests(WorldMapSearchFixtures, unittest.TestCase):
+class WorldSearchPlanningTests(unittest.TestCase):
     """Proves world search planning."""
 
     def test_resolve_plan_uses_self_territory_origin_for_row_major_radius_search(self) -> None:
         """Defaults origin resolution to My Territory and produces a deterministic row-major bounded route."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
         observation = _make_world_map_observation(
             100,
             100,
@@ -46,7 +44,7 @@ class WorldSearchPlanningTests(WorldMapSearchFixtures, unittest.TestCase):
             ),
         )
 
-        plan = service.resolve_plan(
+        plan = _resolve_search_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.CASTLE),
                 pattern=WorldMapSearchPattern.row_major_sweep(),
@@ -75,10 +73,9 @@ class WorldSearchPlanningTests(WorldMapSearchFixtures, unittest.TestCase):
     def test_resolve_plan_builds_expanding_ring_route_from_explicit_origin(self) -> None:
         """Produces the deterministic expanding-ring order around an explicit center coordinate."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
         observation = _make_world_map_observation(100, 100)
 
-        plan = service.resolve_plan(
+        plan = _resolve_search_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.MONSTER),
                 pattern=WorldMapSearchPattern.expanding_ring(),
@@ -107,10 +104,9 @@ class WorldSearchPlanningTests(WorldMapSearchFixtures, unittest.TestCase):
     def test_resolve_plan_builds_perimeter_route_from_full_map_bounds(self) -> None:
         """Builds one explicit perimeter traversal around the requested bounds."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
         observation = _make_world_map_observation(0, 0)
 
-        plan = service.resolve_plan(
+        plan = _resolve_search_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
                 pattern=WorldMapSearchPattern.perimeter_ring_sweep(start_corner=WorldMapTraversalCorner.UPPER_LEFT),

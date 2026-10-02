@@ -103,3 +103,19 @@ class CoordinateMoverArrivalTests(WorldMapSearchFixtures, unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].timing_profile, ActionTimingProfile.WORLD_MAP_MOVEMENT)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())
+
+    def test_coordinate_mover_fails_when_direct_target_is_outside_domain(self) -> None:
+        """Rejects direct movement targets outside the kingdom coordinate domain."""
+
+        mover = WorldMapCoordinateMover(
+            observation_service=None,
+            action_executor=None,
+            navigator=WorldMapNavigator(focus_tolerance=0),
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            mover.move_to_coordinate(
+                _make_world_map_observation(0, 0),
+                target_coordinate=(0, 5000),
+                label_prefix="invalid_direct_move",
+            )

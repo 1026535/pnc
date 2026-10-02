@@ -9,52 +9,34 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectQuery,
     SpatialSurfaceType,
 )
-from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapNavigator
-from pnc_automation.app.pnc.navigation.world_map_search import (
+from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import (
     WorldMapBounds,
     WorldMapCoordinateDomain,
-    WorldMapCoordinateMover,
+)
+from pnc_automation.app.pnc.navigation.world_map_search_contracts import (
     WorldMapMapCorner,
     WorldMapMovementToolKind,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
     WorldMapSearchPattern,
-    WorldMapSearchService,
-    WorldMapTraversalActionFamily,
 )
+from pnc_automation.app.pnc.navigation.world_map_traversal import WorldMapTraversalActionFamily
 from pnc_automation.core.errors import SelectorResolutionError
 
-from tests.support.pnc.world_search.world_map_search_fixtures import WorldMapSearchFixtures
 from tests.support.pnc.world_search.make_world_map_observation import _make_world_map_observation
+from tests.support.pnc.world_search.resolve_search_plan import _resolve_search_plan
 from tests.support.pnc.world_search.search_request import _search_request
 
 
-class WorldSearchRouteEdgesTests(WorldMapSearchFixtures, unittest.TestCase):
+class WorldSearchRouteEdgesTests(unittest.TestCase):
     """Proves world search route edges."""
-
-    def test_coordinate_mover_fails_when_direct_target_is_outside_domain(self) -> None:
-        """Rejects direct movement targets outside the kingdom coordinate domain."""
-
-        mover = WorldMapCoordinateMover(
-            observation_service=None,
-            action_executor=None,
-            navigator=WorldMapNavigator(focus_tolerance=0),
-        )
-
-        with self.assertRaises(SelectorResolutionError):
-            mover.move_to_coordinate(
-                _make_world_map_observation(0, 0),
-                target_coordinate=(0, 5000),
-                label_prefix="invalid_direct_move",
-            )
 
     def test_row_major_route_uses_addressable_neighbors_on_one_world_map_row(self) -> None:
         """Skips impossible coordinate pairs while preserving valid same-row integer neighbors."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
         observation = _make_world_map_observation(507, 1019)
 
-        plan = service.resolve_plan(
+        plan = _resolve_search_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
                 pattern=WorldMapSearchPattern.row_major_sweep(),
@@ -73,10 +55,8 @@ class WorldSearchRouteEdgesTests(WorldMapSearchFixtures, unittest.TestCase):
     def test_row_major_route_fails_when_rectangle_contains_no_addressable_pair(self) -> None:
         """Fails fast instead of snapping a no-tile rectangle outside its requested boundary."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
-
         with self.assertRaises(SelectorResolutionError):
-            service.resolve_plan(
+            _resolve_search_plan(
                 _search_request(
                     matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
                     pattern=WorldMapSearchPattern.row_major_sweep(),
@@ -90,10 +70,9 @@ class WorldSearchRouteEdgesTests(WorldMapSearchFixtures, unittest.TestCase):
     def test_full_map_corner_origin_snaps_to_addressable_coordinate_pair(self) -> None:
         """Resolves impossible map-corner pairs to the closest real world-map coordinate pair."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
         domain = WorldMapCoordinateDomain.puzzles_and_conquest()
 
-        plan = service.resolve_plan(
+        plan = _resolve_search_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
                 pattern=WorldMapSearchPattern.row_major_sweep(),
@@ -112,10 +91,9 @@ class WorldSearchRouteEdgesTests(WorldMapSearchFixtures, unittest.TestCase):
     def test_full_map_row_sweep_prepends_non_local_entry_intent_from_far_current_viewport(self) -> None:
         """Models broad full-map entry as one non-local itinerary step instead of ordinary local traversal."""
 
-        service = WorldMapSearchService(screen_flows=self.flows)
         domain = WorldMapCoordinateDomain.puzzles_and_conquest()
 
-        plan = service.resolve_plan(
+        plan = _resolve_search_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
                 pattern=WorldMapSearchPattern.serpentine_row_sweep(),

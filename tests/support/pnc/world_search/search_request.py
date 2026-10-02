@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pnc_automation.app.pnc.navigation.world_map_search import (
-    TraversalStridePolicy,
+from pnc_automation.app.pnc.navigation.world_map_search_contracts import (
     WorldMapMovementPreferences,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
@@ -11,6 +10,7 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchStopPolicy,
 )
 from pnc_automation.app.pnc.navigation.world_map_sweep import WorldMapSweepPolicy
+from pnc_automation.app.pnc.navigation.world_map_traversal import TraversalStridePolicy
 
 
 
@@ -27,7 +27,7 @@ def _search_request(
 ) -> object:
     """Builds one search request with concise defaults for tests."""
 
-    from pnc_automation.app.pnc.navigation.world_map_search import WorldMapSearchRequest
+    from pnc_automation.app.pnc.navigation.world_map_search_contracts import WorldMapSearchRequest
 
     return WorldMapSearchRequest(
         matcher=matcher,
