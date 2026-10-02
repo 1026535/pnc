@@ -24,6 +24,7 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchRequest,
     WorldMapSearchStopPolicy,
     WorldMapTraversalCorner,
+    validate_world_map_preview_limits,
 )
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.diagnostics import run_with_logging_shutdown
@@ -91,55 +92,57 @@ def _run_preview() -> int:
     parser.add_argument("--verbose", action="store_true", help="Enable verbose structured logging.")
     arguments = parser.parse_args()
 
+    request = _build_request(arguments)
+    validate_world_map_preview_limits(head=arguments.head, tail=arguments.tail)
+
     application = build_application_runner(Path(arguments.config), verbose=arguments.verbose)
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
-    connected = script_runner.build_connected_runtime_bundle(
+    with script_runner.build_connected_runtime_bundle(
         account=account,
         required_role=LiveAutomationRole.LIVE_TESTING,
-    )
-    observation = connected.runner.prove_preflight_state(
-        account,
-        TaskPreflight.WORLD_MAP,
-        label_prefix="preview_world_map_search_route",
-        max_steps=_WORLD_MAP_PREFLIGHT_MAX_STEPS,
-    )
-    request = _build_request(arguments)
-    preview = connected.runtime.world_map_search_service.preview_route(
-        request,
-        observation,
-        head=arguments.head,
-        tail=arguments.tail,
-    )
-    print(json.dumps(preview, indent=2, sort_keys=True))
+    ) as connected:
+        observation = connected.runner.prove_preflight_state(
+            account,
+            TaskPreflight.WORLD_MAP,
+            label_prefix="preview_world_map_search_route",
+            max_steps=_WORLD_MAP_PREFLIGHT_MAX_STEPS,
+        )
+        preview = connected.runtime.world_map_search_service.preview_route(
+            request,
+            observation,
+            head=arguments.head,
+            tail=arguments.tail,
+        )
+        print(json.dumps(preview, indent=2, sort_keys=True))
 
-    if arguments.execute_first <= 0:
-        return 0
-    plan = connected.runtime.world_map_search_service.resolve_plan(request, observation)
-    current = observation
-    executed = []
-    for step in plan.execution_plan.steps[: arguments.execute_first]:
-        current = connected.runtime.world_map_search_service.move_to_checkpoint(
-            current,
-            plan=plan,
-            step=step,
-            label_prefix=f"preview_execute_{step.step_index}",
-        )
-        executed.append(
-            {
-                "step_index": step.step_index,
-                "coordinate": [step.checkpoint.coordinate[0], step.checkpoint.coordinate[1]],
-                "intent": step.traversal_segment_intent.value,
-            }
-        )
-    print(json.dumps({"executed_steps": executed}, indent=2, sort_keys=True))
+        if arguments.execute_first <= 0:
+            return 0
+        plan = connected.runtime.world_map_search_service.resolve_plan(request, observation)
+        current = observation
+        executed = []
+        for step in plan.execution_plan.steps[: arguments.execute_first]:
+            current = connected.runtime.world_map_search_service.move_to_checkpoint(
+                current,
+                plan=plan,
+                step=step,
+                label_prefix=f"preview_execute_{step.step_index}",
+            )
+            executed.append(
+                {
+                    "step_index": step.step_index,
+                    "coordinate": [step.checkpoint.coordinate[0], step.checkpoint.coordinate[1]],
+                    "intent": step.traversal_segment_intent.value,
+                }
+            )
+        print(json.dumps({"executed_steps": executed}, indent=2, sort_keys=True))
     return 0
 
 
 def _build_request(arguments: argparse.Namespace) -> WorldMapSearchRequest:
     """Builds one route-preview search request from the parsed CLI arguments."""
 
-    return WorldMapSearchRequest(
+    request = WorldMapSearchRequest(
         matcher=lambda _sighting: False,
         stop_policy=WorldMapSearchStopPolicy(),
         pattern=_build_pattern(arguments),
@@ -148,6 +151,10 @@ def _build_request(arguments: argparse.Namespace) -> WorldMapSearchRequest:
         boundary=_build_boundary(arguments),
         coordinate_domain=WorldMapCoordinateDomain.puzzles_and_conquest(),
     )
+    if arguments.origin == "explicit_coordinate":
+        assert request.origin is not None and request.origin.coordinate is not None
+        request.coordinate_domain.require_inside_bounds(request.origin.coordinate)
+    return request
 
 
 def _build_pattern(arguments: argparse.Namespace) -> WorldMapSearchPattern:

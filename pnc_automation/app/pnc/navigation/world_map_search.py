@@ -2624,12 +2624,7 @@ class WorldMapSearchService:
     ) -> dict[str, object]:
         """Builds one route-preview document suitable for dry-run auditing before live sweep execution."""
 
-        if head <= 0 or tail <= 0:
-            raise SelectorResolutionError(
-                "World-map route preview requires positive head and tail sizes.",
-                head=head,
-                tail=tail,
-            )
+        validate_world_map_preview_limits(head=head, tail=tail)
         plan = self.resolve_plan(request, observation)
         checkpoints = plan.route
         preview_head = checkpoints[:head]
@@ -4879,6 +4874,17 @@ def _require_valid_world_map_step_budget(
             "World-map step budgets must be positive integers.",
             field_name=field_name,
             step_budget=step_budget,
+        )
+
+
+def validate_world_map_preview_limits(*, head: int, tail: int) -> None:
+    """Rejects non-positive route-preview checkpoint limits without runtime services."""
+
+    if head <= 0 or tail <= 0:
+        raise SelectorResolutionError(
+            "World-map route preview requires positive head and tail sizes.",
+            head=head,
+            tail=tail,
         )
 
 

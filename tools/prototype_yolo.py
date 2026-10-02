@@ -80,14 +80,15 @@ def main() -> int:
         logging.disable(logging.CRITICAL)
         app = build_application_runner(args.config, observation_mode=ObservationMode.DEBUG)
         account = app.script_runner.config.require_account(args.account)
-        bundle = app.script_runner.build_connected_runtime_bundle(account=account)
-        runtime = bundle.runtime
-        observer = runtime.observation_service
-        observer.castle_roster_store = None
-        runtime.session.ensure_app_foregrounded()
-        capture = observer.capture_observation(f"yolo_shadow_{run_id}")
-        result = shadow.observe(capture.screenshot, capture.observation)
-        records.append(save_report(directory, 0, capture.screenshot.image, result))
+        with app.script_runner.build_connected_runtime_bundle(account=account) as bundle:
+            runtime = bundle.runtime
+            observer = runtime.observation_service
+            observer.castle_roster_store = None
+            runtime.session.ensure_app_foregrounded()
+            capture = observer.capture_observation(f"yolo_shadow_{run_id}")
+            result = shadow.observe(capture.screenshot, capture.observation)
+            records.append(save_report(directory, 0, capture.screenshot.image, result))
+            target = _write_summary(directory=directory, args=args, detector=detector, records=records)
     else:
         builder = build_observation_builder(build_default_selector_registry())
         for index, path in enumerate(args.image):
@@ -96,13 +97,31 @@ def main() -> int:
             capture = CapturedScreenshot(None, image, "PNG", ephemeral_captured_at=datetime.now(UTC))
             result = shadow.observe(capture, builder.build(capture))
             records.append(save_report(directory, index, image, result))
-    summary = {"mode": "shadow_only", "live": args.live, "model_sha256": detector.model_sha256,
-               "class_names": detector.class_names, "frames": records,
-               "note": "Detections are diagnostics; no PNC accuracy claim or action authorization."}
-    target = directory / "summary.json"
-    target.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        target = _write_summary(directory=directory, args=args, detector=detector, records=records)
     print(target)
     return 0
+
+
+def _write_summary(
+    *,
+    directory: Path,
+    args: argparse.Namespace,
+    detector: YoloOnnxDetector,
+    records: list[dict[str, object]],
+) -> Path:
+    """Materializes the final report for an inference run."""
+
+    summary = {
+        "mode": "shadow_only",
+        "live": args.live,
+        "model_sha256": detector.model_sha256,
+        "class_names": detector.class_names,
+        "frames": records,
+        "note": "Detections are diagnostics; no PNC accuracy claim or action authorization.",
+    }
+    target = directory / "summary.json"
+    target.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return target
 
 
 if __name__ == "__main__":

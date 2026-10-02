@@ -162,10 +162,10 @@ class ConnectedAutomationRuntime:
     runtime: ConnectedAccountRuntime
     runner: AutomationRunner
 
-    def close(self) -> None:
+    def close(self, *, outcome: str = "success") -> None:
         """Releases the shared connected runtime and its operation lease."""
 
-        self.runtime.close()
+        self.runtime.close(outcome=outcome)
 
     def __enter__(self) -> "ConnectedAutomationRuntime":
         """Enters an explicitly scoped connected runtime bundle."""
@@ -175,12 +175,9 @@ class ConnectedAutomationRuntime:
     def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
         """Releases the connected runtime bundle on exit."""
 
-        active_error = _exception if isinstance(_exception, BaseException) else None
-        close_preserving_error(
-            self.close,
-            active_error,
-            message="Connected automation operation and cleanup both failed.",
-        )
+        # Delegate to the inner lifecycle owner so an active body exception is
+        # recorded as an error and is grouped with any cleanup failure once.
+        self.runtime.__exit__(_exception_type, _exception, _traceback)
 
 
 @dataclass(slots=True)
@@ -727,7 +724,7 @@ class ScriptRunner:
             )
         except BaseException as error:
             close_preserving_error(
-                connected_runtime.close,
+                lambda: connected_runtime.close(outcome="error"),
                 error,
                 message="Automation runner construction and BlueStacks phase cleanup both failed.",
             )

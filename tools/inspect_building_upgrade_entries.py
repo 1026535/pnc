@@ -123,10 +123,21 @@ def main() -> int:
     targets = frozenset(HomeCityObjectId(value.strip()) for value in args.targets.split(",") if value.strip())
     application = build_application_runner(args.config)
     account = application.script_runner.config.require_account(args.account)
-    runner = application.script_runner.build_connected_automation_runner(
+    with application.script_runner.build_connected_runtime_bundle(
         account=account,
         required_role=LiveAutomationRole.LIVE_TESTING,
-    )
+    ) as connected:
+        return _run_inspection(runner=connected.runner, args=args, targets=targets)
+
+
+def _run_inspection(
+    *,
+    runner: AutomationRunner,
+    args: argparse.Namespace,
+    targets: frozenset[HomeCityObjectId],
+) -> int:
+    """Runs the building survey while its connected runtime remains scoped."""
+
     observation = execute_live_flow_until(
         runner=runner,
         label_prefix="phase1_upgrade_survey_home",

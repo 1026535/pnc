@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectKind,
@@ -16,6 +17,7 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchPatternKind,
     WorldMapSearchService,
 )
+from pnc_automation.core.errors import SelectorResolutionError
 
 from tests.support.pnc.world_search.world_map_search_fixtures import WorldMapSearchFixtures
 from tests.support.pnc.world_search.make_world_map_observation import _make_world_map_observation
@@ -24,6 +26,16 @@ from tests.support.pnc.world_search.search_request import _search_request
 
 class WorldSearchPreviewTests(WorldMapSearchFixtures, unittest.TestCase):
     """Proves world search preview."""
+
+    def test_preview_rejects_nonpositive_limits_before_plan_resolution(self) -> None:
+        """Keeps the direct service contract on the same pure limit validator."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+        with patch.object(WorldMapSearchService, "resolve_plan") as resolve_plan:
+            with self.assertRaises(SelectorResolutionError):
+                service.preview_route(None, None, head=0, tail=1)  # type: ignore[arg-type]
+
+        resolve_plan.assert_not_called()
 
     def test_preview_route_reports_segments_and_head_tail_checkpoints(self) -> None:
         """Exposes one dry-run route preview so live sweeps can be audited before execution."""
