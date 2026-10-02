@@ -2,7 +2,10 @@
 
 import unittest
 
-import consult_game_knowledge as consult
+from tests.support.agent_runtime.imports import agent_script_import_path
+
+with agent_script_import_path("devin-game-knowledge"):
+    import consult_game_knowledge as consult
 
 
 REJECTION = consult.TOOL_REJECTION_MARKER

@@ -17,6 +17,7 @@ class ScopedOwnershipTests(unittest.TestCase):
             "tests/unit/app/pnc/vision/test_sample.py",
             "tests/unit/app/pnc/vision/home_city_camera/test_bodies.py",
             "tests/unit/app/pnc/navigation/test_sample.py",
+            "tests/unit/tools/agent_runtime/test_devin_worker.py",
             "tests/integration/sample/test_capture.py",
             "tests/integration/vision/home_city_camera/test_publishers.py",
             "tests/contract/sample/test_api.py",

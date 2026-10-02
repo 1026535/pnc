@@ -41,3 +41,13 @@ resources:
     groups: [integration, contract]
   - pattern: config/*.json
     groups: [vision, integration]
+  - pattern: .agents/skills/devin-implement/scripts/devin_worker.py
+    groups: [unit.tools.agent_runtime]
+  - pattern: .agents/skills/devin-implement/scripts/devin_monitor.py
+    groups: [unit.tools.agent_runtime]
+  - pattern: .agents/skills/devin-implement/scripts/devin_acp.py
+    groups: [unit.tools.agent_runtime]
+  - pattern: .agents/skills/devin-implement/scripts/windows_job.py
+    groups: [unit.tools.agent_runtime]
+  - pattern: .agents/skills/devin-game-knowledge/scripts/consult_game_knowledge.py
+    groups: [unit.tools.agent_runtime]

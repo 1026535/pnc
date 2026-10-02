@@ -123,9 +123,12 @@ class FaultRecallTests(unittest.TestCase):
         camera_unit = "tests/unit/app/pnc/vision/home_city_camera/test_slot_bodies.py"
         camera_integration = "tests/integration/vision/home_city_camera/test_publishers.py"
         navigation = "tests/unit/app/pnc/navigation/test_home_city_scan.py"
+        agent_runtime = "tests/unit/tools/agent_runtime/test_devin_worker.py"
         contract = "tests/contract/sample/test_api.py"
         unrelated = "tests/unit/engine/test_worker.py"
-        tests = inventory([camera_unit, camera_integration, navigation, contract, unrelated])
+        tests = inventory([
+            camera_unit, camera_integration, navigation, agent_runtime, contract, unrelated,
+        ])
         rules = load_rules(
             Path(__file__).resolve().parents[3] / "tests/selection_rules.yaml", tests)
         resource = self.root / "home_city_fault.png"

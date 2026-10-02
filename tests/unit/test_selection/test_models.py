@@ -23,7 +23,7 @@ class InventoryTests(unittest.TestCase):
             path
             for path in paths
             if path not in selected
-            and not path.startswith(("tests/support/", "tests/data/", "tests/live/"))
+            and not path.startswith(("tests/support/", "tests/data/", "tests/live/", "tests/native/"))
             and not (
                 Path(path).parent.as_posix() == "tests"
                 and Path(path).name.startswith("test_live_")

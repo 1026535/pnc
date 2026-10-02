@@ -1,10 +1,9 @@
 """Exercise worker boundaries offline; no test authenticates or calls a model."""
 
-import argparse
 import asyncio
 import ctypes
 from ctypes import wintypes as wt
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 import io
 import json
 import os
@@ -18,7 +17,12 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-import devin_worker as worker
+from tests.support.agent_runtime.imports import agent_script_import_path
+from tests.support.agent_runtime.worker_fixture import WorkerFixture
+
+with agent_script_import_path("devin-implement"):
+    import devin_worker as worker
+    import windows_job
 
 
 def process_running(pid):
@@ -73,7 +77,8 @@ class AppToolDeliveryTests(unittest.TestCase):
                     with patch.dict(os.environ, {
                         "CODEX_HOME": str(root), "CODEX_MCP_NODE_PATH": "node",
                         "CODEX_APP_TOOLS_PIPE_PATH": "unit-test-pipe",
-                    }), patch.object(worker.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)):
+                    }), patch.object(worker.subprocess, "CREATE_NO_WINDOW", 0, create=True), \
+                            patch.object(worker.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)):
                         with self.assertRaises(worker.AppToolError) as raised:
                             asyncio.run(worker.send_notification("test-task", "completed", root / "stderr.log"))
                     self.assertEqual(raised.exception.uncertain, uncertain)
@@ -289,142 +294,101 @@ class MonitorTests(unittest.TestCase):
                 self.assertEqual(tick[0], exit_at or (worker.CANCEL_GRACE_SECONDS + 1 if controls else 1))
 
 
+class WorkerCliTests(unittest.TestCase):
+    def test_console_mode_is_selected_without_starting_a_process(self):
+        """The public CLI keeps console output enabled by default and honors --no-console."""
+        arguments = [
+            "--repo", "repo", "--expected-head", "head", "--run-dir", "run",
+            "--brief", "brief",
+        ]
+        with patch.object(worker, "run", return_value=0) as run:
+            self.assertEqual(worker.main(["run", *arguments]), 0)
+            self.assertTrue(run.call_args.args[0].console)
+            self.assertEqual(worker.main(["run", *arguments, "--no-console"]), 0)
+            self.assertFalse(run.call_args.args[0].console)
+
+
+class ConsoleOutputTests(unittest.TestCase):
+    def test_console_output_copies_unicode_streams_to_logs_and_display(self):
+        """The headless stream copier retains UTF-8 bytes and renders both streams."""
+        stdout_data = "visible stdout: café\n".encode("utf-8")
+        stderr_data = "visible stderr: café\n".encode("utf-8")
+
+        class ByteStream:
+            def __init__(self, data):
+                self.data = data
+                self.read = False
+
+            def read1(self, size):
+                if self.read:
+                    return b""
+                self.read = True
+                return self.data
+
+        class FakeProcess:
+            def __init__(self):
+                self.stdout = ByteStream(stdout_data)
+                self.stderr = ByteStream(stderr_data)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+            def wait(self):
+                return 0
+
+        stdout_log, stderr_log = io.BytesIO(), io.BytesIO()
+        stdout = io.TextIOWrapper(stdout_log, encoding="utf-8")
+        stderr = io.TextIOWrapper(stderr_log, encoding="utf-8")
+        display = io.StringIO()
+        process = FakeProcess()
+        with patch("builtins.open", return_value=nullcontext(display)) as open_console, \
+                patch.object(windows_job.subprocess, "Popen", return_value=process) as popen, \
+                redirect_stdout(stdout), redirect_stderr(stderr):
+            self.assertEqual(windows_job.console_output(["synthetic-cli"], Path(".")), 0)
+
+        self.assertEqual(stdout_log.getvalue(), stdout_data)
+        self.assertEqual(stderr_log.getvalue(), stderr_data)
+        self.assertCountEqual(display.getvalue().splitlines(), [
+            "visible stdout: café", "visible stderr: café",
+        ])
+        open_console.assert_called_once_with("CONOUT$", "w", encoding="utf-8", buffering=1)
+        popen.assert_called_once_with(
+            ["synthetic-cli"], cwd=Path("."), stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+
+@unittest.skipUnless(os.name == "nt", "Worker process and Job lifetime tests require native Windows.")
 class WorkerTests(unittest.TestCase):
     """Use real Git and contained child processes with a deterministic fake Devin."""
 
     @classmethod
     def setUpClass(cls):
         """Prepare one isolated repository; tests restore only their own fixture files."""
-        cls.temporary = tempfile.TemporaryDirectory(prefix="devin adapter ")
-        cls.root = Path(cls.temporary.name)
-        cls.repo = cls.root / "repo"
-        cls.repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(cls.repo)], check=True)
-        (cls.repo / "existing.txt").write_text("initial\n")
-        subprocess.run(["git", "-C", str(cls.repo), "add", "existing.txt"], check=True)
-        subprocess.run(["git", "-C", str(cls.repo), "-c", "user.name=Adapter test", "-c",
-                        "user.email=test@localhost", "commit", "-qm", "Seed adapter test"], check=True)
-        cls.head = worker.git(cls.repo, "rev-parse", "HEAD")
-        cls.git_dir = Path(worker.git(cls.repo, "rev-parse", "--absolute-git-dir"))
-        cls.brief = cls.root / "brief.md"
-        cls.brief.write_text("Implement the bounded fixture.")
-        cls.fake = cls.root / "fake_devin.py"
-        cls.fake.write_text('''"""Deterministic CLI fixture, never a real model."""
-import json, os, pathlib, subprocess, sys, time
-args = sys.argv[1:]
-export = pathlib.Path(args[args.index('--export') + 1])
-config = json.loads(pathlib.Path(args[args.index('--config') + 1]).read_text())
-assert config['subagents_enabled'] is False
-assert config['attribution'] is False
-assert config['agent']['compaction_threshold_tokens'] == 100_000
-assert os.environ['DEVIN_IMPLEMENT_ROLE'] == 'worker'
-assert args[args.index('--model') + 1] == 'swe-2-max'
-permission = args[args.index('--permission-mode') + 1]
-assert permission == os.environ['DEVIN_ADAPTER_EXPECTED_PERMISSION']
-assert args[args.index('--respect-workspace-trust') + 1] == ('false' if permission == 'dangerous' else 'true')
-behavior = os.environ.get('DEVIN_ADAPTER_TEST', 'success')
-export.with_name('context.json').write_text(json.dumps({
-    'used_tokens':36425, 'peak_used_tokens':130770,
-    'window_tokens':262000, 'compactions_completed':1}))
-if behavior == 'console':
-    import ctypes
-    assert ctypes.windll.kernel32.GetConsoleCP() != 0, 'CLI has no attached console'
-    sys.stdout.buffer.write('visible stdout: caf\\u00e9\\n'.encode('utf-8'))
-    sys.stdout.buffer.flush()
-    sys.stderr.buffer.write('visible stderr: caf\\u00e9\\n'.encode('utf-8'))
-    sys.stderr.buffer.flush()
-if behavior in ('sleep', 'graceful-cancel'):
-    export.with_name('acp-session.json').write_text(json.dumps({'session_id':'fixture-session','controls':['cancel']}))
-    export.write_text(json.dumps({'nodes':[], 'main_chain_id':None, 'tools':[]}))
-    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(90)'])
-    export.with_name('descendant.pid').write_text(str(child.pid))
-    if behavior == 'graceful-cancel':
-        while not export.with_name('cancel.request').exists():
-            time.sleep(0.02)
-        child.terminate()
-        child.wait(timeout=5)
-        export.with_name('cancel-native.json').write_text(json.dumps({'status':'acknowledged'}))
-        sys.exit(0)
-    time.sleep(90)
-if behavior == 'failure':
-    pathlib.Path('partial.txt').write_text('preserve partial result')
-    sys.exit(7)
-if behavior == 'acp-error':
-    pathlib.Path(os.environ['DEVIN_IMPLEMENT_TURN_DIR'], 'acp-error.json').write_text(
-        json.dumps({'error': 'protocol invalid_argument (trace ID: t1)',
-                    'acp_error': {'code': -32013, 'data': {'cognition.ai/retryable': True}}}))
-    sys.exit(1)
-model = 'wrong-model' if behavior == 'model-mismatch' else 'swe-2-max'
-step = {'source':'agent','model_name':model,'message':'READY_FOR_REVIEW: fixture complete.'}
-if behavior == 'denied':
-    step.update(message='', tool_calls=[{'function_name':'exec'}])
-export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_definitions':[]},
-                             'steps':[step] * (2 if '--resume' in args else 1),
-                             'final_metrics':{'total_prompt_tokens':12}}))
-''', encoding="utf-8")
+        cls.fixture = WorkerFixture(worker)
+        cls.root = cls.fixture.root
+        cls.repo = cls.fixture.repo
+        cls.head = cls.fixture.head
+        cls.git_dir = cls.fixture.git_dir
+        cls.brief = cls.fixture.brief
+        cls.fake = cls.fixture.fake
 
     @classmethod
     def tearDownClass(cls):
         """Remove only the isolated temporary fixture after contained processes stop."""
-        cls.temporary.cleanup()
+        cls.fixture.close()
 
     def setUp(self):
         """Give each test unique evidence and no previous writer record."""
-        self.run_dir = self.root / self.id().split(".")[-1]
-        self.args = argparse.Namespace(repo=str(self.repo), expected_head=self.head,
-            run_dir=str(self.run_dir), brief=str(self.brief), resume=False,
-            allow_rule=[], permission_mode="accept-edits", notify_thread=None, console=False)
-        (self.repo / "existing.txt").write_text("user's uncommitted work\n")
-        lock = self.git_dir / "devin-implement.lock"
-        lock.unlink(missing_ok=True)
+        self.args = self.fixture.prepare(self.id())
+        self.run_dir = self.fixture.run_dir
 
     def invoke(self, behavior="success", through_cli=False):
         """Run real transport via explicit test settings or the public CLI defaults."""
-        original_output = subprocess.check_output
-        original_popen = subprocess.Popen
-
-        def output(command, **kwargs):
-            """Return account/version fixtures while preserving actual Git subprocesses."""
-            if command[0] == "fake-devin.exe":
-                return "fixture-version" if command[1] == "--version" else json.dumps({
-                    "families": [{"variants": [{"model_uid": worker.MODEL}]}]})
-            return original_output(command, **kwargs)
-
-        def popen(command, **kwargs):
-            """Substitute a deterministic CLI inside the real Windows job bootstrap."""
-            if len(command) > 6 and command[6] == "fake-devin.exe":
-                # Supervisor fixtures isolate lifetime; ACP has separate protocol tests.
-                self.assertEqual(Path(command[5]).name, "devin_acp.py")
-                command = [*command[:4], sys.executable, str(self.fake), *command[7:]]
-            return original_popen(command, **kwargs)
-
-        with patch.object(worker, "executable", return_value="fake-devin.exe"), \
-             patch.object(subprocess, "check_output", side_effect=output), \
-             patch.object(subprocess, "Popen", side_effect=popen), \
-             patch.dict(os.environ, {"DEVIN_ADAPTER_TEST": behavior,
-                                     "CODEX_THREAD_ID": "",
-                                     "DEVIN_ADAPTER_EXPECTED_PERMISSION": "dangerous" if through_cli else self.args.permission_mode}), \
-             redirect_stdout(io.StringIO()):
-            if not through_cli:
-                return worker.run(self.args)
-            arguments = ["run", "--repo", self.args.repo, "--expected-head", self.args.expected_head,
-                         "--run-dir", self.args.run_dir, "--brief", self.args.brief]
-            if getattr(self.args, "preamble_file", None):
-                arguments.extend(["--preamble-file", self.args.preamble_file])
-            if self.args.resume:
-                arguments.append("--resume")
-            if not self.args.console:
-                arguments.append("--no-console")
-            return worker.main(arguments)
-
-    def test_visible_console_preserves_both_logs(self):
-        """The public default attaches a real console and retains Unicode stdout/stderr."""
-        self.args.console = True
-        self.assertEqual(self.invoke("console", through_cli=True), 0)
-        turn = self.run_dir / "turn-001"
-        self.assertEqual((turn / "stdout.log").read_text(encoding="utf-8"), "visible stdout: café\n")
-        self.assertEqual((turn / "stderr.log").read_text(encoding="utf-8"), "visible stderr: café\n")
-        self.assertTrue(worker.read_json(self.run_dir / "state.json")["writers_stopped"])
+        return self.fixture.invoke(behavior, through_cli=through_cli)
 
     def test_failed_fresh_catalog_notifies_and_can_start_on_resume(self):
         """Exhausted preflight leaves a recoverable turn, not an orphan directory."""
@@ -692,7 +656,8 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
 
     def test_supervisor_death_stops_descendants(self):
         """Abrupt host loss closes the job even when normal cleanup never executes."""
-        import windows_job
+        with agent_script_import_path("devin-implement"):
+            import windows_job
         supervisor_script = self.root / "supervisor.py"
         child_marker = self.root / "orphan.pid"
         script_directory = str(Path(worker.__file__).parent)
@@ -725,19 +690,5 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
             supervisor.wait(timeout=5)
 
 
-class TimedResult(unittest.TextTestResult):
-    """Expose actual per-test costs for the repository's completion notices."""
-
-    def startTest(self, test):
-        """Start timing execution after shared suite preparation."""
-        self.started = time.monotonic()
-        super().startTest(test)
-
-    def stopTest(self, test):
-        """Print a machine-readable duration alongside ordinary unittest evidence."""
-        self.stream.writeln(f"COST {test.id()} {time.monotonic() - self.started:.3f}s")
-        super().stopTest(test)
-
-
 if __name__ == "__main__":
-    unittest.main(testRunner=unittest.TextTestRunner(verbosity=2, resultclass=TimedResult))
+    unittest.main()

@@ -31,6 +31,7 @@ missing defaults skip without reading machine-local fixture configuration.
 .venv/Scripts/python.exe tools/run_tests.py group integration.vision.research
 .venv/Scripts/python.exe tools/run_tests.py group api
 .venv/Scripts/python.exe tools/run_tests.py group test_harness
+.venv/Scripts/python.exe tools/run_tests.py group unit.tools.agent_runtime
 
 # Complete portable inventory for a manual baseline.
 .venv/Scripts/python.exe tools/run_tests.py full
@@ -60,6 +61,18 @@ missing defaults skip without reading machine-local fixture configuration.
 .venv/Scripts/python.exe tools/audit_test_selection.py .test-impact/audit-selection.json .test-impact/results.json --output .test-impact/audit-result.json
 ```
 
+`unit.tools.agent_runtime` contains the portable worker, ACP, monitor, and game
+knowledge consultation tests. Worker process, Windows Job lifetime, and native
+monitor-lock checks run only on Windows; the portable console-output test mocks
+process creation and `CONOUT$`, so the group never requests `CREATE_NEW_CONSOLE`. Actual visible
+console attachment is separate and opt-in on Windows:
+
+```powershell
+$env:PNC_RUN_NATIVE_AGENT_CONSOLE_TEST = "1"
+.venv/Scripts/python.exe -m unittest tests.native.tools.agent_runtime.test_visible_console
+Remove-Item Env:PNC_RUN_NATIVE_AGENT_CONSOLE_TEST
+```
+
 `group` or a named test module is the focused development path. Run `affected`
 once on the finished source candidate when downstream consumers need checking;
 reuse a passing worker result for the same candidate and scope. Neither mode
@@ -78,9 +91,10 @@ Coverage measurement remains unsharded because partial runs cannot publish a
 complete coverage seed. Failures and errors print tracebacks immediately so a
 later timeout does not hide them.
 
-The runner limits collection to the four portable tiers. Existing opt-in live
-tests and commands remain separate; none of these commands authorizes or starts
-live testing. No emulator, ADB, account credentials, or live game state is needed.
+The runner limits collection to the four portable tiers; `tests/native` is
+excluded from portable inventory and CI shards. Existing opt-in live tests and
+commands remain separate; none of these commands authorizes or starts live
+testing. No emulator, ADB, account credentials, or live game state is needed.
 
 The opt-in Chat smoke runs exactly one typed, receipt-confirmed send and then
 requires the replacement workflow to return Home. Set

@@ -3,12 +3,16 @@
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-import devin_monitor as monitor
+from tests.support.agent_runtime.imports import agent_script_import_path
+
+with agent_script_import_path("devin-implement"):
+    import devin_monitor as monitor
 
 
 class MonitorTests(unittest.TestCase):
@@ -361,6 +365,7 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(attempts, [1000, 1010, 1030, 1070])
         alert.assert_called_once()
 
+    @unittest.skipUnless(os.name == "nt", "Monitor locking requires native Windows.")
     def test_only_one_monitor_can_own_lead(self):
         with patch.object(monitor, "codex_home", return_value=self.root):
             with monitor.monitor_lock("lead"):

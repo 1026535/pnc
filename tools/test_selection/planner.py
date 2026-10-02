@@ -95,7 +95,8 @@ def affected_plan(
                                 declaration_changes.add(path)
                         except SyntaxError:
                             plan.full(tests, f"cannot parse changed source: {path}")
-                elif not path.startswith(("tests/", "tools/")):
+                elif (not path.startswith(("tests/", "tools/"))
+                      and not rules.resource_groups(path)):
                     plan.full(tests, f"unknown Python owner: {path}")
     if plan.fallbacks:
         return plan

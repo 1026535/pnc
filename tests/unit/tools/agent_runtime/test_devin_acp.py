@@ -5,14 +5,17 @@ import io
 import json
 from pathlib import Path
 import queue
+import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import devin_acp as acp
-import devin_worker as worker
-from test_devin_worker import TimedResult
+from tests.support.agent_runtime.imports import agent_script_import_path
+
+with agent_script_import_path("devin-implement"):
+    import devin_acp as acp
+    import devin_worker as worker
 
 
 class AcpTests(unittest.TestCase):
@@ -294,7 +297,9 @@ class AcpTests(unittest.TestCase):
 
     def test_steering_uses_main_once_and_returns_only_receipt(self):
         """The public command adds exactly the supplied correction, without acknowledgement inference."""
-        with redirect_stdout(io.StringIO()) as output:
+        with agent_script_import_path("devin-implement"), \
+                patch.dict(sys.modules, {"devin_acp": acp, "devin_worker": worker}), \
+                redirect_stdout(io.StringIO()) as output:
             worker.main(["steer", "--run-dir", str(self.root), "--message", "Use canonical owner X.", "--wait-seconds", "0"])
         request_id = json.loads(output.getvalue())["request_id"]
         self.connection.steering()
@@ -386,4 +391,4 @@ class AcpTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(testRunner=unittest.TextTestRunner(verbosity=2, resultclass=TimedResult))
+    unittest.main()
