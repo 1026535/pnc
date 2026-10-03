@@ -544,6 +544,7 @@ class SelectorDiscoveryAnalyzer:
         click = _build_click_definition(
             destination_observation,
             anchor="center" if catalog_entry.click is None else catalog_entry.click.anchor,
+            point_ratio=None if catalog_entry.click is None else catalog_entry.click.point_ratio,
         )
         if click is None:
             return None
@@ -789,6 +790,7 @@ def _build_click_definition(
     destination_observation: Observation,
     *,
     anchor: str = "center",
+    point_ratio: tuple[float, float] | None = None,
 ) -> SelectorCatalogClickDefinition | None:
     """Builds one draft click definition when the probe destination is known and explicitly verifiable."""
 
@@ -798,6 +800,7 @@ def _build_click_definition(
     safe_to_click = not destination_observation.blocking_popup
     return SelectorCatalogClickDefinition(
         anchor=anchor,
+        point_ratio=point_ratio,
         outcomes=(
             SelectorCatalogClickOutcome(
                 target_screen=destination_observation.screen_type.name,
@@ -899,9 +902,9 @@ def _merge_click_definitions(
         return right
     if right is None:
         return left
-    if left.anchor != right.anchor:
+    if left.anchor != right.anchor or left.point_ratio != right.point_ratio:
         raise SelectorResolutionError(
-            "Discovery drafts produced conflicting click anchors for the same selector id.",
+            "Discovery drafts produced conflicting click points for the same selector id.",
             selector_id=selector_id,
             left_anchor=left.anchor,
             right_anchor=right.anchor,
@@ -911,7 +914,9 @@ def _merge_click_definitions(
         if outcome in merged_outcomes:
             continue
         merged_outcomes.append(outcome)
-    return SelectorCatalogClickDefinition(anchor=left.anchor, outcomes=tuple(merged_outcomes))
+    return SelectorCatalogClickDefinition(
+        anchor=left.anchor, outcomes=tuple(merged_outcomes), point_ratio=left.point_ratio,
+    )
 
 
 def _merge_optional_scalar(

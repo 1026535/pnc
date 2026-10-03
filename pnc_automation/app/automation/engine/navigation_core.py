@@ -866,7 +866,14 @@ class NavigationCore:
                 "Selected Home view has no qualified current-frame Upgrade chip; no dependent tap sent.",
             )
         self.record({"event": "pending_upgrade_chip", "target": target.value,
-                     "artifact": str(selected.artifact_path)})
+                     "artifact": str(selected.artifact_path),
+                     "selector": chip.selector_id.value,
+                     "selector_bounds": (chip.bounds.x, chip.bounds.y,
+                                         chip.bounds.width, chip.bounds.height),
+                     "selector_confidence": chip.confidence,
+                     "selector_action_point": chip.action_point or chip.bounds.center(),
+                     "capture_sequence": selected.frame_ref.capture_sequence,
+                     "input_sequence": selected.frame_ref.input_sequence})
         operation.trace(selected, "tap", target=target)
         return self._execute_and_confirm(
             TapAction(selector_id=UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,

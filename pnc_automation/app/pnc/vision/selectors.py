@@ -18,7 +18,11 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.selector_catalog import SelectorCatalogEntry, load_selector_catalog_document
+from pnc_automation.app.pnc.vision.selector_catalog import (
+    SelectorCatalogEntry,
+    load_selector_catalog_document,
+    validate_click_point_ratio,
+)
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 
 
@@ -46,6 +50,23 @@ class ClickDefinition:
     """Defines how a selector should be converted into a click target."""
 
     anchor: str = "center"
+    point_ratio: tuple[float, float] | None = None
+
+    def __post_init__(self) -> None:
+        """Reuse the catalog's matched-region point contract."""
+
+        validate_click_point_ratio(self.point_ratio)
+
+    def resolve_point(self, bounds: Bounds) -> tuple[int, int]:
+        """Resolve the point inside the current match, preserving center defaults."""
+
+        if self.point_ratio is None:
+            return bounds.center()
+        x_ratio, y_ratio = self.point_ratio
+        return (
+            bounds.x + min(bounds.width - 1, round(bounds.width * x_ratio)),
+            bounds.y + min(bounds.height - 1, round(bounds.height * y_ratio)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,7 +471,7 @@ def _create_click_definition(
         anchor = getattr(click, "anchor", None)
         if not isinstance(anchor, str) or anchor == "":
             raise SelectorResolutionError("Selector click anchors must be non-empty strings.", anchor=anchor)
-        return ClickDefinition(anchor=anchor)
+        return ClickDefinition(anchor=anchor, point_ratio=getattr(click, "point_ratio", None))
     if interaction_kind == SelectorInteractionKind.LABEL:
         return None
     detection_kind = _require_detection_kind(detection_kind_name)

@@ -310,6 +310,12 @@ class ImageSelectorEngine:
                         bounds=match.bounds,
                         confidence=match.confidence,
                         source_kind=VisibleElementSourceKind.TEMPLATE,
+                        action_point=(
+                            selector.click.resolve_point(match.bounds)
+                            if selector.click is not None
+                            and selector.click.point_ratio is not None
+                            else None
+                        ),
                     )
                 )
                 continue
@@ -1274,6 +1280,7 @@ def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiEle
             confidence=match.confidence,
             source_kind=match.source_kind,
             extracted_text=match.extracted_text,
+            action_point=match.action_point,
         )
         for match in matches
     }

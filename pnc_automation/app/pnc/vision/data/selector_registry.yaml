@@ -2200,6 +2200,9 @@ selectors:
   detection_kind: template
   interaction_kind: action
   materialize_relative_bounds: false
+  click:
+    anchor: center
+    point_ratio: [0.5, 0.35]
   template_asset:
     path: control_anchors/home_selected_building_upgrade_chip.png
     reference_size:
@@ -2208,7 +2211,7 @@ selectors:
     threshold: 0.85
     mask: embedded_alpha
   notes:
-  - 'Lead-qualified opaque RGB crop of the green selected-building Upgrade chip, whole-frame gate 0.85. Identity qualified offline; its destination is unproved, so it carries no click outcome.'
+  - 'Lead-qualified opaque RGBA crop of the green selected-building Upgrade chip, whole-frame gate 0.85. point_ratio targets the visible button center inside the current match, above the caption. It carries no global destination click outcome.'
 - id: PNC_BUILD_HEADER
   screens:
   - PNC_BUILD_MENU_FIXED_SLOT

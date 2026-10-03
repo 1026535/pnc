@@ -76,11 +76,19 @@ class SelectorCatalogClickDefinition:
 
     anchor: str
     outcomes: tuple[SelectorCatalogClickOutcome, ...]
+    point_ratio: tuple[float, float] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate an optional point relative to a matched template's bounds."""
+
+        validate_click_point_ratio(self.point_ratio)
 
     def to_document(self) -> dict[str, object]:
         """Returns the YAML-ready representation of the click metadata."""
 
         document: dict[str, object] = {"anchor": self.anchor}
+        if self.point_ratio is not None:
+            document["point_ratio"] = list(self.point_ratio)
         if self.outcomes:
             document["outcomes"] = [outcome.to_document() for outcome in self.outcomes]
         return document
@@ -815,7 +823,39 @@ def load_selector_schema_click_definition(
             validate_verification_selector=validate_verification_selector,
         )
     )
-    return SelectorCatalogClickDefinition(anchor=anchor, outcomes=outcomes)
+    raw_point = mapping.get("point_ratio")
+    point_ratio = None
+    if raw_point is not None:
+        values = require_selector_schema_sequence(
+            raw_point,
+            context=f"{selector_label} '{selector_id}' click point_ratio",
+            document_label=document_label,
+        )
+        point_ratio = tuple(values)
+    return SelectorCatalogClickDefinition(
+        anchor=anchor, outcomes=outcomes, point_ratio=point_ratio,
+    )
+
+
+def validate_click_point_ratio(value: tuple[float, float] | None) -> None:
+    """Reject points outside the matched region or without two finite ratios."""
+
+    if value is None:
+        return
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 2
+        or any(
+            isinstance(ratio, bool)
+            or not isinstance(ratio, int | float)
+            or not math.isfinite(ratio)
+            or not 0 <= ratio <= 1
+            for ratio in value
+        )
+    ):
+        raise SelectorResolutionError(
+            "Selector click point_ratio requires two finite numbers within [0, 1].",
+        )
 
 
 def load_selector_schema_click_outcomes(

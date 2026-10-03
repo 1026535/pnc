@@ -79,7 +79,8 @@ class HomeCityUpgradeChipPublisherTests(HomeCameraPublicationAssertions, unittes
         self.assertIs(VisibleElementSourceKind.TEMPLATE, element.source_kind)
         self.assertEqual(expected_bounds, element.bounds)
         self.assertAlmostEqual(expected_confidence, element.confidence, places=9)
-        self.assertIsNone(element.action_point)
+        # The click targets the button, above the caption in this native match.
+        self.assertEqual((expected_bounds.x + 39, expected_bounds.y + 22), element.action_point)
         self.assertEqual(expected_bounds.center(), element.bounds.center())
         self.assertEqual(capture.frame_ref, element.frame_ref)
         self.assertEqual(ScreenType.PNC_HOME_CITY, element.source_screen)

@@ -18,4 +18,5 @@ class SelectorMatch:
     confidence: float
     source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE
     extracted_text: str | None = None
+    action_point: tuple[int, int] | None = None
 
