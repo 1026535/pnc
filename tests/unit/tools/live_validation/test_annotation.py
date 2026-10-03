@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from pnc_automation.app.automation.engine.developmental_control import MeasuredControlProof
@@ -363,13 +364,50 @@ class SelectorProofTests(unittest.TestCase):
                     tmp, observation, selector_id=UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON
                 )
 
-    def test_canonical_back_selector_is_not_a_selector_measurement(self):
-        """The guarded-geometry Back selector refuses before element checks."""
+    def test_reviewed_back_uses_its_current_template_element(self):
+        """A reviewed edge admits visual Back without changing its registry."""
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
             observation = watchtower_observation(
                 artifact_path=write_frame_file(tmp, "frame.png")
             )
+            _, proof = self._selector_proof(
+                tmp, observation, selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT
+            )
+        self.assertEqual(observation.frame_ref, proof.frame_ref)
+        self.assertEqual(
+            observation.visible_elements[UiElementId.PNC_BACK_BUTTON_TOP_LEFT].bounds,
+            proof.bounds,
+        )
+
+    def test_back_without_reviewed_edge_or_current_template_refuses(self):
+        """The historical Back definition is never sufficient by itself."""
+        for screen, with_back in (
+            (ScreenType.PNC_SIEGE_FACTORY, True),
+            (ScreenType.PNC_WATCHTOWER, False),
+        ):
+            with self.subTest(screen=screen, with_back=with_back), tempfile.TemporaryDirectory() as raw:
+                tmp = Path(raw)
+                observation = watchtower_observation(
+                    artifact_path=write_frame_file(tmp, "frame.png"),
+                    screen_type=screen,
+                    with_back=with_back,
+                )
+                with self.assertRaises(SelectorResolutionError):
+                    self._selector_proof(
+                        tmp, observation, selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT
+                    )
+
+    def test_reviewed_back_with_foreign_frame_refuses(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            observation = watchtower_observation(
+                artifact_path=write_frame_file(tmp, "frame.png")
+            )
+            element = observation.visible_elements[UiElementId.PNC_BACK_BUTTON_TOP_LEFT]
+            object.__setattr__(observation, "visible_elements", {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT: replace(element, frame_ref=frame_ref(99))
+            })
             with self.assertRaises(SelectorResolutionError):
                 self._selector_proof(
                     tmp,

@@ -26,9 +26,11 @@ from pathlib import Path
 from typing import Callable
 
 from pnc_automation.app.automation.engine.developmental_control import MeasuredControlProof
+from pnc_automation.app.automation.engine.navigation_core import reviewed_navigation_edges
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry
@@ -184,6 +186,7 @@ class AnnotationExchange:
         frame's own template-matched element — never a tester attestation or
         free-form bounds — supplies the measurement. The element must be the
         registry's ``TEMPLATE``/``action`` selector declared on this screen,
+        or a visually measured Back on a reviewed return-to-Home edge,
         carry this frame's provenance, stay inside the native image, and reach
         the catalog's qualified confidence; any gap raises
         ``SelectorResolutionError`` so a missing, stale, or foreign element
@@ -194,10 +197,19 @@ class AnnotationExchange:
 
         registry = build_default_selector_registry()
         definition = registry.require_supported(selector_id)
+        # Back's shared registry entry also serves historical geometry users.
+        # Its declaration cannot authorize measurement: only an admitted edge
+        # and the same current TEMPLATE/provenance checks below can do so.
+        reviewed_back = selector_id is UiElementId.PNC_BACK_BUTTON_TOP_LEFT and any(
+            edge.source is observation.screen_type
+            and edge.selector is selector_id
+            and ScreenType.PNC_HOME_CITY in edge.destinations
+            for edge in reviewed_navigation_edges()
+        )
         if (
             definition.detection_kind is not DetectionKind.TEMPLATE
             or definition.interaction_kind is not SelectorInteractionKind.ACTION
-        ):
+        ) and not reviewed_back:
             raise SelectorResolutionError(
                 f"Selector measurement requires a template action selector; "
                 f"'{selector_id.value}' is not one.",

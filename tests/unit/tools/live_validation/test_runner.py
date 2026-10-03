@@ -113,6 +113,8 @@ class _FakeCore:
         self.navigation = _FakeNavigation(self, **(navigation or {}))
 
     def _frame(self, name: str, screen: ScreenType):
+        if screen is ScreenType.PNC_CAVALRY_BARRACKS:
+            return self._panel_frame(name, screen, "building_cavalry_barracks")
         self._seq += 1
         path = write_frame_file(self._dir / "frames", f"{self._seq:03d}-{name}.png")
         is_home = screen is ScreenType.PNC_HOME_CITY
@@ -717,16 +719,7 @@ class LiveCaseRunnerTests(unittest.TestCase):
             )
 
     def test_military_cohort_runs_four_cases_in_release_order(self):
-        """Cavalry body -> refused Back proof -> Siege pair blocks on Home.
-
-        The Cavalry return consumes its retained body witness through the
-        real selector_proof path. The canonical Back selector is currently a
-        guarded-geometry definition, not a declared template action selector,
-        so each attempt refuses before any send and the armed manual response
-        is never consumed. With no dispatch the session stays on the Cavalry
-        panel, so the Siege body case blocks on its guarded-Home precondition
-        and its dependent return stays pending.
-        """
+        """Cavalry uses its measured Back; Siege uses its own attested control."""
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
             binding = _binding(
@@ -755,9 +748,9 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 {case_id: r.status for case_id, r in results.items()},
                 {
                     "v44_cavalry_body_menu": CaseStatus.PASSED,
-                    "v44_cavalry_return_home": CaseStatus.FAILED,
-                    "v44_siege_body_menu": CaseStatus.BLOCKED,
-                    "v44_siege_return_home": CaseStatus.BLOCKED,
+                    "v44_cavalry_return_home": CaseStatus.PASSED,
+                    "v44_siege_body_menu": CaseStatus.PASSED,
+                    "v44_siege_return_home": CaseStatus.PASSED,
                 },
             )
             self.assertEqual(
@@ -769,37 +762,33 @@ class LiveCaseRunnerTests(unittest.TestCase):
                     "v44_siege_return_home",
                 ],
             )
+            # Each return consumes its own witness, never reopening a body.
             self.assertEqual(
-                "attempt_budget",
-                results["v44_cavalry_return_home"].unresolved_boundary,
+                [HomeCityObjectId.CAVALRY_BARRACKS, HomeCityObjectId.SIEGE_FACTORY],
+                core.entry_calls,
             )
+            self.assertEqual(2, len(core.control_calls))
+            for body_id, return_id in (
+                ("v44_cavalry_body_menu", "v44_cavalry_return_home"),
+                ("v44_siege_body_menu", "v44_siege_return_home"),
+            ):
+                body, ret = results[body_id], results[return_id]
+                self.assertEqual(body_id, ret.body_case_id)
+                self.assertEqual(body.body_entry_event_id, ret.body_entry_event_id)
+                self.assertIsNotNone(ret.source_artifact)
+                self.assertIsNotNone(ret.follow_up_artifact)
             self.assertEqual(
-                "precondition",
-                results["v44_siege_body_menu"].unresolved_boundary,
+                core.control_proofs[0].bounds,
+                core.control_calls[0].latest_input_follow_up.visible_elements[
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT
+                ].bounds,
             )
-            self.assertEqual(
-                "body_dependency",
-                results["v44_siege_return_home"].unresolved_boundary,
-            )
-            # One body entry; the refused return consumed its own witness and
-            # never dispatched, so the manual response stays unconsumed.
-            self.assertEqual(
-                [HomeCityObjectId.CAVALRY_BARRACKS], core.entry_calls
-            )
-            self.assertEqual([], core.control_calls)
-            self.assertEqual([], core.control_proofs)
-            body = results["v44_cavalry_body_menu"]
-            ret = results["v44_cavalry_return_home"]
-            self.assertEqual("v44_cavalry_body_menu", ret.body_case_id)
-            self.assertEqual(body.body_entry_event_id, ret.body_entry_event_id)
-            self.assertIsNotNone(body.source_artifact)
-            self.assertIsNotNone(body.follow_up_artifact)
             journal_path = (
                 Path(binding.report_root) / binding.run_id / "attempts.jsonl"
             )
             entries = read_journal(journal_path)
             self.assertEqual(
-                ["body_entry", "control", "control"],
+                ["body_entry", "control", "body_entry", "control"],
                 [
                     e.payload.get("intent")
                     for e in entries
@@ -809,16 +798,13 @@ class LiveCaseRunnerTests(unittest.TestCase):
             finishes = [
                 e for e in entries if e.record_type == "attempt_finish"
             ]
-            self.assertEqual(3, len(finishes))
+            self.assertEqual(4, len(finishes))
             refused = [
                 e.payload.get("detail", "")
                 for e in finishes
                 if e.payload.get("status") == "refused"
             ]
-            self.assertEqual(2, len(refused))
-            self.assertTrue(
-                all("template action selector" in detail for detail in refused)
-            )
+            self.assertEqual([], refused)
             report = validate_live_evidence(binding, path)
             self.assertTrue(
                 report.valid,

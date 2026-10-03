@@ -32,6 +32,7 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             (ScreenType.PNC_WALL, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_RANGED_BARRACKS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_INFANTRY_BARRACKS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
+            (ScreenType.PNC_CAVALRY_BARRACKS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
             (ScreenType.PNC_TRIAL_APPLICABLE_STATS, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_TRIAL_CHALLENGE),
             (ScreenType.PNC_BAG_CHEST_PREVIEW, UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE, ScreenType.PNC_BAG),

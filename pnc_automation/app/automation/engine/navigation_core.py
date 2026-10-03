@@ -2607,6 +2607,9 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         screen.PNC_BLACKSMITH, screen.PNC_MARKET, screen.PNC_ALLIANCE_HALL,
         screen.PNC_WALL, screen.PNC_WATCHTOWER,
         screen.PNC_RANGED_BARRACKS, screen.PNC_INFANTRY_BARRACKS,
+        # September 30 Cavalry identity and its own measured Back; Siege
+        # remains unadmitted until its native endpoint is qualified.
+        screen.PNC_CAVALRY_BARRACKS,
         # Only the captured voucher_mall producer qualifies this entry's
         # measured Back; other store contexts remain unreviewed.
         screen.PNC_CASH_MALL,
