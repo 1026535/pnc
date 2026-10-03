@@ -27,7 +27,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             catalog.anchor_object_ids,
         )
         self.assertEqual(30, len(catalog.landmarks))
-        self.assertEqual(17, len(catalog.targets))
+        self.assertEqual(18, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
             {
@@ -161,6 +161,13 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             (1769, 2081),
             moon_well.atlas_action_point(home_city_slot=HomeCitySlotSelector(17)),
         )
+        # The Watchtower is bound to its single-type slot-4 slot (client
+        # 1006): the authored point is the only legal answer and needs no
+        # slot argument, matching the military convention.
+        watchtower = catalog.target_for(HomeCityObjectId.WATCHTOWER)
+        self.assertIsNotNone(watchtower)
+        self.assertEqual(HomeCitySlotSelector(4), watchtower.reference_slot)
+        self.assertEqual((1628, 439), watchtower.atlas_action_point())
         # The Hall of War publishes no camera target until a clean native body
         # and identity pose exist.
         self.assertIsNone(catalog.target_for(HomeCityObjectId.HALL_OF_WAR))

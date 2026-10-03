@@ -76,6 +76,7 @@ _EXPECTED = {
             HomeCityObjectId.CAMPAIGN: (None, (760, 883)),
             HomeCityObjectId.WALL: (HomeCitySlotSelector(2), (517, 1313)),
             HomeCityObjectId.WAREHOUSE: (HomeCitySlotSelector(3), (330, 718)),
+            HomeCityObjectId.WATCHTOWER: (HomeCitySlotSelector(4), (423, 373)),
         },
     },
     "home_city_warehouse_slot3_0084_20260929.png": {
@@ -113,6 +114,14 @@ _EXPECTED = {
             HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (594, 764)),
             HomeCityObjectId.CASTLE: (HomeCitySlotSelector(1), (677, 382)),
             HomeCityObjectId.BANK: (None, (147, 1006)),
+        },
+    },
+    "home_city_watchtower_slot4_0050_20260930.png": {
+        "translation": (-1044, 42),
+        "targets": {
+            HomeCityObjectId.CAMPAIGN: (None, (516, 884)),
+            HomeCityObjectId.ALLIANCE_HALL: (HomeCitySlotSelector(13), (310, 1130)),
+            HomeCityObjectId.WATCHTOWER: (HomeCitySlotSelector(4), (178, 377)),
         },
     },
 }
@@ -365,6 +374,38 @@ class HomeCitySlotBodyPublisherTests(HomeCameraPublicationAssertions, unittest.T
                         expected["targets"],
                     )
             self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_0050_publishes_watchtower_at_slot_4_on_both_paths(self) -> None:
+        """The translated holdout localizes and both publishers tag slot 4.
+
+        The same production session turned the camera roughly southeast
+        from the authoring pose; the corrected stone-shaft body template
+        still matches the level-12 Watch Tower shaft at its measured
+        body-specific offset and binds it to the fixed slot-4 selector on
+        both production publication paths.
+        """
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_watchtower_slot4_0050_20260930.png",
+            session_id="v44-watchtower-0050",
+            capture_sequence=50,
+        )
+        observations = self._build_both(builder, navigation, backend, capture)
+        expected = _EXPECTED["home_city_watchtower_slot4_0050_20260930.png"]
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_slot_body_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
 
 
 if __name__ == "__main__":

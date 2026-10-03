@@ -307,3 +307,27 @@ carries no Farm target. The minimal missing capture is one native Home view
 at a pose distinct from (-351,-410) with the farm body inside the frame,
 clear of the quest strip, collect bubbles, and chat band, where the measured
 body agrees with its slot projection within the reviewed bound.
+
+## Watchtower entry behavior — October 3, 2026
+
+Repository-proven in recovered APK **5.0.203 / versionCode 233**, high
+confidence for that build; current installed-client equivalence is unknown and
+menu geometry, endpoint recognition and return still require native
+qualification. `scenes/cityscene/buildings/items/builditem_1006.lua:146-163`
+toggles an on-city menu; `Btn1` opens `TOWER_WIN`.
+`uis/tower/towerwin.lua:92-115` requests tower information — a read query, not
+a resource claim or spending. Body recognition alone cannot prove panel entry:
+qualify the current menu control, panel and measured return; never derive a
+click coordinate from the Lua button name.
+
+Offline camera evidence: the slot-4 stone-shaft body registers on the authored
+0047 source view (frame (387,311,63,89) score .9897 perr 6.72, action
+(423,373)) and the translated 0050 holdout (frame (141,314,64,90) score .9143
+perr 5.80, action (178,377)) under the shared .90/12px gates, and both action
+points sit inside the HUD-safe band. Those measurements qualify the body for
+tap authorization only after the destination and return qualify live; menu
+entry, collider routing and return remain unproved. Source-level Close/Remove
+behavior does not qualify a current Back control. No new live action was
+performed for this note. Provenance: recovered Lua evidence via the September
+30 ordinary-building consultation and the corrected Watchtower registration on
+`codex/v44-retained-routes-20261002`.

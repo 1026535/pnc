@@ -591,6 +591,41 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 # tags the authored slot's reviewed eligibility.
                 reference_slot=HomeCitySlotSelector(17),
             ),
+            HomeCityCameraTarget(
+                object_id=HomeCityObjectId.WATCHTOWER,
+                landmark_id="watchtower_body",
+                file_name="watchtower_body.png",
+                # Clean stone shaft of the level-12 'Watch Tower', cropped
+                # as rows 80:200 by columns 15:100 of the original
+                # full-body template authored on the 2026-09-29 turn006
+                # frame 0047 (shaft measured at native (387,311) under
+                # camera (-777,55) at zoom ~0.739). The translated turn030
+                # holdout frame 0050 measures the same shaft at (142,314)
+                # under camera (-1044,42) at zoom 0.75 — a body-specific
+                # ~+4/+12 frame-px displacement corroborated against two
+                # independent same-frame bodies. The unshifted shaft
+                # reference is (1044,569); the prior below is the
+                # evidenced midpoint and splits the residual to ~6px on
+                # each saved view. The crop drops the '/120'
+                # ribbon-covered sky corner that depressed the packaged
+                # full-body score to .806 on 0050, plus the nameplate,
+                # level badge and left HUD rail.
+                reference_bounds=Bounds(1047, 577, 85, 120),
+                # Interior shaft point re-expressed against this crop,
+                # preserving the measured 0047 source point near (423,373)
+                # and the holdout point near (179,377); both sit inside
+                # the HUD-safe band. Destination qualification remains a
+                # live gate since a body match does not prove collider
+                # routing.
+                reference_action_bounds=Bounds(1084, 645, 22, 22),
+                reference_action_point=(1096, 661),
+                min_score=0.90,
+                # 12 reference px covers the scene-calibration uncertainty
+                # plus matching noise, matching the slot-bound convention.
+                max_projection_error=12,
+                # Slot 4 is the single-type watchtower slot (client 1006).
+                reference_slot=HomeCitySlotSelector(4),
+            ),
         ),
         reference_size=HOME_CITY_CAMERA_REFERENCE_SIZE,
         atlas_to_reference_offset=HOME_CITY_CAMERA_ATLAS_TO_REFERENCE_OFFSET,

@@ -167,7 +167,7 @@
         1390,
         1484
       ],
-      "annotation": "1721bc67 turn006 Campaign-fallback survey frame 0047. Camera zoom ~0.739, atlas translation (-777,55): the slot-3 Warehouse body is measured at frame (282,667,83,102) score .9948; interior action point (330,718) sits inside the HUD-safe band. Body template crops the L-shaped keep plus courtyard without the 'Warehouse' nameplate or level badge.",
+      "annotation": "1721bc67 turn006 Campaign-fallback survey frame 0047. Camera zoom ~0.739, atlas translation (-777,55): the slot-3 Warehouse body is measured at frame (282,667,83,102) score .9948; interior action point (330,718) sits inside the HUD-safe band. Body template crops the L-shaped keep plus courtyard without the 'Warehouse' nameplate or level badge. The same frame is the authored Watchtower source view: the level-12 'Watch Tower' stone shaft is measured at frame (387,311,63,89) score .9897 perr 6.72 against the midpoint prior; interior action point (423,373) sits inside the HUD-safe band. The shaft crop excludes the nameplate below, the level badge and the left HUD rail.",
       "outside_mask_sha256": "61ce1d8fa7127cb004a28c7225424b43196b43db99f2fa706c6f5d332a9b2ec5"
     },
     {
@@ -304,6 +304,30 @@
       ],
       "annotation": "ef03789c turn020 frame 0030, the same-session translated holdout at a distinct camera pose (zoom ~0.742, atlas translation (-882,-413)). The same-tier Moon Well art publishes at four eligible slots: 17 at (372,1110,120,59) score .9383 perr 10.8, 18 at (531,1016,120,59) score .9455 perr 10.7, 19 at (525,1195,120,59) score .9425 perr 9.6, 20 at (679,1109,120,59) score .9241 perr 9.8; action points (436,1140), (595,1046), (589,1225), (743,1139) all sit below the conservative tap band. The four 'Moon Well' nameplates corroborate each slot's identity. The multi-body view stays a candidates claim; the singular match must refuse ambiguity.",
       "outside_mask_sha256": "082c13a30757981c5fb8e6827052d3f586fc8bc12016f70ae4fa8b63dfe1caff"
+    },
+    {
+      "image": "home_city_watchtower_slot4_0050_20260930.png",
+      "role": "slot_body_holdout_watchtower_translated",
+      "size": [
+        900,
+        1600
+      ],
+      "mode": "RGBA",
+      "raw_sha256": "265504d4636d9bd70840f2b181ef443caf898204ee6430fcad399d920680e7a0",
+      "sha256": "2b69824a0e0cead823c952db4df61ccd82dc4def61dcb4dcd0092434528788e3",
+      "source_artifact": "20260930T154232Z_core_20260930T154028Z_2c1ee6a4_0050_core_10_home_body_after_callback.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_mode": "RGBA",
+      "source_sha256": "5092ed19b2e5de3fb666e61036322981a10f14c525b49ca3f340d4122e2ffa05",
+      "masked_rows": [
+        1390,
+        1484
+      ],
+      "annotation": "v44-4-integrated-turn030 frame 0050, the independent translated holdout for the slot-4 Watchtower. Camera zoom 0.75, atlas translation (-1044,42): the level-12 'Watch Tower' stone shaft is measured at frame (141,314,64,90) score .9143 perr 5.80 against the midpoint prior; interior action point (178,377) sits inside the HUD-safe band. The body renders ~+4/+12 frame px off the unshifted shaft reference — a body-specific displacement the midpoint prior splits to ~6px on each saved view; the '/120' resource ribbon overlaps only sky cropped away from the packaged shaft template. Same-frame Campaign (score .9516 perr 2.24) and Alliance Hall slot-13 (score .9524 perr 3.04) bodies corroborate the camera pose. The readable nameplate and blue '12' badge sit below the crop.",
+      "outside_mask_sha256": "81a35778ad1a09b62435e8cd5d20c352155926cbf1d4a9de06b66f6954f22484"
     }
   ]
 }

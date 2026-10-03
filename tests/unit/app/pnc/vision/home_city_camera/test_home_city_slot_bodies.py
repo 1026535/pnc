@@ -271,6 +271,23 @@ class CameraTargetSlotContractTests(unittest.TestCase):
         with self.assertRaises(SelectorResolutionError):
             target.atlas_action_point(home_city_slot=HomeCitySlotSelector(12))
 
+    def test_watchtower_binding_and_single_type_slot_action(self) -> None:
+        target = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        self.assertEqual(HomeCitySlotSelector(4), target.reference_slot)
+        self.assertEqual("watchtower_body.png", target.file_name)
+        self.assertEqual(Bounds(1047, 577, 85, 120), target.reference_bounds)
+        self.assertEqual(Bounds(1084, 645, 22, 22), target.reference_action_bounds)
+        self.assertEqual((1096, 661), target.reference_action_point)
+        # Slot 4 is the single-type watchtower slot (client 1006); its pivot
+        # keeps the authored atlas point at (1628,439) without an argument.
+        self.assertEqual((1628, 439), target.atlas_action_point())
+        self.assertEqual(
+            (1628, 439),
+            target.atlas_action_point(home_city_slot=HomeCitySlotSelector(4)),
+        )
+        with self.assertRaises(SelectorResolutionError):
+            target.atlas_action_point(home_city_slot=HomeCitySlotSelector(12))
+
     def test_fixed_targets_reject_slot_arguments(self) -> None:
         target = _catalog_target(HomeCityObjectId.TOWER_OF_TRIAL)
         self.assertIsNone(target.reference_slot)
@@ -574,6 +591,7 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
             "home_city_goddess_slot15_0066_20260923.png",
             "home_city_bank_sys1_0022_20260929.png",
             "home_city_bank_sys1_0092_20260929.png",
+            "home_city_watchtower_slot4_0050_20260930.png",
         ):
             with self.subTest(fixture=name):
                 proof, frame = self._proof_and_frame(name)
@@ -683,6 +701,7 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
             "home_city_warehouse_slot3_0084_20260929.png",
             "home_city_moon_well_slot17_0029_20260930.png",
             "home_city_moon_well_slot17_0030_20260930.png",
+            "home_city_watchtower_slot4_0050_20260930.png",
         ):
             with self.subTest(fixture=name):
                 proof, frame = self._proof_and_frame(name)
@@ -825,6 +844,7 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
             "home_city_warehouse_slot3_0084_20260929.png",
             "home_city_bank_sys1_0022_20260929.png",
             "home_city_bank_sys1_0092_20260929.png",
+            "home_city_watchtower_slot4_0050_20260930.png",
         ):
             with self.subTest(fixture=name):
                 proof, frame = self._proof_and_frame(name)
@@ -832,6 +852,129 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
                     (),
                     self.localizer.match_target_candidates(
                         frame, moon_well, proof=proof
+                    ),
+                )
+
+    def test_watchtower_publishes_fixed_body_on_source_and_holdout_views(self) -> None:
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        for name, translation, zoom, bounds, point in (
+            (
+                "home_city_warehouse_slot3_0047_20260929.png",
+                (-777, 55),
+                0.7387,
+                Bounds(387, 311, 63, 89),
+                (423, 373),
+            ),
+            (
+                "home_city_watchtower_slot4_0050_20260930.png",
+                (-1044, 42),
+                0.75,
+                Bounds(141, 314, 64, 90),
+                (178, 377),
+            ),
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(translation, proof.translation)
+                self.assertAlmostEqual(zoom, proof.zoom, delta=0.005)
+                matches = self.localizer.match_target_candidates(
+                    frame, watchtower, proof=proof
+                )
+                self.assertEqual(1, len(matches))
+                match = matches[0]
+                # Slot 4 is the single-type watchtower slot (client 1006).
+                self.assertEqual(HomeCitySlotSelector(4), match.home_city_slot)
+                self.assertEqual(bounds, match.bounds)
+                self.assertEqual(point, match.action_point)
+                self.assertGreaterEqual(match.score, 0.9)
+                self.assertLessEqual(match.projection_error, 12)
+                self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+                self.assertTrue(match.action_bounds.contains_point(match.action_point))
+                self.assertEqual(
+                    match,
+                    self.localizer.match_target(frame, watchtower, proof=proof),
+                )
+
+                objects = self.localizer.matched_target_objects(frame, proof=proof)
+                published = next(
+                    object_
+                    for object_ in objects
+                    if home_city_object_id_from_metadata(object_.metadata)
+                    is HomeCityObjectId.WATCHTOWER
+                )
+                self.assertEqual(HomeCitySlotSelector(4), published.home_city_slot)
+                self.assertEqual(match.bounds, published.bounds)
+                self.assertEqual(match.action_point, published.action_point)
+                self.assertEqual("camera_template", published.metadata["detection_source"])
+                self.assertEqual(4, published.metadata["home_city_slot_index"])
+
+    def test_watchtower_actions_stay_inside_the_safe_tap_band(self) -> None:
+        """Both views measure the body inside the conservative tap band.
+
+        Both projected action points (423,373) and (178,377) land strictly
+        inside the HUD-safe band, so the measured Watchtower geometry can
+        authorize taps once destination qualification proves on live input;
+        that qualification stays a live gate outside this offline package.
+        """
+
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        safe_min_x = int(HOME_CITY_HUD_SAFE_MIN_X_RATIO * 900)
+        safe_max_x = int(HOME_CITY_HUD_SAFE_MAX_X_RATIO * 900)
+        safe_min_y = int(HOME_CITY_HUD_SAFE_MIN_Y_RATIO * 1600)
+        safe_max_y = int(HOME_CITY_HUD_SAFE_MAX_Y_RATIO * 1600)
+        for name in (
+            "home_city_warehouse_slot3_0047_20260929.png",
+            "home_city_watchtower_slot4_0050_20260930.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                match = self.localizer.match_target(frame, watchtower, proof=proof)
+                self.assertIsNotNone(match)
+                self.assertTrue(
+                    safe_min_x < match.action_point[0] < safe_max_x
+                    and safe_min_y < match.action_point[1] < safe_max_y
+                )
+
+    def test_watchtower_erased_body_never_publishes(self) -> None:
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        image = _fixture("home_city_warehouse_slot3_0047_20260929.png")
+        proof = self.localizer.localize(image.copy())
+        self.assertTrue(proof.localized)
+        matches = self.localizer.match_target_candidates(
+            self.localizer.prepare_frame(image), watchtower, proof=proof
+        )
+        self.assertEqual(1, len(matches))
+        body = matches[0].bounds
+        image.paste((0, 0, 0, 255), (body.x, body.y, body.x + body.width, body.y + body.height))
+        self.assertEqual(
+            (),
+            self.localizer.match_target_candidates(
+                self.localizer.prepare_frame(image), watchtower, proof=proof
+            ),
+        )
+
+    def test_watchtower_never_publishes_on_unrelated_views(self) -> None:
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        for name in (
+            "home_city_blacksmith_slot12_f1_20260922.png",
+            "home_city_blacksmith_slot12_f2_20260922.png",
+            "home_city_baseline_f0_20260922.png",
+            "home_city_pan2_f5_20260922.png",
+            "home_city_wall_slot2_f6_20260922.png",
+            "home_city_goddess_slot15_0066_20260923.png",
+            "home_city_warehouse_slot3_0084_20260929.png",
+            "home_city_bank_sys1_0022_20260929.png",
+            "home_city_bank_sys1_0092_20260929.png",
+            "home_city_bank_endpoint_0030_20261001.png",
+            "home_city_moon_well_slot17_0029_20260930.png",
+            "home_city_moon_well_slot17_0030_20260930.png",
+        ):
+            with self.subTest(fixture=name):
+                proof, frame = self._proof_and_frame(name)
+                self.assertEqual(
+                    (),
+                    self.localizer.match_target_candidates(
+                        frame, watchtower, proof=proof
                     ),
                 )
 
@@ -1088,6 +1231,7 @@ class FixtureIntegrityTests(unittest.TestCase):
                 "home_city_bank_endpoint_0030_20261001.png",
                 "home_city_moon_well_slot17_0029_20260930.png",
                 "home_city_moon_well_slot17_0030_20260930.png",
+                "home_city_watchtower_slot4_0050_20260930.png",
             },
             set(samples),
         )

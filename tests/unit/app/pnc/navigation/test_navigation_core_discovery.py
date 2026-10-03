@@ -111,7 +111,7 @@ class BuildingBodyDiscoveryTests(unittest.TestCase):
         now = datetime(2026, 10, 1, tzinfo=UTC)
         content_frames = _frames((), start=now)
         actuator = Actuator()
-        with self.assertRaisesRegex(HomeCityScanError, "no qualified"):
+        with self.assertRaisesRegex(HomeCityScanError, "No qualified pan remains"):
             _core(actuator).enter_building_body_for_discovery(
                 HomeCityObjectId.WATCHTOWER,
                 entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
