@@ -325,9 +325,15 @@ Offline camera evidence: the slot-4 stone-shaft body registers on the authored
 (423,373)) and the translated 0050 holdout (frame (141,314,64,90) score .9143
 perr 5.80, action (178,377)) under the shared .90/12px gates, and both action
 points sit inside the HUD-safe band. Those measurements qualify the body for
-tap authorization only after the destination and return qualify live; menu
-entry, collider routing and return remain unproved. Source-level Close/Remove
-behavior does not qualify a current Back control. No new live action was
-performed for this note. Provenance: recovered Lua evidence via the September
-30 ordinary-building consultation and the corrected Watchtower registration on
+the bounded developmental batch: it authorizes the qualified body tap plus a
+measured selected-building chip control precisely to establish the endpoint
+and a measured return, bound to one body witness and its continuous input
+receipts. The chip is an exploratory on-city control whose immediate raw
+follow-up is recorded as truth — no panel or upgrade claim, and the old Lua
+`Btn1` identity stays unasserted. Menu entry, collider routing and return
+remain unproved until that batch runs; production route promotion stays gated
+on the resulting endpoint/return proof. Source-level Close/Remove behavior
+does not qualify a current Back control. No new live action was performed for
+this note. Provenance: recovered Lua evidence via the September 30
+ordinary-building consultation and the corrected Watchtower registration on
 `codex/v44-retained-routes-20261002`.

@@ -136,12 +136,19 @@ class ExecutionIdentity:
 
 @dataclass(frozen=True, slots=True)
 class _RetainedBodyContext:
-    """One discovery case's retained body entry for its dependent control case."""
+    """One discovery case's retained body entry for its dependent control cases.
+
+    ``receipts`` is the actual continuous physical chain: the body receipt
+    followed by every confirmed case-attributed control receipt since body
+    entry, in order. A later control starts from this recorded tuple, never
+    a synthetic tuple containing only the body receipt.
+    """
 
     witness: BodyEntryWitness
     follow_up: Observation
     body_event_id: str
     last_input_sequence: int
+    receipts: tuple[InputDispatchRecord, ...]
 
 
 @dataclass(slots=True)
@@ -714,7 +721,7 @@ class LiveCaseRunner:
 
         if spec.purpose is CasePurpose.DISCOVERY:
             return self._run_discovery(spec, core, journal, collector, attempts, contexts)
-        if spec.purpose is CasePurpose.DEVELOPMENT_VALIDATION:
+        if spec.purpose in (CasePurpose.CONTROL_DISCOVERY, CasePurpose.DEVELOPMENT_VALIDATION):
             return self._run_validation(spec, core, journal, collector, attempts, contexts)
         return (
             self._case_outcome(
@@ -931,6 +938,7 @@ class LiveCaseRunner:
             follow_up=follow_up,
             body_event_id=body_event_id,
             last_input_sequence=body_receipt.dispatch.input_sequence,
+            receipts=(body_receipt,),
         )
         # Discovery promises a receipt and its immediate raw follow-up, not a
         # menu or destination. On-city controls can retain the Home classifier;
@@ -1019,7 +1027,7 @@ class LiveCaseRunner:
                 ),
                 boundary[2],
             )
-        input_chain: list[InputDispatchRecord] = [witness.receipt]
+        input_chain: list[InputDispatchRecord] = list(context.receipts)
         latest_follow_up = context.follow_up
         annotation = self._deps.annotation_factory(
             Path(self._binding.report_root) / self._binding.run_id / "annotation"
@@ -1204,25 +1212,33 @@ class LiveCaseRunner:
             self._curate(result.follow_up.artifact_path, kind="follow_up_frame",
                          purpose=f"{spec.case_id} immediate post-control observed state.",
                          artifacts=artifacts)
+            self._advance_body_context(
+                contexts, spec, context, tuple(input_chain), result
+            )
             final, satisfied = self._await_postcondition(spec, core)
             if satisfied:
-                self._curate(
-                    final.artifact_path if final is not None else None,
-                    kind="postcondition_frame",
-                    purpose=f"{spec.case_id} guarded Home return evidence.",
-                    artifacts=artifacts,
-                )
+                observed = final if final is not None else result.follow_up
+                if final is not None:
+                    self._curate(
+                        final.artifact_path,
+                        kind="postcondition_frame",
+                        purpose=f"{spec.case_id} guarded Home return evidence.",
+                        artifacts=artifacts,
+                    )
                 return (
                     self._case_outcome(
                         spec, collector, mark=mark, status=CaseStatus.PASSED,
                         artifacts=artifacts,
                         body_entry_event_id=context.body_event_id,
                         source_artifact=current.artifact_path,
-                        follow_up_artifact=(
-                            final.artifact_path if final is not None else result.follow_up.artifact_path
+                        follow_up_artifact=observed.artifact_path,
+                        postcondition=self._postcondition_dict(observed),
+                        detail=(
+                            "Control dispatched and the guarded Home postcondition was observed."
+                            if final is not None
+                            else "Control dispatched and its immediate raw follow-up "
+                                 "persisted; no destination or return is claimed."
                         ),
-                        postcondition=self._postcondition_dict(final),
-                        detail="Control dispatched and the guarded Home postcondition was observed.",
                         unresolved_boundary=None,
                     ),
                     None,
@@ -1254,6 +1270,46 @@ class LiveCaseRunner:
                 unresolved_boundary="attempt_budget",
             ),
             None,
+        )
+
+    @staticmethod
+    def _advance_body_context(
+        contexts: dict[str, _RetainedBodyContext],
+        spec: CaseSpec,
+        context: _RetainedBodyContext,
+        receipts: tuple[InputDispatchRecord, ...],
+        result: Any,
+    ) -> None:
+        """Advances the retained body context after one confirmed control.
+
+        The stored value is replaced in the existing map: the receipt tuple
+        grows by the actual case-attributed receipt, the latest follow-up and
+        last input sequence move to it, and the original body witness stays
+        bound to its discovery owner. Only a confirmed receipt plus a valid
+        immediate same-session/epoch/sequence follow-up may extend the chain;
+        anything else leaves the prior context so a later case's resume
+        boundary still catches the gap rather than hiding it.
+        """
+
+        follow_up = result.follow_up
+        first_ref = follow_up.frame_ref
+        receipt = result.receipt
+        if (
+            first_ref is None
+            or follow_up.artifact_path is None
+            or follow_up.frame_fingerprint is None
+            or first_ref.session_id != receipt.source_frame.session_id
+            or first_ref.session_epoch != receipt.source_frame.session_epoch
+            or first_ref.input_sequence != receipt.dispatch.input_sequence
+            or first_ref.capture_sequence != receipt.source_frame.capture_sequence + 1
+        ):
+            return
+        contexts[spec.body_case_id] = _RetainedBodyContext(
+            witness=context.witness,
+            follow_up=follow_up,
+            body_event_id=context.body_event_id,
+            last_input_sequence=receipt.dispatch.input_sequence,
+            receipts=receipts,
         )
 
     def _resume_boundary(

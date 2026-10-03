@@ -50,6 +50,49 @@ class ValidateLiveEvidenceTests(unittest.TestCase):
                     path.write_text(json.dumps(doc))
                     self.assertFalse(validate_live_evidence(binding, path).valid)
 
+    def test_passed_control_discovery_requires_annotation_not_guarded_home(self):
+        from tests.unit.tools.live_validation.test_runner import _binding, _deps, _armed_exchange
+        from tools.live_validation.runner import LiveCaseRunner
+        from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+        from pnc_automation.app.pnc.enums.screen_type import ScreenType
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp,
+                "v44_watchtower_body_menu",
+                "v44_watchtower_selected_control_entry",
+            )
+            holder = {"core_kwargs": {
+                "post_entry_screens": {
+                    HomeCityObjectId.WATCHTOWER: ScreenType.PNC_HOME_CITY,
+                },
+            }}
+            _, path = LiveCaseRunner(
+                binding, _deps(tmp, holder, annotation_factory=_armed_exchange)
+            ).run()
+            original = json.loads(path.read_text())
+            row = original["case_results"][1]
+            self.assertEqual("control_discovery", row["purpose"])
+            self.assertEqual("pnc_home_city", row["postcondition"]["screen_type"])
+            report = validate_live_evidence(binding, path)
+            self.assertTrue(
+                report.valid,
+                [f"{f.check}: {f.detail}" for f in report.findings],
+            )
+            for defect in ("missing_annotation", "missing_control"):
+                with self.subTest(defect=defect):
+                    doc = json.loads(json.dumps(original))
+                    if defect == "missing_annotation":
+                        doc["case_results"][1]["artifacts"] = [
+                            ref for ref in doc["case_results"][1]["artifacts"]
+                            if ref.get("kind") != "annotation_response"
+                        ]
+                    else:
+                        doc["logical_attempts"] = doc["logical_attempts"][:1]
+                        doc["totals"]["logical_attempts"] = 1
+                    path.write_text(json.dumps(doc))
+                    self.assertFalse(validate_live_evidence(binding, path).valid)
+
     def _setup(self, tmp: Path, **overrides):
         binding = load_assignment_binding(write_assignment(tmp, assignment_payload(tmp)))
         evidence = _evidence(tmp, **overrides)

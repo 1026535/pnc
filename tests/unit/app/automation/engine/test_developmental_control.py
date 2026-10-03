@@ -190,6 +190,54 @@ class DevelopmentalControlTests(unittest.TestCase):
         self.assertEqual(3, receipt.dispatch.input_sequence)
         self.assertEqual([(325, 415)], self.session.taps)
 
+    def test_home_source_dispatches_only_under_an_explicit_home_scope(self) -> None:
+        home = make_observation(
+            ScreenType.PNC_HOME_CITY, artifact_path=Path("home.png"),
+            image_size=(900, 1600), frame_ref=self._frame(2, 1),
+        )
+        proof = replace(
+            self.proof, frame_ref=home.frame_ref, artifact_path=home.artifact_path,
+            frame_fingerprint=home.frame_fingerprint, decision=home.decision,
+            screen_type=ScreenType.PNC_HOME_CITY,
+        )
+        with self.assertRaises(SelectorResolutionError):
+            self.executor.execute_developmental_control(
+                replace(self.scope, latest_input_follow_up=home), proof, home,
+            )
+        self.assertEqual([], self.session.taps)
+        home_scope = replace(
+            self.scope,
+            allowed_source_screens=frozenset({ScreenType.PNC_HOME_CITY}),
+            latest_input_follow_up=home,
+        )
+        receipt = self.executor.execute_developmental_control(
+            home_scope, proof, home,
+        )
+        self.assertEqual([(325, 415)], self.session.taps)
+        self.assertEqual(2, receipt.dispatch.input_sequence)
+
+    def test_loading_and_world_stay_unavailable_control_sources(self) -> None:
+        for screen in (ScreenType.PNC_LOADING, ScreenType.PNC_WORLD_MAP):
+            with self.subTest(screen=screen):
+                obs = make_observation(
+                    screen, artifact_path=Path(f"{screen.value}.png"),
+                    image_size=(900, 1600), frame_ref=self._frame(2, 1),
+                )
+                proof = replace(
+                    self.proof, frame_ref=obs.frame_ref,
+                    artifact_path=obs.artifact_path,
+                    frame_fingerprint=obs.frame_fingerprint,
+                    decision=obs.decision, screen_type=screen,
+                )
+                scope = replace(
+                    self.scope,
+                    allowed_source_screens=frozenset({screen}),
+                    latest_input_follow_up=obs,
+                )
+                with self.assertRaises(SelectorResolutionError):
+                    self.executor.execute_developmental_control(scope, proof, obs)
+        self.assertEqual([], self.session.taps)
+
     def test_refused_logical_attempt_does_not_require_a_physical_receipt(self) -> None:
         with self.assertRaises(SelectorResolutionError):
             self.executor.execute_developmental_control(

@@ -171,7 +171,7 @@ class ActionExecutor:
                 or not all(isinstance(screen, ScreenType) for screen in scope.allowed_source_screens)
                 or observation.screen_type not in scope.allowed_source_screens
                 or observation.screen_type in {
-                    ScreenType.PNC_LOADING, ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP,
+                    ScreenType.PNC_LOADING, ScreenType.PNC_WORLD_MAP,
                 }):
             refuse("This current screen is not an assigned task-owned control source.")
         if observation.frame_ref is None or observation.artifact_path is None:

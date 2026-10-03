@@ -3,11 +3,13 @@
 Selection, execution, and result rows all derive from this one frozen set.
 Python definitions are the released contract; no YAML commands, plugin
 loading, or free-form input exists. ``discovery`` invokes the qualified body
-entry and preserves one raw follow-up; ``development_validation`` consumes a
-tester-attested measured control through the dedicated executor operation
-while reusing its declared discovery case's retained body witness — a return
-case never re-enters the building itself. A captured task-owned menu never
-satisfies an ``acceptance`` route.
+entry and preserves one raw follow-up; ``control_discovery`` sends one
+tester-attested measured control and preserves its raw follow-up without
+claiming a destination; ``development_validation`` consumes a tester-attested
+measured control through the dedicated executor operation while reusing its
+declared discovery case's retained body witness — a return case never
+re-enters the building itself. A captured task-owned menu never satisfies an
+``acceptance`` route.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ class CasePurpose(StrEnum):
     """Case intent released by the assignment, never inferred from its result."""
 
     DISCOVERY = "discovery"
+    CONTROL_DISCOVERY = "control_discovery"
     DEVELOPMENT_VALIDATION = "development_validation"
     ACCEPTANCE = "acceptance"
 
@@ -92,6 +95,8 @@ class CaseSpec:
     def developmental_purpose(self) -> DevelopmentalCasePurpose | None:
         """Maps this case to the executor purpose when it performs a control."""
 
+        if self.purpose is CasePurpose.CONTROL_DISCOVERY:
+            return DevelopmentalCasePurpose.CONTROL_DISCOVERY
         if self.purpose is CasePurpose.DEVELOPMENT_VALIDATION:
             return DevelopmentalCasePurpose.CONTROL_VALIDATION
         return None
@@ -166,6 +171,24 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 target=HomeCityObjectId.WATCHTOWER,
                 home_city_slot=HomeCitySlotSelector(slot_index=4),
                 released_action_id=BODY_ENTRY_OPERATION_ID,
+                required_postconditions=frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
+            ),
+            # The selected Watchtower stays Home-classified and shows only the
+            # on-city Upgrade chip. This case measures that chip through the
+            # tester annotation exchange and sends it once; it does not claim
+            # an upgrade endpoint or a production route.
+            _spec(
+                "v44_watchtower_selected_control_entry",
+                purpose=CasePurpose.CONTROL_DISCOVERY,
+                target=HomeCityObjectId.WATCHTOWER,
+                home_city_slot=HomeCitySlotSelector(slot_index=4),
+                released_action_id="v44_watchtower_selected_chip_entry",
+                body_case_id="v44_watchtower_body_menu",
+                control_name="open_watchtower_panel",
+                control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                allowed_source_screens=frozenset({ScreenType.PNC_HOME_CITY}),
+                max_control_attempts=1,
+                required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
                 required_postconditions=frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
             ),
             _spec(

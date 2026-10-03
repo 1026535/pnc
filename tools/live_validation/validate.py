@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from tools.live_validation.binding import AssignmentBinding, _HEX64
-from tools.live_validation.cases import CaseSpec, require_case
+from tools.live_validation.cases import CaseGate, CaseSpec, require_case
 from tools.live_validation.evidence import EVIDENCE_SCHEMA_VERSION, sha256_file
 
 
@@ -383,12 +383,13 @@ def validate_live_evidence(
                 fail("binding", f"{case_id}: postcondition must bind the persisted follow-up artifact.")
             if isinstance(postcondition, dict):
                 findings.extend(_frame_findings(postcondition.get("frame"), f"{case_id} postcondition"))
-            if spec.purpose.value == "development_validation":
+            if CaseGate.GUARDED_HOME_CITY in spec.required_postconditions:
                 if (not isinstance(postcondition, dict)
                         or postcondition.get("screen_type") != "pnc_home_city"
                         or postcondition.get("guard") != "clear"
                         or postcondition.get("blocking_popup") is not False):
                     fail("binding", f"{case_id}: passed return requires guarded Home proof.")
+            if spec.developmental_purpose is not None:
                 kinds = {
                     ref.get("kind")
                     for ref in row.get("artifacts") or []
@@ -398,7 +399,7 @@ def validate_live_evidence(
                     if required_kind not in kinds:
                         fail(
                             "binding",
-                            f"{case_id}: a passed validation case requires a "
+                            f"{case_id}: a passed control case requires a "
                             f"'{required_kind}' artifact.",
                         )
 
@@ -489,10 +490,10 @@ def validate_live_evidence(
                 fail("attempts", f"{case_id}: body intent must bind the body receipt.")
         else:
             if sent[0].get("intent") != "control":
-                fail("attempts", f"{case_id}: passed return lacks its control intent.")
+                fail("attempts", f"{case_id}: passed control case lacks its control intent.")
             owner = result_by_id.get(spec.body_case_id, {})
             if owner.get("body_entry_event_id") != row.get("body_entry_event_id"):
-                fail("binding", f"{case_id}: return must retain its declared discovery receipt.")
+                fail("binding", f"{case_id}: control case must retain its declared discovery receipt.")
         if len(sent) == 1:
             event = event_by_id.get(sent[0].get("dispatch_event_id"), {})
             frame = (row.get("postcondition") or {}).get("frame")

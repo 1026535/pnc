@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from pnc_automation.app.automation.engine.developmental_control import (
+    DevelopmentalCasePurpose,
     DevelopmentalControlResult,
 )
 from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
@@ -79,7 +80,7 @@ class _FakeCore:
 
     def __init__(self, observer, run_dir: Path, *, entry_error=None,
                  post_entry_screens: dict | None = None,
-                 control_follow_up_screen: ScreenType = ScreenType.PNC_HOME_CITY) -> None:
+                 control_follow_up_screen: ScreenType | dict = ScreenType.PNC_HOME_CITY) -> None:
         self._observer = observer
         self._dir = run_dir
         self._entry_error = entry_error
@@ -136,7 +137,10 @@ class _FakeCore:
     def execute_developmental_control(self, scope, proof, observation):
         self.control_calls.append(scope)
         receipt = self._send_tap(observation, point=proof.action_point)
-        self._screen = self._control_follow_up_screen
+        follow = self._control_follow_up_screen
+        if isinstance(follow, dict):
+            follow = follow[scope.case_id]
+        self._screen = follow
         return DevelopmentalControlResult(
             receipt=receipt,
             follow_up=self._frame("control-follow", self._screen),
@@ -593,6 +597,142 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 "pending_tester_review",
                 json.loads(finalization.read_text(encoding="utf-8"))["review_state"],
             )
+
+    def test_chip_discovery_binds_raw_follow_up_and_extends_the_chain(self):
+        """body -> chip -> return: one body entry, one continuous receipt chain."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp,
+                "v44_watchtower_body_menu",
+                "v44_watchtower_selected_control_entry",
+                "v44_watchtower_return_home",
+            )
+            holder: dict = {
+                "core_kwargs": {
+                    "post_entry_screens": {
+                        HomeCityObjectId.WATCHTOWER: ScreenType.PNC_HOME_CITY,
+                    },
+                    "control_follow_up_screen": {
+                        "v44_watchtower_selected_control_entry": ScreenType.PNC_WATCHTOWER,
+                        "v44_watchtower_return_home": ScreenType.PNC_HOME_CITY,
+                    },
+                }
+            }
+            exchange = _armed_exchange(tmp / "annotation")
+            evidence, path = LiveCaseRunner(
+                binding, _deps(tmp, holder, annotation_factory=lambda _: exchange)
+            ).run()
+            core = holder["core"]
+            results = {r.case_id: r for r in evidence.case_results}
+            self.assertEqual(
+                {
+                    "v44_watchtower_body_menu": CaseStatus.PASSED,
+                    "v44_watchtower_selected_control_entry": CaseStatus.PASSED,
+                    "v44_watchtower_return_home": CaseStatus.PASSED,
+                },
+                {key: r.status for key, r in results.items()},
+            )
+            chip = results["v44_watchtower_selected_control_entry"]
+            self.assertEqual("control_discovery", chip.purpose)
+            self.assertEqual(
+                "pnc_watchtower", chip.postcondition["screen_type"]
+            )
+            self.assertEqual(
+                str(chip.follow_up_artifact), chip.postcondition["artifact_path"]
+            )
+            self.assertEqual(
+                results["v44_watchtower_body_menu"].body_entry_event_id,
+                chip.body_entry_event_id,
+            )
+            self.assertEqual(
+                chip.body_entry_event_id,
+                results["v44_watchtower_return_home"].body_entry_event_id,
+            )
+            # One body entry for the whole chain; the buildings are never reopened.
+            self.assertEqual([HomeCityObjectId.WATCHTOWER], core.entry_calls)
+            chip_scope, return_scope = core.control_calls
+            self.assertEqual(
+                "v44_watchtower_selected_control_entry", chip_scope.case_id
+            )
+            self.assertIs(
+                DevelopmentalCasePurpose.CONTROL_DISCOVERY, chip_scope.purpose
+            )
+            self.assertEqual(
+                (chip_scope.body_entry.receipt,), chip_scope.input_chain
+            )
+            chip_receipt = next(
+                entry.event for entry in evidence.attributed_dispatches
+                if entry.case_id == "v44_watchtower_selected_control_entry"
+                and isinstance(entry.event, InputDispatchRecord)
+            )
+            # The return case starts from the full recorded chain, not a
+            # synthetic tuple containing only the body receipt.
+            self.assertEqual(
+                (chip_scope.body_entry.receipt, chip_receipt),
+                return_scope.input_chain,
+            )
+            self.assertEqual(
+                ScreenType.PNC_WATCHTOWER,
+                return_scope.latest_input_follow_up.screen_type,
+            )
+            begins = [
+                entry.payload.get("intent")
+                for entry in read_journal(
+                    Path(binding.report_root) / binding.run_id / "attempts.jsonl"
+                )
+                if entry.record_type == "attempt_begin"
+            ]
+            self.assertEqual(["body_entry", "control", "control"], begins)
+            sequences = [
+                entry.event.dispatch.input_sequence
+                for entry in evidence.attributed_dispatches
+                if hasattr(entry.event, "dispatch")
+            ]
+            self.assertEqual([1, 2, 3], sequences)
+            report = validate_live_evidence(binding, path)
+            self.assertTrue(
+                report.valid,
+                [f"{f.check}: {f.detail}" for f in report.findings],
+            )
+
+    def test_chip_left_on_home_keeps_the_return_pending(self):
+        """A chip that stays Home passes raw discovery but cannot source the return."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp,
+                "v44_watchtower_body_menu",
+                "v44_watchtower_selected_control_entry",
+                "v44_watchtower_return_home",
+            )
+            holder: dict = {
+                "core_kwargs": {
+                    "post_entry_screens": {
+                        HomeCityObjectId.WATCHTOWER: ScreenType.PNC_HOME_CITY,
+                    },
+                    "control_follow_up_screen": {
+                        "v44_watchtower_selected_control_entry": ScreenType.PNC_HOME_CITY,
+                    },
+                }
+            }
+            exchange = _armed_exchange(tmp / "annotation")
+            evidence, _ = LiveCaseRunner(
+                binding, _deps(tmp, holder, annotation_factory=lambda _: exchange)
+            ).run()
+            results = {r.case_id: r for r in evidence.case_results}
+            chip = results["v44_watchtower_selected_control_entry"]
+            self.assertEqual(CaseStatus.PASSED, chip.status)
+            self.assertEqual("pnc_home_city", chip.postcondition["screen_type"])
+            self.assertEqual(
+                str(chip.follow_up_artifact), chip.postcondition["artifact_path"]
+            )
+            returned = results["v44_watchtower_return_home"]
+            self.assertEqual(CaseStatus.FAILED, returned.status)
+            self.assertEqual(
+                "control_source_screen", returned.unresolved_boundary
+            )
+            self.assertEqual(1, len(holder["core"].control_calls))
 
     def test_control_case_without_its_body_case_is_refused(self):
         with tempfile.TemporaryDirectory() as raw:
