@@ -4,12 +4,13 @@ Selection, execution, and result rows all derive from this one frozen set.
 Python definitions are the released contract; no YAML commands, plugin
 loading, or free-form input exists. ``discovery`` invokes the qualified body
 entry and preserves one raw follow-up; ``control_discovery`` sends one
-tester-attested measured control and preserves its raw follow-up without
-claiming a destination; ``development_validation`` consumes a tester-attested
-measured control through the dedicated executor operation while reusing its
-declared discovery case's retained body witness — a return case never
-re-enters the building itself. A captured task-owned menu never satisfies an
-``acceptance`` route.
+measured control — tester-attested, or through the case's declared
+``measurement_selector_id`` current-frame template element — and preserves
+its raw follow-up without claiming a destination; ``development_validation``
+consumes a tester-attested measured control through the dedicated executor
+operation while reusing its declared discovery case's retained body witness —
+a return case never re-enters the building itself. A captured task-owned
+menu never satisfies an ``acceptance`` route.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 
 class CasePurpose(StrEnum):
@@ -57,6 +59,12 @@ class CaseSpec:
     control case relies on. Discovery cases always own their own body entry
     (``body_case_id == case_id``); a dependent case names the discovery case
     whose retained witness authorizes its control without a second body tap.
+
+    ``measurement_selector_id`` names the canonical selector whose current-
+    frame template element supplies the control measurement for this case
+    instead of manual tester attestation. It identifies the visible control
+    only; it grants no action and claims no destination. Only a control case
+    may declare one.
     """
 
     case_id: str
@@ -73,6 +81,7 @@ class CaseSpec:
     body_case_id: str
     required_preconditions: frozenset[CaseGate]
     required_postconditions: frozenset[CaseGate]
+    measurement_selector_id: UiElementId | None = None
     params: Mapping[str, Any] = field(default=MappingProxyType({}))
 
     def __post_init__(self) -> None:
@@ -81,6 +90,10 @@ class CaseSpec:
                 raise ValueError(f"Discovery case '{self.case_id}' cannot name a control.")
             if self.max_control_attempts != 0:
                 raise ValueError(f"Discovery case '{self.case_id}' cannot allow control attempts.")
+            if self.measurement_selector_id is not None:
+                raise ValueError(
+                    f"Discovery case '{self.case_id}' cannot declare a selector measurement."
+                )
             if self.body_case_id != self.case_id:
                 raise ValueError(f"Discovery case '{self.case_id}' must own its body entry.")
         else:
@@ -114,6 +127,7 @@ def _spec(
     control_effect: WorkflowEffect | None = None,
     allowed_source_screens: frozenset[ScreenType] = frozenset(),
     max_control_attempts: int = 0,
+    measurement_selector_id: UiElementId | None = None,
     required_preconditions: frozenset[CaseGate] | None = None,
     required_postconditions: frozenset[CaseGate],
 ) -> CaseSpec:
@@ -130,6 +144,7 @@ def _spec(
         allowed_source_screens=allowed_source_screens,
         max_control_attempts=max_control_attempts,
         body_case_id=body_case_id or case_id,
+        measurement_selector_id=measurement_selector_id,
         required_preconditions=(
             frozenset({CaseGate.GUARDED_HOME_CITY})
             if required_preconditions is None
@@ -175,8 +190,8 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
             ),
             # The selected Watchtower stays Home-classified and shows only the
             # on-city Upgrade chip. This case measures that chip through the
-            # tester annotation exchange and sends it once; it does not claim
-            # an upgrade endpoint or a production route.
+            # canonical current-frame selector proof and sends it once; it does
+            # not claim an upgrade endpoint or a production route.
             _spec(
                 "v44_watchtower_selected_control_entry",
                 purpose=CasePurpose.CONTROL_DISCOVERY,
@@ -188,6 +203,7 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                 allowed_source_screens=frozenset({ScreenType.PNC_HOME_CITY}),
                 max_control_attempts=1,
+                measurement_selector_id=UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,
                 required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
                 required_postconditions=frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
             ),

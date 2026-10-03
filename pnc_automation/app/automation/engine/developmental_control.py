@@ -85,7 +85,13 @@ class DevelopmentalControlScope:
 
 @dataclass(frozen=True, slots=True)
 class MeasuredControlProof:
-    """Tester-attested foreground control measured on one persisted frame."""
+    """Foreground control measured on one persisted frame.
+
+    The measurement comes from either a tester attestation bound to the frame
+    or a reviewed canonical selector's current-frame template element for a
+    frozen case that declares one. Either way it claims only this frame's
+    geometry — never a destination or a production route.
+    """
 
     frame_ref: FrameRef
     artifact_path: Path

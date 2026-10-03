@@ -75,6 +75,7 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_visible_elements,
     select_content_labels,
     select_navigation_elements,
+    select_template_action_elements,
 )
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
@@ -790,10 +791,18 @@ class ObservationBuilder:
             # Match NavigationPerception: parsed text contributes declared labels
             # and measured navigation controls the profile does not own, while
             # current visual evidence owns controls. Content cannot repair a
-            # missing template or create an unmeasured premium action.
+            # missing template or create an unmeasured premium action. Registry
+            # template action selectors measured on this frame publish through
+            # their own screen-declared channel, never a content invention.
             content_elements = {**visible_elements, **additions.visible_elements}
             visible_elements = {
                 **visual_controls_for_decision(visual, decision),
+                **select_template_action_elements(
+                    content_elements,
+                    selector_registry=self.selector_registry,
+                    screen_type=decision.effective_screen,
+                    reserved_selector_ids=visual.control_selector_ids,
+                ),
                 **select_content_labels(
                     content_elements,
                     selector_registry=self.selector_registry,

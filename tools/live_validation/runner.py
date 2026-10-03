@@ -27,6 +27,7 @@ import pnc_automation
 from pnc_automation.app.automation.engine.developmental_control import (
     BodyEntryWitness,
     DevelopmentalControlScope,
+    MeasuredControlProof,
 )
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
@@ -1060,71 +1061,90 @@ class LiveCaseRunner:
                 foreground_target=spec.target,
                 observation=current,
             )
-            proof = annotation.await_proof(
-                request, current, foreground_target=spec.target
-            )
-            if proof is None:
-                journal.finish(attempt_id, status=AttemptStatus.ANNOTATION_TIMEOUT)
-                attempts.append(
-                    self._attempt_record(
-                        attempt_id, consumed, "annotation_timeout", None
-                    )
-                )
-                return (
-                    self._case_outcome(
-                        spec, collector, mark=mark, status=CaseStatus.BLOCKED,
-                        artifacts=artifacts,
-                        body_entry_event_id=context.body_event_id,
-                        source_artifact=current.artifact_path,
-                        detail="Tester annotation did not arrive before the bounded deadline.",
-                        unresolved_boundary="annotation_timeout",
-                    ),
-                    None,
-                )
-            self._curate(
-                request.request_path,
-                kind="annotation_request",
-                purpose=f"{spec.case_id} annotation request bound to the source frame.",
-                artifacts=artifacts,
-            )
-            self._curate(
-                request.response_path,
-                kind="annotation_response",
-                purpose=(
-                    f"{spec.case_id} tester attestation for "
-                    f"'{spec.control_name}'."
-                ),
-                artifacts=artifacts,
-            )
-            scope = DevelopmentalControlScope(
-                assignment_id=self._binding.assignment_id,
-                case_id=spec.case_id,
-                body_case_id=spec.body_case_id,
-                case_spec_ref=spec.case_id,
-                purpose=spec.developmental_purpose,
-                operation_id=spec.operation_id,
-                released_action_id=spec.released_action_id,
-                control_name=spec.control_name or "",
-                target=spec.target,
-                home_city_slot=spec.home_city_slot,
-                allowed_source_screens=spec.allowed_source_screens,
-                effect=spec.control_effect or WorkflowEffect.READ_ONLY,
-                read_only=self._binding.read_only,
-                resource_allowance_ref=(
-                    self._binding.resource_allowance_ref
-                    if spec.control_effect is WorkflowEffect.RESOURCE_CHANGING
-                    else None
-                ),
-                attempt=consumed,
-                body_entry=witness,
-                input_chain=tuple(input_chain),
-                latest_input_follow_up=latest_follow_up,
-            )
+            proof: MeasuredControlProof | None = None
             try:
                 control_mark = collector.mark()
+                # A frozen case declaring a measurement selector takes the
+                # current frame's canonical template element; every other
+                # case keeps the manual tester attestation path.
+                if spec.measurement_selector_id is not None:
+                    proof = annotation.selector_proof(
+                        request,
+                        current,
+                        selector_id=spec.measurement_selector_id,
+                        foreground_target=spec.target,
+                        intended_effect=(
+                            spec.control_effect or WorkflowEffect.READ_ONLY
+                        ),
+                    )
+                else:
+                    proof = annotation.await_proof(
+                        request, current, foreground_target=spec.target
+                    )
+                if proof is None:
+                    journal.finish(attempt_id, status=AttemptStatus.ANNOTATION_TIMEOUT)
+                    attempts.append(
+                        self._attempt_record(
+                            attempt_id, consumed, "annotation_timeout", None
+                        )
+                    )
+                    return (
+                        self._case_outcome(
+                            spec, collector, mark=mark, status=CaseStatus.BLOCKED,
+                            artifacts=artifacts,
+                            body_entry_event_id=context.body_event_id,
+                            source_artifact=current.artifact_path,
+                            detail="Tester annotation did not arrive before the bounded deadline.",
+                            unresolved_boundary="annotation_timeout",
+                        ),
+                        None,
+                    )
+                self._curate(
+                    request.request_path,
+                    kind="annotation_request",
+                    purpose=f"{spec.case_id} annotation request bound to the source frame.",
+                    artifacts=artifacts,
+                )
+                self._curate(
+                    request.response_path,
+                    kind="annotation_response",
+                    purpose=(
+                        f"{spec.case_id} measurement for "
+                        f"'{spec.control_name}'."
+                    ),
+                    artifacts=artifacts,
+                )
+                scope = DevelopmentalControlScope(
+                    assignment_id=self._binding.assignment_id,
+                    case_id=spec.case_id,
+                    body_case_id=spec.body_case_id,
+                    case_spec_ref=spec.case_id,
+                    purpose=spec.developmental_purpose,
+                    operation_id=spec.operation_id,
+                    released_action_id=spec.released_action_id,
+                    control_name=spec.control_name or "",
+                    target=spec.target,
+                    home_city_slot=spec.home_city_slot,
+                    allowed_source_screens=spec.allowed_source_screens,
+                    effect=spec.control_effect or WorkflowEffect.READ_ONLY,
+                    read_only=self._binding.read_only,
+                    resource_allowance_ref=(
+                        self._binding.resource_allowance_ref
+                        if spec.control_effect is WorkflowEffect.RESOURCE_CHANGING
+                        else None
+                    ),
+                    attempt=consumed,
+                    body_entry=witness,
+                    input_chain=tuple(input_chain),
+                    latest_input_follow_up=latest_follow_up,
+                )
                 result = core.execute_developmental_control(scope, proof, current)
             except SelectorResolutionError as error:
-                known = self._find_tap(collector, control_mark, current, proof.action_point)
+                known = (
+                    self._find_tap(collector, control_mark, current, proof.action_point)
+                    if proof is not None
+                    else None
+                )
                 if known:
                     journal.finish(attempt_id, status=AttemptStatus.DISPATCHED,
                                    dispatch_event_id=known, detail=_detail(error))
@@ -1144,9 +1164,10 @@ class LiveCaseRunner:
                 refreshed = core.capture_once(
                     f"{spec.case_id}_reproof_{attempt_number}", include_content=True
                 )
+                refused_frame = proof.frame_ref if proof is not None else current.frame_ref
                 if (
                     refreshed.frame_ref is None
-                    or proof.frame_ref.input_sequence != refreshed.frame_ref.input_sequence
+                    or refused_frame.input_sequence != refreshed.frame_ref.input_sequence
                 ):
                     return (
                         self._case_outcome(
@@ -1168,7 +1189,11 @@ class LiveCaseRunner:
                              artifacts=artifacts)
                 continue
             except Exception as error:  # noqa: BLE001 - uncertain send, never replay
-                known = self._find_tap(collector, control_mark, current, proof.action_point)
+                known = (
+                    self._find_tap(collector, control_mark, current, proof.action_point)
+                    if proof is not None
+                    else None
+                )
                 state = AttemptStatus.DISPATCHED if known else AttemptStatus.UNCERTAIN
                 journal.finish(attempt_id, status=state, dispatch_event_id=known,
                                detail=_detail(error))

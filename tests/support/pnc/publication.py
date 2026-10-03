@@ -44,5 +44,6 @@ def make_publication_pair(
         enricher,
         builder.screen_classifier,
         builder.create_ocr_context,
+        selector_engine=builder.selector_engine,
     )
     return builder, navigation

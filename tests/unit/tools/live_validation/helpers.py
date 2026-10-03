@@ -5,14 +5,22 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Mapping
 
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import (
+    Observation,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.infra.emulator.input_dispatch import (
     InputDispatchRecord,
     TapDispatch,
 )
 from pnc_automation.core.infra.emulator.provenance import FrameRef
+from pnc_automation.core.vision.image.models import Bounds
 
 from tools.live_validation.binding import SCHEMA_VERSION
 from tools.live_validation.evidence import sha256_file
@@ -51,16 +59,69 @@ def home_observation(
     screen_type: ScreenType = ScreenType.PNC_HOME_CITY,
     blocked: bool = False,
     input_sequence: int | None = None,
+    layout_id: str | None = None,
+    visible_elements: Mapping[UiElementId, VisibleElement] | None = None,
 ) -> Observation:
     return Observation(
-        screen_type=screen_type,
-        blocking_popup=blocked,
-        visible_elements={},
+        decision=ScreenDecision(
+            base_screen=screen_type,
+            effective_screen=screen_type,
+            layout_id=layout_id,
+            guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
+        ),
+        visible_elements={} if visible_elements is None else visible_elements,
         artifact_path=artifact_path,
         image_size=(540, 960),
         frame_fingerprint=f"fp-{sequence}",
         frame_ref=frame_ref(sequence, input_sequence=input_sequence),
     )
+
+
+def chip_element(
+    source: Observation,
+    *,
+    bounds: Bounds = Bounds(300, 400, 78, 62),
+    confidence: float = 0.97,
+    frame_ref: FrameRef | None = None,
+    source_screen: ScreenType | None = ScreenType.PNC_HOME_CITY,
+    source_layout_id: str | None = "home_city",
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
+    action_point: tuple[int, int] | None = None,
+) -> VisibleElement:
+    """One provenanced Upgrade-chip element bound to ``source``'s frame."""
+
+    return VisibleElement(
+        selector_id=UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,
+        bounds=bounds,
+        confidence=confidence,
+        source_kind=source_kind,
+        action_point=action_point,
+        frame_ref=source.frame_ref if frame_ref is None else frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+    )
+
+
+def chip_observation(
+    *,
+    artifact_path: Path | None = None,
+    sequence: int = 1,
+    **kwargs,
+) -> Observation:
+    """A Home observation carrying one canonical chip element on its frame."""
+
+    observation = home_observation(
+        artifact_path=artifact_path,
+        sequence=sequence,
+        layout_id="home_city",
+        **kwargs,
+    )
+    object.__setattr__(
+        observation,
+        "visible_elements",
+        {UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP: chip_element(observation)},
+    )
+    return observation
 
 
 def tap_receipt(source: Observation, *, input_sequence: int | None = None) -> InputDispatchRecord:

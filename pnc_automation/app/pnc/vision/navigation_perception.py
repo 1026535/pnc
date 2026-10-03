@@ -15,7 +15,9 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions, ObservationEnricher,
+    SelectorEngine,
     _accepts_keyword,
+    _matches_to_visible_elements,
     allows_guarded_field_enrichment,
     reconcile_visual_modal_guard,
 )
@@ -25,11 +27,13 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_observation_content,
     bind_visible_elements,
     select_navigation_elements,
+    select_template_action_elements,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     VisualRecognition,
     VisualScreenRecognizer,
@@ -82,6 +86,7 @@ class NavigationPerception:
     guard: NavigationGuard
     screen_classifier: ScreenClassifier
     create_ocr_context: Callable[[CapturedScreenshot], ObservationOcrContext]
+    selector_engine: SelectorEngine | None = None
     debug_artifact_collector: ObservationDebugArtifactCollector = field(
         default_factory=ObservationDebugArtifactCollector, kw_only=True,
     )
@@ -303,15 +308,41 @@ class NavigationPerception:
             source_screen=screen,
             source_layout_id=decision.layout_id,
         )
+        selector_registry = (
+            self.guard.selector_registry
+            if isinstance(self.guard, _SelectorRegistryProvider)
+            else None
+        )
         navigation_elements = (
             bind_visible_elements(
                 select_navigation_elements(
                     content.visible_elements,
-                    selector_registry=(
-                        self.guard.selector_registry
-                        if isinstance(self.guard, _SelectorRegistryProvider)
-                        else None
-                    ),
+                    selector_registry=selector_registry,
+                    reserved_selector_ids=visual.control_selector_ids,
+                ),
+                frame_ref=screenshot.frame_ref,
+                source_screen=screen,
+                source_layout_id=decision.layout_id,
+            )
+            if not interrupted
+            else {}
+        )
+        measured_action_elements = (
+            bind_visible_elements(
+                select_template_action_elements(
+                    {
+                        **self._detect_template_action_elements(
+                            image,
+                            screen,
+                            selector_registry=selector_registry,
+                            reserved_selector_ids=visual.control_selector_ids,
+                            published_selector_ids=frozenset(observation.visible_elements),
+                            ocr_context=ocr_context,
+                        ),
+                        **content.visible_elements,
+                    },
+                    selector_registry=selector_registry,
+                    screen_type=screen,
                     reserved_selector_ids=visual.control_selector_ids,
                 ),
                 frame_ref=screenshot.frame_ref,
@@ -326,11 +357,18 @@ class NavigationPerception:
         # Measured navigation controls the profile does not own ride alongside
         # the visual controls (e.g. the Alliance tab, which has no stable icon
         # template) since they are OCR-anchored on this frame and dispatch-gated
-        # by reviewed safe outcomes.
+        # by reviewed safe outcomes. Screen-declared template action controls
+        # the profile does not own publish through the same current-frame
+        # provenance channel.
         observation = replace(
             observation,
             visible_elements=filter_building_detail_controls(
-                {**navigation_elements, **observation.visible_elements, **content_labels},
+                {
+                    **navigation_elements,
+                    **measured_action_elements,
+                    **observation.visible_elements,
+                    **content_labels,
+                },
                 content.building_detail,
             ),
         )
@@ -341,6 +379,45 @@ class NavigationPerception:
             source_layout_id=decision.layout_id,
         )
         return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
+
+    def _detect_template_action_elements(
+        self,
+        image: Image.Image,
+        screen: ScreenType,
+        *,
+        selector_registry: SelectorRegistry | None,
+        reserved_selector_ids: frozenset[UiElementId],
+        published_selector_ids: frozenset[UiElementId],
+        ocr_context: ObservationOcrContext,
+    ) -> dict[UiElementId, VisibleElement]:
+        """Measures screen-declared template action controls outside the profile.
+
+        Detection runs only for ``action``/``template`` ids declared on this
+        screen that the visual profile does not own and the observation has not
+        already published, so the channel cannot duplicate or replace measured
+        visual controls.
+        """
+
+        if selector_registry is None or self.selector_engine is None:
+            return {}
+        selector_ids = tuple(
+            selector.id
+            for selector in selector_registry.for_screen(screen)
+            if selector.detection_kind == DetectionKind.TEMPLATE
+            and selector.interaction_kind == SelectorInteractionKind.ACTION
+            and selector.id not in reserved_selector_ids
+            and selector.id not in published_selector_ids
+        )
+        if not selector_ids:
+            return {}
+        return _matches_to_visible_elements(
+            self.selector_engine.detect(
+                image,
+                selector_registry,
+                selector_ids=selector_ids,
+                ocr_context=ocr_context,
+            )
+        )
 
     def _finish(
         self, screenshot: CapturedScreenshot, observation: Observation,

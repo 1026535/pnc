@@ -17,6 +17,7 @@ from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.home_city_scan import (
     HomeCityScanError,
     HomeCityScanState,
@@ -29,6 +30,7 @@ from pnc_automation.core.infra.emulator.input_dispatch import (
     SwipeDispatch,
     WheelDispatch,
 )
+from pnc_automation.core.vision.image.models import Bounds
 
 from tools.live_validation.annotation import AnnotationExchange
 from tools.live_validation.binding import load_assignment_binding
@@ -48,11 +50,14 @@ from tools.live_validation.validate import validate_live_evidence
 from tests.unit.tools.live_validation.helpers import (
     CANDIDATE_SHA,
     assignment_payload,
+    chip_element,
     home_observation,
     tap_receipt,
     write_assignment,
     write_frame_file,
 )
+
+CHIP_ID = UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP
 
 
 class _FakeExecutor:
@@ -80,12 +85,14 @@ class _FakeCore:
 
     def __init__(self, observer, run_dir: Path, *, entry_error=None,
                  post_entry_screens: dict | None = None,
-                 control_follow_up_screen: ScreenType | dict = ScreenType.PNC_HOME_CITY) -> None:
+                 control_follow_up_screen: ScreenType | dict = ScreenType.PNC_HOME_CITY,
+                 chip_elements: bool = True) -> None:
         self._observer = observer
         self._dir = run_dir
         self._entry_error = entry_error
         self._post_entry_screens = post_entry_screens or {}
         self._control_follow_up_screen = control_follow_up_screen
+        self._chip_elements = chip_elements
         self._screen = ScreenType.PNC_HOME_CITY
         self._input_seq = 0
         self.executor = _FakeExecutor()
@@ -94,16 +101,26 @@ class _FakeCore:
         self.closed = False
         self.entry_calls = []
         self.control_calls = []
+        self.control_proofs = []
 
     def _frame(self, name: str, screen: ScreenType):
         self._seq += 1
         path = write_frame_file(self._dir / "frames", f"{self._seq:03d}-{name}.png")
-        return home_observation(
+        is_home = screen is ScreenType.PNC_HOME_CITY
+        observation = home_observation(
             artifact_path=path,
             sequence=self._seq,
             screen_type=screen,
             input_sequence=self._input_seq,
+            layout_id="home_city" if is_home else None,
         )
+        if is_home and self._chip_elements:
+            object.__setattr__(
+                observation,
+                "visible_elements",
+                {CHIP_ID: chip_element(observation)},
+            )
+        return observation
 
     def _send_tap(self, source, *, point=(270, 520)):
         self._input_seq += 1
@@ -136,6 +153,7 @@ class _FakeCore:
 
     def execute_developmental_control(self, scope, proof, observation):
         self.control_calls.append(scope)
+        self.control_proofs.append(proof)
         receipt = self._send_tap(observation, point=proof.action_point)
         follow = self._control_follow_up_screen
         if isinstance(follow, dict):
@@ -676,6 +694,26 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 ScreenType.PNC_WATCHTOWER,
                 return_scope.latest_input_follow_up.screen_type,
             )
+            # The chip case measured through the canonical selector element —
+            # its current-frame center (339, 431) — not the free-form manual
+            # bounds the armed exchange would otherwise attest.
+            chip_proof = core.control_proofs[0]
+            self.assertEqual((339, 431), chip_proof.action_point)
+            self.assertEqual(Bounds(300, 400, 78, 62), chip_proof.bounds)
+            responses = {
+                path.name: json.loads(path.read_text(encoding="utf-8"))
+                for path in (tmp / "annotation").glob("*.response.json")
+            }
+            response_doc = next(
+                doc for name, doc in responses.items()
+                if "selected_control_entry" in name
+            )
+            self.assertEqual("canonical_selector", response_doc["measurement_source"])
+            self.assertEqual(CHIP_ID.value, response_doc["selector_id"])
+            # The return case keeps the manual attestation path.
+            self.assertNotIn("selector_id", next(
+                doc for name, doc in responses.items() if "return_home" in name
+            ))
             begins = [
                 entry.payload.get("intent")
                 for entry in read_journal(
@@ -733,6 +771,45 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 "control_source_screen", returned.unresolved_boundary
             )
             self.assertEqual(1, len(holder["core"].control_calls))
+
+    def test_missing_chip_element_refuses_without_any_send(self):
+        """No published chip element: REFUSED attempt, reproof, no dispatch."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp,
+                "v44_watchtower_body_menu",
+                "v44_watchtower_selected_control_entry",
+            )
+            holder: dict = {
+                "core_kwargs": {
+                    "post_entry_screens": {
+                        HomeCityObjectId.WATCHTOWER: ScreenType.PNC_HOME_CITY,
+                    },
+                    "chip_elements": False,
+                }
+            }
+            exchange = _armed_exchange(tmp / "annotation")
+            evidence, _ = LiveCaseRunner(
+                binding, _deps(tmp, holder, annotation_factory=lambda _: exchange)
+            ).run()
+            core = holder["core"]
+            results = {r.case_id: r for r in evidence.case_results}
+            self.assertEqual(
+                CaseStatus.PASSED, results["v44_watchtower_body_menu"].status
+            )
+            chip = results["v44_watchtower_selected_control_entry"]
+            self.assertEqual(CaseStatus.FAILED, chip.status)
+            self.assertEqual("attempt_budget", chip.unresolved_boundary)
+            # The refusal happened before any physical input; the manual
+            # response the armed exchange left was never consumed.
+            self.assertEqual([], core.control_calls)
+            self.assertEqual(
+                "refused", evidence.logical_attempts[-1].status
+            )
+            self.assertEqual(
+                "control", evidence.logical_attempts[-1].intent
+            )
 
     def test_control_with_non_immediate_follow_up_halts_the_chain(self):
         with tempfile.TemporaryDirectory() as raw:

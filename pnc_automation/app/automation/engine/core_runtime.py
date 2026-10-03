@@ -536,6 +536,7 @@ def assemble_core_runtime(
         connected_runtime.observation_service.observation_builder.enricher,
         connected_runtime.observation_service.observation_builder.screen_classifier,
         connected_runtime.observation_service.observation_builder.create_ocr_context,
+        selector_engine=connected_runtime.observation_service.observation_builder.selector_engine,
     )
     run_id = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ") + "_" + uuid4().hex[:8]
     resolved_trace_path = trace_path or _default_trace_path(

@@ -2193,6 +2193,22 @@ selectors:
   materialize_relative_bounds: false
   notes:
   - 'Proposed unsupported strategy: No home upgrade-badge producer.'
+- id: PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP
+  screens:
+  - PNC_HOME_CITY
+  status: screenshot_seeded
+  detection_kind: template
+  interaction_kind: action
+  materialize_relative_bounds: false
+  template_asset:
+    path: control_anchors/home_selected_building_upgrade_chip.png
+    reference_size:
+    - 900
+    - 1600
+    threshold: 0.85
+    mask: embedded_alpha
+  notes:
+  - 'Lead-qualified opaque RGB crop of the green selected-building Upgrade chip, whole-frame gate 0.85. Identity qualified offline; its destination is unproved, so it carries no click outcome.'
 - id: PNC_BUILD_HEADER
   screens:
   - PNC_BUILD_MENU_FIXED_SLOT

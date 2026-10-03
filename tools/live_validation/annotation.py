@@ -6,6 +6,14 @@ a JSON response next to the runner's request file; the runner binds the
 response to that frame's artifact hash and session identity before building a
 ``MeasuredControlProof``. A missing or stale response blocks the case — the
 frame age is never extended to wait.
+
+A frozen case may instead declare ``measurement_selector_id`` to name a
+reviewed canonical selector whose current-frame template element supplies the
+measurement. ``selector_proof`` generates that response in-process from the
+observation's own provenanced element — no external await, no free-form
+bounds — and persists it through the same response contract so journal and
+validator provenance stay inspectable. The selector identifies the visible
+control only; it claims no destination.
 """
 
 from __future__ import annotations
@@ -20,7 +28,11 @@ from typing import Callable
 from pnc_automation.app.automation.engine.developmental_control import MeasuredControlProof
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry
+from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.vision.image.models import Bounds
 
 from tools.live_validation.evidence import frame_ref_dict, sha256_file
@@ -153,6 +165,119 @@ class AnnotationExchange:
             if self._now() >= deadline:
                 return None
             self._sleep(self._poll_seconds)
+
+    def selector_proof(
+        self,
+        request: AnnotationRequest,
+        observation: Observation,
+        *,
+        selector_id: UiElementId,
+        foreground_target: HomeCityObjectId,
+        intended_effect: WorkflowEffect,
+    ) -> MeasuredControlProof:
+        """Builds the typed proof from the observation's canonical selector element.
+
+        For a frozen case declaring ``measurement_selector_id`` the current
+        frame's own template-matched element — never a tester attestation or
+        free-form bounds — supplies the measurement. The element must be the
+        registry's ``TEMPLATE``/``action`` selector declared on this screen,
+        carry this frame's provenance, stay inside the native image, and reach
+        the catalog's qualified confidence; any gap raises
+        ``SelectorResolutionError`` so a missing, stale, or foreign element
+        can never silently authorize input. The generated response persists
+        beside the request and parses through the same typed contract as a
+        tester attestation.
+        """
+
+        registry = build_default_selector_registry()
+        definition = registry.require_supported(selector_id)
+        if (
+            definition.detection_kind is not DetectionKind.TEMPLATE
+            or definition.interaction_kind is not SelectorInteractionKind.ACTION
+        ):
+            raise SelectorResolutionError(
+                f"Selector measurement requires a template action selector; "
+                f"'{selector_id.value}' is not one.",
+                selector_id=selector_id,
+            )
+        if observation.screen_type not in definition.screens:
+            raise SelectorResolutionError(
+                f"Selector '{selector_id.value}' is not declared on "
+                f"'{observation.screen_type.value}'.",
+                selector_id=selector_id,
+                screen_type=observation.screen_type.value,
+            )
+        element = observation.visible_elements.get(selector_id)
+        if element is None or element.source_kind is not VisibleElementSourceKind.TEMPLATE:
+            raise SelectorResolutionError(
+                f"Selector '{selector_id.value}' has no current-frame template element.",
+                selector_id=selector_id,
+            )
+        if (
+            element.frame_ref is None
+            or element.frame_ref != observation.frame_ref
+            or element.source_screen != observation.screen_type
+            or element.source_layout_id != observation.decision.layout_id
+        ):
+            raise SelectorResolutionError(
+                f"Selector '{selector_id.value}' element is not bound to this frame.",
+                selector_id=selector_id,
+            )
+        if observation.image_size is None or not Bounds(
+            0, 0, *observation.image_size
+        ).contains_bounds(element.bounds):
+            raise SelectorResolutionError(
+                f"Selector '{selector_id.value}' bounds leave the native image.",
+                selector_id=selector_id,
+            )
+        if element.confidence < definition.threshold:
+            raise SelectorResolutionError(
+                f"Selector '{selector_id.value}' confidence {element.confidence:.4f} "
+                f"is below the catalog threshold {definition.threshold:.2f}.",
+                selector_id=selector_id,
+            )
+        action_point = element.action_point or element.bounds.center()
+        request.response_path.write_text(
+            json.dumps(
+                {
+                    "request_id": request.request_id,
+                    "case_id": request.case_id,
+                    "control_name": request.control_name,
+                    "foreground_target": request.foreground_target,
+                    "artifact_path": str(request.artifact_path),
+                    "artifact_sha256": request.artifact_sha256,
+                    "frame": frame_ref_dict(observation.frame_ref),
+                    "bounds": {
+                        "x": element.bounds.x,
+                        "y": element.bounds.y,
+                        "width": element.bounds.width,
+                        "height": element.bounds.height,
+                    },
+                    "action_point": {"x": action_point[0], "y": action_point[1]},
+                    "task_owned_foreground": True,
+                    "visual_reason": (
+                        f"Canonical {selector_id.value} template element measured "
+                        f"on the current frame."
+                    ),
+                    "intended_effect": intended_effect.value,
+                    "measurement_source": "canonical_selector",
+                    "selector_id": selector_id.value,
+                    "selector_confidence": element.confidence,
+                },
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        proof = self._parse_response(
+            request, observation, foreground_target=foreground_target
+        )
+        if proof is None:
+            raise SelectorResolutionError(
+                "Generated selector response failed frame binding.",
+                selector_id=selector_id,
+            )
+        return proof
 
     @staticmethod
     def _parse_response(

@@ -32,7 +32,7 @@ from pnc_automation.app.pnc.domain.trial_challenge import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 
@@ -197,6 +197,49 @@ def select_navigation_elements(
         if element.selector_id != selector_id:
             raise SelectorResolutionError(
                 "Navigation control mapping key does not match its visible selector proof.",
+                selector_id=selector_id,
+                element_selector_id=element.selector_id,
+            )
+        selected[selector_id] = element
+    return selected
+
+
+def select_template_action_elements(
+    elements: Mapping[UiElementId, VisibleElement],
+    *,
+    selector_registry: SelectorRegistry | None,
+    screen_type: ScreenType,
+    reserved_selector_ids: frozenset[UiElementId] = frozenset(),
+) -> dict[UiElementId, VisibleElement]:
+    """Keep template-measured action controls the visual profile does not own.
+
+    A selector whose catalog entry declares ``action`` interaction, ``template``
+    detection, and this screen is measured current-frame evidence even when no
+    visual profile declares it as a control. The channel stays narrow: template
+    provenance only, screen-declared ids, and never a profile-reserved id, so
+    it cannot mint an unmeasured premium action or repair a missing profile
+    template.
+    """
+
+    if selector_registry is None:
+        return {}
+    action_selector_ids = {
+        selector.id
+        for selector in selector_registry.for_screen(screen_type)
+        if selector.interaction_kind == SelectorInteractionKind.ACTION
+        and selector.detection_kind == DetectionKind.TEMPLATE
+    }
+    selected: dict[UiElementId, VisibleElement] = {}
+    for selector_id, element in elements.items():
+        if (
+            selector_id not in action_selector_ids
+            or selector_id in reserved_selector_ids
+            or element.source_kind != VisibleElementSourceKind.TEMPLATE
+        ):
+            continue
+        if element.selector_id != selector_id:
+            raise SelectorResolutionError(
+                "Template action mapping key does not match its visible selector proof.",
                 selector_id=selector_id,
                 element_selector_id=element.selector_id,
             )

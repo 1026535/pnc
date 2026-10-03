@@ -9,6 +9,7 @@ from pnc_automation.app.automation.engine.developmental_control import (
 )
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 from tools.live_validation.cases import (
     BODY_ENTRY_OPERATION_ID,
@@ -109,10 +110,20 @@ class CaseRegistryTests(unittest.TestCase):
             frozenset({ScreenType.PNC_HOME_CITY}), spec.allowed_source_screens
         )
         self.assertEqual(1, spec.max_control_attempts)
+        self.assertIs(
+            UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,
+            spec.measurement_selector_id,
+        )
         self.assertEqual(
             spec.home_city_slot,
             CASE_REGISTRY["v44_watchtower_body_menu"].home_city_slot,
         )
+
+    def test_selector_measurement_belongs_to_the_chip_case_only(self):
+        for spec in CASE_REGISTRY.values():
+            if spec.case_id == "v44_watchtower_selected_control_entry":
+                continue
+            self.assertIsNone(spec.measurement_selector_id)
 
     def test_discovery_spec_rejects_a_control(self):
         with self.assertRaises(ValueError):
@@ -129,6 +140,28 @@ class CaseRegistryTests(unittest.TestCase):
                 allowed_source_screens=frozenset(),
                 max_control_attempts=0,
                 body_case_id="bad",
+                required_preconditions=frozenset(),
+                required_postconditions=frozenset(),
+            )
+
+    def test_discovery_spec_rejects_a_selector_measurement(self):
+        with self.assertRaises(ValueError):
+            CaseSpec(
+                case_id="bad",
+                purpose=CasePurpose.DISCOVERY,
+                target=next(iter(CASE_REGISTRY.values())).target,
+                home_city_slot=None,
+                operation_id=BODY_ENTRY_OPERATION_ID,
+                entry_effect=WorkflowEffect.READ_ONLY,
+                released_action_id="x",
+                control_name=None,
+                control_effect=None,
+                allowed_source_screens=frozenset(),
+                max_control_attempts=0,
+                body_case_id="bad",
+                measurement_selector_id=(
+                    UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP
+                ),
                 required_preconditions=frozenset(),
                 required_postconditions=frozenset(),
             )

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "annotation": "Home-city selected-building control fixtures authored from the authorized 2026-10-03 157_farm V44 annotation-delivery session (run v44_live_v44-watchtower-annotation-delivery-20261003, source session 0d53ab56, candidate e0112f8a). The canonical selector under test is PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP, the lead-qualified opaque 78x62 RGB crop of the green up-arrow plus 'Upgrade' caption shown below a selected building body (asset sha256 67c7b1b6fffb3d226a560c6ac74eaf210148ede706c136102f6ddb92dc9e98cd, whole-frame gate 0.85, reference 900x1600). All samples are byte-identical copies of the persisted source captures; no pixels were masked or altered, so raw_sha256 equals the source artifact hash. sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera/home_city_slot_bodies convention. Expected bounds/confidence reproduce the lead's accepted qualification measurements in .local-data/watchtower-chip-control-20261003/lead-qualification-accepted.json; they are current-frame observations for these saved views, not universal geometry. The chip's destination remains unproved: these fixtures prove recognition only, no panel, upgrade route, or return.",
+  "samples": [
+    {
+      "image": "home_city_selected_upgrade_chip_0037.png",
+      "role": "chip_positive_seed",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "659ccdb2f2e21df349ea4a7eff3f4f4fd0c1c510117cc224a8cd6247ad8c97cf",
+      "sha256": "fda66ee844c97c92063df36663f85f01a316f3b01ab12060b27e58e7bc60b350",
+      "source_artifact": "20261003T074429Z_core_20261003T074246Z_0d53ab56_0037_v44_watchtower_selected_control_entry_resume_state.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "659ccdb2f2e21df349ea4a7eff3f4f4fd0c1c510117cc224a8cd6247ad8c97cf",
+      "masked_rows": [],
+      "expected": {
+        "bounds": [624, 474, 78, 62],
+        "center": [663, 505],
+        "confidence": 1.0
+      },
+      "annotation": "Qualification seed: the annotation-delivery session's resume_state frame with the selected slot-4 Watchtower chip visible. The template crop is this view's exact chip region (cols 624:702, rows 474:536), so the expected match is the lossless self-hit at score 1.0. The erroneous turn047 annotation bounds (622,945,80,110) and point (662,976) lie on unrelated city wall lower in this frame; selector measurement must yield (663,505), never the stale point."
+    },
+    {
+      "image": "home_city_selected_upgrade_chip_0038.png",
+      "role": "chip_positive_translated_holdout",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "c55534cf9d317307540a73685f61f1f57eb3e7ced84dcfe5a9c366670df782f8",
+      "sha256": "75bf774ef4ee24a787241a59d3db0d614970fcfc7e64e52ffb805b37c746fd74",
+      "source_artifact": "20261003T074528Z_core_20261003T074246Z_0d53ab56_0038_v44_watchtower_selected_control_entry_reproof_1.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "c55534cf9d317307540a73685f61f1f57eb3e7ced84dcfe5a9c366670df782f8",
+      "masked_rows": [],
+      "expected": {
+        "bounds": [624, 496, 78, 62],
+        "center": [663, 527],
+        "confidence": 0.8811300838694853
+      },
+      "annotation": "Translated holdout: the same session's reproof_1 frame at a shifted camera pose; the chip rides 22px lower with the body. Expected match is the lead-measured (624,496,78,62) at score ~0.8811, the weakest accepted positive and the basis of the 0.85 gate."
+    },
+    {
+      "image": "home_city_unselected_0035.png",
+      "role": "chip_negative_unselected_view",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "5a57cf03d6f7dd8633a0a6f6100b2497238f39b165c2ca5c4ad774cb7a922d01",
+      "sha256": "a420a43b12d6bfe67568297e2d7e8d5520f10c4557a116a615e74ec905e40165",
+      "source_artifact": "20261003T074415Z_core_20261003T074246Z_0d53ab56_0035_core_6_home_after_pan_1_0.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "5a57cf03d6f7dd8633a0a6f6100b2497238f39b165c2ca5c4ad774cb7a922d01",
+      "masked_rows": [],
+      "expected": {
+        "bounds": null,
+        "center": null,
+        "confidence": null
+      },
+      "annotation": "Unselected negative: a Home city view with no selected-building chip. Lead qualification measured no accepted match even at threshold 0.50; the publisher must not fabricate a chip element here."
+    }
+  ]
+}

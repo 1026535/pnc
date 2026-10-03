@@ -330,9 +330,23 @@ measured selected-building chip control precisely to establish the endpoint
 and a measured return, bound to one body witness and its continuous input
 receipts. The chip is an exploratory on-city control whose immediate raw
 follow-up is recorded as truth — no panel or upgrade claim, and the old Lua
-`Btn1` identity stays unasserted. Menu entry, collider routing and return
-remain unproved until that batch runs; production route promotion stays gated
-on the resulting endpoint/return proof. Source-level Close/Remove behavior
+`Btn1` identity stays unasserted.
+
+October 3 correction: the chip's measurement owner is the canonical
+`PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP` template selector — an opaque 78x62
+RGB crop of the green arrow/circle plus Upgrade caption, qualified offline on
+the turn047 native 900x1600 frame (bounds (624,474,78,62), score 1.0, center
+(663,505)) and reproduced on the translated holdout (bounds (624,496,78,62),
+score .8811, center (663,527)) under the .85 whole-frame gate; both unselected
+source views stay unmatched. The frozen control case now declares
+`measurement_selector_id`, so the runner measures the chip from the current
+frame's own provenanced template element through the annotation exchange's
+selector proof — the earlier tester-attested bounds (622,945,80,110) pointed
+at an unrelated city wall and are withdrawn. The selector supplies the
+control's current native geometry only; it asserts no destination. Menu
+entry, collider routing and return remain unproved until that batch runs;
+production route promotion stays gated on the resulting endpoint/return
+proof. Source-level Close/Remove behavior
 does not qualify a current Back control. No new live action was performed for
 this note. Provenance: recovered Lua evidence via the September 30
 ordinary-building consultation and the corrected Watchtower registration on
