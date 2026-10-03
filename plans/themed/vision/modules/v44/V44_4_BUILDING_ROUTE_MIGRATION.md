@@ -3,6 +3,13 @@
 Parent: [V44](../V44_FULL_HOME_CITY_NAVIGATION.md#5-implementation-stages-and-integration-ownership).
 Status: **in progress; consumes the accepted V44-1/2/3 publication and independently reviewed follow-up corrections**.
 Exact route candidates, owners and pending proof remain in the coordinator ledger.
+
+**October 2 scope amendment:** apply the parent's [user-directed exclusions](../V44_FULL_HOME_CITY_NAVIGATION.md#october-2-user-directed-scope-reduction):
+Sanctum, Bank, Lost City Headquarters and Dragondom Conquest. Exclude their routes
+from this slice's required coverage and new live assignments. Preserve map data,
+published behavior and historical evidence; park unfinished excluded-target work.
+All references below to required types mean the retained scope.
+
 Delegate substantial building groups with disjoint target keys/caller symbols;
 the lead owns ownership reconciliation, integration and whole-V44 acceptance.
 Use the [binding interface agreement](V44_INTERFACE_CONTRACT.md), especially
@@ -22,7 +29,7 @@ hold does not pause unrelated M work or resume the user-paused PW task.
 ## Outcome and preparation
 
 Move the remaining V44-owned Home acquisition callers and target data onto the
-shared normalized-zoom navigator. Verify each available ordinary type's distinct
+shared normalized-zoom navigator. Verify each retained available ordinary type's distinct
 entry/destination/return, retaining existing accepted route regressions. This slice
 completes coverage, not a second navigation engine or the feature menu projects.
 
@@ -51,7 +58,7 @@ Recommended coherent groups, following the parent's priority:
 
 | Group | Scope | Parallel boundary |
 |---|---|---|
-| First priority routes | Blacksmith, Wall, Bank, Warehouse and Goddess acquisition/coverage gaps | One package, reusing accepted V44-3 proofs and coordinating existing V22/V34/V40 feature owners |
+| First priority routes | Blacksmith, Wall, Warehouse and Goddess acquisition/coverage gaps | One package, reusing accepted V44-3 proofs and coordinating existing V22/V34 feature owners |
 | Remaining ordinary routes | Other required ordinary catalog types, including repeated-slot selection where applicable | Group by shared caller/body work after inventory review; no overlap with first-priority target keys |
 
 A later group may prepare fixtures in parallel; implementation may overlap once
@@ -147,7 +154,7 @@ ignored coordinator/live-batch area and update authored coverage with stable res
 | Disposition | Not started, under review, fixing findings, awaiting validation, accepted, merged/pushed or blocked; next owner/trigger |
 
 Account for all ordinary definitions even when many share one semantic type. Live
-coverage is per available ordinary type plus materially different explicit-instance
+coverage is per retained available ordinary type plus materially different explicit-instance
 behavior, not 54 redundant taps. System targets remain separate so unavailable
 events cannot hide or stall ordinary scope. Externally owned features keep their
 own rows; their outstanding work is not silently reassigned here.
@@ -201,7 +208,7 @@ For each accepted acquisition, provide the integrated revision, public call,
 canonical target/slot semantics, supported views, destination/return owner,
 evidence paths and explicit unsupported states. Blacksmith handoff enables
 dependent equipment plans only after its own shared acquisition is accepted;
-it does not complete their menu/action scope. Apply the same rule to Wall, Bank,
+it does not complete their menu/action scope. Apply the same rule to Wall,
 Warehouse, Goddess and subsequent groups. The coordinator resumes dependency-ready
 plans only after the user resumes execution and the required V44 integration is
 accepted and pushed.
@@ -242,5 +249,6 @@ Maintain the parent's geometry/route ledgers and V44-4 status. Whole-V44 accepta
 requires the four slices' applicable checks, all required available V44-owned
 ordinary routes and the parent's dependency/coverage rules. List positively
 unavailable targets and externally delegated boundaries separately with owners
-and next triggers. Report final accepted and pushed revisions; a worker completion
+and next triggers. List user-excluded targets separately; they are neither passing
+routes nor unfinished V44 gates. Report final accepted and pushed revisions; a worker completion
 message or a locally integrated candidate alone is not completion.

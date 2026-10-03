@@ -52,12 +52,44 @@ does not gain a Home dependency. V44's ordinary coverage does not depend on V03
 event qualification: an absent event cannot create a dependency cycle.
 
 **Selected acceptance scope:** account for all 54 ordinary slot definitions and
-separate system nodes; verify every available ordinary catalog building type on
+separate system nodes; verify every retained available ordinary catalog building type on
 the authorized castle. Equivalent repeated instances do not each require a live
 route. Evidence-backed unavailable targets retain individual blockers and do not
 hold unrelated available coverage. An unknown or failed-to-detect target cannot
 be relabeled unavailable to pass acceptance. Never report universal account,
 appearance or menu support from this acceptance.
+
+### October 2 user-directed scope reduction
+
+The user excludes the following buildings from V44's route implementation,
+caller migration and entry/destination/return acceptance requirements:
+
+| Excluded target | Catalog identity / related feature packet |
+|---|---|
+| Sanctum | `sanctum`; V28 |
+| Bank | `bank`; V40 |
+| Lost City Headquarters | Event target outside the ordinary catalog; V03/V33 |
+| Dragondom Conquest | `dragondom_conquest`; V32 |
+
+These rows are **excluded by user**, not accepted, unavailable or failed. Their
+unfinished routes, menu recognition, return controls and event qualification do
+not block V44 or require further V44 live checks. All other targets retain their
+existing scope, applicability and external ownership boundaries. Campaign and
+Illusory Beast Manor access remain in scope.
+
+Preserve existing catalog identities, geometry, landmarks, published behavior and
+historical evidence. Removing route requirements does not remove the 54-slot map
+or permit weakening shared recognition, input or test-selection contracts. Park
+unfinished excluded-target source and evidence; do not land it as accepted work
+or extend it merely to close V44. Shared independently useful changes still need
+their own review and applicable validation.
+
+Apply this exclusion list when freezing inventories and assignments. Record
+excluded rows separately from the retained acceptance denominator. Related
+feature packets retain their own status and ownership; this scope decision does
+not complete their features or qualify their missing Home entries. Reintroducing
+these routes requires a separate scope decision. This amendment supersedes older
+Bank-first dispatch and Bank/Watchtower cohort instructions.
 
 The Alliance invitation bug remains outside the epic. The September 25 request
 authorizes the bounded Devin Stage 0 live/game-knowledge assignment on `157_farm`
@@ -530,7 +562,7 @@ Preserve the unfinished `vision-v44-lead` source patch until the lead classifies
 its changes for V44-1/V44-3; do not copy the entire dirty tree into a worker base.
 Externally delegated plan/feature ownership remains excluded unless handed back.
 
-Prioritize Blacksmith, Wall, Bank, Warehouse and Goddess, then remaining ordinary
+Prioritize Blacksmith, Wall, Warehouse and Goddess, then remaining retained ordinary
 targets. Feature-owned minimum destination/return qualification may be developed
 alongside V44 to avoid circular dependencies; acquisition does not require the
 whole feature content parser to be complete. Other feature packages may proceed
@@ -575,7 +607,7 @@ First complete Stage 0; then validate the final implemented normalization and
 navigation through the actual final candidate. Demonstrate off-screen target
 acquisition from materially different starting views and start zooms converging
 to the same endpoint, configurable-slot resolution and repeated
-instance selection where available. Verify each available ordinary type's distinct
+instance selection where available. Verify each retained available ordinary type's distinct
 body/destination and feature-owned return; do not multiply runs across equivalent
 slots, castles or unchanged routes. Reuse valid evidence only when its consumed
 implementation and dependencies remain unchanged; integration changes require
@@ -596,13 +628,15 @@ entry/return proof). Record `mapped`, `observed`, `route_verified`,
 `awaiting_validation`, `blocked` and evidence-backed `not_applicable` separately.
 
 Freeze the ordinary target inventory from the existing catalog and reviewed
-capture evidence before acceptance. User-confirmed or captured presence is enough
+capture evidence before acceptance, applying the user-directed exclusions above.
+User-confirmed or captured presence is enough
 to retain a target as required even if acquisition currently fails. Unavailable
 requires positive current lock/absence/applicability evidence or a confirmed user
 fact; a scan timeout, absent template or missing capture is only unknown/blocked.
-Unknown required ordinary targets cannot be dropped from the denominator.
+Unknown required ordinary targets cannot be dropped from the denominator without
+an explicit scope decision; retain the provenance of each user-directed exclusion.
 
-V44 is accepted for the authorized castle's available ordinary coverage only after
+V44 is accepted for the authorized castle's retained available ordinary coverage only after
 required geometry, zoom/scan behavior, caller migration, offline checks and live
 routes pass. Explicitly unavailable targets do not block that scoped acceptance,
 but their dependent routes remain blocked until separately qualified. A catalog
