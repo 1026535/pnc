@@ -716,6 +716,94 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 json.loads(finalization.read_text(encoding="utf-8"))["review_state"],
             )
 
+    def test_military_cohort_runs_four_cases_in_release_order(self):
+        """The frozen quartet: two body entries, two retained-witness returns."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp,
+                "v44_cavalry_body_menu",
+                "v44_cavalry_return_home",
+                "v44_siege_body_menu",
+                "v44_siege_return_home",
+            )
+            holder: dict = {
+                "core_kwargs": {
+                    "post_entry_screens": {
+                        HomeCityObjectId.CAVALRY_BARRACKS: ScreenType.PNC_CAVALRY_BARRACKS,
+                        HomeCityObjectId.SIEGE_FACTORY: ScreenType.PNC_SIEGE_FACTORY,
+                    }
+                }
+            }
+            exchange = _armed_exchange(tmp / "annotation")
+            deps = _deps(tmp, holder, annotation_factory=lambda _: exchange)
+
+            evidence, path = LiveCaseRunner(binding, deps).run()
+            core = holder["core"]
+
+            statuses = {r.case_id: r.status for r in evidence.case_results}
+            self.assertEqual(
+                {
+                    "v44_cavalry_body_menu": CaseStatus.PASSED,
+                    "v44_cavalry_return_home": CaseStatus.PASSED,
+                    "v44_siege_body_menu": CaseStatus.PASSED,
+                    "v44_siege_return_home": CaseStatus.PASSED,
+                },
+                statuses,
+            )
+            self.assertEqual(
+                [r.case_id for r in evidence.case_results],
+                [
+                    "v44_cavalry_body_menu",
+                    "v44_cavalry_return_home",
+                    "v44_siege_body_menu",
+                    "v44_siege_return_home",
+                ],
+            )
+            # Exactly two body entries — the returns never reopen a building.
+            self.assertEqual(
+                [HomeCityObjectId.CAVALRY_BARRACKS, HomeCityObjectId.SIEGE_FACTORY],
+                core.entry_calls,
+            )
+            self.assertEqual(2, len(core.control_calls))
+            cavalry_scope, siege_scope = core.control_calls
+            self.assertEqual("v44_cavalry_return_home", cavalry_scope.case_id)
+            self.assertEqual("v44_cavalry_body_menu", cavalry_scope.body_case_id)
+            self.assertEqual(
+                "v44_cavalry_body_menu", cavalry_scope.body_entry.case_id
+            )
+            self.assertEqual("v44_siege_return_home", siege_scope.case_id)
+            self.assertEqual("v44_siege_body_menu", siege_scope.body_case_id)
+            self.assertEqual("v44_siege_body_menu", siege_scope.body_entry.case_id)
+            results = {r.case_id: r for r in evidence.case_results}
+            for body_id, return_id in (
+                ("v44_cavalry_body_menu", "v44_cavalry_return_home"),
+                ("v44_siege_body_menu", "v44_siege_return_home"),
+            ):
+                body = results[body_id]
+                ret = results[return_id]
+                self.assertEqual(body_id, ret.body_case_id)
+                self.assertEqual(body.body_entry_event_id, ret.body_entry_event_id)
+                self.assertIsNotNone(body.source_artifact)
+                self.assertIsNotNone(body.follow_up_artifact)
+                self.assertIsNotNone(ret.source_artifact)
+                self.assertIsNotNone(ret.follow_up_artifact)
+            begins = [
+                e.payload.get("intent")
+                for e in read_journal(
+                    Path(binding.report_root) / binding.run_id / "attempts.jsonl"
+                )
+                if e.record_type == "attempt_begin"
+            ]
+            self.assertEqual(
+                ["body_entry", "control", "body_entry", "control"], begins
+            )
+            report = validate_live_evidence(binding, path)
+            self.assertTrue(
+                report.valid,
+                [f"{f.check}: {f.detail}" for f in report.findings],
+            )
+
     def test_chip_discovery_binds_raw_follow_up_and_extends_the_chain(self):
         """body -> chip -> return: one body entry, one continuous receipt chain."""
         with tempfile.TemporaryDirectory() as raw:

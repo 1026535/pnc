@@ -258,6 +258,68 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
                 required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
             ),
+            # Ordinary troop-building body entries may collect completed
+            # troops, so these discovery cases declare a nonspending state
+            # change instead of read-only. They discover the native panels
+            # only; no production route is claimed.
+            _spec(
+                "v44_cavalry_body_menu",
+                purpose=CasePurpose.DISCOVERY,
+                target=HomeCityObjectId.CAVALRY_BARRACKS,
+                home_city_slot=HomeCitySlotSelector(slot_index=6),
+                released_action_id=BODY_ENTRY_OPERATION_ID,
+                entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                required_postconditions=frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
+            ),
+            _spec(
+                "v44_cavalry_return_home",
+                purpose=CasePurpose.DEVELOPMENT_VALIDATION,
+                target=HomeCityObjectId.CAVALRY_BARRACKS,
+                home_city_slot=HomeCitySlotSelector(slot_index=6),
+                released_action_id="v44_cavalry_menu_return_home",
+                body_case_id="v44_cavalry_body_menu",
+                control_name="return_home",
+                control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                allowed_source_screens=frozenset(
+                    {
+                        ScreenType.UNKNOWN,
+                        ScreenType.PNC_POPUP,
+                        ScreenType.PNC_CAVALRY_BARRACKS,
+                    }
+                ),
+                max_control_attempts=2,
+                required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
+                required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
+            ),
+            _spec(
+                "v44_siege_body_menu",
+                purpose=CasePurpose.DISCOVERY,
+                target=HomeCityObjectId.SIEGE_FACTORY,
+                home_city_slot=HomeCitySlotSelector(slot_index=8),
+                released_action_id=BODY_ENTRY_OPERATION_ID,
+                entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                required_postconditions=frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
+            ),
+            _spec(
+                "v44_siege_return_home",
+                purpose=CasePurpose.DEVELOPMENT_VALIDATION,
+                target=HomeCityObjectId.SIEGE_FACTORY,
+                home_city_slot=HomeCitySlotSelector(slot_index=8),
+                released_action_id="v44_siege_menu_return_home",
+                body_case_id="v44_siege_body_menu",
+                control_name="return_home",
+                control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                allowed_source_screens=frozenset(
+                    {
+                        ScreenType.UNKNOWN,
+                        ScreenType.PNC_POPUP,
+                        ScreenType.PNC_SIEGE_FACTORY,
+                    }
+                ),
+                max_control_attempts=2,
+                required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
+                required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
+            ),
             # One frozen production route: guarded Home -> slot-4 Watchtower
             # body -> canonical Upgrade chip -> qualified Watch Tower panel ->
             # measured Back -> guarded Home. The route never confirms an

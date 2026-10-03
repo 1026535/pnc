@@ -8,6 +8,8 @@ from pnc_automation.app.automation.engine.developmental_control import (
     DevelopmentalCasePurpose,
 )
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
@@ -26,7 +28,7 @@ from tools.live_validation.cases import (
 
 
 class CaseRegistryTests(unittest.TestCase):
-    def test_registry_contains_the_six_released_cases(self):
+    def test_registry_contains_the_ten_released_cases(self):
         self.assertEqual(
             {
                 "v44_bank_body_menu",
@@ -35,6 +37,10 @@ class CaseRegistryTests(unittest.TestCase):
                 "v44_watchtower_selected_control_entry",
                 "v44_watchtower_return_home",
                 "v44_watchtower_public_open_return",
+                "v44_cavalry_body_menu",
+                "v44_cavalry_return_home",
+                "v44_siege_body_menu",
+                "v44_siege_return_home",
             },
             set(frozen_case_ids()),
         )
@@ -239,6 +245,127 @@ class CaseRegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             CaseSpec(**base, allowed_source_screens=frozenset({"x"}), max_control_attempts=0)
 
+    def test_cavalry_and_siege_cohort_binds_exactly(self):
+        expected = {
+            "v44_cavalry_body_menu": (
+                CasePurpose.DISCOVERY,
+                HomeCityObjectId.CAVALRY_BARRACKS,
+                6,
+                "v44_cavalry_body_menu",
+                BODY_ENTRY_OPERATION_ID,
+                None,
+                None,
+                frozenset(),
+                0,
+                frozenset({CaseGate.GUARDED_HOME_CITY}),
+                frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
+            ),
+            "v44_cavalry_return_home": (
+                CasePurpose.DEVELOPMENT_VALIDATION,
+                HomeCityObjectId.CAVALRY_BARRACKS,
+                6,
+                "v44_cavalry_body_menu",
+                "v44_cavalry_menu_return_home",
+                "return_home",
+                WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                frozenset(
+                    {
+                        ScreenType.UNKNOWN,
+                        ScreenType.PNC_POPUP,
+                        ScreenType.PNC_CAVALRY_BARRACKS,
+                    }
+                ),
+                2,
+                frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
+                frozenset({CaseGate.GUARDED_HOME_CITY}),
+            ),
+            "v44_siege_body_menu": (
+                CasePurpose.DISCOVERY,
+                HomeCityObjectId.SIEGE_FACTORY,
+                8,
+                "v44_siege_body_menu",
+                BODY_ENTRY_OPERATION_ID,
+                None,
+                None,
+                frozenset(),
+                0,
+                frozenset({CaseGate.GUARDED_HOME_CITY}),
+                frozenset({CaseGate.RAW_FOLLOW_UP_CAPTURED}),
+            ),
+            "v44_siege_return_home": (
+                CasePurpose.DEVELOPMENT_VALIDATION,
+                HomeCityObjectId.SIEGE_FACTORY,
+                8,
+                "v44_siege_body_menu",
+                "v44_siege_menu_return_home",
+                "return_home",
+                WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                frozenset(
+                    {
+                        ScreenType.UNKNOWN,
+                        ScreenType.PNC_POPUP,
+                        ScreenType.PNC_SIEGE_FACTORY,
+                    }
+                ),
+                2,
+                frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
+                frozenset({CaseGate.GUARDED_HOME_CITY}),
+            ),
+        }
+        for case_id, want in expected.items():
+            with self.subTest(case_id=case_id):
+                spec = require_case(case_id)
+                (
+                    purpose,
+                    target,
+                    slot,
+                    body_case_id,
+                    released_action_id,
+                    control_name,
+                    control_effect,
+                    screens,
+                    attempts,
+                    preconditions,
+                    postconditions,
+                ) = want
+                self.assertIs(purpose, spec.purpose)
+                self.assertIs(target, spec.target)
+                self.assertEqual(
+                    HomeCitySlotSelector(slot_index=slot), spec.home_city_slot
+                )
+                self.assertEqual(body_case_id, spec.body_case_id)
+                self.assertEqual(released_action_id, spec.released_action_id)
+                self.assertEqual(BODY_ENTRY_OPERATION_ID, spec.operation_id)
+                self.assertEqual(control_name, spec.control_name)
+                self.assertIs(control_effect, spec.control_effect)
+                self.assertEqual(screens, spec.allowed_source_screens)
+                self.assertEqual(attempts, spec.max_control_attempts)
+                self.assertEqual(preconditions, spec.required_preconditions)
+                self.assertEqual(postconditions, spec.required_postconditions)
+                self.assertIsNone(spec.measurement_selector_id)
+                self.assertEqual({}, dict(spec.params))
+                if spec.purpose is CasePurpose.DISCOVERY:
+                    self.assertIs(
+                        WorkflowEffect.NONSPENDING_STATE_CHANGE, spec.entry_effect
+                    )
+
+    def test_cavalry_and_siege_returns_bind_their_own_body_witness(self):
+        for case_id, body_case_id in (
+            ("v44_cavalry_return_home", "v44_cavalry_body_menu"),
+            ("v44_siege_return_home", "v44_siege_body_menu"),
+        ):
+            with self.subTest(case_id=case_id):
+                spec = require_case(case_id)
+                owner = require_case(body_case_id)
+                self.assertEqual(body_case_id, spec.body_case_id)
+                self.assertIs(CasePurpose.DISCOVERY, owner.purpose)
+                self.assertIs(owner.target, spec.target)
+                self.assertEqual(owner.home_city_slot, spec.home_city_slot)
+                self.assertIs(
+                    DevelopmentalCasePurpose.CONTROL_VALIDATION,
+                    spec.developmental_purpose,
+                )
+
     def test_selected_order_requires_the_body_case_first(self):
         validate_selected_order(["v44_bank_body_menu", "v44_bank_return_home"])
         validate_selected_order(
@@ -248,12 +375,30 @@ class CaseRegistryTests(unittest.TestCase):
                 "v44_watchtower_return_home",
             ]
         )
+        validate_selected_order(
+            [
+                "v44_cavalry_body_menu",
+                "v44_cavalry_return_home",
+                "v44_siege_body_menu",
+                "v44_siege_return_home",
+            ]
+        )
         with self.assertRaises(KeyError):
             validate_selected_order(["v44_bank_return_home", "v44_bank_body_menu"])
         with self.assertRaises(KeyError):
             validate_selected_order(["v44_bank_return_home"])
         with self.assertRaises(KeyError):
             validate_selected_order(["v44_watchtower_selected_control_entry"])
+        with self.assertRaises(KeyError):
+            validate_selected_order(["v44_cavalry_return_home"])
+        with self.assertRaises(KeyError):
+            validate_selected_order(
+                [
+                    "v44_cavalry_body_menu",
+                    "v44_cavalry_return_home",
+                    "v44_siege_return_home",
+                ]
+            )
 
     def test_discovery_case_may_not_delegate_its_body_entry(self):
         with self.assertRaises(ValueError):
