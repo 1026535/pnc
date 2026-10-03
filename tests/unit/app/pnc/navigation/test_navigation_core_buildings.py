@@ -1093,14 +1093,48 @@ class WatchtowerTwoHopTests(RecordedFramesCore, unittest.TestCase):
             _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
             _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
                                     capture_sequence=2),
-            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
-                                    capture_sequence=3, input_sequence=1),
+            *(
+                _provenanced_home_frame((), captured_at=now + timedelta(seconds=index),
+                                       capture_sequence=index + 1, input_sequence=1)
+                for index in range(2, 5)
+            ),
         ))
         _, actuator, error = self._failing_open(content_frames)
         self.assertIsNotNone(error)
         self.assertRegex(str(error), "qualified current-frame Upgrade chip")
         self.assertEqual(1, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+
+    def test_chip_animation_reacquires_current_match_without_replaying_body(self) -> None:
+        """A rejected first view can become qualified on a fresh same-input view."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                   capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                   capture_sequence=3, input_sequence=1),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=3),
+                                   capture_sequence=4, input_sequence=1, chip=True,
+                                   chip_action_point=(663, 496)),
+        ))
+        destination_frames = iter((
+            replace(observation(ScreenType.PNC_WATCHTOWER),
+                    captured_at=now + timedelta(seconds=4)),
+            replace(observation(ScreenType.PNC_WATCHTOWER),
+                    captured_at=now + timedelta(seconds=5)),
+        ))
+        events: list[dict[str, object]] = []
+        _, actuator, result = self._open(content_frames, destination_frames, events=events)
+        self.assertEqual(ScreenType.PNC_WATCHTOWER, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertIsInstance(actuator.actions[1], TapAction)
+        chip_event = next(e for e in events if e.get("event") == "pending_upgrade_chip")
+        self.assertEqual(4, chip_event["capture_sequence"])
+        self.assertEqual(1, chip_event["input_sequence"])
+        self.assertEqual((663, 496), chip_event["selector_action_point"])
 
     def _failing_open(self, content_frames):
         actuator = Actuator()

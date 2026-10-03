@@ -843,7 +843,9 @@ class NavigationCore:
         canonical Upgrade chip measured on the resulting selected Home view
         is this panel's observed entry control. Both sends share this
         operation's deadline and session; a missing, stale, foreign, or
-        interrupted chip observation stops before the dependent tap.
+        interrupted chip observation stops before the dependent tap. The
+        floating chip's observed animation can temporarily prevent a match;
+        missing matches use the existing bounded passive Home allowance.
         """
 
         operation.send(
@@ -851,9 +853,20 @@ class NavigationCore:
                                    reason="replacement_observed_building"),
             before,
         )
-        selected = operation.capture(before, "selected_building_upgrade_chip")
-        self._require_selected_building_chip_frame(selected, before=before, operation=operation)
-        chip = selected.visible_elements.get(UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP)
+        selected = before
+        for index in range(self.policy.max_home_pose_observations):
+            stage = "selected_building_upgrade_chip" + (f"_{index}" if index else "")
+            selected = operation.capture(selected, stage)
+            self._require_selected_building_chip_frame(selected, before=before, operation=operation)
+            chip = selected.visible_elements.get(UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP)
+            if chip is not None:
+                break
+        else:
+            operation.stop(
+                HomeCityScanStopReason.NO_QUALIFIED_ROUTE,
+                "Selected Home view has no qualified current-frame Upgrade chip "
+                "within its passive allowance; no dependent tap sent.",
+            )
         if (
             chip is None
             or chip.source_kind != VisibleElementSourceKind.TEMPLATE
