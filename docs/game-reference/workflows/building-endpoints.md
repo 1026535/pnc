@@ -370,3 +370,26 @@ under the canonical incident collection; no game resource was spent.
 Provenance: curated run evidence SHA-256
 `1e731848d0be0dab92cd346675f73e6798c7b59cec886cbcd947ad6b76eb2f27` and
 `.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE008_REVIEW_20261003.json`.
+
+**Live009 production attempt, October 3:** the first frozen production
+open/return run (run `v44-watchtower-production-20261003`, candidate
+`9d54a864`) FAILED at `route_opening`. Observed: the body tap dispatched at
+(670,371) (`in-0014`) and the chip tap dispatched at (670,543) (`in-0015`)
+from the source34 frame whose canonical match was (633,511,78,62) score
+~0.8933, but no Watchtower panel and no Back receipt followed; the chip
+remains visible on frames 35 and 42, so an earlier claim that it visibly
+dismissed is withdrawn. The match itself moved upward 15 px between frames
+34 and 35, and the caption-inclusive template center (672,542) sits below
+the visible button; the dispatched point differed from that same-frame
+center by only [-2,+1], so large jitter is not established. Inferred: low
+point placement and animated displacement are supported miss risks.
+Unknown: the exact click-time hitbox and final cause. The resolved
+candidate correction keeps one asset/threshold — the canonical selector's
+authored `click.point_ratio` [0.5, 0.35] resolves (672,533) inside each
+current match — after 46x44 circle and 31x33 inner-arrow subcrops both
+failed visible42 at the unchanged .85 gate and were rejected. The live
+miss is not claimed fixed; the corrected open/return still requires its
+own frozen final-candidate proof. Provenance:
+`.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE009_REVIEW_20261003.json`
+and correction commit on `codex/v44-retained-routes-20261002`; two run
+incidents are recorded under the canonical incident collection.

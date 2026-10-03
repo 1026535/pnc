@@ -949,6 +949,7 @@ def _provenanced_home_frame(
     chip_frame_ref: FrameRef | None = None,
     chip_source_screen: ScreenType | None = ScreenType.PNC_HOME_CITY,
     chip_source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
+    chip_action_point: tuple[int, int] | None = None,
     calibration_id: str = "test_endpoint",
     zoom_status: HomeCityZoomStatus = HomeCityZoomStatus.AT_ENDPOINT,
 ) -> Observation:
@@ -971,6 +972,7 @@ def _provenanced_home_frame(
             frame_ref=ref if chip_frame_ref is None else chip_frame_ref,
             source_screen=chip_source_screen,
             source_layout_id=frame.decision.layout_id,
+            action_point=chip_action_point,
         )
     return replace(
         frame,
@@ -1000,11 +1002,13 @@ class WatchtowerTwoHopTests(RecordedFramesCore, unittest.TestCase):
             home_city_slot=HomeCitySlotSelector(4),
         )
 
-    def _open(self, content_frames, destination_frames, *, slot=HomeCitySlotSelector(4)):
+    def _open(self, content_frames, destination_frames, *, slot=HomeCitySlotSelector(4),
+              events: list | None = None):
         actuator = Actuator()
         core = NavigationCore(
             actuator, lambda _: next(destination_frames), reviewed_navigation_edges(),
             NavigationPolicy(max_observations=4), sleep=lambda _: None,
+            record=events.append if events is not None else (lambda _: None),
         )
         return core, actuator, core.open_building(
             HomeCityObjectId.WATCHTOWER,
@@ -1039,6 +1043,47 @@ class WatchtowerTwoHopTests(RecordedFramesCore, unittest.TestCase):
         self.assertEqual((270, 520), actuator.actions[0].target_point)
         self.assertIsInstance(actuator.actions[1], TapAction)
         self.assertEqual(_CHIP, actuator.actions[1].selector_id)
+
+    def test_chip_trace_records_measured_geometry_not_the_dispatch_point(self) -> None:
+        """The intent trace binds the measured element; the dispatched tap is separate."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1, chip=True,
+                                    chip_action_point=(663, 496)),
+        ))
+        destination_frames = iter((
+            replace(observation(ScreenType.PNC_WATCHTOWER),
+                    captured_at=now + timedelta(seconds=3)),
+            replace(observation(ScreenType.PNC_WATCHTOWER),
+                    captured_at=now + timedelta(seconds=4)),
+        ))
+
+        events: list[dict[str, object]] = []
+        _, actuator, result = self._open(content_frames, destination_frames, events=events)
+
+        self.assertEqual(ScreenType.PNC_WATCHTOWER, result.screen_type)
+        pending = [event for event in events if event.get("event") == "pending_upgrade_chip"]
+        self.assertEqual(1, len(pending))
+        event = pending[0]
+        self.assertEqual("watchtower", event["target"])
+        self.assertEqual(_CHIP.value, event["selector"])
+        self.assertEqual((624, 474, 78, 62), event["selector_bounds"])
+        self.assertEqual(0.99, event["selector_confidence"])
+        self.assertEqual((663, 496), event["selector_action_point"])
+        self.assertEqual(3, event["capture_sequence"])
+        self.assertEqual(1, event["input_sequence"])
+        # The trace is the measured intent, not the jittered dispatch point;
+        # the selector tap embeds no coordinate — the executor resolves the
+        # element's action_point at send time and the receipt records the actual.
+        tap = actuator.actions[1]
+        self.assertIsInstance(tap, TapAction)
+        self.assertEqual(_CHIP, tap.selector_id)
+        self.assertFalse(hasattr(tap, "target_point"))
 
     def test_missing_chip_stops_after_body_tap_only(self) -> None:
         """A selected Home frame without the chip never authorizes a dependent tap."""

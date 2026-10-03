@@ -435,3 +435,23 @@ class HomeEntryTests(unittest.TestCase):
         self.assertEqual([-288, 100], record["translation"])
         self.assertEqual("frame.png", record["artifact"])
         self.assertNotIn("account_secret", record)
+
+    def test_generic_trace_retains_chip_geometry_and_strips_unlisted_values(self):
+        record = _sanitize_trace_entry({
+            "event": "pending_upgrade_chip", "target": "watchtower",
+            "selector": "PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP",
+            "artifact": "private/directory/chip.png",
+            "selector_bounds": (633, 511, 78, 62), "selector_confidence": 0.893282413482666,
+            "selector_action_point": (672, 533),
+            "capture_sequence": 34, "input_sequence": 14,
+            "account_secret": "must_drop",
+        })
+        self.assertEqual("pending_upgrade_chip", record["event"])
+        self.assertEqual("watchtower", record["target"])
+        self.assertEqual("(633, 511, 78, 62)", record["selector_bounds"])
+        self.assertEqual("0.893282413482666", record["selector_confidence"])
+        self.assertEqual("(672, 533)", record["selector_action_point"])
+        self.assertEqual("chip.png", record["artifact"])
+        self.assertEqual("34", record["capture_sequence"])
+        self.assertEqual("14", record["input_sequence"])
+        self.assertNotIn("account_secret", record)

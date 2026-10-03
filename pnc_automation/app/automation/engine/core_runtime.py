@@ -756,6 +756,9 @@ def _sanitize_trace_entry(entry: dict[str, object]) -> dict[str, object]:
         "failure_phase",
         "dispatch",
         "operation_id",
+        "selector_bounds",
+        "selector_confidence",
+        "selector_action_point",
     }
     safe: dict[str, object] = {}
     for key, value in entry.items():

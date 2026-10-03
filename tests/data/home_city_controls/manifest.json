@@ -1,7 +1,26 @@
 {
   "version": 1,
-  "annotation": "Home-city selected-building control fixtures authored from the authorized 2026-10-03 157_farm V44 annotation-delivery session (run v44_live_v44-watchtower-annotation-delivery-20261003, source session 0d53ab56, candidate e0112f8a). The canonical selector under test is PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP, the lead-qualified opaque 78x62 RGB crop of the green up-arrow plus 'Upgrade' caption shown below a selected building body (asset sha256 67c7b1b6fffb3d226a560c6ac74eaf210148ede706c136102f6ddb92dc9e98cd, whole-frame gate 0.85, reference 900x1600). All samples are byte-identical copies of the persisted source captures; no pixels were masked or altered, so raw_sha256 equals the source artifact hash. sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera/home_city_slot_bodies convention. Expected bounds/confidence reproduce the lead's accepted qualification measurements in .local-data/watchtower-chip-control-20261003/lead-qualification-accepted.json; they are current-frame observations for these saved views, not universal geometry. The chip's destination remains unproved: these fixtures prove recognition only, no panel, upgrade route, or return.",
+  "annotation": "Home-city selected-building control fixtures authored from the authorized 2026-10-03 157_farm V44 annotation-delivery session (run v44_live_v44-watchtower-annotation-delivery-20261003, source session 0d53ab56, candidate e0112f8a) plus one live009 production-run regression frame. The canonical selector under test is PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP, the lead-qualified opaque 78x62 RGB crop of the green up-arrow plus 'Upgrade' caption shown below a selected building body (asset sha256 67c7b1b6fffb3d226a560c6ac74eaf210148ede706c136102f6ddb92dc9e98cd, whole-frame gate 0.85, reference 900x1600). All samples are byte-identical copies of the persisted source captures; no pixels were masked or altered, so raw_sha256 equals the source artifact hash. sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera/home_city_slot_bodies convention. Expected bounds/confidence reproduce the lead's accepted qualification measurements in .local-data/watchtower-chip-control-20261003/lead-qualification-accepted.json and the live009 review's canonical template measurements in .local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE009_REVIEW_20261003.json; they are current-frame observations for these saved views, not universal geometry. The chip's destination remains unproved: these fixtures prove recognition only, no panel, upgrade route, or return.",
   "samples": [
+    {
+      "image": "home_city_selected_upgrade_chip_0034.png",
+      "role": "chip_positive_live009_source",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "bfef34ef462ef0b6cd93f5e83388e8d94aa264020aa9f2bea65dfdb516be9e4d",
+      "sha256": "760c5aa98a88620428820a0a9dd2d11fb01d640de142a3f38f3b1503ce11fe34",
+      "source_artifact": "20261003T141515Z_core_20261003T141330Z_754d71ef_0034_core_6_home_selected_building_upgrade_chip.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "bfef34ef462ef0b6cd93f5e83388e8d94aa264020aa9f2bea65dfdb516be9e4d",
+      "masked_rows": [],
+      "expected": {
+        "bounds": [633, 511, 78, 62],
+        "center": [672, 542],
+        "confidence": 0.893282413482666
+      },
+      "annotation": "Live009 regression source: the failed production open's chip-source frame (run v44_live_v44-watchtower-production-20261003, 157_farm, capture sequence 34), from which the centered chip tap at (670,543) produced no panel. Lead measurement places the match at (633,511,78,62) score ~0.8933; the caption-inclusive center (672,542) sits below the visible button, so the catalog click.point_ratio [0.5, 0.35] must resolve the corrected in-match action point (672,533) instead."
+    },
     {
       "image": "home_city_selected_upgrade_chip_0037.png",
       "role": "chip_positive_seed",
@@ -19,7 +38,7 @@
         "center": [663, 505],
         "confidence": 1.0
       },
-      "annotation": "Qualification seed: the annotation-delivery session's resume_state frame with the selected slot-4 Watchtower chip visible. The template crop is this view's exact chip region (cols 624:702, rows 474:536), so the expected match is the lossless self-hit at score 1.0. The erroneous turn047 annotation bounds (622,945,80,110) and point (662,976) lie on unrelated city wall lower in this frame; selector measurement must yield (663,505), never the stale point."
+      "annotation": "Qualification seed: the annotation-delivery session's resume_state frame with the selected slot-4 Watchtower chip visible. The template crop is this view's exact chip region (cols 624:702, rows 474:536), so the expected match is the lossless self-hit at score 1.0. The erroneous tester-attested annotation bounds (622,945,80,110) and point (662,976) lie on unrelated city wall lower in this frame; selector measurement must yield (663,505), never the stale point."
     },
     {
       "image": "home_city_selected_upgrade_chip_0038.png",

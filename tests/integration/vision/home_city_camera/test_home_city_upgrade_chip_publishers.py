@@ -1,6 +1,7 @@
 """Selected-building Upgrade chip through both production publishers.
 
-Replays the native 900x1600 turn047 frames through ``ObservationBuilder`` and
+Replays the native 900x1600 live007 annotation-session frames and the failed
+live009 production chip-source frame through ``ObservationBuilder`` and
 ``NavigationPerception``: the canonical
 ``PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP`` template selector must publish its
 current-frame element through the measured-action channel on the selected
@@ -34,6 +35,10 @@ CHIP_ID = UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP
 # Lead-qualified measurements for each tracked frame: template bounds and the
 # actual match confidence the canonical matcher produces on this exact image.
 _EXPECTED = {
+    "home_city_selected_upgrade_chip_0034.png": (
+        Bounds(633, 511, 78, 62),
+        0.893282413482666,
+    ),
     "home_city_selected_upgrade_chip_0037.png": (Bounds(624, 474, 78, 62), 1.0),
     "home_city_selected_upgrade_chip_0038.png": (
         Bounds(624, 496, 78, 62),
@@ -86,8 +91,32 @@ class HomeCityUpgradeChipPublisherTests(HomeCameraPublicationAssertions, unittes
         self.assertEqual(ScreenType.PNC_HOME_CITY, element.source_screen)
         self.assertEqual(observation.decision.layout_id, element.source_layout_id)
 
+    def test_live009_source34_publishes_the_corrected_chip_point(self) -> None:
+        """The live009 chip-source frame resolves action point (672,533) inside the current match."""
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_selected_upgrade_chip_0034.png",
+            session_id="v44-chip-live009-source34",
+            capture_sequence=34,
+        )
+        observations = self._build_both(builder, navigation, backend, capture)
+        bounds, confidence = _EXPECTED["home_city_selected_upgrade_chip_0034.png"]
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_chip_publication(observation, capture, bounds, confidence)
+                self.assertEqual((672, 533), observation.visible_elements[CHIP_ID].action_point)
+        self.assertEqual(
+            observations[0].visible_elements[CHIP_ID],
+            observations[1].visible_elements[CHIP_ID],
+        )
+
     def test_seed37_publishes_the_chip_on_both_paths(self) -> None:
-        """The native turn047 frame measures bounds (624,474,78,62) score 1."""
+        """The native live007 seed frame measures bounds (624,474,78,62) score 1."""
 
         backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
         builder, navigation = _wire(backend)

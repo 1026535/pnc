@@ -33,11 +33,13 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.app.pnc.vision.selector_catalog import (
+    SelectorCatalogClickDefinition,
     SelectorCatalogDocument,
     SelectorCatalogEntry,
 )
 from pnc_automation.app.pnc.vision.selector_discovery import (
     SelectorDiscoveryAnalyzer,
+    SelectorDiscoveryDraft,
     load_artifact_paths,
 )
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
@@ -226,6 +228,66 @@ class SelectorDiscoveryTests(unittest.TestCase):
             probe.draft_selector.click.outcomes[0].verification_selectors,
             ("PNC_BAG_MAIN_TAB_BAG", "PNC_BAG_USE_BUTTON"),
         )
+
+    def test_build_probe_draft_carries_authored_click_point_ratio(self) -> None:
+        """Keeps the catalog's authored in-match click point on promoted drafts."""
+
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
+                        click=SelectorCatalogClickDefinition(
+                            anchor="center",
+                            outcomes=(),
+                            point_ratio=(0.5, 0.35),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        probe = analyzer.build_probe_draft(
+            selector_id=UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,
+            source_observation=make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,),
+            ),
+            destination_observation=make_observation(
+                ScreenType.PNC_WATCHTOWER,
+                visible_ids=(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,),
+            ),
+            source_artifact_path=Path("source.png"),
+            destination_artifact_path=Path("destination.png"),
+        )
+
+        self.assertIsNotNone(probe.draft_selector)
+        self.assertEqual(probe.draft_selector.click.point_ratio, (0.5, 0.35))
+        self.assertEqual(
+            probe.draft_selector.to_update_spec_entry()["click"]["point_ratio"],
+            [0.5, 0.35],
+        )
+
+        merged = analyzer.build_report(snapshots=(), probes=(probe,))
+        self.assertEqual(merged.draft_selectors[0].click.point_ratio, (0.5, 0.35))
+
+        conflicting = SelectorDiscoveryDraft(
+            id="PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP",
+            screens=("PNC_HOME_CITY",),
+            status="click_mapped",
+            detection_kind="semantic",
+            click=SelectorCatalogClickDefinition(
+                anchor="center",
+                outcomes=(),
+                point_ratio=(0.5, 0.5),
+            ),
+        )
+        with self.assertRaises(SelectorResolutionError):
+            analyzer.build_report(snapshots=(), probes=(probe,), extra_drafts=(conflicting,))
 
     def test_build_probe_draft_keeps_unknown_destination_as_probe_only(self) -> None:
         """Does not emit a promotable draft when the reviewed destination screen is still unknown."""

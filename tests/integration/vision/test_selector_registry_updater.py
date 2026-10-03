@@ -296,6 +296,77 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
             selector_by_id = {selector["id"]: selector for selector in yaml.safe_load(catalog_path.read_text(encoding="utf-8"))["selectors"]}
             self.assertFalse(selector_by_id["PNC_MORE_MANAGE_CHAR"]["materialize_relative_bounds"])
 
+    def test_update_selector_registry_files_preserves_click_point_ratio(self) -> None:
+        """Round-trips an authored in-match click point through the canonical catalog writer."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
+                    ),
+                    SelectorCatalogEntry(
+                        id="PNC_BACK_BUTTON_TOP_LEFT",
+                        screens=("PNC_WATCHTOWER",),
+                        status="screenshot_seeded",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(
+                root, selector_ids=("PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP",)
+            )
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "selectors": [
+                            {
+                                "id": "PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP",
+                                "screens": ["PNC_HOME_CITY"],
+                                "status": "click_mapped",
+                                "detection_kind": "semantic",
+                                "interaction_kind": "action",
+                                "click": {
+                                    "anchor": "center",
+                                    "point_ratio": [0.5, 0.35],
+                                    "outcomes": [
+                                        {
+                                            "target_screen": "PNC_WATCHTOWER",
+                                            "verification_selectors": ["PNC_BACK_BUTTON_TOP_LEFT"],
+                                            "safe_to_click": True,
+                                            "monetized": False,
+                                        }
+                                    ],
+                                },
+                            },
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            update_selector_registry_files(
+                spec_path=spec_path,
+                catalog_path=catalog_path,
+                ui_element_id_path=ui_element_id_path,
+            )
+
+            selector_by_id = {selector["id"]: selector for selector in yaml.safe_load(catalog_path.read_text(encoding="utf-8"))["selectors"]}
+            self.assertEqual(
+                selector_by_id["PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP"]["click"]["point_ratio"],
+                [0.5, 0.35],
+            )
+
     def test_update_selector_registry_files_rejects_click_clearing(self) -> None:
         """Fails fast when an update tries to clear reviewed click metadata with `click: null`."""
 
