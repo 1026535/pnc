@@ -457,3 +457,29 @@ Provenance:
 saved-frame replay
 `.local-data/devin-vision-pipeline/watchtower-live011-saved-diagnosis.json`,
 and correction commit on `codex/v44-retained-routes-20261002`.
+
+**Live012 production acceptance, October 3:** run
+`v44-watchtower-body-envelope-20261003` on clean `197469ba` opened the
+qualified `PNC_WATCHTOWER` / `building_watchtower` panel and returned
+through its measured Back control to guarded Home. The lead independently
+checked the original evidence hash, all 16 input receipt chains, the
+native endpoint and return images, candidate identity and cleanup. One
+route attempt used six camera wheels, one pan, one qualified body tap,
+one current-frame chip tap and one Back tap; no resource action occurred.
+The chip match scored .864921 at (627,484,78,62), with current-match
+intent (666,506) and actual receipt point (665,507). This establishes the
+observed production open/return route, not an upgrade or other panel action.
+
+The successful body frame's projection residual was 6.294839 pixels and
+also qualified with the earlier 12-pixel envelope. Contrary to the worker's
+causal attribution, this live run did not exercise the 13-pixel edge; its
+specific calibration is proved by the saved live011 frame and deterministic
+boundary tests. The chip qualified on the first post-body capture, so
+bounded passive reacquisition was likewise unneeded here; its delayed-frame,
+input-chain, deadline and exhaustion mechanics retain their offline proof.
+Neither the exact cause of the live009 miss nor whole-V44 completion is
+inferred. Original offline gate: 4,058 passed / 7 skipped on `197469ba`.
+Provenance:
+`.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE012_REVIEW_20261003.json`,
+original live evidence SHA-256
+`62ae66b97dd8540da340fe2769b8f5033bf8ba2e8030eb4eb1bfdce05f9bd57f`.
