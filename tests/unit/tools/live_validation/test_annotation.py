@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,7 @@ from tests.unit.tools.live_validation.helpers import (
     chip_observation,
     frame_ref,
     home_observation,
+    watchtower_observation,
     write_frame_file,
 )
 
@@ -188,6 +190,37 @@ class AnnotationExchangeTests(unittest.TestCase):
                 )
             )
 
+    def test_relative_exchange_directory_resolves_to_absolute_paths(self):
+        """A relative --annotation-dir must not leak relative artifact paths."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw).resolve()
+            artifact = write_frame_file(tmp, "frame.png")
+            observation = home_observation(artifact_path=artifact)
+            original = Path.cwd()
+            try:
+                os.chdir(tmp)
+                exchange = _exchange(Path("exchange"))
+                request = exchange.prepare(
+                    case_id="v44_bank_return_home",
+                    control_name="return_home",
+                    foreground_target=HomeCityObjectId.BANK,
+                    observation=observation,
+                )
+                request.response_path.write_text(
+                    json.dumps(_response(request)), encoding="utf-8"
+                )
+                proof = exchange.await_proof(
+                    request, observation, foreground_target=HomeCityObjectId.BANK
+                )
+            finally:
+                os.chdir(original)
+        self.assertTrue(request.request_path.is_absolute())
+        self.assertTrue(request.response_path.is_absolute())
+        self.assertTrue(request.request_path.is_relative_to(tmp))
+        self.assertTrue(request.response_path.is_relative_to(tmp))
+        self.assertTrue(request.artifact_path.is_absolute())
+        self.assertIsNotNone(proof)
+
 
 class SelectorProofTests(unittest.TestCase):
     """Canonical-selector measurement through the same response contract."""
@@ -328,6 +361,20 @@ class SelectorProofTests(unittest.TestCase):
             with self.assertRaises(SelectorResolutionError):
                 self._selector_proof(
                     tmp, observation, selector_id=UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON
+                )
+
+    def test_canonical_back_selector_is_not_a_selector_measurement(self):
+        """The guarded-geometry Back selector refuses before element checks."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            observation = watchtower_observation(
+                artifact_path=write_frame_file(tmp, "frame.png")
+            )
+            with self.assertRaises(SelectorResolutionError):
+                self._selector_proof(
+                    tmp,
+                    observation,
+                    selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
                 )
 
 

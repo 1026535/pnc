@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 from tools.live_validation.cases import (
     BODY_ENTRY_OPERATION_ID,
+    CAVALRY_OPEN_RETURN_OPERATION_ID,
     CaseGate,
     CasePurpose,
     CASE_REGISTRY,
@@ -28,7 +29,7 @@ from tools.live_validation.cases import (
 
 
 class CaseRegistryTests(unittest.TestCase):
-    def test_registry_contains_the_ten_released_cases(self):
+    def test_registry_contains_the_eleven_released_cases(self):
         self.assertEqual(
             {
                 "v44_bank_body_menu",
@@ -39,6 +40,7 @@ class CaseRegistryTests(unittest.TestCase):
                 "v44_watchtower_public_open_return",
                 "v44_cavalry_body_menu",
                 "v44_cavalry_return_home",
+                "v44_cavalry_public_open_return",
                 "v44_siege_body_menu",
                 "v44_siege_return_home",
             },
@@ -156,8 +158,35 @@ class CaseRegistryTests(unittest.TestCase):
             CASE_REGISTRY["v44_watchtower_body_menu"].home_city_slot,
         )
 
+    def test_cavalry_acceptance_case_binds_the_released_route(self):
+        spec = require_case("v44_cavalry_public_open_return")
+        self.assertIs(CasePurpose.ACCEPTANCE, spec.purpose)
+        self.assertIs(HomeCityObjectId.CAVALRY_BARRACKS, spec.target)
+        self.assertEqual(CAVALRY_OPEN_RETURN_OPERATION_ID, spec.operation_id)
+        self.assertIn(spec.operation_id, RELEASED_ROUTE_OPERATION_IDS)
+        self.assertIs(
+            WorkflowEffect.NONSPENDING_STATE_CHANGE, spec.entry_effect
+        )
+        self.assertIsNone(spec.developmental_purpose)
+        self.assertIsNone(spec.control_name)
+        self.assertIsNone(spec.measurement_selector_id)
+        self.assertEqual(0, spec.max_control_attempts)
+        self.assertEqual(spec.case_id, spec.body_case_id)
+        self.assertFalse(spec.allowed_source_screens)
+        self.assertEqual(
+            frozenset({CaseGate.GUARDED_HOME_CITY}), spec.required_preconditions
+        )
+        self.assertEqual(
+            frozenset({CaseGate.GUARDED_HOME_CITY}), spec.required_postconditions
+        )
+        self.assertEqual(
+            spec.home_city_slot,
+            CASE_REGISTRY["v44_cavalry_body_menu"].home_city_slot,
+        )
+
     def test_acceptance_case_runs_without_a_body_dependency(self):
         validate_selected_order(["v44_watchtower_public_open_return"])
+        validate_selected_order(["v44_cavalry_public_open_return"])
 
     def test_acceptance_spec_rejects_a_body_witness_delegation(self):
         with self.assertRaises(ValueError):
@@ -178,11 +207,17 @@ class CaseRegistryTests(unittest.TestCase):
                 required_postconditions=frozenset(),
             )
 
-    def test_selector_measurement_belongs_to_the_chip_case_only(self):
+    def test_selector_measurement_belongs_to_the_declared_cases(self):
+        expected = {
+            "v44_watchtower_selected_control_entry": (
+                UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP
+            ),
+            "v44_cavalry_return_home": UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+        }
         for spec in CASE_REGISTRY.values():
-            if spec.case_id == "v44_watchtower_selected_control_entry":
-                continue
-            self.assertIsNone(spec.measurement_selector_id)
+            self.assertIs(
+                expected.get(spec.case_id), spec.measurement_selector_id
+            )
 
     def test_discovery_spec_rejects_a_control(self):
         with self.assertRaises(ValueError):
@@ -342,7 +377,14 @@ class CaseRegistryTests(unittest.TestCase):
                 self.assertEqual(attempts, spec.max_control_attempts)
                 self.assertEqual(preconditions, spec.required_preconditions)
                 self.assertEqual(postconditions, spec.required_postconditions)
-                self.assertIsNone(spec.measurement_selector_id)
+                self.assertIs(
+                    (
+                        UiElementId.PNC_BACK_BUTTON_TOP_LEFT
+                        if case_id == "v44_cavalry_return_home"
+                        else None
+                    ),
+                    spec.measurement_selector_id,
+                )
                 self.assertEqual({}, dict(spec.params))
                 if spec.purpose is CasePurpose.DISCOVERY:
                     self.assertIs(

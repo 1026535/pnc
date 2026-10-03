@@ -70,6 +70,17 @@ caller migration and entry/destination/return acceptance requirements:
 | Bank | `bank`; V40 |
 | Lost City Headquarters | Event target outside the ordinary catalog; V03/V33 |
 | Dragondom Conquest | `dragondom_conquest`; V32 |
+| Moon Well | `moon_well`; resource |
+| Farm | `farm`; resource |
+| Lumber Camp | `lumber_camp`; resource |
+| Iron Mine | `iron_mine`; resource |
+| Gold Mine | `gold_mine`; resource |
+
+**October 3 amendment:** the user additionally excludes the five resource
+buildings above from supported V44 route work and all required
+implementation, live and migration acceptance. The same exclusion rules
+apply — all 54 static geometry entries, reusable landmarks and historical
+evidence are preserved; no resource routes, tests or live cases are added.
 
 These rows are **excluded by user**, not accepted, unavailable or failed. Their
 unfinished routes, menu recognition, return controls and event qualification do

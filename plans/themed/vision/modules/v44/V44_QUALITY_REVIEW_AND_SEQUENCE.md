@@ -10,7 +10,12 @@ historical findings and unfinished source, but stop excluded-target correction
 and live validation. Continue Q4/Q5 using retained targets such as Watchtower;
 Bank success is no longer their prerequisite. Shared tooling still requires its
 own applicable proof, and excluded routes must not be reported as accepted.
-Sol remains disabled under the user's current staffing instruction; the lead
+
+**October 3 extension:** the same exclusion now also covers Moon Well, Farm,
+Lumber Camp, Iron Mine and Gold Mine. Their routes are out of every sequence
+row's required scope; no resource routes, tests or live cases are scheduled.
+All 54 static geometry entries, landmarks and historical evidence stay
+preserved. Sol remains disabled under the user's current staffing instruction; the lead
 owns complex decisions and review, with Devin handling concrete work and live
 execution. Existing accepted Q1/Q2/Q3 proof remains recorded in the ledger.
 

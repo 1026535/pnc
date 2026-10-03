@@ -179,6 +179,18 @@ an already-open panel remain separate. Provenance:
 `.local-data/devin-vision-pipeline/v44-military-entry-auto-collection-20260930.md`
 and the reviewed live021 Cavalry incident.
 
+**Cavalry identity correction, October 3:** The September 29 paragraph above
+predates the Cavalry native profile. `screen_anchors.json` already carries
+`building_cavalry_barracks` — the September 30 art/description identity plus
+a separately measured `PNC_BACK_BUTTON_TOP_LEFT` — and replaying the existing
+recognizer on saved live013 native frame 32 qualified the Cavalry panel at
+TEMPLATE Back confidence 0.99999994, native bounds (0,0,167,92), point
+(83,46). This is saved/offline qualification only: the production
+open/return route remains unproved, and no dispatched return is claimed.
+Siege still has no reviewed native identity or Back; no sibling identity or
+Back geometry is copied to it. Provenance:
+`.local-data/devin-vision-pipeline/live013-cavalry-existing-profile-replay.json`.
+
 ## Measured body evidence — September 29, 2026
 
 The V44-4 sepia-taleggio package measured two Home-city bodies from the

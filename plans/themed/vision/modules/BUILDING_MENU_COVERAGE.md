@@ -74,3 +74,10 @@ available ordinary type on the authorized castle. Positive evidence can establis
 unavailability; scan failures, missing templates and unknown positions cannot.
 Unavailable routes remain individually blocked after V44's scoped acceptance.
 V44 and independent packets are resumed. V44 foundation live validation is authorized on `157_farm`; remaining mapping/route coverage is still pending.
+
+**October 3 scope update:** the user-directed exclusion list now also covers
+Moon Well, Farm, Lumber Camp, Iron Mine and Gold Mine — alongside Sanctum,
+Bank, Lost City Headquarters and Dragondom Conquest — for V44 route work and
+acceptance only. The resource rows keep their V42 feature/menu owners; no
+resource routes, tests or live cases are added. All 54 slot definitions,
+reusable landmarks and historical evidence are preserved.

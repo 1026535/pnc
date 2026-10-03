@@ -69,7 +69,10 @@ class AnnotationExchange:
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._directory = Path(directory)
+        # Artifact paths are recorded into curated evidence, so the exchange
+        # root is normalized once here; a relative --annotation-dir must not
+        # leak relative artifact paths into the report.
+        self._directory = Path(directory).resolve()
         self._directory.mkdir(parents=True, exist_ok=True)
         self._timeout_seconds = timeout_seconds
         self._poll_seconds = poll_seconds

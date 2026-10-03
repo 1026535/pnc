@@ -54,7 +54,12 @@ BODY_ENTRY_OPERATION_ID = "enter_building_body_for_discovery"
 WATCHTOWER_OPEN_RETURN_OPERATION_ID = "watchtower_public_open_return"
 """The named production navigation route an acceptance case may execute."""
 
-RELEASED_ROUTE_OPERATION_IDS = frozenset({WATCHTOWER_OPEN_RETURN_OPERATION_ID})
+CAVALRY_OPEN_RETURN_OPERATION_ID = "cavalry_public_open_return"
+"""The named production navigation route the Cavalry acceptance case runs."""
+
+RELEASED_ROUTE_OPERATION_IDS = frozenset(
+    {WATCHTOWER_OPEN_RETURN_OPERATION_ID, CAVALRY_OPEN_RETURN_OPERATION_ID}
+)
 """Route operation ids released to the tracked runner; all others refuse."""
 
 
@@ -280,6 +285,7 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 body_case_id="v44_cavalry_body_menu",
                 control_name="return_home",
                 control_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                measurement_selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
                 allowed_source_screens=frozenset(
                     {
                         ScreenType.UNKNOWN,
@@ -331,6 +337,18 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 home_city_slot=HomeCitySlotSelector(slot_index=4),
                 released_action_id="v44_watchtower_public_open_return",
                 operation_id=WATCHTOWER_OPEN_RETURN_OPERATION_ID,
+                entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
+            ),
+            # Same generic route for Cavalry slot 6: the existing September 30
+            # native profile supplies the endpoint identity and measured Back.
+            _spec(
+                "v44_cavalry_public_open_return",
+                purpose=CasePurpose.ACCEPTANCE,
+                target=HomeCityObjectId.CAVALRY_BARRACKS,
+                home_city_slot=HomeCitySlotSelector(slot_index=6),
+                released_action_id="v44_cavalry_public_open_return",
+                operation_id=CAVALRY_OPEN_RETURN_OPERATION_ID,
                 entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                 required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
             ),

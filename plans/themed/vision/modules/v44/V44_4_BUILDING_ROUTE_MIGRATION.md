@@ -10,6 +10,12 @@ from this slice's required coverage and new live assignments. Preserve map data,
 published behavior and historical evidence; park unfinished excluded-target work.
 All references below to required types mean the retained scope.
 
+**October 3 amendment:** the parent's exclusion list now also covers the five
+resource types — Moon Well, Farm, Lumber Camp, Iron Mine and Gold Mine. Their
+routes leave this slice's required coverage/denominator and no resource routes,
+tests or live cases are added; the recovered handler/collection semantics below
+stay as preserved source evidence, not a route requirement.
+
 Delegate substantial building groups with disjoint target keys/caller symbols;
 the lead owns ownership reconciliation, integration and whole-V44 acceptance.
 Use the [binding interface agreement](V44_INTERFACE_CONTRACT.md), especially
@@ -108,7 +114,9 @@ when a route has evidence; do not create a parallel destination registry.
   menus use the existing bounded observation/transition contract within one
   operation deadline. An unobserved intermediary is a pending dependency, not
   permission to add guessed clicks or another retry loop.
-- **Resource entry:** Farm, Lumber Camp, Moon Well, Iron Mine and Gold Mine body
+- **Resource entry:** *(excluded from required V44 route scope by the October 3
+  amendment; recovered semantics retained as evidence)* Farm, Lumber Camp,
+  Moon Well, Iron Mine and Gold Mine body
   handlers can divert to collection. The normal collection handler enumerates
   all harvestable same-type IDs, so exact slot selection does not bound mutation
   to that slot. An off-bubble body point or failure to detect a bubble is not a
@@ -118,8 +126,10 @@ when a route has evidence; do not create a parallel destination registry.
   as successful arrival or blindly replay a tap. A positive non-collecting state
   is required only for an explicitly read-only/no-collection case or protected Main.
   Military and Trap completion collection follow the same authority distinction.
-- **Coverage:** record the five resource types' shared entry-state gap once and
-  link their rows. Slots17-51 also allow Recruiting/Infirmary types; their entry
+- **Coverage:** the five resource types moved to the user-excluded list on
+  October 3 — record their shared entry-state gap once as an excluded row,
+  outside the retained acceptance denominator.
+  Slots17-51 also allow Recruiting/Infirmary types; their entry
   cases are not blocked merely because they share resource eligibility. Geometry,
   semantic binding, presence and accepted entry remain separate columns.
 - **Unbound/no-op evidence:** empty packaged dispatcher branches for VALKYRIE or

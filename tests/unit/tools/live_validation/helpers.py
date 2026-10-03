@@ -170,8 +170,11 @@ def watchtower_observation(
     object.__setattr__(
         observation,
         "visible_elements",
-        ({UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back_element(observation)}
-         if with_back else {}),
+        ({UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back_element(
+            observation,
+            source_screen=screen_type,
+            source_layout_id=layout_id,
+        )} if with_back else {}),
     )
     return observation
 
