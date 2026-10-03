@@ -13,9 +13,11 @@ from pnc_automation.app.automation.engine.navigation_core import (
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.action_requests import (
     SwipeAction,
+    TapAction,
     TapSpatialObjectAction,
 )
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityZoomStatus
 from pnc_automation.app.pnc.domain.home_city_slots import HomeCitySlotSelector
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
@@ -33,6 +35,7 @@ from pnc_automation.app.pnc.navigation.spatial_navigation import (
     home_city_scan_steps,
 )
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 
 from tests.support.pnc.navigation.core_frames import Actuator, observation
 from tests.support.pnc.navigation.core_home import (
@@ -931,3 +934,287 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             )
         self.assertEqual(1, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+
+
+_CHIP = UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP
+
+
+def _provenanced_home_frame(
+    objects: tuple = (),
+    *,
+    captured_at: datetime,
+    capture_sequence: int,
+    input_sequence: int = 0,
+    chip: bool = False,
+    chip_frame_ref: FrameRef | None = None,
+    chip_source_screen: ScreenType | None = ScreenType.PNC_HOME_CITY,
+    chip_source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
+    calibration_id: str = "test_endpoint",
+    zoom_status: HomeCityZoomStatus = HomeCityZoomStatus.AT_ENDPOINT,
+) -> Observation:
+    """Build one Home frame whose view/proof/element provenance is consistent."""
+
+    ref = FrameRef(
+        session_id="watchtower-test",
+        session_epoch=1,
+        capture_sequence=capture_sequence,
+        input_sequence=input_sequence,
+        captured_at=captured_at,
+    )
+    frame = camera_home_frame(objects, captured_at=captured_at, zoom_status=zoom_status)
+    surface = frame.spatial_surface
+    elements = {}
+    if chip:
+        elements[_CHIP] = VisibleElement(
+            _CHIP, Bounds(624, 474, 78, 62), 0.99,
+            source_kind=chip_source_kind,
+            frame_ref=ref if chip_frame_ref is None else chip_frame_ref,
+            source_screen=chip_source_screen,
+            source_layout_id=frame.decision.layout_id,
+        )
+    return replace(
+        frame,
+        frame_ref=ref,
+        visible_elements=elements,
+        spatial_surface=replace(
+            surface,
+            camera_proof=replace(surface.camera_proof, frame_ref=ref),
+            home_city_view=replace(
+                surface.home_city_view, frame_ref=ref, calibration_id=calibration_id,
+            ),
+        ),
+    )
+
+
+class WatchtowerTwoHopTests(RecordedFramesCore, unittest.TestCase):
+    """The Watchtower body tap only selects; a fresh chip frame authorizes entry."""
+
+    def _body(self) -> DetectedSpatialObject:
+        return replace(
+            measured_building_object(
+                HomeCityObjectId.WATCHTOWER,
+                bounds=Bounds(220, 470, 100, 100),
+                action_point=(270, 520),
+                action_bounds=Bounds(264, 514, 12, 12),
+            ),
+            home_city_slot=HomeCitySlotSelector(4),
+        )
+
+    def _open(self, content_frames, destination_frames, *, slot=HomeCitySlotSelector(4)):
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(destination_frames), reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4), sleep=lambda _: None,
+        )
+        return core, actuator, core.open_building(
+            HomeCityObjectId.WATCHTOWER,
+            observe_content=lambda _: next(content_frames),
+            home_city_slot=slot,
+        )
+
+    def test_body_tap_then_fresh_chip_opens_watchtower_panel(self) -> None:
+        """Qualified body tap -> fresh selected Home -> measured chip -> stable panel."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1, chip=True),
+        ))
+        destination_frames = iter((
+            replace(observation(ScreenType.PNC_WATCHTOWER),
+                    captured_at=now + timedelta(seconds=3)),
+            replace(observation(ScreenType.PNC_WATCHTOWER),
+                    captured_at=now + timedelta(seconds=4)),
+        ))
+
+        core, actuator, result = self._open(content_frames, destination_frames)
+
+        self.assertEqual(ScreenType.PNC_WATCHTOWER, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual(body, actuator.actions[0].expected_object)
+        self.assertEqual((270, 520), actuator.actions[0].target_point)
+        self.assertIsInstance(actuator.actions[1], TapAction)
+        self.assertEqual(_CHIP, actuator.actions[1].selector_id)
+
+    def test_missing_chip_stops_after_body_tap_only(self) -> None:
+        """A selected Home frame without the chip never authorizes a dependent tap."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1),
+        ))
+        _, actuator, error = self._failing_open(content_frames)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), "qualified current-frame Upgrade chip")
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+
+    def _failing_open(self, content_frames):
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: observation(ScreenType.PNC_WATCHTOWER),
+            reviewed_navigation_edges(), NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        error = None
+        try:
+            core.open_building(
+                HomeCityObjectId.WATCHTOWER,
+                observe_content=lambda _: next(content_frames),
+                home_city_slot=HomeCitySlotSelector(4),
+            )
+        except RuntimeError as caught:
+            error = caught
+        return core, actuator, error
+
+    def test_intervening_input_breaks_chip_authorization(self) -> None:
+        """A foreign input between body tap and selected frame voids the chip."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=2, chip=True),
+        ))
+        _, actuator, error = self._failing_open(content_frames)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), "intervening input")
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_changed_calibration_rejects_chip_frame(self) -> None:
+        """A changed Home calibration after the body tap stops the chip hop."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1, chip=True,
+                                    calibration_id="other_calibration"),
+        ))
+        _, actuator, error = self._failing_open(content_frames)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), "normalized endpoint pose")
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_off_endpoint_chip_frame_stops_before_chip_tap(self) -> None:
+        """A non-endpoint zoom verdict on the selected frame stops the chip hop."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1, chip=True,
+                                    zoom_status=HomeCityZoomStatus.NOT_AT_ENDPOINT),
+        ))
+        _, actuator, error = self._failing_open(content_frames)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), "scale changed")
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_foreign_chip_provenance_stops_before_chip_tap(self) -> None:
+        """Stale-frame or foreign-screen chip elements never authorize the tap."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        stale_ref = FrameRef(
+            session_id="watchtower-test", session_epoch=1, capture_sequence=2,
+            input_sequence=0, captured_at=now + timedelta(seconds=1),
+        )
+        for kwargs in (
+            {"chip_frame_ref": stale_ref},
+            {"chip_source_screen": ScreenType.PNC_WATCHTOWER},
+            {"chip_source_kind": VisibleElementSourceKind.OCR},
+        ):
+            with self.subTest(defect=sorted(kwargs)):
+                content_frames = iter((
+                    _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+                    _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                            capture_sequence=2),
+                    _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                            capture_sequence=3, input_sequence=1,
+                                            chip=True, **kwargs),
+                ))
+                _, actuator, error = self._failing_open(content_frames)
+                self.assertIsNotNone(error)
+                self.assertRegex(str(error), "qualified current-frame Upgrade chip")
+                self.assertEqual(1, len(actuator.actions))
+                self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+
+    def test_unexpected_destination_after_chip_raises(self) -> None:
+        """An unexpected post-chip screen raises without replaying either tap."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1, chip=True),
+        ))
+        destination_frames = iter((
+            replace(observation(ScreenType.PNC_CASTLE),
+                    captured_at=now + timedelta(seconds=3)),
+            replace(observation(ScreenType.PNC_CASTLE),
+                    captured_at=now + timedelta(seconds=4)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(destination_frames), reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4), sleep=lambda _: None,
+        )
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            core.open_building(
+                HomeCityObjectId.WATCHTOWER,
+                observe_content=lambda _: next(content_frames),
+                home_city_slot=HomeCitySlotSelector(4),
+            )
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[1], TapAction)
+
+    def test_watchtower_returns_home_through_reviewed_back_edge(self) -> None:
+        """The qualified Watchtower Back edge returns to Home like other buildings."""
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        back = VisibleElement(
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT, Bounds(33, 7, 104, 73), 0.99,
+            source_kind=VisibleElementSourceKind.TEMPLATE,
+        )
+
+        def panel(captured_at: datetime) -> Observation:
+            return replace(
+                observation(ScreenType.PNC_WATCHTOWER),
+                visible_elements={UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back},
+                captured_at=captured_at,
+            )
+
+        frames = iter((
+            panel(now), panel(now + timedelta(seconds=1)),
+            replace(observation(ScreenType.PNC_HOME_CITY),
+                    captured_at=now + timedelta(seconds=2)),
+            replace(observation(ScreenType.PNC_HOME_CITY),
+                    captured_at=now + timedelta(seconds=3)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(frames), reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4), sleep=lambda _: None,
+        )
+
+        returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertEqual(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                         actuator.actions[0].selector_id)

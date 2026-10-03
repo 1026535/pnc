@@ -29,11 +29,22 @@ from pnc_automation.app.automation.engine.developmental_control import (
     DevelopmentalControlScope,
     MeasuredControlProof,
 )
+from pnc_automation.app.automation.engine.navigation_core import (
+    HomeCityObservationRequest,
+)
 from pnc_automation.app.automation.engine.workflow_effect import WorkflowEffect
 from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.building_catalog import (
+    primary_screen_type_for_home_city_object,
+)
+from pnc_automation.app.pnc.domain.observation import (
+    Observation,
+    VisibleElementSourceKind,
+)
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.navigation.home_city_scan import (
     HomeCityScanError,
     HomeCityScanStopReason,
@@ -53,6 +64,7 @@ from tools.live_validation.binding import (
 )
 from tools.live_validation.cases import (
     BODY_ENTRY_OPERATION_ID,
+    RELEASED_ROUTE_OPERATION_IDS,
     CaseGate,
     CasePurpose,
     CaseSpec,
@@ -66,6 +78,7 @@ from tools.live_validation.evidence import (
     CaseStatus,
     LiveEvidence,
     LogicalAttemptRecord,
+    RouteEvidence,
     collect_artifact,
     compute_totals,
     frame_ref_dict,
@@ -91,6 +104,7 @@ from tools.test_selection.git_changes import working_paths
 
 _NAV_INPUT_ALLOWANCE_PER_CASE = 24
 _BASE_INPUT_ALLOWANCE = 16
+_ROUTE_INPUT_ALLOWANCE_PER_CASE = 3
 _POSTCONDITION_MAX_CAPTURES = 4
 _POSTCONDITION_POLL_SECONDS = 1.0
 
@@ -612,10 +626,17 @@ class LiveCaseRunner:
                 "a selected case changes resources but the assignment names no "
                 "resource_allowance_ref."
             )
-        if any(spec.purpose is CasePurpose.ACCEPTANCE for spec in self._specs.values()):
+        unreleased = [
+            spec.case_id
+            for spec in self._specs.values()
+            if spec.purpose is CasePurpose.ACCEPTANCE
+            and spec.operation_id not in RELEASED_ROUTE_OPERATION_IDS
+        ]
+        if unreleased:
             findings.append(
-                "acceptance cases are not executable by the tracked runner; "
-                "a captured menu never satisfies an acceptance route."
+                f"acceptance case(s) {unreleased} name no released production "
+                "route operation; the tracked runner refuses them before "
+                "connecting."
             )
         if findings:
             raise PreflightRefusal(tuple(findings))
@@ -700,10 +721,16 @@ class LiveCaseRunner:
 
     def _input_budget(self) -> int:
         controls = sum(spec.max_control_attempts for spec in self._specs.values())
+        routes = sum(
+            _ROUTE_INPUT_ALLOWANCE_PER_CASE
+            for spec in self._specs.values()
+            if spec.purpose is CasePurpose.ACCEPTANCE
+        )
         return (
             _BASE_INPUT_ALLOWANCE
             + _NAV_INPUT_ALLOWANCE_PER_CASE * len(self._binding.selected_cases)
             + controls
+            + routes
         )
 
     # -- case execution --------------------------------------------------------
@@ -724,17 +751,9 @@ class LiveCaseRunner:
             return self._run_discovery(spec, core, journal, collector, attempts, contexts)
         if spec.purpose in (CasePurpose.CONTROL_DISCOVERY, CasePurpose.DEVELOPMENT_VALIDATION):
             return self._run_validation(spec, core, journal, collector, attempts, contexts)
-        return (
-            self._case_outcome(
-                spec,
-                collector,
-                mark=None,
-                status=CaseStatus.BLOCKED,
-                detail="Acceptance cases are not executable by the tracked runner.",
-                unresolved_boundary="acceptance_not_executable",
-            ),
-            None,
-        )
+        if spec.purpose is CasePurpose.ACCEPTANCE:
+            return self._run_route(spec, core, journal, collector, attempts, contexts)
+        raise AssertionError(f"Unhandled case purpose: {spec.purpose!r}")
 
     def _precondition_check(
         self,
@@ -954,6 +973,449 @@ class LiveCaseRunner:
                 postcondition=postcondition,
                 detail="Qualified body entry sent and raw follow-up persisted.",
                 unresolved_boundary=None,
+            ),
+            None,
+        )
+
+    def _run_route(
+        self,
+        spec: CaseSpec,
+        core: Any,
+        journal: LogicalAttemptJournal,
+        collector: DispatchCollector,
+        attempts: list[LogicalAttemptRecord],
+        contexts: dict[str, _RetainedBodyContext],
+    ) -> tuple[CaseResult, str | None]:
+        """Runs one frozen production route through the public navigation seam.
+
+        One fresh guarded Home source authorizes a single journaled ROUTE
+        attempt covering one ``open_building`` plus one ``navigate`` Home
+        return — body tap, canonical chip tap, and measured Back inside the
+        production seam. The case retains no developmental body witness, so
+        ``contexts`` stays untouched. Any receipt or dispatch failure inside
+        the route halts every later input; a refusal before any physical
+        send remains a clean refusal that is never replayed.
+        """
+
+        del contexts  # a route case never invents a body witness
+        mark = collector.mark()
+        violated = self._precondition_check(spec, core)
+        if violated is not None:
+            return (
+                self._case_outcome(
+                    spec, collector, mark=mark, status=CaseStatus.BLOCKED,
+                    detail=f"Precondition '{violated}' is not satisfied.",
+                    unresolved_boundary="precondition",
+                ),
+                None,
+            )
+        artifacts: list[ArtifactRef] = []
+        source = core.capture_once(
+            f"{spec.case_id}_route_source", include_content=True
+        )
+        self._curate(
+            source.artifact_path,
+            kind="source_frame",
+            purpose=f"{spec.case_id} guarded Home source authorizing the route.",
+            artifacts=artifacts,
+        )
+        attempt_id, consumed = journal.begin(
+            case_id=spec.case_id,
+            control_name=spec.operation_id,
+            operation_id=spec.operation_id,
+            number=1,
+            limit=1,
+            source_frame=(
+                frame_ref_dict(source.frame_ref)
+                if source.frame_ref is not None
+                else {}
+            ),
+            intent=AttemptIntent.ROUTE,
+        )
+        if source.frame_ref is None or not _is_guarded_home(source):
+            journal.finish(
+                attempt_id,
+                status=AttemptStatus.REFUSED,
+                detail="route source is not a fresh guarded Home frame",
+            )
+            attempts.append(
+                self._attempt_record(
+                    attempt_id, consumed, "refused", None,
+                    intent=AttemptIntent.ROUTE.value,
+                )
+            )
+            return (
+                self._case_outcome(
+                    spec, collector, mark=mark, status=CaseStatus.FAILED,
+                    artifacts=artifacts,
+                    source_artifact=source.artifact_path,
+                    postcondition=self._postcondition_dict(source),
+                    detail="Route source is not a fresh guarded Home frame.",
+                    unresolved_boundary="route_source",
+                ),
+                None,
+            )
+
+        def observe_content(request: HomeCityObservationRequest) -> Observation:
+            return core.observe(
+                request.label,
+                include_content=True,
+                request=ObservationRequest.home_city_navigation(
+                    mode=request.camera_mode
+                ),
+            )
+
+        try:
+            endpoint = core.navigation.open_building(
+                spec.target,
+                observe_content=observe_content,
+                home_city_slot=spec.home_city_slot,
+                entry_effect=spec.entry_effect,
+            )
+        except Exception as error:  # noqa: BLE001 - evidence, not control flow
+            return self._route_failure(
+                spec,
+                collector,
+                mark=mark,
+                journal=journal,
+                attempts=attempts,
+                attempt_id=attempt_id,
+                consumed=consumed,
+                error=error,
+                artifacts=artifacts,
+                source=source,
+                last=getattr(core, "last_observation", None),
+                boundary="route_opening",
+            )
+        self._curate(
+            endpoint.artifact_path,
+            kind="route_endpoint_frame",
+            purpose=f"{spec.case_id} persisted qualified route endpoint.",
+            artifacts=artifacts,
+        )
+        opening_receipt_ids = self._case_receipt_ids(collector, mark)
+        last_opening = self._last_receipt(collector, mark)
+        endpoint_frame = endpoint.frame_ref
+        expected_screen = primary_screen_type_for_home_city_object(spec.target)
+        expected_layout = f"building_{spec.target.value}"
+        endpoint_ok = (
+            expected_screen is not None
+            and endpoint.screen_type is expected_screen
+            and not endpoint.blocking_popup
+            and endpoint.decision.guard is GuardVerdict.CLEAR
+            and endpoint.decision.layout_id == expected_layout
+            and endpoint_frame is not None
+            and source.frame_ref is not None
+            and endpoint_frame.session_id == source.frame_ref.session_id
+            and endpoint_frame.session_epoch == source.frame_ref.session_epoch
+            and last_opening is not None
+            and endpoint_frame.input_sequence == last_opening.dispatch.input_sequence
+            and endpoint_frame.capture_sequence
+            > last_opening.source_frame.capture_sequence
+            and endpoint.artifact_path is not None
+        )
+        back = endpoint.visible_elements.get(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+        back_ok = (
+            endpoint_ok
+            and back is not None
+            and back.source_kind is VisibleElementSourceKind.TEMPLATE
+            and back.frame_ref == endpoint.frame_ref
+            and back.source_screen is expected_screen
+            and back.source_layout_id == endpoint.decision.layout_id
+        )
+        if not (endpoint_ok and back_ok):
+            return self._finish_route_rejected(
+                spec,
+                collector,
+                mark=mark,
+                journal=journal,
+                attempts=attempts,
+                attempt_id=attempt_id,
+                consumed=consumed,
+                artifacts=artifacts,
+                source=source,
+                last=endpoint,
+                boundary="route_endpoint",
+                detail=(
+                    "Route endpoint is not a fresh qualified "
+                    f"{expected_screen.value if expected_screen else 'unknown'} "
+                    "panel with a current TEMPLATE Back."
+                ),
+            )
+        return_mark = collector.mark()
+        try:
+            final = core.navigation.navigate(ScreenType.PNC_HOME_CITY)
+        except Exception as error:  # noqa: BLE001 - evidence, not control flow
+            return self._route_failure(
+                spec,
+                collector,
+                mark=mark,
+                journal=journal,
+                attempts=attempts,
+                attempt_id=attempt_id,
+                consumed=consumed,
+                error=error,
+                artifacts=artifacts,
+                source=source,
+                last=endpoint,
+                boundary="route_return",
+            )
+        self._curate(
+            final.artifact_path,
+            kind="postcondition_frame",
+            purpose=f"{spec.case_id} guarded Home route postcondition.",
+            artifacts=artifacts,
+        )
+        return_receipt_ids = [
+            attributed.event_id
+            for attributed in collector.events_since(return_mark)
+            if isinstance(attributed.event, InputDispatchRecord)
+        ]
+        last_return = next(
+            (
+                attributed.event
+                for attributed in reversed(collector.events_since(return_mark))
+                if isinstance(attributed.event, InputDispatchRecord)
+            ),
+            None,
+        )
+        final_frame = final.frame_ref
+        home_ok = (
+            _is_guarded_home(final)
+            and final_frame is not None
+            and final_frame.session_id == source.frame_ref.session_id
+            and final_frame.session_epoch == source.frame_ref.session_epoch
+            and last_return is not None
+            and final_frame.input_sequence == last_return.dispatch.input_sequence
+            and final_frame.capture_sequence
+            > last_return.source_frame.capture_sequence
+            and final.artifact_path is not None
+        )
+        if not home_ok:
+            return self._finish_route_rejected(
+                spec,
+                collector,
+                mark=mark,
+                journal=journal,
+                attempts=attempts,
+                attempt_id=attempt_id,
+                consumed=consumed,
+                artifacts=artifacts,
+                source=source,
+                last=final,
+                boundary="postcondition",
+                detail="Route return did not end on a fresh guarded Home frame.",
+            )
+        journal.finish(
+            attempt_id,
+            status=AttemptStatus.DISPATCHED,
+            dispatch_event_id=opening_receipt_ids[0],
+        )
+        attempts.append(
+            self._attempt_record(
+                attempt_id,
+                consumed,
+                "dispatched",
+                opening_receipt_ids[0],
+                intent=AttemptIntent.ROUTE.value,
+            )
+        )
+        route = RouteEvidence(
+            operation_id=spec.operation_id,
+            endpoint_screen=endpoint.screen_type.value,
+            endpoint_layout_id=endpoint.decision.layout_id,
+            endpoint_artifact=(
+                None if endpoint.artifact_path is None else str(endpoint.artifact_path)
+            ),
+            endpoint_frame=frame_ref_dict(endpoint_frame),
+            back_selector=UiElementId.PNC_BACK_BUTTON_TOP_LEFT.value,
+            back_bounds=(
+                back.bounds.x,
+                back.bounds.y,
+                back.bounds.width,
+                back.bounds.height,
+            ),
+            back_confidence=back.confidence,
+            opening_receipt_ids=tuple(opening_receipt_ids),
+            return_receipt_ids=tuple(return_receipt_ids),
+        )
+        return (
+            self._case_outcome(
+                spec, collector, mark=mark, status=CaseStatus.PASSED,
+                artifacts=artifacts,
+                source_artifact=source.artifact_path,
+                follow_up_artifact=final.artifact_path,
+                postcondition=self._postcondition_dict(final),
+                detail=(
+                    "Production route opened the qualified "
+                    f"{endpoint.decision.layout_id} endpoint and returned to "
+                    "guarded Home."
+                ),
+                unresolved_boundary=None,
+                route=route,
+            ),
+            None,
+        )
+
+    @staticmethod
+    def _route_attempt_state(
+        collector: DispatchCollector, mark: int
+    ) -> tuple[AttemptStatus, str | None]:
+        """Maps the case-attributed dispatch record onto a terminal state."""
+
+        events = collector.events_since(mark)
+        if any(isinstance(attributed.event, InputDispatchFailure) for attributed in events):
+            return AttemptStatus.UNCERTAIN, None
+        receipts = [
+            attributed.event_id
+            for attributed in events
+            if isinstance(attributed.event, InputDispatchRecord)
+        ]
+        if receipts:
+            return AttemptStatus.DISPATCHED, receipts[0]
+        return AttemptStatus.REFUSED, None
+
+    def _route_failure(
+        self,
+        spec: CaseSpec,
+        collector: DispatchCollector,
+        *,
+        mark: int,
+        journal: LogicalAttemptJournal,
+        attempts: list[LogicalAttemptRecord],
+        attempt_id: str,
+        consumed: Any,
+        error: BaseException,
+        artifacts: list[ArtifactRef],
+        source: Observation,
+        last: Observation | None,
+        boundary: str,
+    ) -> tuple[CaseResult, str | None]:
+        """Terminates the journaled route attempt after a raised failure.
+
+        A recorded receipt or dispatch failure marks the attempt DISPATCHED
+        or UNCERTAIN and halts every later input; a refusal before any
+        physical send stays a clean, never-replayed refusal. The last
+        persisted observation is preserved as the case's follow-up.
+        """
+
+        state, bound = self._route_attempt_state(collector, mark)
+        journal.finish(
+            attempt_id, status=state, dispatch_event_id=bound, detail=_detail(error)
+        )
+        attempts.append(
+            self._attempt_record(
+                attempt_id, consumed, state.value, bound,
+                intent=AttemptIntent.ROUTE.value,
+            )
+        )
+        if last is not None:
+            self._curate(
+                last.artifact_path,
+                kind="route_last_frame",
+                purpose=f"{spec.case_id} last persisted observation before failure.",
+                artifacts=artifacts,
+            )
+        if state is AttemptStatus.REFUSED:
+            return (
+                self._case_outcome(
+                    spec, collector, mark=mark, status=CaseStatus.FAILED,
+                    artifacts=artifacts,
+                    source_artifact=source.artifact_path,
+                    follow_up_artifact=follow_up_artifact_or_none(last),
+                    postcondition=self._postcondition_dict(last),
+                    detail=(
+                        "Route refused by the qualified navigation seam before "
+                        f"any physical input: {_detail(error)}"
+                    ),
+                    unresolved_boundary="qualified_route",
+                ),
+                None
+                if isinstance(error, (SelectorResolutionError, HomeCityScanError))
+                else _detail(error),
+            )
+        return (
+            self._case_outcome(
+                spec, collector, mark=mark, status=CaseStatus.FAILED,
+                artifacts=artifacts,
+                source_artifact=source.artifact_path,
+                follow_up_artifact=follow_up_artifact_or_none(last),
+                postcondition=self._postcondition_dict(last),
+                detail=(
+                    "Route input recorded but the route failed; later inputs "
+                    f"are halted: {_detail(error)}"
+                ),
+                unresolved_boundary=boundary,
+            ),
+            f"{spec.case_id}: route failed after physical input: {_detail(error)}",
+        )
+
+    def _finish_route_rejected(
+        self,
+        spec: CaseSpec,
+        collector: DispatchCollector,
+        *,
+        mark: int,
+        journal: LogicalAttemptJournal,
+        attempts: list[LogicalAttemptRecord],
+        attempt_id: str,
+        consumed: Any,
+        artifacts: list[ArtifactRef],
+        source: Observation,
+        last: Observation,
+        boundary: str,
+        detail: str,
+    ) -> tuple[CaseResult, str | None]:
+        """Terminates the route after a returned observation fails its gate.
+
+        Physical route inputs already happened, so the case cannot safely
+        proceed to any dependent input and the run halts.
+        """
+
+        state, bound = self._route_attempt_state(collector, mark)
+        journal.finish(
+            attempt_id, status=state, dispatch_event_id=bound, detail=detail
+        )
+        attempts.append(
+            self._attempt_record(
+                attempt_id, consumed, state.value, bound,
+                intent=AttemptIntent.ROUTE.value,
+            )
+        )
+        return (
+            self._case_outcome(
+                spec, collector, mark=mark, status=CaseStatus.FAILED,
+                artifacts=artifacts,
+                source_artifact=source.artifact_path,
+                follow_up_artifact=last.artifact_path,
+                postcondition=self._postcondition_dict(last),
+                detail=detail,
+                unresolved_boundary=boundary,
+            ),
+            f"{spec.case_id}: {detail}",
+        )
+
+    @staticmethod
+    def _case_receipt_ids(collector: DispatchCollector, mark: int) -> list[str]:
+        """Ordered case-attributed receipt ids since the case began."""
+
+        return [
+            attributed.event_id
+            for attributed in collector.events_since(mark)
+            if isinstance(attributed.event, InputDispatchRecord)
+        ]
+
+    @staticmethod
+    def _last_receipt(
+        collector: DispatchCollector, mark: int
+    ) -> InputDispatchRecord | None:
+        """The last case-attributed receipt since the case began."""
+
+        return next(
+            (
+                attributed.event
+                for attributed in reversed(collector.events_since(mark))
+                if isinstance(attributed.event, InputDispatchRecord)
             ),
             None,
         )
@@ -1535,6 +1997,7 @@ class LiveCaseRunner:
         source_artifact: Path | None = None,
         follow_up_artifact: Path | None = None,
         postcondition: dict[str, Any] | None = None,
+        route: RouteEvidence | None = None,
     ) -> CaseResult:
         events = (collector.events_since(mark) if mark is not None else
                   tuple(row for row in collector.events if row.case_id == spec.case_id))
@@ -1556,6 +2019,7 @@ class LiveCaseRunner:
             postcondition=postcondition,
             unresolved_boundary=unresolved_boundary,
             detail=detail,
+            route=route,
         )
 
 

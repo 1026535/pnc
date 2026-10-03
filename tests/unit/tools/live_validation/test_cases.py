@@ -18,13 +18,15 @@ from tools.live_validation.cases import (
     CASE_REGISTRY,
     CaseSpec,
     frozen_case_ids,
+    RELEASED_ROUTE_OPERATION_IDS,
     require_case,
     validate_selected_order,
+    WATCHTOWER_OPEN_RETURN_OPERATION_ID,
 )
 
 
 class CaseRegistryTests(unittest.TestCase):
-    def test_registry_contains_the_five_released_cases(self):
+    def test_registry_contains_the_six_released_cases(self):
         self.assertEqual(
             {
                 "v44_bank_body_menu",
@@ -32,13 +34,17 @@ class CaseRegistryTests(unittest.TestCase):
                 "v44_watchtower_body_menu",
                 "v44_watchtower_selected_control_entry",
                 "v44_watchtower_return_home",
+                "v44_watchtower_public_open_return",
             },
             set(frozen_case_ids()),
         )
 
-    def test_every_case_uses_the_body_entry_operation(self):
+    def test_every_case_uses_its_released_operation(self):
         for spec in CASE_REGISTRY.values():
-            self.assertEqual(BODY_ENTRY_OPERATION_ID, spec.operation_id)
+            if spec.purpose is CasePurpose.ACCEPTANCE:
+                self.assertIn(spec.operation_id, RELEASED_ROUTE_OPERATION_IDS)
+            else:
+                self.assertEqual(BODY_ENTRY_OPERATION_ID, spec.operation_id)
             self.assertTrue(spec.required_postconditions)
         for spec in CASE_REGISTRY.values():
             if spec.purpose is CasePurpose.DISCOVERY:
@@ -118,6 +124,53 @@ class CaseRegistryTests(unittest.TestCase):
             spec.home_city_slot,
             CASE_REGISTRY["v44_watchtower_body_menu"].home_city_slot,
         )
+
+    def test_watchtower_acceptance_case_binds_the_released_route(self):
+        spec = require_case("v44_watchtower_public_open_return")
+        self.assertIs(CasePurpose.ACCEPTANCE, spec.purpose)
+        self.assertEqual(WATCHTOWER_OPEN_RETURN_OPERATION_ID, spec.operation_id)
+        self.assertIn(spec.operation_id, RELEASED_ROUTE_OPERATION_IDS)
+        self.assertIs(
+            WorkflowEffect.NONSPENDING_STATE_CHANGE, spec.entry_effect
+        )
+        self.assertIsNone(spec.developmental_purpose)
+        self.assertIsNone(spec.control_name)
+        self.assertIsNone(spec.measurement_selector_id)
+        self.assertEqual(0, spec.max_control_attempts)
+        self.assertEqual(spec.case_id, spec.body_case_id)
+        self.assertFalse(spec.allowed_source_screens)
+        self.assertEqual(
+            frozenset({CaseGate.GUARDED_HOME_CITY}), spec.required_preconditions
+        )
+        self.assertEqual(
+            frozenset({CaseGate.GUARDED_HOME_CITY}), spec.required_postconditions
+        )
+        self.assertEqual(
+            spec.home_city_slot,
+            CASE_REGISTRY["v44_watchtower_body_menu"].home_city_slot,
+        )
+
+    def test_acceptance_case_runs_without_a_body_dependency(self):
+        validate_selected_order(["v44_watchtower_public_open_return"])
+
+    def test_acceptance_spec_rejects_a_body_witness_delegation(self):
+        with self.assertRaises(ValueError):
+            CaseSpec(
+                case_id="bad",
+                purpose=CasePurpose.ACCEPTANCE,
+                target=next(iter(CASE_REGISTRY.values())).target,
+                home_city_slot=None,
+                operation_id=WATCHTOWER_OPEN_RETURN_OPERATION_ID,
+                entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+                released_action_id="x",
+                control_name=None,
+                control_effect=None,
+                allowed_source_screens=frozenset(),
+                max_control_attempts=0,
+                body_case_id="v44_bank_body_menu",
+                required_preconditions=frozenset(),
+                required_postconditions=frozenset(),
+            )
 
     def test_selector_measurement_belongs_to_the_chip_case_only(self):
         for spec in CASE_REGISTRY.values():

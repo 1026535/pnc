@@ -334,9 +334,10 @@ follow-up is recorded as truth — no panel or upgrade claim, and the old Lua
 
 October 3 correction: the chip's measurement owner is the canonical
 `PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP` template selector — an opaque 78x62
-RGB crop of the green arrow/circle plus Upgrade caption, qualified offline on
-the turn047 native 900x1600 frame (bounds (624,474,78,62), score 1.0, center
-(663,505)) and reproduced on the translated holdout (bounds (624,496,78,62),
+RGBA crop (alpha 255 everywhere) of the green arrow/circle plus Upgrade
+caption, qualified offline on the live007 native 900x1600 frame (bounds
+(624,474,78,62), score 1.0, center (663,505)) and reproduced on the
+translated holdout (bounds (624,496,78,62),
 score .8811, center (663,527)) under the .85 whole-frame gate; both unselected
 source views stay unmatched. The frozen control case now declares
 `measurement_selector_id`, so the runner measures the chip from the current
@@ -351,3 +352,21 @@ does not qualify a current Back control. No new live action was performed for
 this note. Provenance: recovered Lua evidence via the September 30
 ordinary-building consultation and the corrected Watchtower registration on
 `codex/v44-retained-routes-20261002`.
+
+**Live008 developmental outcome, October 3:** the bounded native-chip
+checkpoint ran the frozen body and chip cases on `157_farm` under run
+`v44-watchtower-native-chip-20261003`. A fresh slot-4 body witness
+authorized the body tap at (676,383) (receipt `in-0014`), and the current
+frame's canonical chip element measured and tapped the chip at (678,518)
+(receipt `in-0015`). The immediate raw follow-up is a full-screen Watch
+Tower panel, consistent with the `TOWER_WIN` mapping above; installed-client
+equivalence stays unproved, and the panel had no qualified visual profile at
+that time. The developmental body/chip witness is therefore accepted;
+the production open/return route — qualified body, fresh canonical chip,
+`PNC_WATCHTOWER`/`building_watchtower` endpoint and a measured
+`PNC_BACK_BUTTON_TOP_LEFT` return to guarded Home — remains pending its own
+frozen acceptance run. Two unrelated delivery/host incidents are recorded
+under the canonical incident collection; no game resource was spent.
+Provenance: curated run evidence SHA-256
+`1e731848d0be0dab92cd346675f73e6798c7b59cec886cbcd947ad6b76eb2f27` and
+`.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE008_REVIEW_20261003.json`.

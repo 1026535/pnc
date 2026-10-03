@@ -55,6 +55,28 @@ class ArtifactRef:
 
 
 @dataclass(frozen=True, slots=True)
+class RouteEvidence:
+    """The typed production-route proof for one ``acceptance`` case.
+
+    Records the qualified endpoint and its measured control exactly as
+    observed, plus the ordered case receipts partitioned into the opening
+    and return halves of the route. No developmental body witness exists
+    for a route case, so none is recorded here.
+    """
+
+    operation_id: str
+    endpoint_screen: str
+    endpoint_layout_id: str | None
+    endpoint_artifact: str | None
+    endpoint_frame: dict[str, Any] | None
+    back_selector: str
+    back_bounds: tuple[int, ...] | None
+    back_confidence: float | None
+    opening_receipt_ids: tuple[str, ...]
+    return_receipt_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CaseResult:
     """The single recorded outcome for one selected case."""
 
@@ -71,6 +93,7 @@ class CaseResult:
     postcondition: dict[str, Any] | None
     unresolved_boundary: str | None
     detail: str
+    route: RouteEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +239,27 @@ def artifact_ref_dict(ref: ArtifactRef) -> dict[str, object]:
     }
 
 
+def route_evidence_dict(route: RouteEvidence) -> dict[str, object]:
+    """Serializes one production route evidence record."""
+
+    return {
+        "operation_id": route.operation_id,
+        "endpoint_screen": route.endpoint_screen,
+        "endpoint_layout_id": route.endpoint_layout_id,
+        "endpoint_artifact": route.endpoint_artifact,
+        "endpoint_frame": (
+            None if route.endpoint_frame is None else dict(route.endpoint_frame)
+        ),
+        "back_selector": route.back_selector,
+        "back_bounds": (
+            None if route.back_bounds is None else list(route.back_bounds)
+        ),
+        "back_confidence": route.back_confidence,
+        "opening_receipt_ids": list(route.opening_receipt_ids),
+        "return_receipt_ids": list(route.return_receipt_ids),
+    }
+
+
 def case_result_dict(result: CaseResult) -> dict[str, object]:
     """Serializes one case result row."""
 
@@ -237,6 +281,9 @@ def case_result_dict(result: CaseResult) -> dict[str, object]:
         ),
         "unresolved_boundary": result.unresolved_boundary,
         "detail": result.detail,
+        "route": (
+            None if result.route is None else route_evidence_dict(result.route)
+        ),
     }
 
 

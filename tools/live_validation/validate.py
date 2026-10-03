@@ -15,6 +15,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from pnc_automation.app.pnc.domain.building_catalog import (
+    primary_screen_type_for_home_city_object,
+)
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+
 from tools.live_validation.binding import AssignmentBinding, _HEX64
 from tools.live_validation.cases import CaseGate, CaseSpec, require_case
 from tools.live_validation.evidence import EVIDENCE_SCHEMA_VERSION, sha256_file
@@ -55,7 +60,7 @@ _STATUSES = frozenset({"passed", "failed", "blocked", "not_run"})
 _ATTEMPT_STATUSES = frozenset(
     {"dispatched", "refused", "uncertain", "annotation_timeout", "unfinished"}
 )
-_ATTEMPT_INTENTS = frozenset({"body_entry", "control"})
+_ATTEMPT_INTENTS = frozenset({"body_entry", "control", "route"})
 
 
 def _is_iso(value: object) -> bool:
@@ -88,6 +93,155 @@ def _frame_findings(frame: object, where: str) -> list[ValidationFinding]:
         findings.append(
             ValidationFinding("frame", f"{where} frame captured_monotonic must be numeric.")
         )
+    return findings
+
+
+def _route_case_findings(
+    row: dict[str, Any],
+    spec: CaseSpec,
+    event_by_id: dict[str, dict[str, Any]],
+    artifact_paths: set[str],
+) -> list[ValidationFinding]:
+    """Fail-closed checks on one passed acceptance case's route record.
+
+    The route must prove the qualified building endpoint plus its measured
+    Back control, and partition the case's receipts into the opening half
+    (camera inputs, then exactly the body and chip taps) and the return half
+    (exactly one Back tap), all in one session on contiguous input
+    sequences, with no accepted dispatch failure.
+    """
+
+    case_id = str(row.get("case_id"))
+    route = row.get("route")
+    if not isinstance(route, dict):
+        return [
+            ValidationFinding(
+                "route",
+                f"{case_id}: a passed acceptance case requires a route "
+                "evidence record.",
+            )
+        ]
+    findings: list[ValidationFinding] = []
+
+    def fail(check: str, detail: str) -> None:
+        findings.append(ValidationFinding(check, detail))
+
+    if route.get("operation_id") != spec.operation_id:
+        fail("route", f"{case_id}: route operation_id must be '{spec.operation_id}'.")
+    opening = route.get("opening_receipt_ids")
+    returning = route.get("return_receipt_ids")
+    if not isinstance(opening, list) or not isinstance(returning, list):
+        fail("route", f"{case_id}: route requires opening/return receipt lists.")
+        opening, returning = (
+            opening if isinstance(opening, list) else [],
+            returning if isinstance(returning, list) else [],
+        )
+    elif opening + returning != (row.get("receipt_event_ids") or []):
+        fail(
+            "route",
+            f"{case_id}: opening+return receipts must partition the case "
+            "receipts exactly once in order.",
+        )
+    for event_id in opening + returning:
+        if event_id not in event_by_id:
+            fail("route", f"{case_id}: route receipt '{event_id}' is unknown.")
+    if (
+        len(opening) < 2
+        or any(
+            (event_by_id.get(event_id) or {}).get("primitive") != "tap"
+            for event_id in opening[-2:]
+        )
+        or any(
+            (event_by_id.get(event_id) or {}).get("primitive") == "tap"
+            for event_id in opening[:-2]
+        )
+    ):
+        fail(
+            "route",
+            f"{case_id}: opening must end in exactly two taps (body then "
+            "chip); earlier receipts may only be camera inputs.",
+        )
+    if len(returning) != 1 or (
+        event_by_id.get(returning[0]) or {}
+    ).get("primitive") != "tap":
+        fail("route", f"{case_id}: return must be exactly one Back tap.")
+    for event_id in row.get("dispatch_event_ids") or []:
+        if (event_by_id.get(event_id) or {}).get("kind") != "receipt":
+            fail(
+                "route",
+                f"{case_id}: a passed route must not carry a dispatch failure.",
+            )
+            break
+    ordered = [
+        event_by_id[event_id]
+        for event_id in opening + returning
+        if event_id in event_by_id
+    ]
+    for prior, current in zip(ordered, ordered[1:]):
+        prior_source = prior.get("source_frame") or {}
+        source = current.get("source_frame") or {}
+        if (
+            source.get("session_id") != prior_source.get("session_id")
+            or source.get("session_epoch") != prior_source.get("session_epoch")
+            or (current.get("dispatch") or {}).get("input_sequence")
+            != (prior.get("dispatch") or {}).get("input_sequence", -1) + 1
+        ):
+            fail(
+                "route",
+                f"{case_id}: route receipts must share one session/epoch "
+                "with contiguous input sequences.",
+            )
+            break
+    expected_screen = primary_screen_type_for_home_city_object(spec.target)
+    if expected_screen is not None and route.get("endpoint_screen") != expected_screen.value:
+        fail(
+            "route",
+            f"{case_id}: route endpoint_screen must be '{expected_screen.value}'.",
+        )
+    expected_layout = f"building_{spec.target.value}"
+    if route.get("endpoint_layout_id") != expected_layout:
+        fail(
+            "route",
+            f"{case_id}: route endpoint_layout_id must be '{expected_layout}'.",
+        )
+    endpoint_artifact = route.get("endpoint_artifact")
+    if not isinstance(endpoint_artifact, str) or endpoint_artifact not in artifact_paths:
+        fail(
+            "route",
+            f"{case_id}: route endpoint_artifact must be in the artifact index.",
+        )
+    endpoint_frame = route.get("endpoint_frame")
+    findings.extend(_frame_findings(endpoint_frame, f"{case_id} route endpoint"))
+    chip = event_by_id.get(opening[-1]) if opening else None
+    if isinstance(endpoint_frame, dict) and isinstance(chip, dict):
+        chip_source = chip.get("source_frame") or {}
+        if (
+            endpoint_frame.get("session_id") != chip_source.get("session_id")
+            or endpoint_frame.get("session_epoch") != chip_source.get("session_epoch")
+            or endpoint_frame.get("input_sequence")
+            != (chip.get("dispatch") or {}).get("input_sequence")
+            or endpoint_frame.get("capture_sequence", -1)
+            <= chip_source.get("capture_sequence", -1)
+        ):
+            fail(
+                "route",
+                f"{case_id}: endpoint frame must immediately follow the chip "
+                "receipt in the same session.",
+            )
+    if route.get("back_selector") != UiElementId.PNC_BACK_BUTTON_TOP_LEFT.value:
+        fail(
+            "route",
+            f"{case_id}: route back_selector must be the canonical Back control.",
+        )
+    bounds = route.get("back_bounds")
+    if (
+        not isinstance(bounds, list)
+        or len(bounds) != 4
+        or not all(isinstance(value, int) for value in bounds)
+    ):
+        fail("route", f"{case_id}: route back_bounds must be four ints.")
+    if not isinstance(route.get("back_confidence"), (int, float)):
+        fail("route", f"{case_id}: route back_confidence must be numeric.")
     return findings
 
 
@@ -364,7 +518,17 @@ def validate_live_evidence(
                     f"its owner case '{body_owner}'.",
                 )
         if spec is not None and row.get("status") == "passed":
-            if body_id is None:
+            if spec.purpose.value == "acceptance":
+                if body_id is not None:
+                    fail(
+                        "binding",
+                        f"{case_id}: a passed route case must not carry a "
+                        "developmental body-entry receipt.",
+                    )
+                findings.extend(
+                    _route_case_findings(row, spec, event_by_id, artifact_paths)
+                )
+            elif body_id is None:
                 fail(
                     "binding",
                     f"{case_id}: a passed case requires a body-entry receipt "
@@ -453,6 +617,17 @@ def validate_live_evidence(
                     "attempts",
                     f"{attempt_id}: a body-entry intent is exactly 1 of 1.",
                 )
+        elif intent == "route":
+            if spec.purpose.value != "acceptance":
+                fail(
+                    "attempts",
+                    f"{attempt_id}: route intent is only valid on an acceptance case.",
+                )
+            elif number != 1 or limit != 1:
+                fail(
+                    "attempts",
+                    f"{attempt_id}: a route intent is exactly 1 of 1.",
+                )
         elif isinstance(limit, int) and limit > spec.max_control_attempts:
             fail("attempts", f"{attempt_id}: limit exceeds the released bound {spec.max_control_attempts}.")
         if not isinstance(entry.get("journal_ref"), str) or not entry.get("journal_ref"):
@@ -488,6 +663,9 @@ def validate_live_evidence(
         elif spec.purpose.value == "discovery":
             if sent[0].get("dispatch_event_id") != row.get("body_entry_event_id"):
                 fail("attempts", f"{case_id}: body intent must bind the body receipt.")
+        elif spec.purpose.value == "acceptance":
+            if sent[0].get("intent") != "route":
+                fail("attempts", f"{case_id}: passed route case lacks its route intent.")
         else:
             if sent[0].get("intent") != "control":
                 fail("attempts", f"{case_id}: passed control case lacks its control intent.")
@@ -495,7 +673,20 @@ def validate_live_evidence(
             if owner.get("body_entry_event_id") != row.get("body_entry_event_id"):
                 fail("binding", f"{case_id}: control case must retain its declared discovery receipt.")
         if len(sent) == 1:
-            event = event_by_id.get(sent[0].get("dispatch_event_id"), {})
+            if spec.purpose.value == "acceptance":
+                route = row.get("route")
+                returning = (
+                    route.get("return_receipt_ids")
+                    if isinstance(route, dict)
+                    else None
+                )
+                event = (
+                    event_by_id.get(returning[-1], {})
+                    if isinstance(returning, list) and returning
+                    else {}
+                )
+            else:
+                event = event_by_id.get(sent[0].get("dispatch_event_id"), {})
             frame = (row.get("postcondition") or {}).get("frame")
             source = event.get("source_frame", {})
             if isinstance(frame, dict) and source:

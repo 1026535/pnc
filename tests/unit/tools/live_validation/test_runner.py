@@ -8,6 +8,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from pnc_automation.app.automation.engine.developmental_control import (
     DevelopmentalCasePurpose,
@@ -16,6 +17,10 @@ from pnc_automation.app.automation.engine.developmental_control import (
 from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.automation.engine.navigation_core import (
+    HomeCityObservationRequest,
+)
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraScanMode
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.home_city_scan import (
@@ -53,6 +58,7 @@ from tests.unit.tools.live_validation.helpers import (
     chip_element,
     home_observation,
     tap_receipt,
+    watchtower_observation,
     write_assignment,
     write_frame_file,
 )
@@ -86,7 +92,8 @@ class _FakeCore:
     def __init__(self, observer, run_dir: Path, *, entry_error=None,
                  post_entry_screens: dict | None = None,
                  control_follow_up_screen: ScreenType | dict = ScreenType.PNC_HOME_CITY,
-                 chip_elements: bool = True) -> None:
+                 chip_elements: bool = True,
+                 navigation: dict | None = None) -> None:
         self._observer = observer
         self._dir = run_dir
         self._entry_error = entry_error
@@ -102,6 +109,8 @@ class _FakeCore:
         self.entry_calls = []
         self.control_calls = []
         self.control_proofs = []
+        self.last_observation = None
+        self.navigation = _FakeNavigation(self, **(navigation or {}))
 
     def _frame(self, name: str, screen: ScreenType):
         self._seq += 1
@@ -120,7 +129,28 @@ class _FakeCore:
                 "visible_elements",
                 {CHIP_ID: chip_element(observation)},
             )
+        self.last_observation = observation
         return observation
+
+    def _panel_frame(self, name: str, screen: ScreenType,
+                     layout_id: str | None, *, with_back: bool = True):
+        self._seq += 1
+        path = write_frame_file(self._dir / "frames", f"{self._seq:03d}-{name}.png")
+        observation = watchtower_observation(
+            artifact_path=path,
+            sequence=self._seq,
+            input_sequence=self._input_seq,
+            screen_type=screen,
+            layout_id=layout_id,
+            with_back=with_back,
+        )
+        self.last_observation = observation
+        return observation
+
+    def _request(self, label: str) -> HomeCityObservationRequest:
+        return HomeCityObservationRequest(
+            label=label, camera_mode=HomeCityCameraScanMode.UNRESTRICTED
+        )
 
     def _send_tap(self, source, *, point=(270, 520)):
         self._input_seq += 1
@@ -130,6 +160,9 @@ class _FakeCore:
         return receipt
 
     def capture_once(self, label: str, *, include_content: bool = False, request=None):
+        return self._frame(label, self._screen)
+
+    def observe(self, label: str, *, include_content: bool = False, request=None):
         return self._frame(label, self._screen)
 
     def preflight_active_castle_identity(self):
@@ -167,6 +200,73 @@ class _FakeCore:
     def close(self):
         self.executor.input_dispatch_recorder = None
         self.closed = True
+
+
+class _FakeNavigation:
+    """Models the frozen Watchtower open/return route over the fake session.
+
+    ``open_building`` sends the body tap, captures the fresh chip frame,
+    sends the chip tap, and returns the qualified panel endpoint —
+    unless configured to refuse or fail first. ``navigate`` sends the
+    measured Back tap from the endpoint and returns the landing frame.
+    """
+
+    def __init__(
+        self,
+        core: _FakeCore,
+        *,
+        endpoint_screen: ScreenType = ScreenType.PNC_WATCHTOWER,
+        endpoint_layout_id: str | None = "building_watchtower",
+        endpoint_back: bool = True,
+        open_error: Exception | None = None,
+        chip_failure: bool = False,
+        return_screen: ScreenType = ScreenType.PNC_HOME_CITY,
+        return_error: Exception | None = None,
+        return_failure: bool = False,
+    ) -> None:
+        self._core = core
+        self._endpoint_screen = endpoint_screen
+        self._endpoint_layout_id = endpoint_layout_id
+        self._endpoint_back = endpoint_back
+        self._open_error = open_error
+        self._chip_failure = chip_failure
+        self._return_screen = return_screen
+        self._return_error = return_error
+        self._return_failure = return_failure
+        self.open_calls = []
+        self.navigate_calls = []
+
+    def open_building(self, target, *, observe_content, on_target_acquired=None,
+                      home_city_slot=None, entry_effect=None):
+        if self._open_error is not None:
+            raise self._open_error
+        self.open_calls.append(target)
+        self._core._send_tap(observe_content(self._core._request("route-body")))
+        chip = observe_content(self._core._request("route-chip"))
+        if self._chip_failure:
+            self._core._observer(InputDispatchFailure(
+                chip.frame_ref, "tap", "dispatch", "RuntimeError",
+                artifact_path=chip.artifact_path, home_city=True))
+            raise SelectorResolutionError("chip dispatch failed")
+        self._core._send_tap(chip)
+        self._core._screen = self._endpoint_screen
+        return self._core._panel_frame(
+            "route-endpoint", self._endpoint_screen,
+            self._endpoint_layout_id, with_back=self._endpoint_back,
+        )
+
+    def navigate(self, target, *, max_transitions=8):
+        self.navigate_calls.append(target)
+        if self._return_error is not None:
+            if self._return_failure:
+                source = self._core.last_observation
+                self._core._observer(InputDispatchFailure(
+                    source.frame_ref, "tap", "dispatch", "RuntimeError",
+                    artifact_path=source.artifact_path, home_city=True))
+            raise self._return_error
+        self._core._send_tap(self._core.last_observation)
+        self._core._screen = self._return_screen
+        return self._core._frame("route-final", self._return_screen)
 
 
 class _FakeBundle:
@@ -1000,6 +1100,260 @@ class LiveCaseRunnerTests(unittest.TestCase):
             with self.assertRaises(PreflightRefusal):
                 runner.run()
             self.assertTrue(holder["bundle"].closed)
+
+    def test_acceptance_route_passes_and_evidence_validates(self):
+        """guarded Home -> body -> fresh chip -> qualified panel -> Back -> Home."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_watchtower_public_open_return")
+            holder: dict = {}
+            evidence, path = LiveCaseRunner(
+                binding, _deps(tmp, holder)
+            ).run()
+            result = evidence.case_results[0]
+            core = holder["core"]
+            self.assertEqual(CaseStatus.PASSED, result.status)
+            self.assertEqual("acceptance", result.purpose)
+            self.assertIsNone(result.body_entry_event_id)
+            self.assertIsNotNone(result.source_artifact)
+            self.assertIsNotNone(result.follow_up_artifact)
+            self.assertIsNotNone(result.postcondition)
+            self.assertEqual(
+                "pnc_home_city", result.postcondition["screen_type"]
+            )
+            route = result.route
+            self.assertIsNotNone(route)
+            self.assertEqual(
+                "watchtower_public_open_return", route.operation_id
+            )
+            self.assertEqual("pnc_watchtower", route.endpoint_screen)
+            self.assertEqual("building_watchtower", route.endpoint_layout_id)
+            self.assertIsNotNone(route.endpoint_artifact)
+            self.assertIsNotNone(route.endpoint_frame)
+            self.assertEqual(
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT.value, route.back_selector
+            )
+            self.assertEqual(4, len(route.back_bounds))
+            self.assertTrue(all(
+                isinstance(v, int) for v in route.back_bounds
+            ))
+            self.assertEqual(2, len(route.opening_receipt_ids))
+            self.assertEqual(1, len(route.return_receipt_ids))
+            self.assertEqual(
+                result.receipt_event_ids,
+                route.opening_receipt_ids + route.return_receipt_ids,
+            )
+            self.assertEqual(
+                [HomeCityObjectId.WATCHTOWER], core.navigation.open_calls
+            )
+            self.assertEqual(
+                [ScreenType.PNC_HOME_CITY], core.navigation.navigate_calls
+            )
+            # No developmental body witness is retained for the route.
+            self.assertEqual([], core.entry_calls)
+            # Base + one case navigation allowance + the route allowance.
+            self.assertEqual(16 + 24 + 3, core.executor.budget[0])
+            self.assertEqual(1, len(evidence.logical_attempts))
+            self.assertEqual("route", evidence.logical_attempts[0].intent)
+            self.assertEqual(
+                "dispatched", evidence.logical_attempts[0].status
+            )
+            journal_path = (
+                Path(binding.report_root) / binding.run_id / "attempts.jsonl"
+            )
+            begins = [
+                entry.payload for entry in read_journal(journal_path)
+                if entry.record_type == "attempt_begin"
+            ]
+            self.assertEqual(1, len(begins))
+            self.assertEqual("route", begins[0].get("intent"))
+            self.assertEqual(1, begins[0].get("limit"))
+            self.assertEqual(
+                "watchtower_public_open_return", begins[0].get("operation_id")
+            )
+            self.assertEqual((), pending_attempts(journal_path))
+            sequences = [
+                entry.event.dispatch.input_sequence
+                for entry in evidence.attributed_dispatches
+                if hasattr(entry.event, "dispatch")
+            ]
+            self.assertEqual([1, 2, 3], sequences)
+            report = validate_live_evidence(binding, path)
+            self.assertTrue(
+                report.valid,
+                [f"{f.check}: {f.detail}" for f in report.findings],
+            )
+
+    def test_route_refusal_before_any_send_keeps_later_cases_runnable(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_watchtower_public_open_return", "v44_bank_body_menu"
+            )
+            holder = {"core_kwargs": {"navigation": {
+                "open_error": SelectorResolutionError("no chip element"),
+            }}}
+            evidence, _ = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            route, discovery = evidence.case_results
+            self.assertEqual(CaseStatus.FAILED, route.status)
+            self.assertEqual("qualified_route", route.unresolved_boundary)
+            self.assertEqual(CaseStatus.PASSED, discovery.status)
+            attempt = evidence.logical_attempts[0]
+            self.assertEqual("route", attempt.intent)
+            self.assertEqual("refused", attempt.status)
+            self.assertIsNone(attempt.dispatch_event_id)
+            self.assertEqual([], holder["core"].navigation.open_calls)
+
+    def test_route_chip_dispatch_failure_halts_later_inputs(self):
+        """A recorded failure after the confirmed body tap ends the run."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_watchtower_public_open_return", "v44_bank_body_menu"
+            )
+            holder = {"core_kwargs": {"navigation": {"chip_failure": True}}}
+            evidence, _ = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            route, discovery = evidence.case_results
+            self.assertEqual(CaseStatus.FAILED, route.status)
+            self.assertEqual("route_opening", route.unresolved_boundary)
+            self.assertEqual(CaseStatus.NOT_RUN, discovery.status)
+            attempt = evidence.logical_attempts[0]
+            self.assertEqual("uncertain", attempt.status)
+            self.assertEqual("route", attempt.intent)
+            receipts = [
+                entry.event_id for entry in evidence.attributed_dispatches
+                if isinstance(entry.event, InputDispatchRecord)
+            ]
+            self.assertEqual(1, len(receipts))
+            self.assertEqual([], holder["core"].navigation.navigate_calls)
+
+    def test_route_endpoint_without_qualified_identity_rejects(self):
+        """A wrong screen, wrong layout, or missing Back never reaches Back."""
+        for kwargs in (
+            {"endpoint_back": False},
+            {"endpoint_screen": ScreenType.PNC_HOME_CITY},
+            {"endpoint_layout_id": "building_market"},
+        ):
+            with self.subTest(kwargs=kwargs), \
+                    tempfile.TemporaryDirectory() as raw:
+                tmp = Path(raw)
+                binding = _binding(
+                    tmp,
+                    "v44_watchtower_public_open_return",
+                    "v44_bank_body_menu",
+                )
+                holder = {"core_kwargs": {"navigation": kwargs}}
+                evidence, _ = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+                route, discovery = evidence.case_results
+                self.assertEqual(CaseStatus.FAILED, route.status)
+                self.assertEqual(
+                    "route_endpoint", route.unresolved_boundary
+                )
+                self.assertEqual(CaseStatus.NOT_RUN, discovery.status)
+                self.assertEqual(
+                    "dispatched", evidence.logical_attempts[0].status
+                )
+                self.assertEqual(
+                    [], holder["core"].navigation.navigate_calls
+                )
+
+    def test_route_return_landing_outside_home_fails_postcondition(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_watchtower_public_open_return", "v44_bank_body_menu"
+            )
+            holder = {"core_kwargs": {"navigation": {
+                "return_screen": ScreenType.PNC_POPUP,
+            }}}
+            evidence, _ = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            route, discovery = evidence.case_results
+            self.assertEqual(CaseStatus.FAILED, route.status)
+            self.assertEqual("postcondition", route.unresolved_boundary)
+            self.assertEqual(CaseStatus.NOT_RUN, discovery.status)
+            self.assertEqual(
+                [ScreenType.PNC_HOME_CITY],
+                holder["core"].navigation.navigate_calls,
+            )
+
+    def test_route_return_dispatch_failure_halts_the_run(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_watchtower_public_open_return", "v44_bank_body_menu"
+            )
+            holder = {"core_kwargs": {"navigation": {
+                "return_error": SelectorResolutionError("back send failed"),
+                "return_failure": True,
+            }}}
+            evidence, _ = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            route, discovery = evidence.case_results
+            self.assertEqual(CaseStatus.FAILED, route.status)
+            self.assertEqual("route_return", route.unresolved_boundary)
+            self.assertEqual(CaseStatus.NOT_RUN, discovery.status)
+            self.assertEqual(
+                "uncertain", evidence.logical_attempts[0].status
+            )
+
+    def test_unqualified_route_source_refuses_before_any_input(self):
+        """A source frame that is not guarded Home refutes the attempt."""
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_watchtower_public_open_return", "v44_bank_body_menu"
+            )
+            holder: dict = {}
+            deps = _deps(tmp, holder)
+            connect = deps.connect
+
+            def unqualified_source_connect(**kwargs):
+                connection = connect(**kwargs)
+                core = connection.core
+                capture = core.capture_once
+                calls = {"n": 0}
+
+                def captured(label, **kw):
+                    calls["n"] += 1
+                    if calls["n"] != 2:
+                        return capture(label, **kw)
+                    # The route source read lands on a popup; restore Home
+                    # so the later independent case can still qualify.
+                    core._screen = ScreenType.PNC_POPUP
+                    observation = capture(label, **kw)
+                    core._screen = ScreenType.PNC_HOME_CITY
+                    return observation
+
+                core.capture_once = captured
+                return connection
+
+            evidence, _ = LiveCaseRunner(
+                binding, replace(deps, connect=unqualified_source_connect)
+            ).run()
+            route, discovery = evidence.case_results
+            self.assertEqual(CaseStatus.FAILED, route.status)
+            self.assertEqual("route_source", route.unresolved_boundary)
+            self.assertEqual(CaseStatus.PASSED, discovery.status)
+            self.assertEqual([], holder["core"].navigation.open_calls)
+            attempt = evidence.logical_attempts[0]
+            self.assertEqual("route", attempt.intent)
+            self.assertEqual("refused", attempt.status)
+            self.assertIsNone(attempt.dispatch_event_id)
+
+    def test_unreleased_route_operation_refuses_before_connecting(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_watchtower_public_open_return")
+            holder: dict = {}
+            with patch(
+                "tools.live_validation.runner.RELEASED_ROUTE_OPERATION_IDS",
+                frozenset(),
+            ):
+                with self.assertRaises(PreflightRefusal) as raised:
+                    LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            self.assertTrue(
+                any("route operation" in f for f in raised.exception.findings)
+            )
+            self.assertNotIn("core", holder)
 
 
 class AdmitReservationTests(unittest.TestCase):

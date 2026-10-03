@@ -124,6 +124,58 @@ def chip_observation(
     return observation
 
 
+def back_element(
+    source: Observation,
+    *,
+    bounds: Bounds = Bounds(10, 10, 100, 50),
+    confidence: float = 0.99,
+    frame_ref: FrameRef | None = None,
+    source_screen: ScreenType | None = ScreenType.PNC_WATCHTOWER,
+    source_layout_id: str | None = "building_watchtower",
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
+    action_point: tuple[int, int] | None = None,
+) -> VisibleElement:
+    """One provenanced canonical Back element bound to ``source``'s frame."""
+
+    return VisibleElement(
+        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+        bounds=bounds,
+        confidence=confidence,
+        source_kind=source_kind,
+        action_point=action_point,
+        frame_ref=source.frame_ref if frame_ref is None else frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+    )
+
+
+def watchtower_observation(
+    *,
+    artifact_path: Path | None = None,
+    sequence: int = 1,
+    layout_id: str | None = "building_watchtower",
+    screen_type: ScreenType = ScreenType.PNC_WATCHTOWER,
+    with_back: bool = True,
+    **kwargs,
+) -> Observation:
+    """A Watchtower panel observation carrying its canonical Back element."""
+
+    observation = home_observation(
+        artifact_path=artifact_path,
+        sequence=sequence,
+        screen_type=screen_type,
+        layout_id=layout_id,
+        **kwargs,
+    )
+    object.__setattr__(
+        observation,
+        "visible_elements",
+        ({UiElementId.PNC_BACK_BUTTON_TOP_LEFT: back_element(observation)}
+         if with_back else {}),
+    )
+    return observation
+
+
 def tap_receipt(source: Observation, *, input_sequence: int | None = None) -> InputDispatchRecord:
     return InputDispatchRecord(
         source_frame=source.frame_ref,

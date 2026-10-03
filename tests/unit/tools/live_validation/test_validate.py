@@ -93,6 +93,71 @@ class ValidateLiveEvidenceTests(unittest.TestCase):
                     path.write_text(json.dumps(doc))
                     self.assertFalse(validate_live_evidence(binding, path).valid)
 
+    def test_passed_acceptance_route_requires_qualified_evidence(self):
+        from tests.unit.tools.live_validation.test_runner import (
+            _binding, _deps,
+        )
+        from tools.live_validation.runner import LiveCaseRunner
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_watchtower_public_open_return")
+            _, path = LiveCaseRunner(binding, _deps(tmp, {})).run()
+            original = json.loads(path.read_text())
+            report = validate_live_evidence(binding, path)
+            self.assertTrue(
+                report.valid,
+                [f"{f.check}: {f.detail}" for f in report.findings],
+            )
+            for defect in (
+                "missing_route",
+                "wrong_operation",
+                "wrong_endpoint_screen",
+                "wrong_endpoint_layout",
+                "truncated_opening",
+                "empty_return",
+                "wrong_back_selector",
+                "stale_endpoint_frame",
+                "body_entry_witness",
+                "wrong_intent",
+                "second_attempt",
+                "bad_postcondition",
+            ):
+                with self.subTest(defect=defect):
+                    doc = json.loads(json.dumps(original))
+                    row = doc["case_results"][0]
+                    if defect == "missing_route":
+                        row["route"] = None
+                    elif defect == "wrong_operation":
+                        row["route"]["operation_id"] = "other_route"
+                    elif defect == "wrong_endpoint_screen":
+                        row["route"]["endpoint_screen"] = "pnc_market"
+                    elif defect == "wrong_endpoint_layout":
+                        row["route"]["endpoint_layout_id"] = "building_market"
+                    elif defect == "truncated_opening":
+                        row["route"]["opening_receipt_ids"] = \
+                            row["route"]["opening_receipt_ids"][:1]
+                    elif defect == "empty_return":
+                        row["route"]["return_receipt_ids"] = []
+                    elif defect == "wrong_back_selector":
+                        row["route"]["back_selector"] = \
+                            "pnc_home_selected_building_upgrade_chip"
+                    elif defect == "stale_endpoint_frame":
+                        row["route"]["endpoint_frame"]["input_sequence"] = 0
+                    elif defect == "body_entry_witness":
+                        row["body_entry_event_id"] = "in-0001"
+                    elif defect == "wrong_intent":
+                        doc["logical_attempts"][0]["intent"] = "control"
+                    elif defect == "second_attempt":
+                        extra = dict(doc["logical_attempts"][0])
+                        extra["attempt_id"] = "attempt-2"
+                        doc["logical_attempts"].append(extra)
+                        doc["totals"]["logical_attempts"] = 2
+                    elif defect == "bad_postcondition":
+                        row["postcondition"]["screen_type"] = "pnc_popup"
+                    path.write_text(json.dumps(doc))
+                    report = validate_live_evidence(binding, path)
+                    self.assertFalse(report.valid, defect)
+
     def _setup(self, tmp: Path, **overrides):
         binding = load_assignment_binding(write_assignment(tmp, assignment_payload(tmp)))
         evidence = _evidence(tmp, **overrides)

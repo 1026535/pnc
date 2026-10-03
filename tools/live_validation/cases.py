@@ -9,8 +9,9 @@ measured control — tester-attested, or through the case's declared
 its raw follow-up without claiming a destination; ``development_validation``
 consumes a tester-attested measured control through the dedicated executor
 operation while reusing its declared discovery case's retained body witness —
-a return case never re-enters the building itself. A captured task-owned
-menu never satisfies an ``acceptance`` route.
+a return case never re-enters the building itself. ``acceptance`` runs one
+released production route through the public navigation seam; a captured
+task-owned menu never satisfies it.
 """
 
 from __future__ import annotations
@@ -50,6 +51,12 @@ class CaseGate(StrEnum):
 BODY_ENTRY_OPERATION_ID = "enter_building_body_for_discovery"
 """The named existing navigation operation every measured body entry uses."""
 
+WATCHTOWER_OPEN_RETURN_OPERATION_ID = "watchtower_public_open_return"
+"""The named production navigation route an acceptance case may execute."""
+
+RELEASED_ROUTE_OPERATION_IDS = frozenset({WATCHTOWER_OPEN_RETURN_OPERATION_ID})
+"""Route operation ids released to the tracked runner; all others refuse."""
+
 
 @dataclass(frozen=True, slots=True)
 class CaseSpec:
@@ -65,6 +72,13 @@ class CaseSpec:
     instead of manual tester attestation. It identifies the visible control
     only; it grants no action and claims no destination. Only a control case
     may declare one.
+
+    An ``acceptance`` case is one production route executed through the
+    public navigation seam, not a measured control: it names no control,
+    declares no selector measurement, retains no discovery body witness, and
+    keeps ``body_case_id == case_id`` only for the existing selection-order
+    convention. ``operation_id`` names the released route; ``entry_effect``
+    describes the body selection that opens the route.
     """
 
     case_id: str
@@ -96,6 +110,25 @@ class CaseSpec:
                 )
             if self.body_case_id != self.case_id:
                 raise ValueError(f"Discovery case '{self.case_id}' must own its body entry.")
+        elif self.purpose is CasePurpose.ACCEPTANCE:
+            if self.control_name is not None or self.control_effect is not None:
+                raise ValueError(f"Acceptance case '{self.case_id}' cannot name a control.")
+            if self.max_control_attempts != 0:
+                raise ValueError(f"Acceptance case '{self.case_id}' cannot allow control attempts.")
+            if self.measurement_selector_id is not None:
+                raise ValueError(
+                    f"Acceptance case '{self.case_id}' cannot declare a selector measurement."
+                )
+            if self.body_case_id != self.case_id:
+                raise ValueError(
+                    f"Acceptance case '{self.case_id}' owns its own route and cannot "
+                    "retain a discovery body witness."
+                )
+            if self.allowed_source_screens:
+                raise ValueError(
+                    f"Acceptance case '{self.case_id}' binds guarded Home, not a "
+                    "control source-screen contract."
+                )
         else:
             if not self.control_name or self.control_effect is None:
                 raise ValueError(f"Control case '{self.case_id}' requires a named control and effect.")
@@ -122,6 +155,8 @@ def _spec(
     target: HomeCityObjectId,
     home_city_slot: HomeCitySlotSelector | None,
     released_action_id: str,
+    operation_id: str = BODY_ENTRY_OPERATION_ID,
+    entry_effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
     body_case_id: str | None = None,
     control_name: str | None = None,
     control_effect: WorkflowEffect | None = None,
@@ -136,8 +171,8 @@ def _spec(
         purpose=purpose,
         target=target,
         home_city_slot=home_city_slot,
-        operation_id=BODY_ENTRY_OPERATION_ID,
-        entry_effect=WorkflowEffect.READ_ONLY,
+        operation_id=operation_id,
+        entry_effect=entry_effect,
         released_action_id=released_action_id,
         control_name=control_name,
         control_effect=control_effect,
@@ -221,6 +256,20 @@ CASE_REGISTRY: Mapping[str, CaseSpec] = MappingProxyType(
                 ),
                 max_control_attempts=2,
                 required_preconditions=frozenset({CaseGate.RETAINED_BODY_CONTEXT}),
+                required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
+            ),
+            # One frozen production route: guarded Home -> slot-4 Watchtower
+            # body -> canonical Upgrade chip -> qualified Watch Tower panel ->
+            # measured Back -> guarded Home. The route never confirms an
+            # upgrade and never touches the panel's resource controls.
+            _spec(
+                "v44_watchtower_public_open_return",
+                purpose=CasePurpose.ACCEPTANCE,
+                target=HomeCityObjectId.WATCHTOWER,
+                home_city_slot=HomeCitySlotSelector(slot_index=4),
+                released_action_id="v44_watchtower_public_open_return",
+                operation_id=WATCHTOWER_OPEN_RETURN_OPERATION_ID,
+                entry_effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
                 required_postconditions=frozenset({CaseGate.GUARDED_HOME_CITY}),
             ),
         )

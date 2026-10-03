@@ -34,6 +34,7 @@ class AttemptIntent(StrEnum):
 
     BODY_ENTRY = "body_entry"
     CONTROL = "control"
+    ROUTE = "route"
 
 
 @dataclass(frozen=True, slots=True)

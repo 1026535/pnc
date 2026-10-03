@@ -14,9 +14,12 @@ from tools.live_validation.evidence import (
     CaseStatus,
     LiveEvidence,
     LogicalAttemptRecord,
+    RouteEvidence,
+    case_result_dict,
     collect_artifact,
     compute_totals,
     frame_ref_dict,
+    route_evidence_dict,
     serialize_live_evidence,
     sha256_file,
     write_live_evidence,
@@ -170,6 +173,55 @@ class EvidenceTests(unittest.TestCase):
              "dispatch_failures": 1, "logical_attempts": 1},
             totals,
         )
+
+    def test_route_evidence_serializes_json_primitives(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            artifact = write_frame_file(tmp, "endpoint.png")
+            route = RouteEvidence(
+                operation_id="watchtower_public_open_return",
+                endpoint_screen="pnc_watchtower",
+                endpoint_layout_id="building_watchtower",
+                endpoint_artifact=str(artifact),
+                endpoint_frame=frame_ref_dict(frame_ref(5)),
+                back_selector="pnc_back_button_top_left",
+                back_bounds=(8, 8, 72, 64),
+                back_confidence=0.97,
+                opening_receipt_ids=("in-0001", "in-0002"),
+                return_receipt_ids=("in-0003",),
+            )
+            row = route_evidence_dict(route)
+            self.assertEqual(
+                json.loads(json.dumps(row)), row
+            )
+            self.assertEqual([8, 8, 72, 64], row["back_bounds"])
+            self.assertEqual(
+                ["in-0001", "in-0002"], row["opening_receipt_ids"]
+            )
+            self.assertEqual(["in-0003"], row["return_receipt_ids"])
+            self.assertEqual(5, row["endpoint_frame"]["capture_sequence"])
+
+            result = CaseResult(
+                case_id="v44_watchtower_public_open_return",
+                purpose="acceptance",
+                status=CaseStatus.PASSED,
+                artifacts=(),
+                receipt_event_ids=("in-0001", "in-0002", "in-0003"),
+                dispatch_event_ids=("in-0001", "in-0002", "in-0003"),
+                body_entry_event_id=None,
+                body_case_id="v44_watchtower_public_open_return",
+                source_artifact=None,
+                follow_up_artifact=None,
+                postcondition=None,
+                unresolved_boundary=None,
+                detail="ok",
+                route=route,
+            )
+            serialized = json.loads(
+                json.dumps(case_result_dict(result))
+            )
+            self.assertEqual(row, serialized["route"])
+            self.assertIsNone(serialized["body_entry_event_id"])
 
     def test_frame_ref_dict_serializes_exact_identity(self):
         row = frame_ref_dict(frame_ref(3))

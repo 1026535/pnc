@@ -6914,6 +6914,74 @@
       ]
     },
     {
+      "id": "building_watchtower",
+      "layout_id": "building_watchtower",
+      "screen": "PNC_WATCHTOWER",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/watchtower_native_20261003.png",
+        "decoded_sha256": "d3d1287ac36473260752007f1624dc4bc1bebdd866390bd8e8f271026a7a9b1a",
+        "capture_group": "2026-10-03/v44_live_v44-watchtower-native-chip-20261003/645a1286"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Native RGBA 900x1600 Watch Tower endpoint frame0036 from live008 (session 645a1286), reached by the canonical generic Upgrade-chip tap after the slot-4 body tap selected the Watchtower on Home. Identity requires all three conjunctive anchors: the static building title, the facility description, and the Warning tab band; mutable Glory Level, Upgrade button, Info and tab contents are excluded. Correlated frame0037 is a same-session holdout, not an independent layout proof. Equivalence of the installed native panel to the recovered APK TOWER_WIN layout is unproven and irrelevant to this observed endpoint. Passive endpoint perception only: the profile publishes the independently measured Back control and no Glory Level, Upgrade, Info or warning-tab admission. Templates are canonical 540x960 RGB LANCZOS reference crops lead-qualified against native36/37, unselected Home and Hall of War negatives.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_watchtower_title.png",
+          "search_region": [
+            95,
+            0,
+            245,
+            65
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/building_watchtower_description.png",
+          "search_region": [
+            270,
+            128,
+            270,
+            76
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/building_watchtower_warning_tabs.png",
+          "search_region": [
+            0,
+            307,
+            540,
+            62
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_watchtower_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              65
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "hero_formation_challenge_preparation",
       "layout_id": "hero_formation_challenge_preparation",
       "screen": "PNC_HERO_FORMATION",

@@ -815,12 +815,86 @@ class NavigationCore:
         self.record({"event": "pending_building", "target": target.value,
                      "artifact": str(before.artifact_path), "point": point})
         operation.trace(before, "tap", target=target, slot=home_city_slot)
+        if target is HomeCityObjectId.WATCHTOWER:
+            return self._open_watchtower_panel(
+                target=target, destination=destination, before=before, body=body,
+                point=point, operation=operation,
+            )
         return self._execute_and_confirm(
             TapSpatialObjectAction(target_point=point, expected_object=body, exact_geometry=True,
                                    reason="replacement_observed_building"),
             before, frozenset({destination}), operation.label,
             home_operation=operation,
         )
+
+    def _open_watchtower_panel(
+        self,
+        *,
+        target: HomeCityObjectId,
+        destination: ScreenType,
+        before: Observation,
+        body: DetectedSpatialObject,
+        point: tuple[int, int],
+        operation: "_HomeCityOperation",
+    ) -> Observation:
+        """Open the Watchtower through its observed body-then-chip chain.
+
+        The qualified body tap only selects the building on Home; the
+        canonical Upgrade chip measured on the resulting selected Home view
+        is this panel's observed entry control. Both sends share this
+        operation's deadline and session; a missing, stale, foreign, or
+        interrupted chip observation stops before the dependent tap.
+        """
+
+        operation.send(
+            TapSpatialObjectAction(target_point=point, expected_object=body, exact_geometry=True,
+                                   reason="replacement_observed_building"),
+            before,
+        )
+        selected = operation.capture(before, "selected_building_upgrade_chip")
+        self._require_selected_building_chip_frame(selected, before=before, operation=operation)
+        chip = selected.visible_elements.get(UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP)
+        if (
+            chip is None
+            or chip.source_kind != VisibleElementSourceKind.TEMPLATE
+            or chip.frame_ref != selected.frame_ref
+            or chip.source_screen != selected.screen_type
+            or chip.source_layout_id != selected.decision.layout_id
+        ):
+            operation.stop(
+                HomeCityScanStopReason.NO_QUALIFIED_ROUTE,
+                "Selected Home view has no qualified current-frame Upgrade chip; no dependent tap sent.",
+            )
+        self.record({"event": "pending_upgrade_chip", "target": target.value,
+                     "artifact": str(selected.artifact_path)})
+        operation.trace(selected, "tap", target=target)
+        return self._execute_and_confirm(
+            TapAction(selector_id=UiElementId.PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP,
+                      reason="watchtower_selected_building_upgrade_chip"),
+            selected, frozenset({destination}), operation.label,
+            home_operation=operation,
+        )
+
+    @staticmethod
+    def _require_selected_building_chip_frame(
+        selected: Observation, *, before: Observation, operation: "_HomeCityOperation",
+    ) -> None:
+        """Require the post-body Home frame to continue the exact input chain."""
+
+        view = operation.view(selected)
+        if view is not None and view.zoom_status == HomeCityZoomStatus.NOT_AT_ENDPOINT:
+            operation.stop(HomeCityScanStopReason.ZOOM_CHANGED,
+                           "Home scale changed before the selected-building chip tap.")
+        if not operation.endpoint(selected) or view.calibration_id != operation.calibration_id:
+            operation.stop(HomeCityScanStopReason.LOCALIZATION_UNRESOLVED,
+                           "Selected Home frame lost its normalized endpoint pose; no chip tap sent.")
+        if before.frame_ref is None or selected.frame_ref is None:
+            raise RuntimeError("Home navigation lost frame provenance; no chip tap sent.")
+        if selected.frame_ref.input_sequence != before.frame_ref.input_sequence + 1:
+            operation.stop(
+                HomeCityScanStopReason.INPUT_UNCERTAIN,
+                "An intervening input broke the body-to-chip chain; no chip tap sent.",
+            )
 
     def _acquire_final_building_body(
         self,
@@ -2511,7 +2585,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER, screen.PNC_TRIAL_CHALLENGE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
         screen.PNC_BLACKSMITH, screen.PNC_MARKET, screen.PNC_ALLIANCE_HALL,
-        screen.PNC_WALL,
+        screen.PNC_WALL, screen.PNC_WATCHTOWER,
         screen.PNC_RANGED_BARRACKS, screen.PNC_INFANTRY_BARRACKS,
         # Only the captured voucher_mall producer qualifies this entry's
         # measured Back; other store contexts remain unreviewed.

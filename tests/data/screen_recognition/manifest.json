@@ -2169,6 +2169,32 @@
       "source_sha256": "c57527d596730bc5e88bc356ef3e04ddea61b0d43a19864d6840a3f06048157a"
     },
     {
+      "image": "building_routes/watchtower_native_20261003.png",
+      "screen": "PNC_WATCHTOWER",
+      "split": "reference",
+      "group": "2026-10-03/v44_live_v44-watchtower-native-chip-20261003/645a1286",
+      "sha256": "d3d1287ac36473260752007f1624dc4bc1bebdd866390bd8e8f271026a7a9b1a",
+      "expected_visual_screens": [
+        "PNC_WATCHTOWER"
+      ],
+      "annotation": "Native 900x1600 RGBA live008 frame0036, visibly the full-screen Watch Tower panel (title, facility description, Warning/tabs band) reached by the canonical generic Upgrade-chip tap after the slot-4 body tap selected the Watchtower on Home, but classified UNKNOWN because the family had no visual profile. Profile source; recognition is passive endpoint/Back evidence only and grants no Glory Level, Upgrade, Info or warning-tab action authority. Installed build not recorded; equivalence to the recovered APK panel is unproven.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-10-03/v44_live_v44-watchtower-native-chip-20261003/20261003T105527Z_core_20261003T105327Z_645a1286_0036_developmental_control_after_input.png",
+      "source_sha256": "477d6a757968bcb601fe6fae26819a0e8dd8d69b0b1372bcb49d056a17ae918f"
+    },
+    {
+      "image": "building_routes/watchtower_native_holdout_20261003.png",
+      "screen": "PNC_WATCHTOWER",
+      "split": "validation",
+      "group": "2026-10-03/v44_live_v44-watchtower-native-chip-20261003/645a1286",
+      "sha256": "75cb979be8ed361b4d96dbc7aca75dc6ca8c154310df3dc9ebc5a6fdb464c346",
+      "expected_visual_screens": [
+        "PNC_WATCHTOWER"
+      ],
+      "annotation": "Native 900x1600 RGBA live008 final frame0037. Same-session correlated holdout of the Watch Tower endpoint appearance, not an independent layout proof.",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-10-03/v44_live_v44-watchtower-native-chip-20261003/20261003T105529Z_core_20261003T105327Z_645a1286_0037_v44_final_state.png",
+      "source_sha256": "e30d778621edd62abf3c00c634c8676d2c8d5c9e7ef078876f62405c347282e2"
+    },
+    {
       "image": "hero_formation_challenge_preparation_20260929.png",
       "screen": "PNC_HERO_FORMATION",
       "split": "reference",

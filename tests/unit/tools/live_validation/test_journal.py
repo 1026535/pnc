@@ -8,6 +8,7 @@ from pathlib import Path
 
 from tools.live_validation.evidence import frame_ref_dict
 from tools.live_validation.journal import (
+    AttemptIntent,
     AttemptStatus,
     LogicalAttemptJournal,
     pending_attempts,
@@ -72,6 +73,27 @@ class LogicalAttemptJournalTests(unittest.TestCase):
             self.assertEqual(second, pending[0].attempt_id)
             self.assertEqual(2, pending[0].number)
             self.assertEqual("body_entry", pending[0].intent)
+
+    def test_route_attempt_intent_persists_and_closes(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "attempts.jsonl"
+            journal = LogicalAttemptJournal(path)
+            attempt_id, _ = journal.begin(
+                case_id="v44_watchtower_public_open_return",
+                control_name="watchtower_public_open_return",
+                operation_id="watchtower_public_open_return",
+                number=1,
+                limit=1,
+                source_frame=frame_ref_dict(frame_ref()),
+                intent=AttemptIntent.ROUTE.value,
+            )
+            journal.finish(attempt_id, status=AttemptStatus.DISPATCHED)
+            journal.close()
+
+            entries = read_journal(path)
+            self.assertEqual("route", entries[0].payload["intent"])
+            self.assertEqual("dispatched", entries[1].payload["status"])
+            self.assertEqual((), pending_attempts(path))
 
     def test_reopening_continues_the_sequence(self):
         with tempfile.TemporaryDirectory() as raw:

@@ -8,6 +8,7 @@ import unittest
 
 from PIL import Image, ImageDraw
 
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -18,6 +19,7 @@ from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.paths import TEST_DATA_ROOT
@@ -170,7 +172,33 @@ CASES = (
         "building_market",
         {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
     ),
+    (
+        "watchtower_native_20261003.png",
+        ScreenType.PNC_WATCHTOWER,
+        "building_watchtower",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
+    (
+        "watchtower_native_holdout_20261003.png",
+        ScreenType.PNC_WATCHTOWER,
+        "building_watchtower",
+        {UiElementId.PNC_BACK_BUTTON_TOP_LEFT},
+    ),
 )
+
+
+# Erasure bands stay in the preserved native 900x1600 frame's coordinate
+# space and cover each canonical search region scaled by 5/3.
+WATCHTOWER_NATIVE_FRAMES = (
+    "watchtower_native_20261003.png",
+    "watchtower_native_holdout_20261003.png",
+)
+WATCHTOWER_IDENTITY_BANDS = (
+    ("title", (150, 0, 415, 115)),
+    ("description", (445, 208, 900, 345)),
+    ("warning_tabs", (0, 505, 900, 620)),
+)
+WATCHTOWER_BACK_BAND = (0, 0, 170, 112)
 
 
 # Erasure boxes remain in each preserved native frame's coordinate space.
@@ -363,6 +391,120 @@ class BuildingRouteCapturedObserversTests(unittest.TestCase):
                 with self.subTest(fixture=fixture_name, observer=observer_name):
                     self.assertEqual(screen, observation.screen_type)
                     self.assertNotIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, observation.visible_elements)
+
+
+class WatchtowerCapturedProfileTests(unittest.TestCase):
+    """The lead-qualified three-anchor Watchtower identity stays conjunctive."""
+
+    def test_watchtower_back_publishes_with_native_template_provenance(self) -> None:
+        """The shared Back selector is measured on this frame, not asserted."""
+        recognizer = load_visual_screen_recognizer(matcher=OpenCvTemplateMatcher())
+        for fixture_name in WATCHTOWER_NATIVE_FRAMES:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                image = source.copy()
+            capture = CapturedScreenshot(
+                artifact=None,
+                image=image,
+                image_format="PNG",
+                payload=None,
+                ephemeral_captured_at=datetime.now(tz=UTC),
+            )
+            registry = build_default_selector_registry()
+            matcher = OpenCvTemplateMatcher()
+            enricher = PncObservationEnricher(selector_registry=registry, template_matcher=matcher)
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=ImageSelectorEngine(matcher),
+                screen_classifier=ScreenClassifier(),
+                enricher=enricher,
+                visual_recognizer=recognizer,
+                ocr_service=_require_rapid_ocr_service(self),
+                ocr_backend_revision="a02:building_watchtower",
+            )
+            navigation = NavigationPerception(
+                recognizer,
+                enricher,
+                ScreenClassifier(),
+                builder.create_ocr_context,
+            )
+            for observer_name, observation in (
+                (
+                    "observation_builder",
+                    builder.build(
+                        capture,
+                        request=ObservationRequest.source_screen_retry(ScreenType.PNC_WATCHTOWER),
+                    ),
+                ),
+                ("navigation_perception", navigation.build(capture, include_content=True)),
+                ("navigation_perception_no_content", navigation.build(capture, include_content=False)),
+            ):
+                with self.subTest(fixture=fixture_name, observer=observer_name):
+                    self.assertEqual(ScreenType.PNC_WATCHTOWER, observation.screen_type)
+                    self.assertEqual("building_watchtower", observation.decision.layout_id)
+                    back = observation.visible_elements.get(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+                    self.assertIsNotNone(back)
+                    assert back is not None
+                    self.assertEqual(VisibleElementSourceKind.TEMPLATE, back.source_kind)
+                    self.assertEqual(Bounds(x=33, y=7, width=104, height=73), back.bounds)
+                    self.assertEqual("building_watchtower", back.source_layout_id)
+                    self.assertEqual(ScreenType.PNC_WATCHTOWER, back.source_screen)
+                    self.assertFalse(back.identity_evidence)
+
+    def test_every_watchtower_identity_anchor_is_required(self) -> None:
+        """Title, description and Warning tabs are conjunctive, not a vote."""
+        recognizer = load_visual_screen_recognizer(matcher=OpenCvTemplateMatcher())
+        for fixture_name in WATCHTOWER_NATIVE_FRAMES:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                image = source.copy()
+            for label, band in WATCHTOWER_IDENTITY_BANDS:
+                erased = image.copy()
+                ImageDraw.Draw(erased).rectangle(band, fill=(10, 20, 40))
+                recognition = recognizer.recognize(erased)
+                with self.subTest(fixture=fixture_name, erased=label):
+                    self.assertNotIn(
+                        ScreenType.PNC_WATCHTOWER,
+                        {item.screen_type for item in recognition.evidence},
+                    )
+                    self.assertNotIn(
+                        UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        {item.selector_id for item in recognition.controls},
+                    )
+
+    def test_erased_watchtower_back_preserves_identity_but_withholds_control(self) -> None:
+        """A missing measured Back cannot be recovered from layout geometry."""
+        recognizer = load_visual_screen_recognizer(matcher=OpenCvTemplateMatcher())
+        for fixture_name in WATCHTOWER_NATIVE_FRAMES:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                erased = source.copy()
+            ImageDraw.Draw(erased).rectangle(WATCHTOWER_BACK_BAND, fill=(10, 20, 40))
+            recognition = recognizer.recognize(erased)
+            with self.subTest(fixture=fixture_name):
+                self.assertIn(
+                    ScreenType.PNC_WATCHTOWER,
+                    {item.screen_type for item in recognition.evidence},
+                )
+                self.assertFalse(recognition.controls)
+
+    def test_unqualified_frames_never_gain_watchtower_identity(self) -> None:
+        """Unselected Home and another family panel never look like Watchtower."""
+        recognizer = load_visual_screen_recognizer(matcher=OpenCvTemplateMatcher())
+        negatives = (
+            ("home_city_illusory_beast_manor_20260921.png", ScreenType.PNC_HOME_CITY),
+            ("hall_of_war_reference_20260914.png", ScreenType.PNC_HALL_OF_WAR),
+        )
+        for fixture_name, expected_screen in negatives:
+            with Image.open(FIXTURE_ROOT / fixture_name) as source:
+                image = source.copy()
+            recognition = recognizer.recognize(image)
+            with self.subTest(fixture=fixture_name):
+                self.assertNotIn(
+                    ScreenType.PNC_WATCHTOWER,
+                    {item.screen_type for item in recognition.evidence},
+                )
+                self.assertIn(
+                    expected_screen,
+                    {item.screen_type for item in recognition.evidence},
+                )
 
 
 if __name__ == "__main__":
