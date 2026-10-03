@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "annotation": "Home-city selected-building control fixtures authored from the authorized 2026-10-03 157_farm V44 annotation-delivery session (run v44_live_v44-watchtower-annotation-delivery-20261003, source session 0d53ab56, candidate e0112f8a) plus one live009 production-run regression frame. The canonical selector under test is PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP, the lead-qualified opaque 78x62 RGB crop of the green up-arrow plus 'Upgrade' caption shown below a selected building body (asset sha256 67c7b1b6fffb3d226a560c6ac74eaf210148ede706c136102f6ddb92dc9e98cd, whole-frame gate 0.85, reference 900x1600). All samples are byte-identical copies of the persisted source captures; no pixels were masked or altered, so raw_sha256 equals the source artifact hash. sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera/home_city_slot_bodies convention. Expected bounds/confidence reproduce the lead's accepted qualification measurements in .local-data/watchtower-chip-control-20261003/lead-qualification-accepted.json and the live009 review's canonical template measurements in .local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE009_REVIEW_20261003.json; they are current-frame observations for these saved views, not universal geometry. The chip's destination remains unproved: these fixtures prove recognition only, no panel, upgrade route, or return.",
+  "annotation": "Home-city selected-building control fixtures authored from the authorized 2026-10-03 157_farm V44 annotation-delivery session (run v44_live_v44-watchtower-annotation-delivery-20261003, source session 0d53ab56, candidate e0112f8a) plus the live009 and live010 production-run regression frames. The canonical selector under test is PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP, the lead-qualified opaque 78x62 RGB crop of the green up-arrow plus 'Upgrade' caption shown below a selected building body (asset sha256 67c7b1b6fffb3d226a560c6ac74eaf210148ede706c136102f6ddb92dc9e98cd, whole-frame gate 0.85, reference 900x1600). All samples are byte-identical copies of the persisted source captures; no pixels were masked or altered, so raw_sha256 equals the source artifact hash. sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera/home_city_slot_bodies convention. Expected bounds/confidence reproduce the lead's accepted qualification measurements in .local-data/watchtower-chip-control-20261003/lead-qualification-accepted.json and the live009 and live010 reviews' canonical template measurements in .local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE009_REVIEW_20261003.json and V44_WATCHTOWER_LIVE010_REVIEW_20261003.json; they are current-frame observations for these saved views, not universal geometry. The chip's destination remains unproved: these fixtures prove recognition only, no panel, upgrade route, or return.",
   "samples": [
     {
       "image": "home_city_selected_upgrade_chip_0034.png",
@@ -20,6 +20,44 @@
         "confidence": 0.893282413482666
       },
       "annotation": "Live009 regression source: the failed production open's chip-source frame (run v44_live_v44-watchtower-production-20261003, 157_farm, capture sequence 34), from which the centered chip tap at (670,543) produced no panel. Lead measurement places the match at (633,511,78,62) score ~0.8933; the caption-inclusive center (672,542) sits below the visible button, so the catalog click.point_ratio [0.5, 0.35] must resolve the corrected in-match action point (672,533) instead."
+    },
+    {
+      "image": "home_city_selected_upgrade_chip_live010_0034.png",
+      "role": "chip_unqualified_live010_source",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "05405ef819d9d9cb33db77fd73caece04255667723c156d1de1eb80a4a8621fa",
+      "sha256": "c707417a6ddcb161f4868c7545af7d9dfad144e093674077fda0d9ff4ae84b7a",
+      "source_artifact": "20261003T161202Z_core_20261003T161019Z_be476816_0034_core_6_home_selected_building_upgrade_chip.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "05405ef819d9d9cb33db77fd73caece04255667723c156d1de1eb80a4a8621fa",
+      "masked_rows": [],
+      "expected": {
+        "bounds": null,
+        "center": null,
+        "confidence": null
+      },
+      "annotation": "Live010 regression source: the failed production open's chip-source frame (run v44_live_v44-watchtower-button-point-20261003, 157_farm, capture sequence 34). Lead review and masked-matcher diagnostic confirm the Upgrade chip is visibly present yet the unchanged 78x62/.85 whole-frame matcher scores only ~0.795923 at (649,507,78,62), so no qualified element may publish. Present-but-unqualified is recognition evidence, not proof that the control is absent; the production route must acquire the chip on a later frame rather than tap or declare missing here."
+    },
+    {
+      "image": "home_city_selected_upgrade_chip_live010_0035.png",
+      "role": "chip_positive_live010_final",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "3cd53841620d7b775748b44fca0e0c504c9a98d99b5b96b9edcafaf3814fefd6",
+      "sha256": "4c6e43fecf4e0c1a102a8f23b6dbbf3f6b4c9c2b97e984d08d4d58264c6ac779",
+      "source_artifact": "20261003T161206Z_core_20261003T161019Z_be476816_0035_v44_final_state.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "3cd53841620d7b775748b44fca0e0c504c9a98d99b5b96b9edcafaf3814fefd6",
+      "masked_rows": [],
+      "expected": {
+        "bounds": [649, 474, 78, 62],
+        "center": [688, 505],
+        "confidence": 0.8634350299835205
+      },
+      "annotation": "Live010 delayed positive: the same run's final_state frame (capture sequence 35), the next Home capture after source34 with no intervening input. The same selected building's chip qualifies unchanged at (649,474,78,62) score ~0.863435, so point_ratio [0.5, 0.35] resolves action point (688,496) on the current match. This pair proves a fresh passive frame can reacquire the floating chip without new input; the corrected point's live effectiveness remains unproven."
     },
     {
       "image": "home_city_selected_upgrade_chip_0037.png",

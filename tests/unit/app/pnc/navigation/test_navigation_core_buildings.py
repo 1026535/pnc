@@ -1136,6 +1136,66 @@ class WatchtowerTwoHopTests(RecordedFramesCore, unittest.TestCase):
         self.assertEqual(1, chip_event["input_sequence"])
         self.assertEqual((663, 496), chip_event["selector_action_point"])
 
+    def test_intervening_input_on_the_later_passive_frame_still_refuses(self) -> None:
+        """A foreign input surfacing on a later passive view voids that frame's chip."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        content_frames = iter((
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=3),
+                                    capture_sequence=4, input_sequence=2, chip=True),
+        ))
+        _, actuator, error = self._failing_open(content_frames)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), "intervening input")
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+
+    def test_operation_deadline_bounds_passive_chip_observation(self) -> None:
+        """The shared Home deadline stops the passive wait before another capture."""
+        body = self._body()
+        now = datetime(2026, 10, 3, tzinfo=UTC)
+        elapsed = [0.0]
+        queued = [
+            _provenanced_home_frame((body,), captured_at=now, capture_sequence=1),
+            _provenanced_home_frame((body,), captured_at=now + timedelta(seconds=1),
+                                    capture_sequence=2),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=2),
+                                    capture_sequence=3, input_sequence=1),
+            _provenanced_home_frame((), captured_at=now + timedelta(seconds=3),
+                                    capture_sequence=4, input_sequence=1, chip=True),
+        ]
+        frames = iter(queued)
+
+        def observe(_):
+            frame = next(frames)
+            if frame.frame_ref.capture_sequence == 3:
+                # The unqualified selected view arrived late; the shared
+                # operation clock is already past the Home deadline.
+                elapsed[0] = 200.0
+            return frame
+
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: observation(ScreenType.PNC_WATCHTOWER),
+            reviewed_navigation_edges(), NavigationPolicy(max_observations=4),
+            sleep=lambda _: None, clock=lambda: elapsed[0],
+        )
+        with self.assertRaisesRegex(RuntimeError, "operation deadline"):
+            core.open_building(
+                HomeCityObjectId.WATCHTOWER,
+                observe_content=observe,
+                home_city_slot=HomeCitySlotSelector(4),
+            )
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        # The qualifying frame was never consumed; the deadline cut the wait.
+        self.assertEqual(4, next(frames).frame_ref.capture_sequence)
+
     def _failing_open(self, content_frames):
         actuator = Actuator()
         core = NavigationCore(

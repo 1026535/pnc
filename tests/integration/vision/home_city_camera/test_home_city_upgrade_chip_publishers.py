@@ -1,13 +1,14 @@
 """Selected-building Upgrade chip through both production publishers.
 
-Replays the native 900x1600 live007 annotation-session frames and the failed
-live009 production chip-source frame through ``ObservationBuilder`` and
-``NavigationPerception``: the canonical
+Replays the native 900x1600 live007 annotation-session frames, the failed
+live009 production chip-source frame, and the failed live010 delayed pair
+through ``ObservationBuilder`` and ``NavigationPerception``: the canonical
 ``PNC_HOME_SELECTED_BUILDING_UPGRADE_CHIP`` template selector must publish its
 current-frame element through the measured-action channel on the selected
 views with the lead-qualified bounds and full frame provenance, and must stay
-absent on the unselected view. The element identifies the visible control
-only; no destination or route is claimed.
+absent on the unselected view and on the visibly-present-but-unqualified
+live010 source. The element identifies the visible control only; no
+destination or route is claimed.
 """
 
 from __future__ import annotations
@@ -43,6 +44,10 @@ _EXPECTED = {
     "home_city_selected_upgrade_chip_0038.png": (
         Bounds(624, 496, 78, 62),
         0.8811300838694853,
+    ),
+    "home_city_selected_upgrade_chip_live010_0035.png": (
+        Bounds(649, 474, 78, 62),
+        0.8634350299835205,
     ),
 }
 
@@ -159,6 +164,64 @@ class HomeCityUpgradeChipPublisherTests(HomeCameraPublicationAssertions, unittes
         self.assertEqual(
             observations[0].visible_elements[CHIP_ID],
             observations[1].visible_elements[CHIP_ID],
+        )
+
+    def test_live010_delayed_pair_republishes_the_same_chip(self) -> None:
+        """Live010's unqualified source stays chipless; the later same-chain frame qualifies.
+
+        Capture 34 visibly shows the chip yet scores ~0.7959 under the
+        unchanged .85 gate, so both publishers must withhold the element. The
+        next capture 35 of the same selected building — same synthetic
+        session, epoch, and input sequence, no new input — qualifies at
+        (649,474,78,62) ~0.863435 and resolves action point (688,496) on the
+        current match. This is delayed recognition, not proof the control was
+        absent on capture 34.
+        """
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        first = _capture(
+            "home_city_selected_upgrade_chip_live010_0034.png",
+            session_id="v44-chip-live010-pair",
+            capture_sequence=34,
+        )
+        first_pair = self._build_both(builder, navigation, backend, first)
+        for name, observation in (
+            ("observation_builder", first_pair[0]),
+            ("navigation_perception", first_pair[1]),
+        ):
+            with self.subTest(publisher=name, stage="unqualified"):
+                self.assertEqual(ScreenType.PNC_HOME_CITY, observation.screen_type)
+                self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
+                self.assertNotIn(CHIP_ID, observation.visible_elements)
+
+        second = _capture(
+            "home_city_selected_upgrade_chip_live010_0035.png",
+            session_id="v44-chip-live010-pair",
+            capture_sequence=35,
+        )
+        self.assertEqual(first.frame_ref.session_id, second.frame_ref.session_id)
+        self.assertEqual(first.frame_ref.session_epoch, second.frame_ref.session_epoch)
+        self.assertEqual(first.frame_ref.input_sequence, second.frame_ref.input_sequence)
+        self.assertLess(
+            first.frame_ref.capture_sequence, second.frame_ref.capture_sequence,
+        )
+        second_pair = self._build_both(builder, navigation, backend, second)
+        bounds, confidence = _EXPECTED[
+            "home_city_selected_upgrade_chip_live010_0035.png"
+        ]
+        for name, observation in (
+            ("observation_builder", second_pair[0]),
+            ("navigation_perception", second_pair[1]),
+        ):
+            with self.subTest(publisher=name, stage="qualified"):
+                self._assert_chip_publication(observation, second, bounds, confidence)
+                self.assertEqual(
+                    (688, 496), observation.visible_elements[CHIP_ID].action_point,
+                )
+        self.assertEqual(
+            second_pair[0].visible_elements[CHIP_ID],
+            second_pair[1].visible_elements[CHIP_ID],
         )
 
     def test_unselected_view_publishes_no_chip(self) -> None:

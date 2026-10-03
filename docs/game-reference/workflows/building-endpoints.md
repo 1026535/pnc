@@ -393,3 +393,34 @@ own frozen final-candidate proof. Provenance:
 `.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE009_REVIEW_20261003.json`
 and correction commit on `codex/v44-retained-routes-20261002`; two run
 incidents are recorded under the canonical incident collection.
+
+**Live010 production attempt, October 3:** the corrected-point
+production open/return run (run `v44-watchtower-button-point-20261003`,
+candidate `843d6039`) FAILED before chip dispatch. Observed: one body
+send (`in-0014` at (686,365)) and zero chip/Back sends. Chip-source34
+visibly shows the Upgrade chip yet the unchanged 78x62/.85 matcher
+scores only ~0.7959 at (649,507,78,62), below the gate, so no qualified
+element authorized a tap. The later final35 of the same selected
+building and same input chain qualifies unchanged at (649,474,78,62)
+score ~0.8634, which resolves the [0.5, 0.35] action point (688,496).
+Inferred: rendering/animation variability can temporarily hold the
+floating chip under the gate, and a fresh passive frame can reacquire it
+without new input. Unknown: the exact pixel/opacity cause, and the
+corrected point's live effectiveness remains untested. The resolved
+candidate correction uses the existing bounded passive Home observation
+allowance after the single body send: each fresh capture rechecks newer
+timestamp, session/epoch, the original body-to-chip input chain,
+normalized endpoint/calibration, Home guard and the same operation
+deadline. Only a missing match may wait; a present foreign element,
+interrupted chain or exhausted allowance/deadline still stops
+immediately before dependent input, ending `NO_QUALIFIED_ROUTE` with no
+chip sent. The circle/caption and content-glyph alpha-mask matcher
+experiments failed existing saved views and were rejected; asset,
+threshold, point_ratio, jitter and deadline owners stay unchanged.
+Production open/return is still unproved and requires its own frozen
+final-candidate run. Provenance:
+`.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE010_REVIEW_20261003.json`,
+run evidence SHA-256
+`304fc0f6e1cf9d1e8a5475b70417236678749f9c6333d0688967ae58768eed7a`, and
+correction commit on `codex/v44-retained-routes-20261002`; two run
+incidents are recorded under the canonical incident collection.
