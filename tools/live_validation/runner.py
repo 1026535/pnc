@@ -932,13 +932,9 @@ class LiveCaseRunner:
             body_event_id=body_event_id,
             last_input_sequence=body_receipt.dispatch.input_sequence,
         )
-        if follow_up.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_LOADING}:
-            return (self._case_outcome(
-                spec, collector, mark=mark, status=CaseStatus.BLOCKED,
-                artifacts=artifacts, body_entry_event_id=body_event_id,
-                source_artifact=source.artifact_path, follow_up_artifact=follow_up.artifact_path,
-                postcondition=postcondition, detail="Body input recorded; a foreground menu is not yet observed.",
-                unresolved_boundary="body_menu_observation"), None)
+        # Discovery promises a receipt and its immediate raw follow-up, not a
+        # menu or destination. On-city controls can retain the Home classifier;
+        # dependent controls still require their own explicit source contract.
         return (
             self._case_outcome(
                 spec, collector, mark=mark, status=CaseStatus.PASSED,

@@ -308,6 +308,44 @@ class LiveCaseRunnerTests(unittest.TestCase):
                 [f"{f.check}: {f.detail}" for f in report.findings],
             )
 
+    def test_raw_discovery_does_not_require_a_menu_screen(self):
+        for screen in (ScreenType.PNC_HOME_CITY, ScreenType.PNC_LOADING):
+            with self.subTest(screen=screen), tempfile.TemporaryDirectory() as raw:
+                tmp = Path(raw)
+                binding = _binding(tmp, "v44_watchtower_body_menu")
+                holder = {"core_kwargs": {"post_entry_screens": {
+                    HomeCityObjectId.WATCHTOWER: screen,
+                }}}
+                evidence, path = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+                result = evidence.case_results[0]
+                self.assertEqual(CaseStatus.PASSED, result.status)
+                self.assertEqual("discovery", result.purpose)
+                self.assertEqual(screen.value, result.postcondition["screen_type"])
+                self.assertIsNotNone(result.body_entry_event_id)
+                self.assertIsNotNone(result.follow_up_artifact)
+                self.assertEqual([], holder["core"].control_calls)
+                self.assertTrue(validate_live_evidence(binding, path).valid)
+
+    def test_home_discovery_does_not_authorize_a_return_control(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_bank_body_menu", "v44_bank_return_home"
+            )
+            holder = {"core_kwargs": {"post_entry_screens": {
+                HomeCityObjectId.BANK: ScreenType.PNC_HOME_CITY,
+            }}}
+            evidence, _ = LiveCaseRunner(
+                binding, _deps(tmp, holder, annotation_factory=lambda _: self.fail(
+                    "An unauthorized source must refuse before requesting annotation."
+                ))
+            ).run()
+            discovery, control = evidence.case_results
+            self.assertEqual(CaseStatus.PASSED, discovery.status)
+            self.assertEqual(CaseStatus.FAILED, control.status)
+            self.assertEqual("control_source_screen", control.unresolved_boundary)
+            self.assertEqual([], holder["core"].control_calls)
+
     def test_discovery_body_entry_refusal_fails_the_case_not_the_run(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
