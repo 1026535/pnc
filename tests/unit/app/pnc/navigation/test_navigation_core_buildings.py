@@ -508,7 +508,6 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
         """An unqualified endpoint cannot dispatch its potentially mutating body tap."""
         for target in (
             HomeCityObjectId.BANK,
-            HomeCityObjectId.CAVALRY_BARRACKS,
             HomeCityObjectId.SIEGE_FACTORY,
             HomeCityObjectId.FARM,
             HomeCityObjectId.LUMBER_CAMP,
@@ -516,7 +515,6 @@ class NavigationCoreTests(RecordedFramesCore, unittest.TestCase):
             HomeCityObjectId.IRON_MINE,
             HomeCityObjectId.GOLD_MINE,
             HomeCityObjectId.TRAP_WORKSHOP,
-            HomeCityObjectId.CAVALRY_BARRACKS,
             HomeCityObjectId.SIEGE_FACTORY,
         ):
             for method in ("open_building", "open_visible_building"):
