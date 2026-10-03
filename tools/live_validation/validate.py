@@ -21,7 +21,12 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 from tools.live_validation.binding import AssignmentBinding, _HEX64
-from tools.live_validation.cases import CaseGate, CaseSpec, require_case
+from tools.live_validation.cases import (
+    WATCHTOWER_OPEN_RETURN_OPERATION_ID,
+    CaseGate,
+    CaseSpec,
+    require_case,
+)
 from tools.live_validation.evidence import EVIDENCE_SCHEMA_VERSION, sha256_file
 
 
@@ -106,9 +111,9 @@ def _route_case_findings(
 
     The route must prove the qualified building endpoint plus its measured
     Back control, and partition the case's receipts into the opening half
-    (camera inputs, then exactly the body and chip taps) and the return half
-    (exactly one Back tap), all in one session on contiguous input
-    sequences, with no accepted dispatch failure.
+    (camera inputs, then the body tap and Watchtower's additional chip tap)
+    and the return half (exactly one Back tap), all in one session on
+    contiguous input sequences, with no accepted dispatch failure.
     """
 
     case_id = str(row.get("case_id"))
@@ -145,21 +150,24 @@ def _route_case_findings(
     for event_id in opening + returning:
         if event_id not in event_by_id:
             fail("route", f"{case_id}: route receipt '{event_id}' is unknown.")
+    # Watchtower alone uses an intermediate selected-building chip. Cavalry's
+    # native panel is reached directly by the qualified body tap.
+    opening_taps = 2 if spec.operation_id == WATCHTOWER_OPEN_RETURN_OPERATION_ID else 1
     if (
-        len(opening) < 2
+        len(opening) < opening_taps
         or any(
             (event_by_id.get(event_id) or {}).get("primitive") != "tap"
-            for event_id in opening[-2:]
+            for event_id in opening[-opening_taps:]
         )
         or any(
             (event_by_id.get(event_id) or {}).get("primitive") == "tap"
-            for event_id in opening[:-2]
+            for event_id in opening[:-opening_taps]
         )
     ):
         fail(
             "route",
-            f"{case_id}: opening must end in exactly two taps (body then "
-            "chip); earlier receipts may only be camera inputs.",
+            f"{case_id}: opening must end in exactly {opening_taps} tap(s); "
+            "earlier receipts may only be camera inputs.",
         )
     if len(returning) != 1 or (
         event_by_id.get(returning[0]) or {}
@@ -212,20 +220,20 @@ def _route_case_findings(
         )
     endpoint_frame = route.get("endpoint_frame")
     findings.extend(_frame_findings(endpoint_frame, f"{case_id} route endpoint"))
-    chip = event_by_id.get(opening[-1]) if opening else None
-    if isinstance(endpoint_frame, dict) and isinstance(chip, dict):
-        chip_source = chip.get("source_frame") or {}
+    final_opening = event_by_id.get(opening[-1]) if opening else None
+    if isinstance(endpoint_frame, dict) and isinstance(final_opening, dict):
+        opening_source = final_opening.get("source_frame") or {}
         if (
-            endpoint_frame.get("session_id") != chip_source.get("session_id")
-            or endpoint_frame.get("session_epoch") != chip_source.get("session_epoch")
+            endpoint_frame.get("session_id") != opening_source.get("session_id")
+            or endpoint_frame.get("session_epoch") != opening_source.get("session_epoch")
             or endpoint_frame.get("input_sequence")
-            != (chip.get("dispatch") or {}).get("input_sequence")
+            != (final_opening.get("dispatch") or {}).get("input_sequence")
             or endpoint_frame.get("capture_sequence", -1)
-            <= chip_source.get("capture_sequence", -1)
+            <= opening_source.get("capture_sequence", -1)
         ):
             fail(
                 "route",
-                f"{case_id}: endpoint frame must immediately follow the chip "
+                f"{case_id}: endpoint frame must immediately follow the final opening "
                 "receipt in the same session.",
             )
     if route.get("back_selector") != UiElementId.PNC_BACK_BUTTON_TOP_LEFT.value:

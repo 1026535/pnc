@@ -99,3 +99,30 @@ They do not add another engine, registry, detector family or implementation slic
 Live execution remains in the existing bounded batch on an exact reviewed clean
 candidate, with leases, identity continuity and current CPU scheduling. This
 planning review performed no live inputs and accepts no additional routes.
+
+## October 3 native evidence and Cavalry acceptance
+
+The coordinator independently reviewed Devin live015 on clean runtime
+`e75c16363803d24e642870eeb8525dc84c602d03`, configured `157_farm`, active
+`K157:0 sticker NPC`. The production Cavalry route normalized the camera,
+panned, tapped the freshly measured slot-6 body once, observed its own
+`building_cavalry_barracks` endpoint, and used the current visual Back match
+to return to guarded Home. Cavalry opens directly on its body tap;
+Watchtower's body-then-chip entry is a separate observed route. The evidence
+validator and its fake now retain that distinction. No resource action was
+recorded. Confidence is live-observed for this candidate and castle; the
+installed client build was not measured in this batch.
+
+The same batch's one slot-8 body tap opened the visible Siege Factory panel.
+That frame supplies Siege's own title, artwork, family description and Back
+appearance. This is discovery evidence: Siege still needs its own recognition
+profile, measured Back, reviewed return edge and production open/return proof.
+Neither its capture nor Cavalry's acceptance proves whole-V44 coverage.
+
+Provenance: primary checkout
+`.local-data/devin-live-test/runs/v44-q4-bank-watchtower-20261001/turn-015/evidence.json`;
+original raw evidence and frames are linked there. The lead's independent
+review is `.local-data/devin-vision-pipeline/V44_CAVALRY_LIVE015_REVIEW_20261003.json`.
+The earlier Cavalry/Siege pending statements above are superseded to this
+extent. The resource-capture row is superseded by the October 3 user scope
+exclusion; all 54 atlas slots remain geometry evidence.

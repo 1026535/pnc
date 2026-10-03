@@ -158,6 +158,38 @@ class ValidateLiveEvidenceTests(unittest.TestCase):
                     report = validate_live_evidence(binding, path)
                     self.assertFalse(report.valid, defect)
 
+    def test_chipless_route_requires_one_body_tap_and_current_endpoint(self):
+        from pnc_automation.app.pnc.enums.screen_type import ScreenType
+        from tests.unit.tools.live_validation.test_runner import _binding, _deps
+        from tools.live_validation.runner import LiveCaseRunner
+
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(tmp, "v44_cavalry_public_open_return")
+            holder = {"core_kwargs": {"navigation": {
+                "endpoint_screen": ScreenType.PNC_CAVALRY_BARRACKS,
+                "endpoint_layout_id": "building_cavalry_barracks",
+            }}}
+            _, path = LiveCaseRunner(binding, _deps(tmp, holder)).run()
+            original = json.loads(path.read_text())
+            self.assertTrue(validate_live_evidence(binding, path).valid)
+            for defect in ("missing_body", "extra_tap", "stale_endpoint", "missing_back"):
+                with self.subTest(defect=defect):
+                    doc = json.loads(json.dumps(original))
+                    route = doc["case_results"][0]["route"]
+                    if defect == "missing_body":
+                        route["opening_receipt_ids"] = []
+                    elif defect == "extra_tap":
+                        route["opening_receipt_ids"] *= 2
+                    elif defect == "stale_endpoint":
+                        route["endpoint_frame"]["input_sequence"] = 0
+                    else:
+                        route["return_receipt_ids"] = []
+                    path.write_text(json.dumps(doc))
+                    report = validate_live_evidence(binding, path)
+                    self.assertFalse(report.valid, defect)
+                    self.assertTrue(any(f.check == "route" for f in report.findings))
+
     def _setup(self, tmp: Path, **overrides):
         binding = load_assignment_binding(write_assignment(tmp, assignment_payload(tmp)))
         evidence = _evidence(tmp, **overrides)

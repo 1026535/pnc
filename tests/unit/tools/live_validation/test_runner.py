@@ -205,12 +205,13 @@ class _FakeCore:
 
 
 class _FakeNavigation:
-    """Models the frozen Watchtower open/return route over the fake session.
+    """Models the released production open/return routes over the fake session.
 
-    ``open_building`` sends the body tap, captures the fresh chip frame,
-    sends the chip tap, and returns the qualified panel endpoint —
-    unless configured to refuse or fail first. ``navigate`` sends the
-    measured Back tap from the endpoint and returns the landing frame.
+    ``open_building`` sends the body tap, and for Watchtower additionally
+    captures the fresh chip frame and sends the chip tap, then returns the
+    qualified panel endpoint unless configured to refuse or fail first.
+    ``navigate`` sends the measured Back tap from the endpoint and returns
+    the landing frame.
     """
 
     def __init__(
@@ -244,13 +245,14 @@ class _FakeNavigation:
             raise self._open_error
         self.open_calls.append(target)
         self._core._send_tap(observe_content(self._core._request("route-body")))
-        chip = observe_content(self._core._request("route-chip"))
-        if self._chip_failure:
-            self._core._observer(InputDispatchFailure(
-                chip.frame_ref, "tap", "dispatch", "RuntimeError",
-                artifact_path=chip.artifact_path, home_city=True))
-            raise SelectorResolutionError("chip dispatch failed")
-        self._core._send_tap(chip)
+        if target is HomeCityObjectId.WATCHTOWER:
+            chip = observe_content(self._core._request("route-chip"))
+            if self._chip_failure:
+                self._core._observer(InputDispatchFailure(
+                    chip.frame_ref, "tap", "dispatch", "RuntimeError",
+                    artifact_path=chip.artifact_path, home_city=True))
+                raise SelectorResolutionError("chip dispatch failed")
+            self._core._send_tap(chip)
         self._core._screen = self._endpoint_screen
         return self._core._panel_frame(
             "route-endpoint", self._endpoint_screen,
@@ -1280,7 +1282,7 @@ class LiveCaseRunnerTests(unittest.TestCase):
             )
 
     def test_cavalry_acceptance_route_passes_and_evidence_validates(self):
-        """Same generic route over the Cavalry slot-6 endpoint contract."""
+        """Cavalry's body tap directly opens its slot-6 native endpoint."""
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
             binding = _binding(tmp, "v44_cavalry_public_open_return")
@@ -1312,7 +1314,7 @@ class LiveCaseRunnerTests(unittest.TestCase):
             self.assertEqual(
                 UiElementId.PNC_BACK_BUTTON_TOP_LEFT.value, route.back_selector
             )
-            self.assertEqual(2, len(route.opening_receipt_ids))
+            self.assertEqual(1, len(route.opening_receipt_ids))
             self.assertEqual(1, len(route.return_receipt_ids))
             self.assertEqual(
                 [HomeCityObjectId.CAVALRY_BARRACKS],
