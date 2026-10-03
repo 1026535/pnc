@@ -620,9 +620,14 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_action_bounds=Bounds(1084, 645, 22, 22),
                 reference_action_point=(1096, 661),
                 min_score=0.90,
-                # 12 reference px covers the scene-calibration uncertainty
-                # plus matching noise, matching the slot-bound convention.
-                max_projection_error=12,
+                # Live011's fresh selected target frame on 2026-10-03
+                # measures this floating shaft at score .903566 with a
+                # 12.414709 reference-px projection residual. The smallest
+                # whole-pixel allowance containing that observed residual
+                # is 13; retained source/holdout bodies still qualify. This
+                # target-specific envelope keeps the .90 score floor and
+                # current-match action geometry unchanged.
+                max_projection_error=13,
                 # Slot 4 is the single-type watchtower slot (client 1006).
                 reference_slot=HomeCitySlotSelector(4),
             ),
