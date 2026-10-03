@@ -1287,8 +1287,8 @@ class LiveCaseRunner:
         last input sequence move to it, and the original body witness stays
         bound to its discovery owner. Only a confirmed receipt plus a valid
         immediate same-session/epoch/sequence follow-up may extend the chain;
-        anything else leaves the prior context so a later case's resume
-        boundary still catches the gap rather than hiding it.
+        anything else fails the case and halts dependent input rather than
+        marking raw discovery passed with an invalid capture.
         """
 
         follow_up = result.follow_up
@@ -1303,7 +1303,9 @@ class LiveCaseRunner:
             or first_ref.input_sequence != receipt.dispatch.input_sequence
             or first_ref.capture_sequence != receipt.source_frame.capture_sequence + 1
         ):
-            return
+            raise ReceiptIntegrityError(
+                "Control has no persisted immediate follow-up for its receipt."
+            )
         contexts[spec.body_case_id] = _RetainedBodyContext(
             witness=context.witness,
             follow_up=follow_up,

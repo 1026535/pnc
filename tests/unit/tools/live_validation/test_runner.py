@@ -734,6 +734,45 @@ class LiveCaseRunnerTests(unittest.TestCase):
             )
             self.assertEqual(1, len(holder["core"].control_calls))
 
+    def test_control_with_non_immediate_follow_up_halts_the_chain(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            binding = _binding(
+                tmp, "v44_watchtower_body_menu",
+                "v44_watchtower_selected_control_entry",
+                "v44_watchtower_return_home",
+            )
+            holder = {"core_kwargs": {"post_entry_screens": {
+                HomeCityObjectId.WATCHTOWER: ScreenType.PNC_HOME_CITY,
+            }}}
+            deps = _deps(tmp, holder, annotation_factory=_armed_exchange)
+            connect = deps.connect
+
+            def non_immediate_connect(**kwargs):
+                connection = connect(**kwargs)
+                control = connection.core.execute_developmental_control
+
+                def non_immediate_control(*args):
+                    result = control(*args)
+                    return replace(result, follow_up=replace(
+                        result.follow_up, frame_ref=replace(
+                            result.follow_up.frame_ref,
+                            capture_sequence=result.follow_up.frame_ref.capture_sequence + 1,
+                        ),
+                    ))
+
+                connection.core.execute_developmental_control = non_immediate_control
+                return connection
+
+            evidence, _ = LiveCaseRunner(
+                binding, replace(deps, connect=non_immediate_connect)
+            ).run()
+            self.assertEqual(CaseStatus.FAILED, evidence.case_results[1].status)
+            self.assertEqual("receipt_integrity", evidence.case_results[1].unresolved_boundary)
+            self.assertEqual(CaseStatus.NOT_RUN, evidence.case_results[2].status)
+            self.assertEqual(1, len(holder["core"].control_calls))
+            self.assertEqual("dispatched", evidence.logical_attempts[1].status)
+
     def test_control_case_without_its_body_case_is_refused(self):
         with tempfile.TemporaryDirectory() as raw:
             tmp = Path(raw)
