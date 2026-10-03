@@ -271,6 +271,43 @@ class CameraTargetSlotContractTests(unittest.TestCase):
         with self.assertRaises(SelectorResolutionError):
             target.atlas_action_point(home_city_slot=HomeCitySlotSelector(12))
 
+    def test_projection_envelopes_keep_watchtower_at_13_and_others_unchanged(self) -> None:
+        """The live011 calibration widened only the Watchtower envelope.
+
+        The floating shaft measured a 12.414709 reference-px residual on the
+        2026-10-03 route frame, so the Watchtower envelope is calibrated to 13;
+        every other target keeps its authored tolerance and the .90 floor.
+        """
+
+        expected = {
+            HomeCityObjectId.INSTITUTE: 8,
+            HomeCityObjectId.TOWER_OF_TRIAL: 8,
+            HomeCityObjectId.CAMPAIGN: 8,
+            HomeCityObjectId.BLACKSMITH: 12,
+            HomeCityObjectId.ALLIANCE_HALL: 12,
+            HomeCityObjectId.MARKET: 12,
+            HomeCityObjectId.ILLUSORY_BEAST_MANOR: 8,
+            HomeCityObjectId.WALL: 12,
+            HomeCityObjectId.GODDESS_STATUE: 12,
+            HomeCityObjectId.CASTLE: 8,
+            HomeCityObjectId.WAREHOUSE: 12,
+            HomeCityObjectId.BANK: 8,
+            HomeCityObjectId.INFANTRY_BARRACKS: 12,
+            HomeCityObjectId.CAVALRY_BARRACKS: 12,
+            HomeCityObjectId.RANGED_BARRACKS: 12,
+            HomeCityObjectId.SIEGE_FACTORY: 12,
+            HomeCityObjectId.MOON_WELL: 12,
+            HomeCityObjectId.WATCHTOWER: 13,
+        }
+        catalog = load_home_city_camera_catalog()
+        self.assertEqual(
+            expected,
+            {target.object_id: target.max_projection_error for target in catalog.targets},
+        )
+        for target in catalog.targets:
+            with self.subTest(target=target.object_id.value):
+                self.assertEqual(0.9, target.min_score)
+
     def test_watchtower_binding_and_single_type_slot_action(self) -> None:
         target = _catalog_target(HomeCityObjectId.WATCHTOWER)
         self.assertEqual(HomeCitySlotSelector(4), target.reference_slot)
@@ -978,6 +1015,86 @@ class NativeSlotBodyMatchTests(unittest.TestCase):
                     ),
                 )
 
+    def test_watchtower_live011_frame34_qualifies_at_the_calibrated_envelope(self) -> None:
+        """The 2026-10-03 refusal frame now publishes the measured slot-4 body.
+
+        On the live011 route this same view passed the .90 floor at .90357 but
+        measured a 12.414709-px projection residual, beyond the pre-correction
+        12-px envelope, so the route refused without any body input. Under the
+        calibrated 13-px envelope the identical view qualifies the floating
+        shaft at slot 4 with the unchanged interior action geometry.
+        """
+
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        proof, frame = self._proof_and_frame(
+            "home_city_watchtower_slot4_live011_0034_20261003.png"
+        )
+        self.assertEqual((-551, 43), proof.translation)
+        self.assertAlmostEqual(0.75, proof.zoom, delta=0.005)
+        matches = self.localizer.match_target_candidates(frame, watchtower, proof=proof)
+        self.assertEqual(1, len(matches))
+        match = matches[0]
+        self.assertEqual(HomeCitySlotSelector(4), match.home_city_slot)
+        self.assertEqual(Bounds(628, 298, 64, 90), match.bounds)
+        self.assertEqual((665, 361), match.action_point)
+        self.assertEqual(Bounds(656, 349, 16, 17), match.action_bounds)
+        self.assertAlmostEqual(0.9035658, match.score, places=5)
+        self.assertGreaterEqual(match.score, watchtower.min_score)
+        # The residual exceeds the pre-correction 12-px envelope yet stays
+        # inside the calibrated 13-px bound.
+        self.assertAlmostEqual(12.414709, match.projection_error, places=5)
+        self.assertGreater(match.projection_error, 12)
+        self.assertLessEqual(match.projection_error, watchtower.max_projection_error)
+        self.assertTrue(match.bounds.contains_bounds(match.action_bounds))
+        self.assertTrue(match.action_bounds.contains_point(match.action_point))
+        self.assertEqual(
+            match,
+            self.localizer.match_target(frame, watchtower, proof=proof),
+        )
+
+        objects = self.localizer.matched_target_objects(frame, proof=proof)
+        published = next(
+            object_
+            for object_ in objects
+            if home_city_object_id_from_metadata(object_.metadata)
+            is HomeCityObjectId.WATCHTOWER
+        )
+        self.assertEqual(HomeCitySlotSelector(4), published.home_city_slot)
+        self.assertEqual(match.bounds, published.bounds)
+        self.assertEqual(match.action_point, published.action_point)
+        self.assertEqual("camera_template", published.metadata["detection_source"])
+        self.assertEqual(4, published.metadata["home_city_slot_index"])
+
+    def test_watchtower_live011_frame33_stays_unqualified_despite_visible_shaft(self) -> None:
+        """The earlier pan frame localizes yet still publishes no Watchtower.
+
+        Native33 visibly contains the floating shaft, but its best saved hits
+        score .8875 below the .90 floor and .9218 at a 14.65-px residual beyond
+        the calibrated envelope, so present-but-unqualified must never publish.
+        """
+
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        proof, frame = self._proof_and_frame(
+            "home_city_watchtower_slot4_live011_0033_20261003.png"
+        )
+        self.assertTrue(proof.localized)
+        self.assertEqual((-550, 43), proof.translation)
+        self.assertAlmostEqual(0.75, proof.zoom, delta=0.005)
+        self.assertEqual(
+            (),
+            self.localizer.match_target_candidates(frame, watchtower, proof=proof),
+        )
+        self.assertIsNone(self.localizer.match_target(frame, watchtower, proof=proof))
+        self.assertFalse(
+            any(
+                home_city_object_id_from_metadata(object_.metadata)
+                is HomeCityObjectId.WATCHTOWER
+                for object_ in self.localizer.matched_target_objects(
+                    frame, proof=proof
+                )
+            )
+        )
+
     def test_contradictory_camera_proofs_reject_both_new_bodies(self) -> None:
         """Wrong translations/zooms move predictions away from the bodies."""
 
@@ -1099,6 +1216,42 @@ class SyntheticCandidatePlacementTests(unittest.TestCase):
                 frame, self.blacksmith, proof=proof
             )
         self.assertEqual((), matches)
+
+    def test_watchtower_hits_bracket_the_calibrated_envelope(self) -> None:
+        """Score-qualified hits just inside/outside 13px admit/reject deterministically.
+
+        Under the live011 pose the slot-4 pivot projects the shaft origin to
+        (633.25,309.25): a scripted .95 hit at a 12.3px residual publishes,
+        while the identical hit at 13.3px stays outside the calibrated
+        envelope and must not publish.
+        """
+
+        watchtower = _catalog_target(HomeCityObjectId.WATCHTOWER)
+        proof = _localized_proof((-551, 43), zoom=0.75)
+        frame = HomeCityCameraLocalizer(matcher=_RegionScriptedMatcher({})).prepare_frame(
+            Image.new("RGB", (900, 1600))
+        )
+        inside = {
+            (665, 354): TemplateMatch(
+                bounds=Bounds(621, 309, 64, 90), confidence=0.95
+            ),
+        }
+        matches = self._localizer(inside).match_target_candidates(
+            frame, watchtower, proof=proof
+        )
+        self.assertEqual(1, len(matches))
+        self.assertEqual(HomeCitySlotSelector(4), matches[0].home_city_slot)
+        outside = {
+            (665, 354): TemplateMatch(
+                bounds=Bounds(620, 309, 64, 90), confidence=0.95
+            ),
+        }
+        self.assertEqual(
+            (),
+            self._localizer(outside).match_target_candidates(
+                frame, watchtower, proof=proof
+            ),
+        )
 
     def test_partially_clipped_candidate_is_skipped(self) -> None:
         """Synthetic: a candidate whose predicted body leaves the frame is not searched."""
@@ -1232,6 +1385,8 @@ class FixtureIntegrityTests(unittest.TestCase):
                 "home_city_moon_well_slot17_0029_20260930.png",
                 "home_city_moon_well_slot17_0030_20260930.png",
                 "home_city_watchtower_slot4_0050_20260930.png",
+                "home_city_watchtower_slot4_live011_0033_20261003.png",
+                "home_city_watchtower_slot4_live011_0034_20261003.png",
             },
             set(samples),
         )

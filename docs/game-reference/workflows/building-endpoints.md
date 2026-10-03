@@ -424,3 +424,36 @@ run evidence SHA-256
 `304fc0f6e1cf9d1e8a5475b70417236678749f9c6333d0688967ae58768eed7a`, and
 correction commit on `codex/v44-retained-routes-20261002`; two run
 incidents are recorded under the canonical incident collection.
+
+**Live011 production attempt, October 3:** the passive-reacquisition
+production open/return run (run `v44-watchtower-chip-settle-20261003`,
+candidate `a88236a8`) FAILED before any body, chip or Back input.
+Observed: the route spent only six camera wheels and one 1,0 pan, then
+refused. Camera localization passed on the last observation (native
+frame 34, zoom .75, translation (-551,43), groups
+garden_terrace/institute_structure/plaza_low), and the canonical shaft
+template scored .90357 — above the unchanged .90 floor — but its
+projection residual measured 12.414709 reference px, just beyond the
+target's prior 12-px envelope, so no slot-4 body published. Native
+frames 33 and 35 stay unqualified: frame 33's best saved hits score
+.8875 below the floor and .9218 at a 14.65-px residual, and frame 35
+scores .89966 below the floor. A Military
+Expedition widget is observed on the frame; no causal role is
+established. Inferred: the floating Watchtower shaft can drift a few
+tenths of a pixel beyond the authored 12-px bound while remaining the
+same visible body — rendering-level variability, like the chip's
+live010 excursion. The resolved correction widens only the Watchtower
+envelope 12 -> 13, the smallest whole-pixel bound containing the
+observed residual; the .90 score floor, shaft template, reference
+geometry, slot-4 identity, action geometry, HUD constraints,
+provenance gates and the passive chip correction stay unchanged. All
+four previously qualified source/holdout/live009/live010 body views
+still match under the calibrated envelope on saved replay, and
+native33/35 remain unqualified. Unknown: the precise pixel-level
+cause of the floating displacement. The production open/return route
+remains unproved and requires its own frozen final-candidate run.
+Provenance:
+`.local-data/devin-vision-pipeline/V44_WATCHTOWER_LIVE011_REVIEW_20261003.json`,
+saved-frame replay
+`.local-data/devin-vision-pipeline/watchtower-live011-saved-diagnosis.json`,
+and correction commit on `codex/v44-retained-routes-20261002`.

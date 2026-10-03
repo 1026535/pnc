@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session, the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa), the authorized 2026-09-30 ef03789c turn020 survey frames that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, the four single-type military bodies at slots 5 through 8, and the multi-slot Moon Well body, and the 2026-10-01 v44-q4-bank-watchtower live endpoint frame. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
+  "annotation": "Home-city slot-body fixtures authored from the 2026-09-22 157_farm V44 evidence session, the 2026-09-29 V44-4 driver-correction sessions (157_farm castle under both 1721bc67 and f1171ffa), the authorized 2026-09-30 ef03789c turn020 survey frames that measured the slot-3 Warehouse body, the fixed sys_1/5001 Bank body, the four single-type military bodies at slots 5 through 8, and the multi-slot Moon Well body, and the 2026-10-01 v44-q4-bank-watchtower live endpoint frame, and the 2026-10-03 v44-watchtower-chip-settle live011 route frames 0033/0034 on a88236a8. Sources stay RGBA 900x1600 through production-publisher tests: tests pass source.copy() to the builder and never pre-convert to RGB. Only declared private-chat rows 1390 through 1484 inclusive are masked solid black; every other pixel is source-identical and the RGBA mode is preserved. raw_sha256 hashes the PNG file bytes; sha256 is the decoded RGB digest width.to_bytes(8,big)+height.to_bytes(8,big)+RGB bytes, matching the home_city_camera convention. Slot tags record the slot the body was measured at on these saved views; they are current-frame observations, not universal occupancy.",
   "samples": [
     {
       "image": "home_city_blacksmith_slot12_f1_20260922.png",
@@ -328,6 +328,36 @@
       ],
       "annotation": "v44-4-integrated-turn030 frame 0050, the independent translated holdout for the slot-4 Watchtower. Camera zoom 0.75, atlas translation (-1044,42): the level-12 'Watch Tower' stone shaft is measured at frame (141,314,64,90) score .9143 perr 5.80 against the midpoint prior; interior action point (178,377) sits inside the HUD-safe band. The body renders ~+4/+12 frame px off the unshifted shaft reference — a body-specific displacement the midpoint prior splits to ~6px on each saved view; the '/120' resource ribbon overlaps only sky cropped away from the packaged shaft template. Same-frame Campaign (score .9516 perr 2.24) and Alliance Hall slot-13 (score .9524 perr 3.04) bodies corroborate the camera pose. The readable nameplate and blue '12' badge sit below the crop.",
       "outside_mask_sha256": "81a35778ad1a09b62435e8cd5d20c352155926cbf1d4a9de06b66f6954f22484"
+    },
+    {
+      "image": "home_city_watchtower_slot4_live011_0033_20261003.png",
+      "role": "slot_body_watchtower_live011_unqualified_floating_shaft",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "5fc97e275da1674aa99fdc3b7aa23d39f8d7bffc1ee978b2197107e22283f254",
+      "sha256": "180fb0de72e17560551b8c64ac069c6d4d5e9dfd28fe7a9e3a092f3565986fdd",
+      "source_artifact": "20261003T180433Z_core_20261003T180307Z_605b59d3_0033_core_6_home_after_pan_1_0.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "0a03dd344d23c9d71cb9c2152747bfb434bafa856fed56dd2c2de083da2678c0",
+      "masked_rows": [1390, 1484],
+      "annotation": "2026-10-03 live011 v44-watchtower-chip-settle-20261003 frame 0033 on candidate a88236a8, captured after the single 1,0 pan during camera-seeded target reacquisition; the route sent zero body/chip/Back input. Camera localizes at zoom 0.75, atlas translation (-550,43) through garden_terrace/institute_structure/plaza_low. The Watchtower shaft is visibly present but stays unqualified: its best saved diagnostic hits score .8875 below the .90 floor and .9218 at projection error 14.65 beyond the calibrated 13px envelope, so the frame must publish no slot-4 body. Present-but-unqualified is not proof the body is absent. Every pixel outside the declared private-chat mask stays source-identical.",
+      "outside_mask_sha256": "75f2d6c7366687f57b96a6745135d518ec84f0f92e91fb5de88b6a2433f3295d"
+    },
+    {
+      "image": "home_city_watchtower_slot4_live011_0034_20261003.png",
+      "role": "slot_body_watchtower_live011_qualified_floating_shaft",
+      "size": [900, 1600],
+      "mode": "RGBA",
+      "raw_sha256": "833f1255cbaf6f153151dbeac073c39ba56432353eabc41104fd63e793f8587c",
+      "sha256": "7ba23ff3c05e4d87d4475fb254e5c1513ff60b4ddbd2cea5637cfe57f7a55a58",
+      "source_artifact": "20261003T180437Z_core_20261003T180307Z_605b59d3_0034_core_6_home_target_body_reacquisition.png",
+      "source_size": [900, 1600],
+      "source_mode": "RGBA",
+      "source_sha256": "ba240db151f91620f02af8905ede4065a5e78ce10f82af12765d1d5d87654aca",
+      "masked_rows": [1390, 1484],
+      "annotation": "2026-10-03 live011 v44-watchtower-chip-settle-20261003 frame 0034, the route's last observation before refusal on candidate a88236a8. Camera localizes at zoom 0.75, atlas translation (-551,43) through garden_terrace/institute_structure/plaza_low. The floating Watchtower shaft passes the .90 floor at score .90357 but measures projection residual 12.414709 reference px — beyond the pre-correction 12px envelope, so the live run published no body and sent zero building input. Under the calibrated 13px envelope this same view qualifies the slot-4 body at frame (628,298,64,90) with interior action point (665,361) inside the HUD-safe band; Castle/Institute/Warehouse/Market/Goddess/Tower bodies corroborate the pose. Every pixel outside the declared private-chat mask stays source-identical.",
+      "outside_mask_sha256": "2ffef1d4d0890a549143d9ebff9f83da08de890d0a1837c4ab9aa3f000fa1566"
     }
   ]
 }

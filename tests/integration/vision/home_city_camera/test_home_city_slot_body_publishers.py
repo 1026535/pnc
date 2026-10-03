@@ -124,6 +124,18 @@ _EXPECTED = {
             HomeCityObjectId.WATCHTOWER: (HomeCitySlotSelector(4), (178, 377)),
         },
     },
+    "home_city_watchtower_slot4_live011_0034_20261003.png": {
+        "translation": (-551, 43),
+        "targets": {
+            HomeCityObjectId.INSTITUTE: (HomeCitySlotSelector(9), (390, 817)),
+            HomeCityObjectId.TOWER_OF_TRIAL: (None, (75, 1158)),
+            HomeCityObjectId.MARKET: (HomeCitySlotSelector(11), (579, 1232)),
+            HomeCityObjectId.GODDESS_STATUE: (HomeCitySlotSelector(15), (196, 829)),
+            HomeCityObjectId.CASTLE: (HomeCitySlotSelector(1), (279, 447)),
+            HomeCityObjectId.WAREHOUSE: (HomeCitySlotSelector(3), (572, 718)),
+            HomeCityObjectId.WATCHTOWER: (HomeCitySlotSelector(4), (665, 361)),
+        },
+    },
 }
 
 
@@ -394,6 +406,39 @@ class HomeCitySlotBodyPublisherTests(HomeCameraPublicationAssertions, unittest.T
         )
         observations = self._build_both(builder, navigation, backend, capture)
         expected = _EXPECTED["home_city_watchtower_slot4_0050_20260930.png"]
+        for name, observation in (
+            ("observation_builder", observations[0]),
+            ("navigation_perception", observations[1]),
+        ):
+            with self.subTest(publisher=name):
+                self._assert_slot_body_publication(
+                    observation,
+                    capture,
+                    expected["translation"],
+                    expected["targets"],
+                )
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
+    def test_live011_frame34_publishes_watchtower_on_both_paths(self) -> None:
+        """The 2026-10-03 refusal frame publishes the slot-4 body on both producers.
+
+        The live011 run refused on this view: the floating shaft measured a
+        12.414709-px projection residual, outside the pre-correction 12-px
+        envelope. Under the calibrated 13-px envelope the identical saved
+        frame localizes through the same fixed groups and both publishers
+        tag the Watchtower at slot 4 with the measured in-match action
+        geometry; offline recognition authorizes no tap or destination.
+        """
+
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_watchtower_slot4_live011_0034_20261003.png",
+            session_id="v44-watchtower-live011",
+            capture_sequence=34,
+        )
+        observations = self._build_both(builder, navigation, backend, capture)
+        expected = _EXPECTED["home_city_watchtower_slot4_live011_0034_20261003.png"]
         for name, observation in (
             ("observation_builder", observations[0]),
             ("navigation_perception", observations[1]),
